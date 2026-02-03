@@ -1,0 +1,4 @@
+Timing sensitive non-interference
+
+SME is a technique for making a possibly interfering program non-interfering.
+Building SME using the language primitives from the paper seems to run into an issue. To get guarantees about SME(p0,p1), I guess you need to ensure that p0 and p1 are non interfering. 

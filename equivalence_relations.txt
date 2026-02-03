@@ -1,0 +1,30 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+definition (characterized equivalence relation):
+
+  a characterized equivalence relation r : Eqᶜ V over V is
+  an equivalence relation over V w/ a distinguished member,
+  dis r.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+definition (observational equivalence relation):
+
+  an observational equivalence relation r : Eq⬫ L V over V is
+  an L-indexed family of characterized equivalence relations
+  over V, satisfying the following: L is a lattice, and
+    ∀ ℓ , ℓ' . ℓ ⊑ ℓ' ⇒ ∀ v, v' .
+     • v (rℓ') v' ⇒ v (rℓ) v'        (ℓ' diffs more)
+     • v ∈ dis rℓ' ⇒ v ∈ dis rℓ      (ℓ' sees  more)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+What is missing in this, is that there should /optionally/ be a characterized equivalence class. The better way to define it, would thus be to either use some kind of option type, or to say that
+
+[...] w/ a distinguished set, dis r, satisfying
+    ∀ v . v ∈ dis r ⇒ ∀ v' . v r v' ⇒ v' ∈ dis r
+
+(that way, if dis r is empty, then nothing is unobservable; if it is non-empty, then one equivalence class is unobservable).
+
+
+
+
+EQ V P
+

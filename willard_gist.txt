@@ -1,0 +1,72 @@
+
+Modern operating systems have a side-channel: Presence of interrupts.
+
+Consider the following scenario.
+
+* p1 is a process that issues a disk read request, does something
+  computationally heavy upon being notified that block is in memory,
+  and repeats (requesting something else etc.).
+
+* p2 is a process that just spams outputs to a host, attacker.com.
+
+Suppose that the presence, pattern, or size, of disk read requests, is
+confidential; it may depend on data on disk.
+
+Effectively, p1 I/O is High, p2 I/O is Low. Both are noninterfering.
+
+Then attacker.com may obtain information about data on disk, since,
+when the disk triggers an interrupt upon completing the DMA of data
+from disk to memory, p1 gets to run, meaning p2 gets less CPU time,
+meaning there will be a stagger in p2's output.
+
+Despite p1 and p2 being noninterfering, the OS introduces a timing
+leak from p1 to p2. We desire an OS that does not leak.
+
+We believe securing this channel is an important starting point
+towards building an operating system free of timing leaks.
+
+Scheduling p1 and p2 round-robin is an important first-step towards a
+solution. However, it is insufficient; currently running code still
+gets interrupted.
+
+Why problem exists: control is hijacked by the interrupt controller
+(IC) whenever the IC desires it (i.e. it gets signal from device). As
+a result, the OS cannot control which part of the computer system has
+control, and thus cannot enforce timing sensitive noninterference.
+
+Our solution is to hand this control back to the OS, so the OS can
+carefully handle where control goes, and thus enforce a property.
+
+We do this by, (in addition to scheduling p1 and p2 round-robin,)
+controlling when the OS can be interrupted. We call this added control
+"the mitigator" (for lack of a better name at the moment).
+
+The idea is to disable interrupts while processes are running, such
+that only the timer interrupt (which comes in at a configurable, fixed
+rate, e.g. 100 or 1000 times per second) can interrupt the OS. The
+timer interrupt is important since we want preemptive multitasking.
+
+When a timer interrupt comes in, we take control from the running
+process, enable all interrupts, receive & queue pending interrupts,
+let the OS handle them, disable interrupts again (save the timer
+interrupt), and finally schedule the next process.
+
+This is viable since CPUs operate in the GHz range and the IC operates
+in the KHz range, meaning the CPU has some time between interrupts in
+general (and plenty of time between timing interrupts in particular).
+
+To present the problem & viability of our solution, we will
+
+* create a simple model of an OS (that has presence-of-interrupt leak)
+* create a simple model of a mitigator
+* prove that OS in mitigator is timing-sensitive noninterfering
+  (assuming processes are).
+
+Later, we will demonstrate this approach by, instead of modifying an
+actual OS or wrapping it in a mitigator, do what the mitigator does by
+disabling and enabling interrupts in the IC. (our mitigator is,
+effectively, a formal model of part of the IC that we need to reason
+about to prove noninterference).
+
+We can then run benchmarks or experiments to show that the timing leak
+is reduced or eliminated.
