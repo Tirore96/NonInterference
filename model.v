@@ -231,7 +231,7 @@ Definition trace (I O : Ty) eff p := paco2 (@TraceF I O) bot2 eff p.
 
 
 Variant Clause1 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | Clause1F : forall p i s, (dis IRel l i -> R s p) -> Clause1 l IRel ORel R (Cons (inl i) s) p.
+  | Clause1F : forall p i s s', s = (Cons (inl i) s') -> (dis IRel l i -> R s' p) -> Clause1 l IRel ORel R s p.
 
 
 Variant Clause2 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
@@ -239,11 +239,11 @@ Variant Clause2 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R 
 
 
 Variant Clause3 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | Clause3F : forall p i s, (forall i', rel IRel l i i' -> exists p', reduceI p i' p' /\ R s p')
-                         -> Clause3 l IRel ORel R (Cons (inl i) s) p.
+  | Clause3F : forall p i s s', s = (Cons (inl i) s') -> (forall i', rel IRel l i i' -> exists p', reduceI p i' p' /\ R s' p')
+                         -> Clause3 l IRel ORel R s p.
 
 Variant Clause4 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | Clause4F : forall p p' o o' s,  rel ORel l o o' -> reduceO p o' p' -> R s p' -> Clause4 l IRel ORel R (Cons (inr o) s) p.
+  | Clause4F : forall p p' o o' s s', s = (Cons (inr o) s') ->  rel ORel l o o' -> reduceO p o' p' -> R s' p' -> Clause4 l IRel ORel R s p.
 
 
 (*Variant Simulation'F {I O : Set} (l : level) (IRel : myrel I) (ORel : myrel O) (R : Stream (I + O) -> Proc I O -> Prop) : Stream (I + O) -> Proc I O  -> Prop :=
@@ -328,18 +328,18 @@ Proof.
   move=> I O l IRel ORel s p H Hsim.
   elim: H Hsim;intros.
   - punfold Hsim. inv Hsim.
-    clear H3 H4 H5. inv H2. pc. 
-    by move: (H6 H).
+    clear H3 H4 H5. inv H2. inv H3. pc. 
+    by move: (H4 H).
   - punfold Hsim. inv Hsim.
     clear H2 H4 H5. inv H3.
     case: (H2 _ H)=>p1 [] Hred [] Hsim'//;eauto.
   - punfold Hsim. inv Hsim.
-    clear H1 H2 H4. inv H3.
-    case: (H5 _ (rel_eq IRel i l))=>p1 [] Hred []// Hsim'.
-    eapply H0. 2:eauto. exists i. eauto.
+    clear H1 H2 H4. inv H3. inv H1.
+    case: (H2 _ (rel_eq IRel i0 l))=>p1 [] Hred []// Hsim'.
+    eapply H0. 2:eauto. exists i0. eauto.
   - punfold Hsim. inv Hsim.
-    clear H1 H2 H3. inv H4. pc.
-    move: (H0 _ _ H3 H5). eauto.
+    clear H1 H2 H3. inv H4. pc. inv H1.
+    move: (H0 _ _ H2 H3). eauto.
 Qed.
   
 Section AdmittedTheorems.
@@ -556,53 +556,12 @@ Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
       (swi b (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1))
       (swi (negb b) (@map (Times _ _) _ _ (Times Bool _) snd (fun x => (false,x)) p2)).
 
-(** Inputs / Outputs*)
 
 
+(* Tactics for deriving traces *)
 
+Ltac rewr := idtac. (*updated later*)
 
-(*Simple example*)
-Check out.
-Definition p1_simple := @out TInput TOutput Step.
-Definition p2 := @out TInput TOutput Idle.
-Definition processes_simple (*: Proc (bool * (I1 * I2)) (O1 + O2) :=*) :=
-  par_swiI false p1_simple p2.
-
-Definition leaking_scheduler := @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [Times TInput TInput]) => (fst i == DiskRead,i)) id processes_simple.
-
-
-Definition scheduler_stream := Stream ([Times TInput TInput] + (([Times (Option TOutput) (Option TOutput)]))).
-Definition newtraceF_simple (newtrace : scheduler_stream) := Cons (inl (DiskRead,Skip))
-                                                               (Cons (inr (Some Step,None))
-                                                                  (Cons (inl (DiskRead,Skip)) newtrace)).
-
-CoFixpoint newtrace_simple := newtraceF_simple newtrace_simple.
-
-Lemma newtrace_simple_eq : newtrace_simple = newtraceF_simple newtrace_simple.
-Proof.
-rewrite {1}/newtrace_simple.
-rewrite {1}(coseq_match (cofix newtrace : scheduler_stream := newtraceF_simple newtrace)).
-simpl.
-rewrite /newtraceF_simple.
-do ? f_equal.
-Qed.
-
-Lemma newtrace_simple_eq2 s : newtraceF_simple s =  Cons (inl (DiskRead,Skip))
-                                                               (Cons (inr (Some Step,None))
-                                                                  (Cons (inl (DiskRead,Skip)) s)).
-Proof. done.
-Qed.
-
-Section EQs.
-Let eqs := (newtrace_simple_eq, newtrace_simple_eq2).
-
-Ltac peel := pfold;econ;first econs;simpl;left.
-Ltac finish := by pfold;econ;first econs;simpl;right.
-Check trace.
-
-
-Ltac rewr :=
-  (try rewrite newtrace_simple_eq); rewrite /newtraceF_simple /processes_simple /par_swiI /leaking_scheduler /p1_simple /p2.
 
 Ltac swi_instans :=
    repeat
@@ -642,6 +601,57 @@ Ltac bundle :=
   appTrace;
   first (do ? reduce_tac).
 
+Ltac match_dd := 
+   repeat
+    match goal with
+    | H : reduceI _ _ _ |- _ => dependent destruction  H
+    | H : reduceO _ _ _ |- _ => dependent destruction  H
+    end.
+
+
+(*Types used in all examples*)
+Definition ExInputType := Times TInput TInput.
+Definition ExOutputType := Times (Option TOutput) (Option TOutput).
+
+Definition streamType := Stream ([ExInputType] + (([ExOutputType]))).
+
+Definition Input_prod : myrel ([ExInputType]).
+  apply: eqpair_LR;apply InputRel;apply InputRel.
+Defined.
+
+Definition Output_option : myrel ([Option TOutput]) := eqmaybe OutputRel [::\top].
+
+Definition Output_option_prod : myrel ([ExOutputType]).
+  apply eqpair. apply Output_option. apply Output_option.
+  Defined.
+
+
+Section Example1.
+(*Process*)
+Definition p1_simple := @out TInput TOutput Step.
+Definition p2 := @out TInput TOutput Idle.
+Definition processes_simple := par_swiI false p1_simple p2.
+Definition leaking_scheduler := @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [Times TInput TInput]) => (fst i == DiskRead,i)) id processes_simple.
+
+
+(*Trace*)
+Definition newtraceF_simple (newtrace : streamType) := Cons (inl (DiskRead,Skip))
+                                                               (Cons (inr (Some Step,None))
+                                                                  (Cons (inl (DiskRead,Skip)) newtrace)).
+CoFixpoint newtrace_simple := newtraceF_simple newtrace_simple.
+
+Lemma newtrace_simple_eq : newtrace_simple = newtraceF_simple newtrace_simple.
+Proof.
+rewrite {1}/newtrace_simple.
+rewrite {1}(coseq_match (cofix newtrace : streamType := newtraceF_simple newtrace)).
+simpl.
+rewrite /newtraceF_simple.
+do ? f_equal.
+Qed.
+
+
+(*Trace derivation*)
+Ltac rewr ::=  (try rewrite newtrace_simple_eq); rewrite /newtraceF_simple /processes_simple /par_swiI /leaking_scheduler /p1_simple /p2.
 Lemma simple_trace : trace newtrace_simple leaking_scheduler.
 Proof.
   pcofix CIH.
@@ -650,43 +660,9 @@ Proof.
   bundle. left.
   bundle. right.
   swi_instans. eauto.
-Qed.  
-  
-Definition Input_prod : myrel ([Times TInput TInput]).
-  apply: eqpair_LR. apply InputRel. apply InputRel.
-Defined.
-Check OutputRel.
-Definition Output_option : myrel ([Option TOutput]) := eqmaybe OutputRel [::\top].
-
-Definition Output_option_prod : myrel ([Times (Option TOutput) (Option TOutput)]).
-  apply eqpair. apply Output_option. apply Output_option.
-  Defined.
-
-(*kort trace kunne være om der er diskread først eller ikke*)
-
-
-Global Instance input_dec : EqDec Input.
-Proof. intro. intro. destruct (eqVneq x y). left. done. right. intro. subst.
-       apply/negP. apply i. rewrite eqxx. done.
 Qed.
 
-Global Instance output_dec : EqDec Output.
-Proof. intro. intro. destruct (eqVneq x y). left. done. right. intro. subst.
-       apply/negP. apply i. rewrite eqxx. done.
-Qed.
-
-
-Ltac dd H := dependent destruction H.
-
-Ltac match_dd := 
-   repeat
-    match goal with
-    | H : reduceI _ _ _ |- _ => dd H
-    | H : reduceO _ _ _ |- _ => dd H
-    end.
-
-(*Uniqueness of Identity pro*)
-Set Equations With UIP.
+(*NotSim*)
 Example counterexample : NotSim \bot Input_prod Output_option_prod newtrace_simple leaking_scheduler.
 Proof. Check NS2. 
   rewrite newtrace_simple_eq /newtraceF_simple.
@@ -702,22 +678,53 @@ Proof. Check NS2.
   match_dd.
 Qed.  
 
-
-Check NI.
+(*Not NI*)
 Example example_not_NI :  ~ NI Input_prod Output_option_prod leaking_scheduler.
 Proof.
   rewrite /NI. ssa. intro.
   Search _ NotSim.
   apply/toNotSim. apply/counterexample.
   apply/H. apply simple_trace.
-Qed.  
+Qed.
+
+End Example1.
 
 
 
 
 
 
-Example counterexample : ~ simulation \bot Input_prod Output_option_prod newtrace_simple leaking_scheduler.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Example counterexample_notsim : ~ simulation \bot Input_prod Output_option_prod newtrace_simple leaking_scheduler.
 Proof.
 intro.
 rewrite /simulation in H.
