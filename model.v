@@ -100,9 +100,24 @@ Canonical Output_indType := IndType Output Output_indDef.
 Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
+Inductive Type3 := InternalStep | Syscall.
+
+Definition Type3_indDef := [indDef for Type3_rect].
+Canonical Type3_indType := IndType Type3 Type3_indDef.
+Definition Type3_hasDecEq := [derive hasDecEq for Type3].
+HB.instance Definition _ := Type3_hasDecEq.
+
+Inductive Type4 := SysStep | Notify.
+
+Definition Type4_indDef := [indDef for Type4_rect].
+Canonical Type4_indType := IndType Type4 Type4_indDef.
+Definition Type4_hasDecEq := [derive hasDecEq for Type4].
+HB.instance Definition _ := Type4_hasDecEq.
 
 
-Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | TInput | TOutput.
+
+
+Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | TInput | TOutput | TNat | TType3 | TType4.
 
 Derive NoConfusion for Ty.
 Derive EqDec for Ty.
@@ -119,39 +134,14 @@ Fixpoint interp (t : Ty) : Set :=
   | Bool => bool
   | Option t' => option (interp t')
   | TInput => Input
-  | TOutput => Output              
+  | TOutput => Output
+  | TNat => nat               
+  | TType3 => Type3
+  | TType4 => Type4              
   end.
 Notation "[ i ]" := (interp i).
 
-Definition InputRel : myrel ([TInput]). 
-  refine (@MyRel _
-            (fun l a => if l == \bot then a = DiskRead else False)
-            (fun l a b => a = b) _ _ _ _).
-  intros.
-  done.
-  intros.
-  move: H0.
-  case_if;last by [].
-  move: H. rewrite /order.
-  move/eqP: H0. intros. subst.
-  rewrite lex0 in H. rewrite H. done.
-  intros. subst. done.
-Defined.
 
-Definition OutputRel : myrel ([TOutput]).
-  refine (@MyRel _
-            (fun l a => if l == \bot  then a = Step else False)
-            (fun l a b => a = b) _ _ _ _).
-  intros.
-  done.
-  intros.
-  move: H0.
-  case_if;last by [].
-  rewrite /order (eqP H0) lex0 in H.
-  by rewrite H.
-
-  by intros;subst.
-Defined.
 
 
 
@@ -230,28 +220,37 @@ Hint Resolve monotone_TraceF : paco.
 Definition trace (I O : Ty) eff p := paco2 (@TraceF I O) bot2 eff p.
 
 
-Variant Clause1 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | Clause1F : forall p i s s', s = (Cons (inl i) s') -> (dis IRel l i -> R s' p) -> Clause1 l IRel ORel R s p.
+Definition Clause1 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+  forall i s', s = (Cons (inl i) s') -> dis IRel l i -> R s' p.
 
 
-Variant Clause2 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
+(*Variant Clause1 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
+  | Clause1F : forall p i s s', s = (Cons (inl i) s') -> (dis IRel l i -> R s' p) -> Clause1 l IRel ORel R s p.*)
+
+Definition Clause2 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+  (forall i, dis IRel l i -> exists p', reduceI p i p' /\ R s p').
+
+
+(*Variant Clause2 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
   | Clause2F : forall p s, (forall i, dis IRel l i -> exists p', reduceI p i p' /\ R s p') -> Clause2 l IRel ORel R s p.
+ *)
+
+Definition Clause3 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+  forall i s', s = (Cons (inl i) s') -> (forall i', rel IRel l i' i -> exists p', reduceI p i' p' /\ R s' p').
 
 
-Variant Clause3 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
+(*Variant Clause3 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
   | Clause3F : forall p i s s', s = (Cons (inl i) s') -> (forall i', rel IRel l i i' -> exists p', reduceI p i' p' /\ R s' p')
                          -> Clause3 l IRel ORel R s p.
+ *)
 
-Variant Clause4 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
+Definition Clause4 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+  forall o s', s = (Cons (inr o) s') -> exists o', rel ORel l o' o /\ exists p', reduceO p o' p' /\ R s' p'.
+
+
+(*Variant Clause4 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
   | Clause4F : forall p p' o o' s s', s = (Cons (inr o) s') ->  rel ORel l o o' -> reduceO p o' p' -> R s' p' -> Clause4 l IRel ORel R s p.
-
-
-(*Variant Simulation'F {I O : Set} (l : level) (IRel : myrel I) (ORel : myrel O) (R : Stream (I + O) -> Proc I O -> Prop) : Stream (I + O) -> Proc I O  -> Prop :=
-  | SI13 : forall p i s, (forall i', rel IRel l i i' -> exists p', reduceI p i' p' /\ R s p')
-                         -> Simulation'F l IRel ORel R (Cons (inl i) s) p
-  | SI4 : forall p p' o o' s,  rel ORel l o o' -> reduceO p o' p' -> R s p' -> Simulation'F l IRel ORel R (Cons (inr o) s) p.
-Hint Constructors Simulation'F.*)
-
+*)
 Variant SimulationF {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
   | SI s p : Clause1 l IRel ORel R s p ->
              Clause2 l IRel ORel R s p ->
@@ -259,29 +258,42 @@ Variant SimulationF {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O])
              Clause4 l IRel ORel R s p ->
              SimulationF l IRel ORel R s p.
 
+Ltac rc := rewrite /Clause1 /Clause2 /Clause3 /Clause4.
+Lemma monotone_Clause1 {I O : Ty}  l IRel ORel :  monotone2 (@Clause1 I O l IRel ORel).
+Proof.
+intro. ssa. rc. eauto.
+Qed.
 
-(*(*TODO: Check definition with Willard*)
-Variant SimulationF {I O : Set} {l : level} {IRel : myrel I} {ORel : myrel O} (R : Stream (I + O) -> Proc I O -> Prop) : Stream (I + O) -> Proc I O  -> Prop :=
-  | NI13 : forall p p' i s,  (dis IRel l i -> R s p') \/ (forall i', rel IRel l i i' -> exists p', reduceI p i' p' /\ R s p')  -> SimulationF R (Cons (inl i) s) p
-  | NI2 : forall p s,  (forall i, dis IRel l i -> exists p', reduceI p i p' /\ R s p')  -> SimulationF R s p
-  | NI4 : forall p p' o o' s, rel ORel l o o' -> reduceO p o' p' -> SimulationF R (Cons (inr o) s) p.
-Hint Constructors SimulationF.*)
+Lemma monotone_Clause2 {I O : Ty}  l IRel ORel :  monotone2 (@Clause2 I O l IRel ORel).
+Proof.
+  intro. rc. ssa. 
+  move: (IN _ H). ssa. eauto.
+Qed.
+
+Lemma monotone_Clause3 {I O : Ty}  l IRel ORel :  monotone2 (@Clause3 I O l IRel ORel).
+Proof.
+  intro. rc. ssa. subst.
+  move: (IN _ _ Logic.eq_refl _ H0). ssa. eauto.
+Qed.
+
+Lemma monotone_Clause4 {I O : Ty}  l IRel ORel :  monotone2 (@Clause4 I O l IRel ORel).
+Proof.
+  intro. rc. ssa. subst.
+  move: (IN _ _ Logic.eq_refl). ssa. eauto.
+  exists x. ssa. eauto.
+Qed.
 
 
 Lemma monotone_SimulationF {I O : Ty}  l IRel ORel :  monotone2 (@SimulationF I O l IRel ORel).
 Proof.
 rewrite /monotone2. ssa.
 inv IN.
-eauto. Admitted.
-
-(*eapply NI2. 
-intros. move: (H _ H0). case.
-eauto. ssa. eauto.
-eapply NI3.  intros.
-move: (H _ H0). case. eauto.
-eauto. ssa. eauto.
-subst. eauto.
-Qed.*)
+eapply SI.
+eapply monotone_Clause1. eauto. eauto.
+eapply monotone_Clause2. eauto. eauto.
+eapply monotone_Clause3. eauto. eauto.
+eapply monotone_Clause4. eauto. eauto.
+Qed.
 Hint Resolve monotone_SimulationF : paco.
 
 Definition simulation {I O : Ty} l IRel ORel s p := paco2 (@SimulationF I O l IRel ORel) bot2 s p.
@@ -291,26 +303,6 @@ Inductive NotSim {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) : 
 | NS2 i s p : dis IRel l i -> (forall p', reduceI p i p' -> NotSim l IRel ORel s p') -> NotSim l IRel ORel s p
 | NS3 i s p : (forall p', (exists i', rel IRel l i i' /\ reduceI p i' p') ->  NotSim l IRel ORel s p') -> NotSim l IRel ORel (Cons (inl i) s) p
 | NS4 o s p : (forall p' o', rel ORel l o o' -> reduceO p o' p' -> NotSim l IRel ORel s p') -> NotSim l IRel ORel (Cons (inr o) s) p.
-
-(*Lemma NotSim_ind
-     : forall (I O : Set) (l : level) (IRel : myrel I) (ORel : myrel O) (P : Stream (I + O) -> Proc I O -> Prop),
-       (forall (i : I) (s : Stream (I + O)) (p : Proc I O), dis IRel l i -> NotSim l IRel ORel s p -> P s p -> P (Cons (inl i) s) p) ->
-       (forall (i : I) (s : Stream (I + O)) (p : Proc I O),
-        dis IRel l i -> (forall p' : Proc I O, reduceI p i p' -> NotSim l IRel ORel s p') -> (forall p' : Proc I O, reduceI p i p' -> P s p') -> P s p) ->
-       (forall (i : I) (s : Stream (I + O)) (p : Proc I O), (forall p' : Proc I O, exists i' : I, rel IRel l i i' /\ reduceI p i' p' -> P s p' -> NotSim l IRel ORel s p') -> P (Cons (inl i) s) p) ->
-       (forall (o : O) (s : Stream (I + O)) (p : Proc I O),
-        (forall (p' : Proc I O) (o' : O), rel ORel l o o' -> reduceO p o p' -> NotSim l IRel ORel s p') ->
-        (forall (p' : Proc I O) (o' : O), rel ORel l o o' -> reduceO p o p' -> P s p') -> P (Cons (inr o) s) p) ->
-       forall (s : Stream (I + O)) (p : Proc I O), NotSim l IRel ORel s p -> P s p.
-Proof.
-  move=> I O l IRel ORel P H1 H2 H3 H4.
-  fix IH 3.
-  move=> s p [].
-  - intros. apply H1. done. done. apply IH. done.
-  - intros. eapply H2. eauto. done. intros. apply IH. eauto. 
-  - intros. eapply H3. intros.
-    case: (e p'). ssa. exists x. case.
-    done. intros. apply IH. eauto. *)
 
     
 Ltac pc := pclearbot.
@@ -323,28 +315,38 @@ Proof.
 Qed.
 Hint Resolve rel_eq.
 
+Ltac rc_in H := move: H;rc=>H.
+
+Lemma rel_sym : forall A (ARel : myrel A) l x y, rel ARel l x y -> rel ARel l y x.
+  Proof.
+    intros. destruct ARel;ssa.
+    move: (equiv0 l). case. ssa.
+Qed.    
 Lemma toNotSim : forall {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) s (p : Proc I O), NotSim l IRel ORel s p -> ~simulation l IRel ORel s p.
 Proof.
   move=> I O l IRel ORel s p H Hsim.
   elim: H Hsim;intros.
   - punfold Hsim. inv Hsim.
-    clear H3 H4 H5. inv H2. inv H3. pc. 
-    by move: (H4 H).
+    clear H3 H4 H5. rc_in H2. 
+    case: (H2 _ _ Logic.eq_refl H)=>//. 
   - punfold Hsim. inv Hsim.
-    clear H2 H4 H5. inv H3.
-    case: (H2 _ H)=>p1 [] Hred [] Hsim'//;eauto.
+    clear H2 H4 H5. rc_in H3.
+    case: (H3 _ H)=>p1 [] Hred [] Hsim'//;eauto.
   - punfold Hsim. inv Hsim.
-    clear H1 H2 H4. inv H3. inv H1.
-    case: (H2 _ (rel_eq IRel i0 l))=>p1 [] Hred []// Hsim'.
-    eapply H0. 2:eauto. exists i0. eauto.
+    clear H1 H2 H4. rc_in H3.
+    case: (H3 _ _ Logic.eq_refl _ (rel_eq IRel i l))=>p1 [] Hred []// Hsim'.
+    eapply H0. 2:eauto. exists i. eauto.
   - punfold Hsim. inv Hsim.
-    clear H1 H2 H3. inv H4. pc. inv H1.
-    move: (H0 _ _ H2 H3). eauto.
+    clear H1 H2 H3. rc_in H4. pc.
+    move: (H4 _ _ Logic.eq_refl). ssa.
+    apply rel_sym in H1. 
+    
+    eapply H0. eauto. eauto. pc. done.
 Qed.
   
 Section AdmittedTheorems.
 
-Definition NI {I O :Ty} IRel ORel (p : Proc I O) := forall l s p, trace s p -> @simulation I O l IRel ORel s p.
+Definition NI (I O :Ty) IRel ORel (p : Proc I O) := forall l s, trace s p -> @simulation I O l IRel ORel s p.
 
 Definition f_NI {I O :Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall (l : level) (i i' : [I]) (o o' : [O]), rel IRel l i i' -> rel ORel l (f i) (f i').
 Definition f_PU {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall l (i : [I]), dis IRel l i -> dis ORel l (f i).
@@ -457,8 +459,9 @@ Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
  Admitted.
 
 
-
-Definition aware (V : Set) (VRel : myrel V) (l : level) (v : V) := (forall v', rel VRel l v v' -> v = v') /\ ~ dis VRel l v.
+Definition levelPred := level -> Prop.
+ Definition aware (V : Ty) (VRel : myrel [V])  (v : [V]) : levelPred
+   := fun l => (forall v', rel VRel l v v' -> v = v') /\ ~ dis VRel l v.
 
 Variant ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) (R : Proc I O -> Prop) : Proc I O -> Prop :=
   OF1 p : (forall i p', reduceI p i p' -> R p') -> (forall o p', reduceO p o p' -> R p' /\ dis ORel l o) ->  ObliviousF ORel l R p.
@@ -473,7 +476,7 @@ move: (H0 _ _ H1). case. eauto.
 Qed.
 Hint Resolve monotone_ObliviousF : paco.
 
-Definition oblivious {I O : Ty} (ORel : myrel [O]) (l : level) p := paco1 (@ObliviousF I O ORel l) bot1 p.
+Definition oblivious {I O : Ty} (ORel : myrel [O]) p : levelPred := fun l => paco1 (@ObliviousF I O ORel l) bot1 p.
 
 Definition boolRel : myrel ([Bool]).
   refine (@MyRel _
@@ -489,11 +492,11 @@ eauto.
 eauto.
 Defined.
 
-Definition order_respecting (ls : seq level) :=  forall l l', order l l' -> l \in ls -> l' \in ls.
+(*Definition order_respecting (ls : seq level) :=  forall l l', order l l' -> l \in ls -> l' \in ls.*)
 
-Definition eqmaybe {V : Ty} (VRel : myrel [V]) (ls : seq level) : myrel ([Option V]).
+Definition eqmaybe {V : Ty} (VRel : myrel [V]) (P: levelPred) : myrel ([Option V]).
     refine (@MyRel _
-            (fun l v => if v is Some v' then dis VRel l v' else forall l', l' <= l -> l' \notin ls)
+            (fun l v => if v is Some v' then dis VRel l v' else ~ P l /\ forall x0 x1, order x0 x1 -> P x0 -> P x1 )
             (fun l b1 b2 => b1 = b2)
             _
             _
@@ -502,21 +505,20 @@ Definition eqmaybe {V : Ty} (VRel : myrel [V]) (ls : seq level) : myrel ([Option
 intros. auto.
 ssa. de a.
 de VRel. eauto.
-apply/negP. intro.
-have: l' <= l1.
-apply: le_trans. eauto. done.
-move/(H0 _). by rewrite H2.
+intro. apply H0. eauto.
 
 intros. de a0. de a1. inv H0. subst. done.
 subst. done.
 Defined.
 
+Definition aware_or_oblivious  {I O : Ty} (ORel : myrel [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware O ORel o l \/ oblivious ORel p l.
 
-Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) ls p b, NI IRel (eqpair_LR boolRel ORel) p -> (forall l, l \in ls -> aware boolRel l true \/ oblivious (eqpair_LR boolRel ORel) l p) -> NI (eqpair_LR boolRel IRel) (eqmaybe ORel ls) (swi b p).
+Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) p b, NI IRel (eqpair_LR boolRel ORel) p ->
+ NI (eqpair_LR boolRel IRel) (eqmaybe ORel (fun l => aware Bool boolRel true l \/ oblivious (eqpair_LR boolRel ORel) p l)) (swi b p).
 Admitted.
 
 
-Theorem maybe_NI : forall (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p -> NI (eqmaybe IRel nil) ORel (maybe p).
+Theorem maybe_NI : forall (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p -> NI (eqmaybe IRel (fun _ => False)) ORel (maybe p).
 Admitted.
 
 Theorem loop_NI : forall (I : Ty) (IRel : myrel [I]) p, NI IRel IRel p -> NI IRel IRel (loop p).
@@ -556,9 +558,28 @@ Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
       (swi b (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1))
       (swi (negb b) (@map (Times _ _) _ _ (Times Bool _) snd (fun x => (false,x)) p2)).
 
+Definition bool3Type := Times Bool (Times Bool Bool).
+
+Definition proj1 (b : [bool3Type]) : [Bool] := fst b.
+Definition proj2 (b : [bool3Type]) : [Bool] := fst (snd b).
+Definition proj3 (b : [bool3Type]) : [Bool] := snd (snd b).
+
+Definition bool1 : [bool3Type] := (true,(false,false)).
+Definition bool2 : [bool3Type] := (false,(true,false)).
+Definition bool3 : [bool3Type] := (false,(false,true)).
+
+Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (b : [bool3Type]) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
+  : Proc (Times bool3Type (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
+    par
+      (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj1 (fst x),snd x)) id (swi (proj1 b) (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1)))
+      (par
+      (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj2 (fst x),snd x)) id (swi (proj2 b) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => fst (snd x)) (fun x => (false,x)) p2)))
+      (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj3 (fst x),snd x)) id (swi (proj3 b) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => snd (snd x)) (fun x => (false,x)) p3)))).
 
 
-(* Tactics for deriving traces *)
+Lemma par_swiI_NI : forall (I1 I2 O1 O2 : Ty) (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (IRel1 : myrel [I1]) (IRel2 : myrel [I2]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]),
+     NI IRel1 ORel1 p1 -> NI IRel2 ORel2 p2 -> NI (eqpair_LR boolRel (eqpair IRel1 IRel2)) (eqpair (eqmaybe ORel1 (aware Bool boolRel true)) (eqmaybe ORel2 (aware Bool boolRel false))) (par_swiI b p1 p2).
+Proof. Admitted.
 
 Ltac rewr := idtac. (*updated later*)
 
@@ -613,13 +634,43 @@ Ltac match_dd :=
 Definition ExInputType := Times TInput TInput.
 Definition ExOutputType := Times (Option TOutput) (Option TOutput).
 
-Definition streamType := Stream ([ExInputType] + (([ExOutputType]))).
+Definition streamType := Stream ([TInput] + (([ExOutputType]))).
+
+Definition InputRel : myrel ([TInput]). 
+  refine (@MyRel _
+            (fun l a => if l == \bot then a = DiskRead else False)
+            (fun l a b => a = b) _ _ _ _).
+  intros.
+  done.
+  intros.
+  move: H0.
+  case_if;last by [].
+  move: H. rewrite /order.
+  move/eqP: H0. intros. subst.
+  rewrite lex0 in H. rewrite H. done.
+  intros. subst. done.
+Defined.
+
+Definition OutputRel : myrel ([TOutput]).
+  refine (@MyRel _
+            (fun l a => if l == \bot  then a = Step else False)
+            (fun l a b => a = b) _ _ _ _).
+  intros.
+  done.
+  intros.
+  move: H0.
+  case_if;last by [].
+  rewrite /order (eqP H0) lex0 in H.
+  by rewrite H.
+
+  by intros;subst.
+Defined.
 
 Definition Input_prod : myrel ([ExInputType]).
   apply: eqpair_LR;apply InputRel;apply InputRel.
 Defined.
 
-Definition Output_option : myrel ([Option TOutput]) := eqmaybe OutputRel [::\top].
+Definition Output_option : myrel ([Option TOutput]) := eqmaybe OutputRel (fun l => l = \top).
 
 Definition Output_option_prod : myrel ([ExOutputType]).
   apply eqpair. apply Output_option. apply Output_option.
@@ -631,13 +682,13 @@ Section Example1.
 Definition p1_simple := @out TInput TOutput Step.
 Definition p2 := @out TInput TOutput Idle.
 Definition processes_simple := par_swiI false p1_simple p2.
-Definition leaking_scheduler := @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [Times TInput TInput]) => (fst i == DiskRead,i)) id processes_simple.
-
+Definition leaking_scheduler := @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [TInput]) => (i == DiskRead,(i,i))) id processes_simple.
+Check leaking_scheduler.
 
 (*Trace*)
-Definition newtraceF_simple (newtrace : streamType) := Cons (inl (DiskRead,Skip))
+Definition newtraceF_simple (newtrace : streamType) := Cons (inl (DiskRead))
                                                                (Cons (inr (Some Step,None))
-                                                                  (Cons (inl (DiskRead,Skip)) newtrace)).
+                                                                  (Cons (inl (DiskRead)) newtrace)).
 CoFixpoint newtrace_simple := newtraceF_simple newtrace_simple.
 
 Lemma newtrace_simple_eq : newtrace_simple = newtraceF_simple newtrace_simple.
@@ -663,10 +714,10 @@ Proof.
 Qed.
 
 (*NotSim*)
-Example counterexample : NotSim \bot Input_prod Output_option_prod newtrace_simple leaking_scheduler.
-Proof. Check NS2. 
+Example counterexample : NotSim \bot InputRel Output_option_prod newtrace_simple leaking_scheduler.
+Proof. 
   rewrite newtrace_simple_eq /newtraceF_simple.
-  apply: NS2. instantiate (1:= (DiskRead,Skip)).
+  apply: NS2. instantiate (1:= (DiskRead)).
   rewrite /= eqxx. auto.
 
   intros. match_dd.
@@ -679,7 +730,7 @@ Proof. Check NS2.
 Qed.  
 
 (*Not NI*)
-Example example_not_NI :  ~ NI Input_prod Output_option_prod leaking_scheduler.
+Example example_not_NI :  ~ NI InputRel Output_option_prod leaking_scheduler.
 Proof.
   rewrite /NI. ssa. intro.
   Search _ NotSim.
@@ -690,41 +741,147 @@ Qed.
 End Example1.
 
 
+Section Example2.
+(*high low*)
+
+Definition naive_scheduler {I O} (p : Proc (Times Bool (Times I I)) O) : Proc I O :=
+  @map _ (Times Bool (Times _ _)) _ _ (fun i => (true,(i,i))) id p.
+
+Definition hp_lp := naive_scheduler (par_swiI true (@out TInput TOutput Idle) (@out TInput TOutput Step)).
+
+Definition InputRelPublic : myrel ([TInput]). 
+  refine (@MyRel _
+            (fun l a => False)
+            (fun l a b => a = b) _ _ _ _).
+  intros.
+  done.
+  intros. done.
+  intros. subst. done.
+Defined.
+
+Definition TraceF_specific := (@TraceF TInput (Times (Option TOutput) (Option TOutput))).
+Lemma specific_monotone : monotone2 TraceF_specific.
+  apply (@monotone_TraceF TInput (Times (Option TOutput) (Option TOutput))).
+Qed.
+
+Hint Resolve specific_monotone : paco.
+Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), @NI I O IRel ORel (out o).
+Proof.
+  intros. rewrite /NI.
+  move=>l. pcofix CIH.
+  ssa. punfold H0. inv H0.
+  - pc. match_dd.
+    pfold. con.
+    * rc. intros. inv H. right. apply CIH. done.
+    * rc. intros. exists (@out _ _ o). con. eauto. right. apply CIH.
+      pfold. done.
+    * rc. intros. exists (@out _ _ o). con. eauto.
+      right. inv H. eauto.
+    * rc. intros. inv H.
+  - pc. match_dd.
+    pfold. con.
+    * rc. intros. inv H.
+    * rc. intros. exists (@out _ _ o). con. eauto. right. apply CIH.
+      pfold. done.
+    * rc. intros. exists (@out _ _ o). con. eauto.
+      right. inv H. eauto.
+    * rc. intros. inv H.
+      exists o0. ssa. exists (@out _ _ o0). con. eauto. eauto.
+Qed.
+
+
+Arguments NI : clear implicits.
+Arguments NI I O [_] [_].
+Example hl_lp_NI : @NI _ _ InputRelPublic Output_option_prod hp_lp.
+Proof.
+  rewrite /hp_lp /naive_scheduler.
+  eapply map_NI.
+  eapply par_swiI_NI.
+  apply out_NI.
+  apply out_NI.
+
+  instantiate (1:= (InputRelPublic)).
+  instantiate (1:= (InputRelPublic)).  
+  rewrite /f_NI. ssa.
+
+  rewrite /f_PU. ssa.
+
+  instantiate (1:= OutputRel).
+  instantiate (1:= OutputRel).
+
+  ssa.
+Qed.
+
+End Example2.
+
+
+
+Section Example3.
+
+(*high process: out InternalStep *)
+
+
+Definition SimpleTypeRel (t : Ty): myrel [t].
+    refine (@MyRel _ 
+            (fun (l : level) _ => False)
+            (fun l io1 io2 => io1 = io2)
+                        _
+            _
+            _
+            _).
+  - intros. done.
+  - intros. done.
+  - done.
+Defined.
+
+Definition collapse_option (T : Set) (a : option (option T)) :=
+  match a with
+  | None => None
+  | Some None => None
+  | Some (Some a) => Some a
+  end.                        
+Definition high_p := @map _ _ (Times (Option _) (Option _)) (Option _) id (fun x => if fst x is Some x' then fst x else snd x) (par (@swi TType4 TType3 true (@out TType4 (Times Bool TType3) (true,InternalStep))) (@swi TType4 TType3 false (@out TType4 (Times Bool TType3) (true,Syscall)))).
+Check high_p.
+
+Definition handler :=
+  @map _ _ (Times (Option _) (Option _)) (Option _) id (fun x => if fst x is Some x' then fst x else snd x)
+  (par (@swi TType3 TType4 false (@out TType3 (Times Bool TType4) (true,SysStep))) (@swi TType3 TType4 true (@out TType3 (Times Bool TType4) (true,Notify)))).
+
+
+Definition process3 := par_swiI3 (true,(false,false)) p1_simple high_p handler.
+Check process3.
+(*L | H | handler*)
+(*TInput | TInput | TType3*)
+(*Proc A B | Proc C D | Proc D C*)
+
+(*Definition new_o := @par _ _ _ p1_simple (@par _ _ (Times (Option _) (Option _)) high_p handler).*)
+Definition new_scheduler (I1 I2 I3 O1 O2 O3: Ty)
+  (p : Proc (Times Bool (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))))
+  := 
+  
+                         
+
+                       
+  Definition process3 := tt.
+
+
+
+End Example3.    
 
 
 
 
 
+                   
+Ltac trace_tac := 
+   repeat
+    match goal with
+    | H : monotone2 (Stream (sum ?i ?o)) TraceF  |- _ => dependent destruction  H
+    | H : reduceO _ _ _ |- _ => dependent destruction  H
+    end.                   
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Example counterexample_notsim : ~ simulation \bot Input_prod Output_option_prod newtrace_simple leaking_scheduler.
+Print newtraceF_simple.
+Example counterexample_notsim : ~ simulation \bot InputRel Output_option_prod newtrace_simple leaking_scheduler.
 Proof.
 intro.
 rewrite /simulation in H.
@@ -876,8 +1033,7 @@ simpl.
 
   
   leaking_scheduuler. (* Mitigator definition(s). Prevents interference as scheduling is round robin. *)
-Definition naive_scheduler {I O} (p : Proc (bool * I) O) : Proc I O :=
-  map (fun i => (true,i)) id p.
+
 
 
 Definition naive_mitigator (*: Proc (I1 * I2) (O1 + O2) :=*) :=
