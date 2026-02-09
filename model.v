@@ -100,24 +100,26 @@ Canonical Output_indType := IndType Output Output_indDef.
 Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
-Inductive Type3 := InternalStep | Syscall.
+Inductive TypeSyscall := InternalStep | Syscall | SPublic. (*SPublic corresponds to None, and InternalStep/Syscall is Some _
+                                                             Used to distinguish H/L and easier than sprinkling option types into existing counterexample
+                                                            *)
 
-Definition Type3_indDef := [indDef for Type3_rect].
-Canonical Type3_indType := IndType Type3 Type3_indDef.
-Definition Type3_hasDecEq := [derive hasDecEq for Type3].
-HB.instance Definition _ := Type3_hasDecEq.
+Definition TypeSyscall_indDef := [indDef for TypeSyscall_rect].
+Canonical TypeSyscall_indType := IndType TypeSyscall TypeSyscall_indDef.
+Definition TypeSyscall_hasDecEq := [derive hasDecEq for TypeSyscall].
+HB.instance Definition _ := TypeSyscall_hasDecEq.
 
-Inductive Type4 := SysStep | Notify.
+Inductive TypeNotify := SysStep | Notify | NPublic. (*NPublic corresponds to None*)
 
-Definition Type4_indDef := [indDef for Type4_rect].
-Canonical Type4_indType := IndType Type4 Type4_indDef.
-Definition Type4_hasDecEq := [derive hasDecEq for Type4].
-HB.instance Definition _ := Type4_hasDecEq.
-
-
+Definition TypeNotify_indDef := [indDef for TypeNotify_rect].
+Canonical TypeNotify_indType := IndType TypeNotify TypeNotify_indDef.
+Definition TypeNotify_hasDecEq := [derive hasDecEq for TypeNotify].
+HB.instance Definition _ := TypeNotify_hasDecEq.
 
 
-Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | TInput | TOutput | TNat | TType3 | TType4.
+
+
+Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TNat | TTypeSyscall | TTypeNotify.
 
 Derive NoConfusion for Ty.
 Derive EqDec for Ty.
@@ -130,14 +132,15 @@ HB.instance Definition _ := Ty_hasDecEq.
 Fixpoint interp (t : Ty) : Set :=
   match t with
   | Nat => nat
-  | Times t0 t1 => (interp t0) * (interp t1)%type
+  | Times t0 t1 => (interp t0) * (interp t1)
   | Bool => bool
   | Option t' => option (interp t')
   | TInput => Input
   | TOutput => Output
-  | TNat => nat               
-  | TType3 => Type3
-  | TType4 => Type4              
+  | TNat => nat
+  | Sum t0 t1 => (interp t0) + (interp t1)            
+  | TTypeSyscall => TypeSyscall
+  | TTypeNotify => TypeNotify              
   end.
 Notation "[ i ]" := (interp i).
 
@@ -451,8 +454,43 @@ Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
 
   - intros. de IRel;de ORel. eauto.
   - intros. de IRel;de ORel. eauto.
- Defined.
+Defined.
 
+Definition eqsum (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end)
+            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2 | inr o1,inr o2 => rel ORel l o1 o2 | _,_ => False end)
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con.
+    intro. 
+    destruct IRel. destruct ORel. simpl. de x.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y.
+    move: (equiv0 l). case. eauto. 
+    move: (equiv1 l). case. de y.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y. de z.
+    move: (equiv0 l). case. eauto. de y. de z. 
+    move: (equiv1 l). case. eauto.
+
+
+  -     ssa. de a0. de a1. de IRel. eauto.
+        de a1. de ORel. eauto.
+
+        ssa. de a. de IRel. eauto.
+        de ORel. eauto.
+
+        ssa. de a0. de a1. de IRel. eauto.
+        de a1. de ORel. eauto.
+Defined.
 
 
  Theorem sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]), NI (eqpair_LR VRel IRel) ORel p -> fv_NI g ORel VRel VRel -> fv_NI f IRel VRel VRel -> equivalence_preserving f IRel VRel -> NI IRel (eqpair VRel ORel) (sta f g v p).
@@ -558,6 +596,41 @@ Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
       (swi b (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1))
       (swi (negb b) (@map (Times _ _) _ _ (Times Bool _) snd (fun x => (false,x)) p2)).
 
+
+
+Definition scheduled_p (I O : Ty) (b : bool) (p : Proc I O) := @map _ _ (Times _ _) _ id snd
+                                                                 (@sta (Times Bool _) _ Bool (fun i v => xor (fst i) v) (fun o v => v) b
+                                                                 (@map (Times _ (Times _ _))  (Times _ (Times _ _)) _ _ (fun i => (fst (snd i),(fst i,snd (snd i)))) id
+                                                                 (swi b (@map (Times Bool _) (Option _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o))
+                                                                           (maybe p))))).
+Check scheduled_p.
+Definition par2 (I1 I2 : Ty) (O1 O2 : Ty) (p1 : Proc I1 O1) (p2 : Proc I2 O2) : Proc (Times I1 I2) (Times O1 O2) :=
+  par (@map (Times _ _) _ _ _ fst id p1) (@map (Times _ _) _ _ _ snd id p2).
+
+Definition testp (I1 I2 I3 : Ty) (O1 O2 O3 : Ty) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)  :=
+  @sta _ _ (Times Bool (Times Bool Bool)) (fun i v => v) (fun o v => v) (false,(false,false))
+    (@map (Times (Times Bool (Times Bool Bool)) (Times _ (Times _ _))) (Times (Times Bool _) (Times (Times Bool _) (Times Bool _))) _ _ (fun i => let:((b1,(b2,b3)),(p1,(p2,p3))) := i in ((b1,p1),((b2,p2),(b3,p3)))) id (par2 (scheduled_p true p1) (par2 (scheduled_p false p2) (scheduled_p false p3)))).
+
+Check testp.
+(*Definition par3 (I1 I2 I3 : Ty) (O1 O2 O3 : Ty) (p0 : Proc I1 O1) (p1 : Proc I2 O2) (p2 : Proc I3 O3) := @map _ (Times _ (Times _ _)) _ _ (fun i => (i,(i,i))) id (par (@scheduled_p _ _ false p0) (par (@scheduled_p _ _ false p1) (@scheduled_p _ _ false p2))).
+Definition par2 (I1 I2 O1 O2 : Ty) (p1 : Proc I1 O1) (p2 : Proc I2 O2) : Proc (Sum I1 I2) (Sum O1 O2) :=
+  @map _ _ _ _ (fun i => (i,i)) par p1 p2
+
+  @map (Times _ _) (Times _ (Times _ _)) (Times _ _) _ (fun i => (fst i,i)) snd (@swi _ _ b ((@map (Times Bool _) (Option _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o)) (maybe p)))).
+
+Definition scheduled_p (I O : Ty) (b : bool) (p : Proc I O) : Proc (Times Bool (Option I)) (Option O) :=
+  @map (Times _ _) (Times _ (Times _ _)) (Times _ _) _ (fun i => (fst i,i)) snd (@swi _ _ b ((@map (Times Bool _) (Option _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o)) (maybe p)))).
+
+Definition par_swiI2 {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
+  : Proc (Times Bool (Sum I1 I2)) (Sum O1 O2) :=
+    par
+      (swi b (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1))
+      (swi (negb b) (@map (Times _ _) _ _ (Times Bool _) snd (fun x => (false,x)) p2)).*)
+
+Lemma par_swiI_NI : forall (I1 I2 O1 O2 : Ty) (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (IRel1 : myrel [I1]) (IRel2 : myrel [I2]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]),
+     NI IRel1 ORel1 p1 -> NI IRel2 ORel2 p2 -> NI (eqpair_LR boolRel (eqpair IRel1 IRel2)) (eqpair (eqmaybe ORel1 (aware Bool boolRel true)) (eqmaybe ORel2 (aware Bool boolRel false))) (par_swiI b p1 p2).
+Proof. Admitted.
+
 Definition bool3Type := Times Bool (Times Bool Bool).
 
 Definition proj1 (b : [bool3Type]) : [Bool] := fst b.
@@ -568,18 +641,25 @@ Definition bool1 : [bool3Type] := (true,(false,false)).
 Definition bool2 : [bool3Type] := (false,(true,false)).
 Definition bool3 : [bool3Type] := (false,(false,true)).
 
-Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (b : [bool3Type]) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
+Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
+  : Proc (Times TNat (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
+    par
+      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 0,snd x)) id (swi (n == 0) (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (true,x)) p1)))
+      (par
+      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 1,snd x)) id (swi (n == 1) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => fst (snd x)) (fun x => (true,x)) p2)))
+      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 2,snd x)) id (swi (n == 2) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => snd (snd x)) (fun x => (true,x)) p3)))).
+
+
+(*Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (b : [bool3Type]) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
   : Proc (Times bool3Type (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
     par
       (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj1 (fst x),snd x)) id (swi (proj1 b) (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1)))
       (par
       (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj2 (fst x),snd x)) id (swi (proj2 b) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => fst (snd x)) (fun x => (false,x)) p2)))
       (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj3 (fst x),snd x)) id (swi (proj3 b) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => snd (snd x)) (fun x => (false,x)) p3)))).
+*)
 
 
-Lemma par_swiI_NI : forall (I1 I2 O1 O2 : Ty) (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (IRel1 : myrel [I1]) (IRel2 : myrel [I2]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]),
-     NI IRel1 ORel1 p1 -> NI IRel2 ORel2 p2 -> NI (eqpair_LR boolRel (eqpair IRel1 IRel2)) (eqpair (eqmaybe ORel1 (aware Bool boolRel true)) (eqmaybe ORel2 (aware Bool boolRel false))) (par_swiI b p1 p2).
-Proof. Admitted.
 
 Ltac rewr := idtac. (*updated later*)
 
@@ -683,7 +763,7 @@ Definition p1_simple := @out TInput TOutput Step.
 Definition p2 := @out TInput TOutput Idle.
 Definition processes_simple := par_swiI false p1_simple p2.
 Definition leaking_scheduler := @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [TInput]) => (i == DiskRead,(i,i))) id processes_simple.
-Check leaking_scheduler.
+
 
 (*Trace*)
 Definition newtraceF_simple (newtrace : streamType) := Cons (inl (DiskRead))
@@ -834,32 +914,217 @@ Definition SimpleTypeRel (t : Ty): myrel [t].
   - done.
 Defined.
 
-Definition collapse_option (T : Set) (a : option (option T)) :=
+(*Definition collapse_option (T : Set) (a : option (option T)) :=
   match a with
   | None => None
   | Some None => None
   | Some (Some a) => Some a
-  end.                        
-Definition high_p := @map _ _ (Times (Option _) (Option _)) (Option _) id (fun x => if fst x is Some x' then fst x else snd x) (par (@swi TType4 TType3 true (@out TType4 (Times Bool TType3) (true,InternalStep))) (@swi TType4 TType3 false (@out TType4 (Times Bool TType3) (true,Syscall)))).
-Check high_p.
+  end.*)
 
+Definition collapse_opair (A : Set) (o : option A * (option A)) (d : A) :=
+  match o with
+  | (Some o', _) => o'
+  | (_, Some o') => o'
+  | _ => d
+  end.         
+
+Definition alternate (I O : Ty) (o1 o2 d : [O]):=
+  @map _ (Times Bool _) (Times (Option _) (Option _)) _ (fun i => (true,i)) (fun o => collapse_opair o d) (par (@swi _ _ true (@out I (Times Bool _) (true,o1))) (@swi _ _ false (@out _ (Times Bool _) (false,o2)))).
+
+Definition high_p := alternate TTypeNotify TTypeSyscall Syscall InternalStep Syscall.
+
+Definition handler := alternate TTypeSyscall TTypeNotify SysStep Notify SysStep.
+  
+(*Definition high_p := @map _ (Times Bool _) (Times (Option _) (Option _)) (Option _) (fun i => (false,i)) (fun x => if fst x is Some x' then fst x else snd x)
+                       (par (@swi TTypeNotify TTypeSyscall true (@out TTypeNotify (Times Bool TTypeSyscall) (true,InternalStep)))
+                            (@swi TTypeNotify TTypeSyscall false (@out TTypeNotify (Times Bool TTypeSyscall) (true,Syscall)))).
 Definition handler :=
   @map _ _ (Times (Option _) (Option _)) (Option _) id (fun x => if fst x is Some x' then fst x else snd x)
-  (par (@swi TType3 TType4 false (@out TType3 (Times Bool TType4) (true,SysStep))) (@swi TType3 TType4 true (@out TType3 (Times Bool TType4) (true,Notify)))).
+    (par (@swi TTypeSyscall TTypeNotify false (@out TTypeSyscall (Times Bool TTypeNotify) (true,SysStep)))
+         (@swi TTypeSyscall TTypeNotify true (@out TTypeSyscall (Times Bool TTypeNotify) (true,Notify)))).*)
 
 
-Definition process3 := par_swiI3 (true,(false,false)) p1_simple high_p handler.
-Check process3.
-(*L | H | handler*)
-(*TInput | TInput | TType3*)
-(*Proc A B | Proc C D | Proc D C*)
+Definition Ex3NInput := (Times TNat (Times TInput (Times TTypeNotify TTypeSyscall))).
+Definition Ex3Input := (Times TInput (Times TTypeNotify TTypeSyscall)).
+Definition Ex3Output :=  (Times (Option TOutput) (Times (Option TTypeSyscall) (Option TTypeNotify))).
 
-(*Definition new_o := @par _ _ _ p1_simple (@par _ _ (Times (Option _) (Option _)) high_p handler).*)
+Definition LoopType := Sum Ex3Input Ex3Output.
+
+Definition d : [Ex3Input].
+  do ? con.
+Defined.
+
+Definition par_proc : Proc Ex3NInput Ex3Output := (par_swiI3 0 p1_simple high_p handler).
+
+(*Definition myn (n : nat) :=
+  match n with
+  | 0 => 0
+  | 1 => 0
+  | 2 => 1
+  | 3 => 2
+  | 4 => 3
+  | 5 => 3
+  | _ => 0
+  end.
+Check sta.*)
+Check par_proc. Print Ex3Output.
+Definition process2 := @map (Times Nat LoopType) Ex3NInput Ex3Output (LoopType) (fun i => match i with | (n,inl i') => (n,i') | (n,inr o) => (n,d) end) inr par_proc.
+
+
+Definition myvT := Times Bool (Times Nat Nat).
+Locate "%/".
+Definition inc_myv (v : [myvT]) :=
+  let: (b,(c,n)) := v in if b then v else (b,((c+1) %% 2,(n+((c+1)%/2))%%3)).
+
+Definition myv_to_n (v: [myvT]) : nat :=
+  let: (b,(c,n)) := v in if b then 2 else n.
+
+Definition handler_up_v (i : [LoopType]) (v: [myvT])  : [myvT] :=
+  let: (b,(c,n)) := v in
+  match i with
+  | inl (_,(no,s)) => if b && (no == Notify) then (false,(c,n)) else if (~~ b) && (s == Syscall) then (true,(c,n)) else v
+  | inr r => v
+  end.
+
+(*Definition bad_scheduler := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ myvT handler_up_v (fun o v => inc_myv v) (false,(0,0)) (@map (Times myvT _) (Times Nat _) _ _ (fun x => (myv_to_n (fst x), snd x)) id process2))).*)
+Definition bad_scheduler (p : Proc (Times Nat LoopType) LoopType)  := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ myvT handler_up_v (fun o v => inc_myv v) (false,(0,0)) (@map (Times myvT _) (Times Nat _) _ _ (fun x => (myv_to_n (fst x), snd x)) id p))).
+
+
+(*Got to here:
+  We need to state and show example below*)
+Check NotSim.
+Check bad_scheduler.
+Print LoopType.
+Print Ex3Input.
+
+Definition Ex3InputRel : myrel [Ex3Input].
+  rewrite /Ex3Input.
+   refine (@MyRel _ 
+            (fun (l : level) _ => )
+            (fun l io1 io2 => io1 = io2)
+                        _
+            _
+            _
+            _).
+  - intros. done.
+  - intros. done.
+  - done.
+Defined.
+
+  
+
+
+  
+Definition LoopRel : myrel [LoopType].
+apply eqsum. apply eqpair. apply InputRelPublic. apply eqpairw
+  
+Parameter l : Stream ([LoopType] + [LoopType]).
+Example bad_scheduler_is_bad : NotSim \bot LoopRel LoopRel l (bad_scheduler process2).
+
+(*Maybe also some example traces to show it works as expected?*)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(*Definition process3   := @sta _ _ Nat (fun i v => v)  0
+                                                   (@loop (Times Nat LoopType) (@map (Times Nat LoopType) Ex3NInput Ex3Output (Times Nat LoopType) (fun i => match i with | (n,inl i') => (n %/ 2,i') | (n,inr o) => (n %/ 2,d) end) (fun x => (0, inr x)) par_proc )).*)
+
+
+
 Definition new_scheduler (I1 I2 I3 O1 O2 O3: Ty)
   (p : Proc (Times Bool (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))))
-  := 
+  := @sta _ _ (Times bool3Type TNat) (fun i v => v) (fun o v => (if snd v %% 5 == 0 then inc_bool (fst v) else fst v,(snd v) %/ 5)) ((false,(false,false)),0) (@map (Times _ _) _ _ _ snd id (p)).
   
-                         
+           
+
+(*L | H | handler*)
+(*TInput | TInput | TTypeSyscall*)
+(*Proc A B | Proc C D | Proc D C*)
+
+Definition inc_bool (b : [bool3Type]) :=
+  match b with
+  | (false,(false,false)) => (true,(false,false))    
+  | (true,(false,false)) => (true,(true,false))
+  | (true,(true,false)) => (false,(true,true))
+  | (false,(true,true)) => (true,(false,true))
+  | (true,(false,true)) => (true,(true,false))                             
+  | _ => (true,(false,false))
+  end.
+
+(*Definition new_o := @par _ _ _ p1_simple (@par _ _ (Times (Option _) (Option _)) high_p handler).*)
+
+              
 
                        
   Definition process3 := tt.
