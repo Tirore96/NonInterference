@@ -663,17 +663,16 @@ Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc 
 
 Ltac rewr := idtac. (*updated later*)
 
-
+Lemma zerol : 0 < 0 = false.
+Proof. done.
+Qed.
 Ltac swi_instans :=
    repeat
     match goal with
-    | |- context [ swi (?x < ?x) _] => is_evar x; unify x 0
+    | |- context [ swi (?x < ?x) _] => is_evar x; unify x 0; try rewrite zerol
     end; rewrite ?eqxx /= /xor /=.
 
-
-Ltac reduce_tac :=
-  rewr;
-   repeat
+Ltac reduce_once :=
     match goal with
     | |- reduceI (@out _ _ _) _ _ => apply: reduce_outI
     | |- reduceI (@map _ _ _ _ _ _ _) _ _ => apply: reduce_mapI
@@ -681,26 +680,50 @@ Ltac reduce_tac :=
     | |- reduceI (@swi _ _ _ _) _ _ => apply: reduce_swiI
     | |- reduceI (par _ _) _ _ => apply: reduce_parI
     | |- reduceI (@loop _ _) _ _ => apply: reduce_loopI                                                  
-    | |- reduceI (@maybe _ _ _ _ _ _ _) None _ => apply: reduce_maybeI
-    | |- reduceI (@maybe _ _ _ _ _ _ _) (Some _) _ => apply: reduce_maybeI2
+    | |- reduceI (@maybe _ _ _) None _ => apply: reduce_maybeI
+    | |- reduceI (@maybe _ _ _) (Some _) _ => apply: reduce_maybeI2
 
     | |- reduceO (@out _ _ _) _ _ => apply: reduce_outO
     | |- reduceO (@map _ _ _ _ _ _ _) _ _ => apply: reduce_mapO
     | |- reduceO (@sta _ _ _ _ _ _ _) _ _ => apply: reduce_staO
-    | |- reduceO (swi _ _) None _ => apply: reduce_swiO
-    | |- reduceO (swi _ _) (Some _) _ => apply: reduce_swiO2
+    | |- reduceO (@swi _ _ _ _) None _ => apply: reduce_swiO
+    | |- reduceO (@swi _ _ _ _) (Some _) _ => apply: reduce_swiO2
+    | |- reduceO (@swi _ _ false _) _ _ => apply: reduce_swiO
+    | |- reduceO (@swi _ _ true _) _ _ => apply: reduce_swiO2                                                       
     | |- reduceO (par _ _) _ _ => apply: reduce_parO
     | |- reduceO (@loop _ _) _ _ => apply: reduce_loopO
-    | |- reduceO (@maybe _ _ _ _ _ _ _) _ _ => apply: reduce_maybeO
-    end;(try swi_instans);eauto; rewrite ?eqxx /= /xor /=.
+    | |- reduceO (@maybe _ _ _) _ _ => apply: reduce_maybeO
+    end.
+
+Ltac controlled_eauto := 
+    match goal with
+    | |- reduceI _ _ _ => idtac
+    | |- reduceO _ _ _ => idtac
+    | |- _ => eauto                        
+    end.
+
+Ltac reduce_tac :=
+  (try rewr);
+   (repeat
+      reduce_once);(try swi_instans);controlled_eauto; rewrite ?eqxx /= /xor /=.
+Ltac reduce_tac' :=
+  (try rewr);
+   (repeat
+      reduce_once);(try swi_instans); rewrite ?eqxx /= /xor /=.
+
+(*Ltac reduce_tac_ne :=
+  (try rewr);
+   (repeat
+    reduce_once);(try swi_instans);rewrite ?eqxx /= /xor /=.*)
+
 
 Ltac appTrace := apply: traceI || apply: traceO.
 
 
 Ltac bundle :=
-  pfold;
-  appTrace;
-  first (do ? reduce_tac).
+  (pfold;
+  first [ appTrace | rewr;appTrace ];
+  first (do ? reduce_tac));controlled_eauto.
 
 Ltac match_dd := 
    repeat
@@ -950,7 +973,7 @@ Definition Ex3NInput := Times TNat Ex3Input.
 Definition Ex3NInput_option := Times TNat Ex3Input_option.
 Definition Ex3Output :=  (Times (Option TOutput) (Times (Option TTypeSyscall) (Option TTypeSyscall))).
 
-Definition LoopType := Sum Ex3Input Ex3Output.
+(*Definition LoopType := Sum Ex3Input Ex3Output.*)
 Definition LoopType_option := Sum Ex3Input_option Ex3Output.
 
 Definition d : [Ex3Input].
@@ -962,42 +985,67 @@ Definition d_option : [Ex3Input_option].
   do ? con.
 Defined.
 
-Definition par_proc : Proc Ex3NInput Ex3Output := (par_swiI3 0 p1_simple high_p handler).
+(*Definition par_proc : Proc Ex3NInput Ex3Output := (par_swiI3 0 p1_simple high_p handler).*)
 
-Definition par_proc_maybe : Proc Ex3NInput_option Ex3Output := (par_swiI3 0 (maybe p1_simple) (maybe high_p) (maybe handler)).
-
-
-Definition process2 : Proc (Times Nat LoopType) LoopType := @map (Times Nat LoopType) Ex3NInput Ex3Output LoopType (fun i => match i with | (n,inl i') => (n,i') | (n,inr o) => (n,d) end) inr par_proc.
-Definition process2_maybe : Proc (Times Nat LoopType_option) LoopType_option := @map (Times Nat LoopType_option) Ex3NInput_option Ex3Output LoopType_option (fun i => match i with | (n,inl i') => (n,i') | (n,inr o) => (n,d_option) end) inr par_proc_maybe.
+(*Definition par_proc_maybe : Proc Ex3NInput_option Ex3Output := .*)
 
 
-Check process2_maybe.
+(*Definition process2 : Proc (Times Nat LoopType) LoopType := @map (Times Nat LoopType) Ex3NInput Ex3Output LoopType (fun i => match i with | (n,inl i') => (n,i') | (n,inr o) => (n,d) end) inr par_proc.*)
+
+
+Definition process2_maybe : Proc (Times Nat LoopType_option) LoopType_option :=
+  @map (Times Nat LoopType_option) Ex3NInput_option Ex3Output LoopType_option
+    (fun i => match i with | (n,inl i') => (n,i') | (n,inr o) => (n,(None,(None,None))) end) (*inl = input, inr = output rerouted as input, which we discard by mapping to (n,(None,(None,None)))
+                                                                                              Here n, schedules the n'th process *)
+    inr
+    (par_swiI3 0 (maybe p1_simple) (maybe high_p) (maybe handler)).
+
 
 Definition myvT := Times Bool (Times Nat Nat).
 
 Definition inc_myv (v : [myvT]) :=
-  let: (b,(c,n)) := v in if b then v else (b,((c+1) %% 2,(n+((c+1)%/2))%%3)).
+  let: (b,(c,n)) := v in if b then v else if c == 0 then (b,(c+1,n)) else (b,(0,(n+1)%%2)). (* low process: n = 0 and (b = false)
+                                                                                               high process: n = 1 and (b = false)
+                                                                                               handler: b = true
+                                                                                               two steps per low/high process counted by (c), with c == 0 meaning has the first step been taken yet
+                                                                                               nat used for c instead of bool both for readability and in case we increase step count for examples in the future*)
 
 Definition myv_to_n (v: [myvT]) : nat :=
-  let: (b,(c,n)) := v in if b then 2 else n.
+  let: (b,(c,n)) := v in if b then 2 else n. (*mapping state myvT to the process that should be scheduled*)
 
-Definition handler_up_v (i : [LoopType_option]) (v: [myvT])  : [myvT] :=
+Definition handler_up_v (o : [LoopType_option]) (v: [myvT])  : [myvT] := (*based on output and state, schedule/deschedule handler using the bool flag*)
   let: (b,(c,n)) := v in
-  match b,i with
-  | false,inl (None,(None, Some Syscall)) => (true,(c,n))
-  | true, inl (None,(Some Notify,None)) => (false,(c,n))
+  match b,o with
+  | false,inr (None,(None, Some Syscall)) => (true,(c,n))
+  | true, inr (None,(Some Notify,None)) => (false,(c,n))
   | _,_ => v
   end.
 
 (*Definition bad_scheduler := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ myvT handler_up_v (fun o v => inc_myv v) (false,(0,0)) (@map (Times myvT _) (Times Nat _) _ _ (fun x => (myv_to_n (fst x), snd x)) id process2))).*)
-Definition bad_scheduler (p : Proc (Times Nat LoopType_option) LoopType_option)  := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ myvT handler_up_v (fun o v => inc_myv v) (false,(0,0)) (@map (Times myvT _) (Times Nat _) _ _ (fun x => (myv_to_n (fst x), snd x)) id p))).
 
+Definition bad_scheduler (p : Proc (Times Nat LoopType_option) LoopType_option)  :=
+  @map Ex3Input_option LoopType_option LoopType_option Ex3Output
+    inl
+    (fun x => match x with | inl _ => (None,(None,None)) | inr y => y end)
+    (loop
+       (@map _ _ (Times _ _) _
+          id
+          snd
+          (@sta _ _ myvT
+             handler_up_v
+             (fun o v => inc_myv v)
+             (false,(0,0))
+             (@map (Times myvT _) (Times Nat _) _ _
+                (fun x => (myv_to_n (fst x), snd x))
+                id
+                p
+    )))).
 
+Print LoopType_option.
 (*Got to here:
   We need to state and show example below*)
 Check NotSim.
 Check bad_scheduler.
-Print LoopType.
 Print Ex3Input.
 
 Definition Ex3InputRel : myrel [Ex3Input_option].
@@ -1038,8 +1086,127 @@ Definition LoopRel : myrel [LoopType_option].
   apply eqsum. apply Ex3InputRel. apply Ex3OutputRel.
 Defined.
 
+Definition ex3_stream_type := ([Ex3Input_option] + [Ex3Output])%type.
 
-Parameter l : Stream ([LoopType_option] + [LoopType_option]).
+Definition insert1 (i : [TOutput]) : ex3_stream_type := (inr (Some i,(None,None))).
+Definition insert2 (i : [TTypeSyscall]) : ex3_stream_type := inr (None,(Some i,None)).
+Definition insert3 (i : [TTypeSyscall]) : ex3_stream_type := inr (None,(None,Some i)).
+
+Definition ex3_streamF (s : Stream ex3_stream_type) := Cons (insert1 Step) (Cons (insert1 Step) (Cons (insert2 Syscall) (Cons (insert3 InternalStep) (Cons (insert3 Notify) (Cons (insert2 InternalStep) s))))).
+
+CoFixpoint ex3_stream := ex3_streamF ex3_stream.
+
+Lemma ex3_stream_eq : ex3_stream = ex3_streamF ex3_stream.
+Proof.
+rewrite {1}/ex3_stream.
+rewrite {1}(coseq_match (cofix newtrace : (Stream ex3_stream_type) := ex3_streamF newtrace)).
+simpl.
+rewrite /ex3_streamF.
+do ? f_equal.
+Qed.
+
+
+Ltac rewr ::=  (try rewrite newtrace_simple_eq); (try rewrite ex3_stream_eq); rewrite /newtraceF_simple /processes_simple /par_swiI /leaking_scheduler /p1_simple /p2 /ex3_streamF /bad_scheduler /process2_maybe /par_swiI3 /p1_simple /high_p /alternate /handler.
+
+
+Example ex3_trace_derivation : trace ex3_stream (bad_scheduler process2_maybe).
+Proof.
+  pcofix CIH.
+
+  bundle. left.
+  bundle. left.
+  bundle. left.
+
+(*  bundle.
+  pfold. appTrace.
+  reduce_once. admit.
+  reduce_once. admit. admit.*)
+
+(*  bundle.*)
+  
+
+  pfold. appTrace.
+
+  reduce_tac'. admit. econ. econ. econ. econ. econ.
+  reduce_once. econ.
+  
+  reduce_tac. econ.
+  
+  reduce_once.
+
+  reduce_once. instantiate (1:= insert3 InternalStep). done.
+  reduce_once.
+  reduce_once. admit.
+  reduce_once. simpl. econ.
+  reduce_once. econ.
+  reduce_once. econ.
+  reduce_once.
+  reduce_once. econ.
+  swi_instans. 
+  reduce_once.
+  reduce_once.
+  reduce_once. econ.
+  rewrite eqxx /=.
+  reduce_once. econ.
+  reduce_once. econ.
+  reduce_once.
+  reduce_once. econ.
+  reduce_once.
+  swi_instans.
+  reduce_once. econ.
+  reduce_once. econ.
+  swi_instans.
+  reduce_once.
+
+  
+  bundle. instantiate (1:= None). by instantiate (1:= None).
+
+  
+
+  Print reduceO.
+
+  apply: reduce_maybeO. Print maybe.
+
+  pfold. rewr. appTrace.
+  reduce_tac_ne.
+  reduce_tac_ne.
+  Print reduce_tac_ne.
+  reduce_once.
+  pfold. rewr.
+  appTrace.
+(*  reduce_tac. admit.*)
+  reduce_once. by instantiate (1:= (inr (Some Step,(None,None)))).
+  reduce_once. 
+  reduce_once. admit.
+  reduce_once. econ.
+  reduce_once. econ.
+  reduce_once. econ.
+  reduce_once.
+  reduce_once. econ.
+  rewrite eqxx.
+  reduce_once. admit.
+  reduce_tac.
+  
+
+
+
+  
+  bundle.
+
+  Print reduceO.
+
+  apply: reduce_swiO2.
+
+  reduce_tac.
+
+  apply: reduce_mapO.
+
+  left.
+  bundle. left.
+  bundle. right.
+  swi_instans. eauto.
+Qed.  
+
 Example bad_scheduler_is_bad : NotSim \bot LoopRel LoopRel l (bad_scheduler process2_maybe).
 
 Print LoopType_option. Print Ex3Input_option.
