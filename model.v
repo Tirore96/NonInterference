@@ -100,26 +100,26 @@ Canonical Output_indType := IndType Output Output_indDef.
 Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
-Inductive TypeSyscall := InternalStep | Syscall | SPublic. (*SPublic corresponds to None, and InternalStep/Syscall is Some _
+Inductive TypeSyscall := InternalStep | Syscall | Notify. (* | SPublic. (*SPublic corresponds to None, and InternalStep/Syscall is Some _
                                                              Used to distinguish H/L and easier than sprinkling option types into existing counterexample
-                                                            *)
+                                                            *)*)
 
 Definition TypeSyscall_indDef := [indDef for TypeSyscall_rect].
 Canonical TypeSyscall_indType := IndType TypeSyscall TypeSyscall_indDef.
 Definition TypeSyscall_hasDecEq := [derive hasDecEq for TypeSyscall].
 HB.instance Definition _ := TypeSyscall_hasDecEq.
 
-Inductive TypeNotify := SysStep | Notify | NPublic. (*NPublic corresponds to None*)
+(*Inductive TypeNotify := SysStep | Notify. (*| NPublic. (*NPublic corresponds to None*)*)
 
 Definition TypeNotify_indDef := [indDef for TypeNotify_rect].
 Canonical TypeNotify_indType := IndType TypeNotify TypeNotify_indDef.
 Definition TypeNotify_hasDecEq := [derive hasDecEq for TypeNotify].
-HB.instance Definition _ := TypeNotify_hasDecEq.
+HB.instance Definition _ := TypeNotify_hasDecEq.*)
 
 
 
 
-Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TNat | TTypeSyscall | TTypeNotify.
+Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TNat | TTypeSyscall. (* | TTypeNotify.*)
 
 Derive NoConfusion for Ty.
 Derive EqDec for Ty.
@@ -140,7 +140,7 @@ Fixpoint interp (t : Ty) : Set :=
   | TNat => nat
   | Sum t0 t1 => (interp t0) + (interp t1)            
   | TTypeSyscall => TypeSyscall
-  | TTypeNotify => TypeNotify              
+(*  | TTypeNotify => TypeNotify   *)           
   end.
 Notation "[ i ]" := (interp i).
 
@@ -931,63 +931,66 @@ Definition collapse_opair (A : Set) (o : option A * (option A)) (d : A) :=
 Definition alternate (I O : Ty) (o1 o2 d : [O]):=
   @map _ (Times Bool _) (Times (Option _) (Option _)) _ (fun i => (true,i)) (fun o => collapse_opair o d) (par (@swi _ _ true (@out I (Times Bool _) (true,o1))) (@swi _ _ false (@out _ (Times Bool _) (false,o2)))).
 
-Definition high_p := alternate TTypeNotify TTypeSyscall Syscall InternalStep Syscall.
+Definition high_p := alternate TTypeSyscall TTypeSyscall Syscall InternalStep Syscall.
 
-Definition handler := alternate TTypeSyscall TTypeNotify SysStep Notify SysStep.
+Definition handler := alternate TTypeSyscall TTypeSyscall InternalStep Notify InternalStep.
   
 (*Definition high_p := @map _ (Times Bool _) (Times (Option _) (Option _)) (Option _) (fun i => (false,i)) (fun x => if fst x is Some x' then fst x else snd x)
-                       (par (@swi TTypeNotify TTypeSyscall true (@out TTypeNotify (Times Bool TTypeSyscall) (true,InternalStep)))
-                            (@swi TTypeNotify TTypeSyscall false (@out TTypeNotify (Times Bool TTypeSyscall) (true,Syscall)))).
+                       (par (@swi TTypeSyscall TTypeSyscall true (@out TTypeSyscall (Times Bool TTypeSyscall) (true,InternalStep)))
+                            (@swi TTypeSyscall TTypeSyscall false (@out TTypeSyscall (Times Bool TTypeSyscall) (true,Syscall)))).
 Definition handler :=
   @map _ _ (Times (Option _) (Option _)) (Option _) id (fun x => if fst x is Some x' then fst x else snd x)
-    (par (@swi TTypeSyscall TTypeNotify false (@out TTypeSyscall (Times Bool TTypeNotify) (true,SysStep)))
-         (@swi TTypeSyscall TTypeNotify true (@out TTypeSyscall (Times Bool TTypeNotify) (true,Notify)))).*)
+    (par (@swi TTypeSyscall TTypeSyscall false (@out TTypeSyscall (Times Bool TTypeSyscall) (true,SysStep)))
+         (@swi TTypeSyscall TTypeSyscall true (@out TTypeSyscall (Times Bool TTypeSyscall) (true,Notify)))).*)
 
+Definition Ex3Input := (Times TInput (Times TTypeSyscall TTypeSyscall)).
+Definition Ex3Input_option := (Times (Option TInput) (Times (Option TTypeSyscall) (Option TTypeSyscall))).
 
-Definition Ex3NInput := (Times TNat (Times TInput (Times TTypeNotify TTypeSyscall))).
-Definition Ex3Input := (Times TInput (Times TTypeNotify TTypeSyscall)).
-Definition Ex3Output :=  (Times (Option TOutput) (Times (Option TTypeSyscall) (Option TTypeNotify))).
+Definition Ex3NInput := Times TNat Ex3Input.
+Definition Ex3NInput_option := Times TNat Ex3Input_option.
+Definition Ex3Output :=  (Times (Option TOutput) (Times (Option TTypeSyscall) (Option TTypeSyscall))).
 
 Definition LoopType := Sum Ex3Input Ex3Output.
+Definition LoopType_option := Sum Ex3Input_option Ex3Output.
 
 Definition d : [Ex3Input].
   do ? con.
 Defined.
 
+
+Definition d_option : [Ex3Input_option].
+  do ? con.
+Defined.
+
 Definition par_proc : Proc Ex3NInput Ex3Output := (par_swiI3 0 p1_simple high_p handler).
 
-(*Definition myn (n : nat) :=
-  match n with
-  | 0 => 0
-  | 1 => 0
-  | 2 => 1
-  | 3 => 2
-  | 4 => 3
-  | 5 => 3
-  | _ => 0
-  end.
-Check sta.*)
-Check par_proc. Print Ex3Output.
-Definition process2 := @map (Times Nat LoopType) Ex3NInput Ex3Output (LoopType) (fun i => match i with | (n,inl i') => (n,i') | (n,inr o) => (n,d) end) inr par_proc.
+Definition par_proc_maybe : Proc Ex3NInput_option Ex3Output := (par_swiI3 0 (maybe p1_simple) (maybe high_p) (maybe handler)).
 
+
+Definition process2 : Proc (Times Nat LoopType) LoopType := @map (Times Nat LoopType) Ex3NInput Ex3Output LoopType (fun i => match i with | (n,inl i') => (n,i') | (n,inr o) => (n,d) end) inr par_proc.
+Definition process2_maybe : Proc (Times Nat LoopType_option) LoopType_option := @map (Times Nat LoopType_option) Ex3NInput_option Ex3Output LoopType_option (fun i => match i with | (n,inl i') => (n,i') | (n,inr o) => (n,d_option) end) inr par_proc_maybe.
+
+
+Check process2_maybe.
 
 Definition myvT := Times Bool (Times Nat Nat).
-Locate "%/".
+
 Definition inc_myv (v : [myvT]) :=
   let: (b,(c,n)) := v in if b then v else (b,((c+1) %% 2,(n+((c+1)%/2))%%3)).
 
 Definition myv_to_n (v: [myvT]) : nat :=
   let: (b,(c,n)) := v in if b then 2 else n.
 
-Definition handler_up_v (i : [LoopType]) (v: [myvT])  : [myvT] :=
+Definition handler_up_v (i : [LoopType_option]) (v: [myvT])  : [myvT] :=
   let: (b,(c,n)) := v in
-  match i with
-  | inl (_,(no,s)) => if b && (no == Notify) then (false,(c,n)) else if (~~ b) && (s == Syscall) then (true,(c,n)) else v
-  | inr r => v
+  match b,i with
+  | false,inl (None,(None, Some Syscall)) => (true,(c,n))
+  | true, inl (None,(Some Notify,None)) => (false,(c,n))
+  | _,_ => v
   end.
 
 (*Definition bad_scheduler := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ myvT handler_up_v (fun o v => inc_myv v) (false,(0,0)) (@map (Times myvT _) (Times Nat _) _ _ (fun x => (myv_to_n (fst x), snd x)) id process2))).*)
-Definition bad_scheduler (p : Proc (Times Nat LoopType) LoopType)  := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ myvT handler_up_v (fun o v => inc_myv v) (false,(0,0)) (@map (Times myvT _) (Times Nat _) _ _ (fun x => (myv_to_n (fst x), snd x)) id p))).
+Definition bad_scheduler (p : Proc (Times Nat LoopType_option) LoopType_option)  := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ myvT handler_up_v (fun o v => inc_myv v) (false,(0,0)) (@map (Times myvT _) (Times Nat _) _ _ (fun x => (myv_to_n (fst x), snd x)) id p))).
 
 
 (*Got to here:
@@ -997,30 +1000,49 @@ Check bad_scheduler.
 Print LoopType.
 Print Ex3Input.
 
-Definition Ex3InputRel : myrel [Ex3Input].
-  rewrite /Ex3Input.
-   refine (@MyRel _ 
-            (fun (l : level) _ => )
+Definition Ex3InputRel : myrel [Ex3Input_option].
+  rewrite /Ex3Input_option. 
+  refine (@MyRel _ 
+            (fun (l : level) v => if l == \bot then match v with | (_,(None,None)) => False | _ => True end else False)
             (fun l io1 io2 => io1 = io2)
-                        _
+            _
             _
             _
             _).
-  - intros. done.
-  - intros. done.
-  - done.
+  - by intros.
+  - intros. rewrite /order in H. destruct (eqVneq l1 \bot). subst. rewrite lex0 in H. rewrite (eqP H) eqxx.
+    de a. done.
+  - intros. subst. destruct (eqVneq l \bot). subst. de a1. done.
+Defined.
+
+Definition Ex3OutputRel : myrel [Ex3Output].
+  rewrite /Ex3Output.
+  refine (@MyRel _ 
+            (fun (l : level) v => if l == \bot then match v with | (_,(Some NPublic,Some SPublic)) => False | _ => True end else False)
+            (fun l io1 io2 => io1 = io2)
+            _
+            _
+            _
+            _).
+  - by intros. 
+  - intros. rewrite /order in H. destruct (eqVneq l1 \bot). subst. rewrite lex0 in H. rewrite (eqP H) eqxx.
+    de a. done.
+  - intros. subst. destruct (eqVneq l \bot). subst. de a1. done.
 Defined.
 
   
 
 
   
-Definition LoopRel : myrel [LoopType].
-apply eqsum. apply eqpair. apply InputRelPublic. apply eqpairw
-  
-Parameter l : Stream ([LoopType] + [LoopType]).
-Example bad_scheduler_is_bad : NotSim \bot LoopRel LoopRel l (bad_scheduler process2).
+Definition LoopRel : myrel [LoopType_option].
+  apply eqsum. apply Ex3InputRel. apply Ex3OutputRel.
+Defined.
 
+
+Parameter l : Stream ([LoopType_option] + [LoopType_option]).
+Example bad_scheduler_is_bad : NotSim \bot LoopRel LoopRel l (bad_scheduler process2_maybe).
+
+Print LoopType_option. Print Ex3Input_option.
 (*Maybe also some example traces to show it works as expected?*)
 
 
