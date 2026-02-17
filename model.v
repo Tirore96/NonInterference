@@ -841,11 +841,21 @@ Ltac bundle_v :=
   first [ appTrace | rewr;appTrace ];
   first (do ? reduce_tac_v));simpl;try econ.
 
+Ltac check_if_var x :=
+  first [ is_var x;fail 1 "Term" x "is not a bare variable" | idtac ].
+
+(*Ltac match_dd := 
+   repeat
+    match goal with
+    | H : reduceI ?p _ _ |- _ => dependent destruction  H
+    | H : reduceO ?p _ _ |- _ => dependent destruction  H
+    end.*)
+
 Ltac match_dd := 
    repeat
     match goal with
-    | H : reduceI _ _ _ |- _ => dependent destruction  H
-    | H : reduceO _ _ _ |- _ => dependent destruction  H
+    | H : reduceI ?p _ _ |- _ => check_if_var p; dependent destruction  H
+    | H : reduceO ?p _ _ |- _ => check_if_var p; dependent destruction  H
     end.
 
 
@@ -1187,38 +1197,24 @@ Qed.
 
 Ltac rewr ::=  (try rewrite ex3_stream_eq); rewrite /par_swiI /bad_scheduler /process_pool /low_p  /ex3_streamF /bad_scheduler /process_pool /par_swiI3 /high_p /handler /sta_swi.
 
-(*Example ex3_trace_derivation : trace ex4_stream (bad_scheduler process_pool).
-Proof.
-  pcofix CIH.
-
-  bundle. left. (*1 Step*)
-  bundle. left. (*1 Step*)
-  bundle. left. (*2 Syscall*)
-  bundle. left. (*3 Internal step*)
-  bundle. left. (*3 Internal step*)
-  bundle. left. (*3 Internal step*) simpl.
-  
-
-  bundle_v. simpl.*)
-
-
 
 Ltac reduce_twice := reduce_once;(try reduce_once);(try eapply Logic.eq_refl).
-Example ex3_trace_derivation : trace ex3_stream (bad_scheduler process_pool).
+Example simple_trace : trace ex3_stream (bad_scheduler process_pool).
 Proof.
   pcofix CIH.
-  bundle. left. (*1 Get*)
-  bundle. left. (*1 Get*)
-  bundle. left. (*2 Sys*)
-  bundle. left. (*3 Sys*)
-  bundle. left. (*4 Timer*)
-  bundle. right. 
+  bundle. left.  (*1 Get*)
+  bundle. left.  (*1 Get*)
+  bundle. left.  (*2 Sys*)
+  bundle. left.  (*3 Sys*)
+  bundle. left.  (*4 Timer*)
+  bundle. right. (*5 Notify*)
   swi_instans.
   exact CIH.
 Qed.
 
 
-Definition Ex3InputRel : myrel [InputType].
+
+Definition InputTypeRel : myrel [InputType].
   rewrite /InputType. 
   refine (@MyRel _ 
             (fun (l : level) v => if l == \bot then match v with | (_,(None,None)) => False | _ => True end else False)
@@ -1248,12 +1244,59 @@ Definition OutputTypeRel : myrel [OutputType].
   - intros. subst. destruct (eqVneq l \bot). subst. de a1. done.
 Defined.
 
-  
+Ltac dd H := dependent destruction H.
+
+Ltac temp_match := 
+    match goal with
+    | H : reduceI ?p _ _ |- _ =>  check_if_var p;  dependent destruction  H
+    | H : reduceO ?p _ _ |- _ => check_if_var p; dependent destruction  H
+    end.
+
+Example counterexample : NotSim \bot InputTypeRel OutputTypeRel ex3_stream (bad_scheduler process_pool).
+Proof.
+  apply: NS2.
+  instantiate (1:= (None,(None,(Some TimerInterrupt)))). ssa. rewrite eqxx //.
+
+  move=>p'. rewr. ssa.
+  match_dd.
+  apply:NS4.
+  ssa.
+  match_dd.
+Qed.  
+
+Example example_not_NI : ~ @NI _ _ InputTypeRel OutputTypeRel (bad_scheduler process_pool).
+Proof.
+  rewrite /NI. ssa. intro.
+  apply/toNotSim. apply/counterexample.
+  apply/H. apply simple_trace.
+Qed.  
+
+End Example3.
 
 
-  
+
+
+
+
+
+
+
+
+Example ex3_is_bad : NotSim \bot InputTypeRel OutputTypeRel ex3_stream (bad_scheduler process_pool).
+Proof.
+  apply: NS2.
+  instantiate (1:= (None,(None,(Some TimerInterrupt)))). ssa. rewrite eqxx //.
+  move=> p' Hred. match_dd
+                                                                                                      match_dd_safe.
+  dd H0. de o.
+  dd H1.
+  dd H1. dd H1.
+  dd H
+
+
+
 Definition LoopRel : myrel [IOType].
-  apply eqsum. apply Ex3InputRel. apply OutputTypeRel.
+  apply eqsum. apply InputTypeRel. apply OutputTypeRel.
 Defined.
 
 
@@ -1286,7 +1329,6 @@ Proof.
   de i. de i0. de o0. reduce_tac.
 Qed.
 
-Ltac dd H := dependent destruction H.
 (*Lemma stays_i2 : forall p i, reduceO (bad_scheduler process_pool) (Some Step,(None,None)) p -> reduceI p i p.
 Proof.
   intros.
