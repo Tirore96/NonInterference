@@ -15,7 +15,6 @@ Import Order.TTheory.
 Open Scope order_scope.
 
 Parameter (level : tbLatticeType (Order.Disp tt tt)).
-(*ltacs*)
 
 Ltac con := constructor.
 Ltac econ := econstructor.
@@ -89,9 +88,7 @@ Record myrel (A : Set) :=
 (*Example 3*)
 Inductive Interrupt := DiskInterrupt | TimerInterrupt.
 Inductive HandlerOutput := Nothing | Notify.
-Inductive TypeSyscall := Syscall.(* InternalStep | Syscall | Notify (*| Default*) . (* | SPublic. (*SPublic corresponds to None, and InternalStep/Syscall is Some _
-                                                             Used to distinguish H/L and easier than sprinkling option types into existing counterexample
-                                                            *)*) *)
+Inductive TypeSyscall := Syscall.
 Inductive PublicOutput := GetRequest.
 
 Definition Interrupt_indDef := [indDef for Interrupt_rect].
@@ -114,14 +111,6 @@ Canonical PublicOutput_indType := IndType PublicOutput PublicOutput_indDef.
 Definition PublicOutput_hasDecEq := [derive hasDecEq for PublicOutput].
 HB.instance Definition _ := PublicOutput_hasDecEq.
 
-
-
-
-
-
-
-
-
 Inductive Input := Skip | DiskRead.
 Inductive Output := Idle | Step.
 
@@ -136,19 +125,7 @@ Canonical Output_indType := IndType Output Output_indDef.
 Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
-
-
-(*Inductive TypeNotify := SysStep | Notify. (*| NPublic. (*NPublic corresponds to None*)*)
-
-Definition TypeNotify_indDef := [indDef for TypeNotify_rect].
-Canonical TypeNotify_indType := IndType TypeNotify TypeNotify_indDef.
-Definition TypeNotify_hasDecEq := [derive hasDecEq for TypeNotify].
-HB.instance Definition _ := TypeNotify_hasDecEq.*)
-
-
-
-
-Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | TInterrupt | THandlerOutput |  TPublicOutput. (* | TTypeNotify.*)
+Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | TInterrupt | THandlerOutput |  TPublicOutput. 
 
 Derive NoConfusion for Ty.
 Derive EqDec for Ty.
@@ -169,7 +146,6 @@ Fixpoint interp (t : Ty) : Set :=
   | Sum t0 t1 => (interp t0) + (interp t1)            
   | TTypeSyscall => TypeSyscall
   | Unit => unit                     
-              (*  | TTypeNotify => TypeNotify   *)
   | TInterrupt => Interrupt
   | THandlerOutput => HandlerOutput
   | TPublicOutput => PublicOutput              
@@ -183,9 +159,6 @@ Notation "[ i ]" := (interp i).
 
 
 (** Process type **)
-
-     
-
 Inductive Proc : Ty -> Ty -> Type :=
 | out  : forall {I O : Ty}, interp O -> Proc I O  
 | map   : forall {I I' O O' : Ty}, (interp I -> interp I') -> (interp O -> interp O') -> Proc I' O -> Proc I O'
@@ -199,20 +172,8 @@ Derive NoConfusion for Proc.
 Derive NoConfusionHom for Proc.
 Derive Signature for Proc.
 
-
-
-(** Core combinators *)
-(*Parameter map   : forall {I I' O O'}, (I -> I') -> (O -> O') -> Proc I' O -> Proc I O'.
-Parameter sta   : forall {I O V}, (I -> V -> V) -> (O -> V -> V) -> V -> Proc (V*I) O -> Proc I (V*O).
-Parameter swi   : forall {I O},  bool -> Proc I (bool * O)%type -> Proc (bool * I) (option O).
-Parameter par   : forall {I O1 O2}, Proc I O1 -> Proc I O2 -> Proc I (O1 * O2).
-Parameter loop  : forall {I}, Proc I I -> Proc I I.
-Parameter maybe : forall {I O}, Proc I O -> Proc (option I) O.*)
-
 Definition xor (b1 b2 : bool) := (Datatypes.negb (b1 == b2)).
 
-
-Check out.
 
 Inductive reduceI : forall (I O : Ty), Proc I O -> interp I -> Proc I O -> Prop :=
 | reduce_outI I O i (o : [O]) : reduceI (@out I _ o) i (@out I _ o)
@@ -225,8 +186,8 @@ Inductive reduceI : forall (I O : Ty), Proc I O -> interp I -> Proc I O -> Prop 
 | reduce_loopI (I :Ty) (p p' : Proc I I) (i : [I]) : reduceI p i p' -> reduceI (loop p) i (loop p').
 Hint Constructors reduceI : core.
 
-Create HintDb omitdb.
-Hint Resolve reduce_mapI reduce_staI reduce_swiI reduce_maybeI reduce_maybeI2 reduce_parI reduce_loopI : omitdb.
+(*Create HintDb omitdb.
+Hint Resolve reduce_mapI reduce_staI reduce_swiI reduce_maybeI reduce_maybeI2 reduce_parI reduce_loopI : omitdb.*)
 
 Inductive reduceO : forall (I O : Ty), Proc I O -> [O] -> Proc I O -> Prop :=
 | reduce_outO (I O : Ty) (o : [O]) : reduceO (@out I _ o) o (@out I _ o)
@@ -239,7 +200,17 @@ Inductive reduceO : forall (I O : Ty), Proc I O -> [O] -> Proc I O -> Prop :=
 | reduce_loopO (O :Ty) (p p' p'' : Proc O O) (o : [O]) : reduceO p o p' -> reduceI p' o p'' -> reduceO (loop p) o (loop p'').
 Hint Constructors reduceO : core.
 
-Hint Resolve reduce_mapO reduce_staO reduce_swiO reduce_swiO2 reduce_maybeO reduce_parO reduce_loopO : omitdb.
+Ltac check_if_var x :=
+  first [ is_var x;fail 1 "Term" x "is not a bare variable" | idtac ].
+
+Ltac match_dd := 
+   repeat
+    match goal with
+    | H : reduceI ?p _ _ |- _ => check_if_var p; dependent destruction  H
+    | H : reduceO ?p _ _ |- _ => check_if_var p; dependent destruction  H
+    end.
+
+(*Hint Resolve reduce_mapO reduce_staO reduce_swiO reduce_swiO2 reduce_maybeO reduce_parO reduce_loopO : omitdb.*)
 
 
 Variant TraceF {I O : Ty} (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O -> Prop :=
@@ -254,41 +225,21 @@ inv IN; eauto.
 Qed.
 Hint Resolve monotone_TraceF : paco.
 
-(* not (a -> b)  = *)  
 Definition trace (I O : Ty) eff p := paco2 (@TraceF I O) bot2 eff p.
 
 
 Definition Clause1 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   forall i s', s = (Cons (inl i) s') -> dis IRel l i -> R s' p.
 
-
-(*Variant Clause1 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | Clause1F : forall p i s s', s = (Cons (inl i) s') -> (dis IRel l i -> R s' p) -> Clause1 l IRel ORel R s p.*)
-
 Definition Clause2 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   (forall i, dis IRel l i -> exists p', reduceI p i p' /\ R s p').
-
-
-(*Variant Clause2 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | Clause2F : forall p s, (forall i, dis IRel l i -> exists p', reduceI p i p' /\ R s p') -> Clause2 l IRel ORel R s p.
- *)
 
 Definition Clause3 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   forall i s', s = (Cons (inl i) s') -> (forall i', rel IRel l i' i -> exists p', reduceI p i' p' /\ R s' p').
 
-
-(*Variant Clause3 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | Clause3F : forall p i s s', s = (Cons (inl i) s') -> (forall i', rel IRel l i i' -> exists p', reduceI p i' p' /\ R s' p')
-                         -> Clause3 l IRel ORel R s p.
- *)
-
 Definition Clause4 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   forall o s', s = (Cons (inr o) s') -> exists o', rel ORel l o' o /\ exists p', reduceO p o' p' /\ R s' p'.
 
-
-(*Variant Clause4 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | Clause4F : forall p p' o o' s s', s = (Cons (inr o) s') ->  rel ORel l o o' -> reduceO p o' p' -> R s' p' -> Clause4 l IRel ORel R s p.
-*)
 Variant SimulationF {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
   | SI s p : Clause1 l IRel ORel R s p ->
              Clause2 l IRel ORel R s p ->
@@ -381,10 +332,131 @@ Proof.
     
     eapply H0. eauto. eauto. pc. done.
 Qed.
+
+
+Ltac rewr := idtac. (*updated later*)
+
+Lemma zerol : 0 < 0 = false.
+Proof. done.
+Qed.
+
+Ltac swi_instans :=
+   repeat
+    match goal with
+    | |- context [ swi (?x < ?x) _] => is_evar x; unify x 0; try rewrite zerol
+    | |- context [ swi (?x < ?x != _) _] => is_evar x; unify x 0; try rewrite zerol
+    end; rewrite ?eqxx /= /xor /=.
+
+Ltac reduce_once :=
+  simpl;
+    match goal with
+    | |- reduceI (@out _ _ _) _ _ => apply: reduce_outI
+    | |- reduceI (@map _ _ _ _ _ _ _) _ _ => apply: reduce_mapI
+    | |- reduceI (@sta _ _ _ _ _ _ _) _ _ => apply: reduce_staI
+    | |- reduceI (@swi _ _ _ _) _ _ => apply: reduce_swiI
+    | |- reduceI (par _ _) _ _ => apply: reduce_parI
+    | |- reduceI (@loop _ _) _ _ => apply: reduce_loopI                                                  
+    | |- reduceI (@maybe _ _ _) None _ => apply: reduce_maybeI
+    | |- reduceI (@maybe _ _ _) (Some _) _ => apply: reduce_maybeI2
+
+    | |- reduceO (@out _ _ _) _ _ => apply: reduce_outO
+    | |- reduceO (@map _ _ _ _ _ _ _) _ _ => apply: reduce_mapO
+    | |- reduceO (@sta _ _ _ _ _ _ _) _ _ => apply: reduce_staO
+    | |- reduceO (@swi _ _ _ _) None _ => apply: reduce_swiO
+    | |- reduceO (@swi _ _ _ _) (Some _) _ => apply: reduce_swiO2
+    | |- reduceO (@swi _ _ false _) _ _ => apply: reduce_swiO
+    | |- reduceO (@swi _ _ true _) _ _ => apply: reduce_swiO2                                                       
+    | |- reduceO (par _ _) _ _ => apply: reduce_parO
+    | |- reduceO (@loop _ _) _ _ => apply: reduce_loopO
+    | |- reduceO (@maybe _ _ _) _ _ => apply: reduce_maybeO
+    end.
+
+Ltac debug_reduce :=
+    match goal with
+    | |- reduceI ?p ?i _ => idtac "reduceI" i
+    | |- reduceO ?p ?o _ => idtac "reduceO" o
+    end.
+
+Ltac reduce_once_v :=
+  simpl;debug_reduce;
+    match goal with
+    | |- reduceI (@out _ _ _) _ _ => apply: reduce_outI
+    | |- reduceI (@map _ _ _ _ _ _ _) ?i _ => idtac "map_in" i;apply: reduce_mapI
+    | |- reduceI (@sta _ _ _ _ _ ?v _) _ _ => idtac "state" v;apply: reduce_staI
+    | |- reduceI (@swi _ _ _ _) _ _ => apply: reduce_swiI
+    | |- reduceI (par _ _) _ _ => apply: reduce_parI
+    | |- reduceI (@loop _ _) _ _ => apply: reduce_loopI                                                  
+    | |- reduceI (@maybe _ _ _) None _ => apply: reduce_maybeI
+    | |- reduceI (@maybe _ _ _) (Some _) _ => apply: reduce_maybeI2
+
+    | |- reduceO (@out _ _ _) _ _ => apply: reduce_outO
+    | |- reduceO (@map _ _ _ _ _ _ _) ?o _ => idtac "map_out" o;apply: reduce_mapO
+    | |- reduceO (@sta _ _ _ _ _ ?v _) _ _ => idtac "state" v;apply: reduce_staO
+    | |- reduceO (@swi _ _ _ _) None _ => apply: reduce_swiO
+    | |- reduceO (@swi _ _ _ _) (Some _) _ => apply: reduce_swiO2
+    | |- reduceO (@swi _ _ false _) _ _ => apply: reduce_swiO
+    | |- reduceO (@swi _ _ true _) _ _ => apply: reduce_swiO2                                                       
+    | |- reduceO (par _ _) _ _ => apply: reduce_parO
+    | |- reduceO (@loop _ _) _ _ => apply: reduce_loopO
+    | |- reduceO (@maybe _ _ _) _ _ => apply: reduce_maybeO
+    end.
+
+Ltac controlled_eauto := 
+    match goal with
+    | |- reduceI _ _ _ => idtac
+    | |- reduceO _ _ _ => idtac
+    | |- _ => eauto                        
+    end.
+
+Ltac reduce_tac :=
+  (try rewr);
+   (repeat
+      reduce_once);(try swi_instans);controlled_eauto; rewrite ?eqxx /= /xor /=.
+
+Ltac reduce_tac_v :=
+  (try rewr);(rewrite ?eqxx /= /xor /= );
+   repeat first [reduce_once_v;first try econ | swi_instans].
+
+Ltac appTrace := apply: traceI || apply: traceO.
+
+
+Ltac bundle :=
+  (pfold;
+  first [ appTrace | rewr;appTrace ];
+   first (do ? reduce_tac));controlled_eauto;simpl.
+
+Ltac bundle_v :=
+  (pfold;
+  first [ appTrace | rewr;appTrace ];
+  first (do ? reduce_tac_v));simpl;try econ.
   
 Section AdmittedTheorems.
 
-Definition NI (I O :Ty) IRel ORel (p : Proc I O) := forall l s, trace s p -> @simulation I O l IRel ORel s p.
+  Definition NI (I O :Ty) IRel ORel (p : Proc I O) := forall l s, trace s p -> @simulation I O l IRel ORel s p.
+
+  Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), @NI I O IRel ORel (out o).
+Proof.
+  intros. rewrite /NI.
+  move=>l. pcofix CIH.
+  ssa. punfold H0. inv H0.
+  - pc. match_dd.
+    pfold. con.
+    * rc. intros. inv H. right. apply CIH. done.
+    * rc. intros. exists (@out _ _ o). con. eauto;con. right. apply CIH.
+      pfold. done.
+    * rc. intros. exists (@out _ _ o). con. eauto.
+      right. inv H. eauto.
+    * rc. intros. inv H.
+  - pc. match_dd.
+    pfold. con.
+    * rc. intros. inv H.
+    * rc. intros. exists (@out _ _ o). con. eauto. right. apply CIH.
+      pfold. done.
+    * rc. intros. exists (@out _ _ o). con. eauto.
+      right. inv H. eauto.
+    * rc. intros. inv H.
+      exists o0. ssa. exists (@out _ _ o0). con. eauto. eauto.
+Qed.
 
 Definition f_NI {I O :Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall (l : level) (i i' : [I]) (o o' : [O]), rel IRel l i i' -> rel ORel l (f i) (f i').
 Definition f_PU {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall l (i : [I]), dis IRel l i -> dis ORel l (f i).
@@ -565,8 +637,6 @@ eauto.
 eauto.
 Defined.
 
-(*Definition order_respecting (ls : seq level) :=  forall l l', order l l' -> l \in ls -> l' \in ls.*)
-
 Definition eqmaybe {V : Ty} (VRel : myrel [V]) (P: levelPred) : myrel ([Option V]).
     refine (@MyRel _
             (fun l v => if v is Some v' then dis VRel l v' else ~ P l /\ forall x0 x1, order x0 x1 -> P x0 -> P x1 )
@@ -603,7 +673,7 @@ Admitted.
 End AdmittedTheorems.
 
 
-Definition mapO {I O O' : Ty} (f : [O] -> [O']) : Proc I O  -> Proc I O' :=
+(*Definition mapO {I O O' : Ty} (f : [O] -> [O']) : Proc I O  -> Proc I O' :=
   map (@id [I]) f.
 
 
@@ -623,7 +693,7 @@ Definition staO {I O V : Ty} (f : [O] -> [V] -> [V]) (v:[V]) (p:Proc (Times V I)
 Definition swiI {I O : Ty} (b : [Bool]) (p : Proc I O) : Proc (Times Bool I) (Option O) :=
   swi b (@mapO _ _ (Times Bool _) (fun x => (false,x)) p).
 Definition swiO {I O : Ty} (b : bool) (p : Proc I (Times Bool O)) : Proc I (Option O) :=
-  @mapI _ (Times Bool _) _ (fun x => (false,x)) (swi b p).
+  @mapI _ (Times Bool _) _ (fun x => (false,x)) (swi b p).*)
 
 Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
   : Proc (Times Bool (Times I1 I2)) (Times (Option O1) (Option O2)) :=
@@ -638,44 +708,10 @@ Definition scheduled_p (I O : Ty) (b : bool) (p : Proc I O) := @map _ _ (Times _
                                                                  (@map (Times _ (Times _ _))  (Times _ (Times _ _)) _ _ (fun i => (fst (snd i),(fst i,snd (snd i)))) id
                                                                  (swi b (@map (Times Bool _) (Option _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o))
                                                                            (maybe p))))).
-Check scheduled_p.
-Definition par2 (I1 I2 : Ty) (O1 O2 : Ty) (p1 : Proc I1 O1) (p2 : Proc I2 O2) : Proc (Times I1 I2) (Times O1 O2) :=
-  par (@map (Times _ _) _ _ _ fst id p1) (@map (Times _ _) _ _ _ snd id p2).
-
-Definition testp (I1 I2 I3 : Ty) (O1 O2 O3 : Ty) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)  :=
-  @sta _ _ (Times Bool (Times Bool Bool)) (fun i v => v) (fun o v => v) (false,(false,false))
-    (@map (Times (Times Bool (Times Bool Bool)) (Times _ (Times _ _))) (Times (Times Bool _) (Times (Times Bool _) (Times Bool _))) _ _ (fun i => let:((b1,(b2,b3)),(p1,(p2,p3))) := i in ((b1,p1),((b2,p2),(b3,p3)))) id (par2 (scheduled_p true p1) (par2 (scheduled_p false p2) (scheduled_p false p3)))).
-
-Check testp.
-(*Definition par3 (I1 I2 I3 : Ty) (O1 O2 O3 : Ty) (p0 : Proc I1 O1) (p1 : Proc I2 O2) (p2 : Proc I3 O3) := @map _ (Times _ (Times _ _)) _ _ (fun i => (i,(i,i))) id (par (@scheduled_p _ _ false p0) (par (@scheduled_p _ _ false p1) (@scheduled_p _ _ false p2))).
-Definition par2 (I1 I2 O1 O2 : Ty) (p1 : Proc I1 O1) (p2 : Proc I2 O2) : Proc (Sum I1 I2) (Sum O1 O2) :=
-  @map _ _ _ _ (fun i => (i,i)) par p1 p2
-
-  @map (Times _ _) (Times _ (Times _ _)) (Times _ _) _ (fun i => (fst i,i)) snd (@swi _ _ b ((@map (Times Bool _) (Option _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o)) (maybe p)))).
-
-Definition scheduled_p (I O : Ty) (b : bool) (p : Proc I O) : Proc (Times Bool (Option I)) (Option O) :=
-  @map (Times _ _) (Times _ (Times _ _)) (Times _ _) _ (fun i => (fst i,i)) snd (@swi _ _ b ((@map (Times Bool _) (Option _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o)) (maybe p)))).
-
-Definition par_swiI2 {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
-  : Proc (Times Bool (Sum I1 I2)) (Sum O1 O2) :=
-    par
-      (swi b (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1))
-      (swi (negb b) (@map (Times _ _) _ _ (Times Bool _) snd (fun x => (false,x)) p2)).*)
 
 Lemma par_swiI_NI : forall (I1 I2 O1 O2 : Ty) (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (IRel1 : myrel [I1]) (IRel2 : myrel [I2]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]),
      NI IRel1 ORel1 p1 -> NI IRel2 ORel2 p2 -> NI (eqpair_LR boolRel (eqpair IRel1 IRel2)) (eqpair (eqmaybe ORel1 (aware Bool boolRel true)) (eqmaybe ORel2 (aware Bool boolRel false))) (par_swiI b p1 p2).
 Proof. Admitted.
-
-Definition bool3Type := Times Bool (Times Bool Bool).
-
-Definition proj1 (b : [bool3Type]) : [Bool] := fst b.
-Definition proj2 (b : [bool3Type]) : [Bool] := fst (snd b).
-Definition proj3 (b : [bool3Type]) : [Bool] := snd (snd b).
-
-Definition bool1 : [bool3Type] := (true,(false,false)).
-Definition bool2 : [bool3Type] := (false,(true,false)).
-Definition bool3 : [bool3Type] := (false,(false,true)).
-
 
 (*sta_swi b n f p:
  (i == n,I') -> enables p
@@ -704,159 +740,6 @@ Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc 
       (@sta_swi (Times _ (Times _ _)) _ O2 (n == 1) 1 (fun x => fst (snd x)) p2)
       ((@sta_swi (Times _ (Times _ _)) _ O3 (n == 2) 2 (fun x => snd (snd x)) p3))). 
 
-
-
-
-(*Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
-  : Proc (Times TNat (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
-    par
-      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 0,snd x)) id (@sta_swi (Times _ _) _ O1 (n == 0) fst p1))
-      (par
-      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 1,snd x)) id (@sta_swi (Times _ (Times _ _)) _ O2 (n == 1) (fun x => fst (snd x)) p2))
-      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 2,snd x)) id (@sta_swi (Times _ (Times _ _)) _ O3 (n == 2) (fun x => snd (snd x)) p3))).*) 
-
-
-(*Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
-  : Proc (Times TNat (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
-    par
-      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 0,snd x)) id (swi (n == 0) (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (true,x)) p1)))
-      (par
-      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 1,snd x)) id (swi (n == 1) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => fst (snd x)) (fun x => (true,x)) p2)))
-      (@map (Times TNat _) (Times Bool _) _ _ (fun x => (fst x == 2,snd x)) id (swi (n == 2) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => snd (snd x)) (fun x => (true,x)) p3)))).*)
-
-
-(*Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (b : [bool3Type]) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
-  : Proc (Times bool3Type (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
-    par
-      (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj1 (fst x),snd x)) id (swi (proj1 b) (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1)))
-      (par
-      (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj2 (fst x),snd x)) id (swi (proj2 b) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => fst (snd x)) (fun x => (false,x)) p2)))
-      (@map (Times bool3Type _) (Times Bool _) _ _ (fun x => (proj3 (fst x),snd x)) id (swi (proj3 b) (@map (Times _ (Times _ _)) _ _ (Times Bool _) (fun x => snd (snd x)) (fun x => (false,x)) p3)))).
-*)
-
-
-
-Ltac rewr := idtac. (*updated later*)
-
-Lemma zerol : 0 < 0 = false.
-Proof. done.
-Qed.
-Ltac swi_instans :=
-   repeat
-    match goal with
-    | |- context [ swi (?x < ?x) _] => is_evar x; unify x 0; try rewrite zerol
-    | |- context [ swi (?x < ?x != _) _] => is_evar x; unify x 0; try rewrite zerol
-    end; rewrite ?eqxx /= /xor /=.
-
-Ltac reduce_once :=
-  simpl;
-    match goal with
-    | |- reduceI (@out _ _ _) _ _ => apply: reduce_outI
-    | |- reduceI (@map _ _ _ _ _ _ _) _ _ => apply: reduce_mapI
-    | |- reduceI (@sta _ _ _ _ _ _ _) _ _ => apply: reduce_staI
-    | |- reduceI (@swi _ _ _ _) _ _ => apply: reduce_swiI
-    | |- reduceI (par _ _) _ _ => apply: reduce_parI
-    | |- reduceI (@loop _ _) _ _ => apply: reduce_loopI                                                  
-    | |- reduceI (@maybe _ _ _) None _ => apply: reduce_maybeI
-    | |- reduceI (@maybe _ _ _) (Some _) _ => apply: reduce_maybeI2
-
-    | |- reduceO (@out _ _ _) _ _ => apply: reduce_outO
-    | |- reduceO (@map _ _ _ _ _ _ _) _ _ => apply: reduce_mapO
-    | |- reduceO (@sta _ _ _ _ _ _ _) _ _ => apply: reduce_staO
-    | |- reduceO (@swi _ _ _ _) None _ => apply: reduce_swiO
-    | |- reduceO (@swi _ _ _ _) (Some _) _ => apply: reduce_swiO2
-    | |- reduceO (@swi _ _ false _) _ _ => apply: reduce_swiO
-    | |- reduceO (@swi _ _ true _) _ _ => apply: reduce_swiO2                                                       
-    | |- reduceO (par _ _) _ _ => apply: reduce_parO
-    | |- reduceO (@loop _ _) _ _ => apply: reduce_loopO
-    | |- reduceO (@maybe _ _ _) _ _ => apply: reduce_maybeO
-    end.
-
-Ltac debug_reduce :=
-    match goal with
-    | |- reduceI ?p ?i _ => idtac "reduceI" i
-    | |- reduceO ?p ?o _ => idtac "reduceO" o
-    end.
-
-Ltac reduce_once_v :=
-  simpl;debug_reduce;
-    match goal with
-    | |- reduceI (@out _ _ _) _ _ => apply: reduce_outI
-    | |- reduceI (@map _ _ _ _ _ _ _) ?i _ => idtac "map_in" i;apply: reduce_mapI
-    | |- reduceI (@sta _ _ _ _ _ ?v _) _ _ => idtac "state" v;apply: reduce_staI
-    | |- reduceI (@swi _ _ _ _) _ _ => apply: reduce_swiI
-    | |- reduceI (par _ _) _ _ => apply: reduce_parI
-    | |- reduceI (@loop _ _) _ _ => apply: reduce_loopI                                                  
-    | |- reduceI (@maybe _ _ _) None _ => apply: reduce_maybeI
-    | |- reduceI (@maybe _ _ _) (Some _) _ => apply: reduce_maybeI2
-
-    | |- reduceO (@out _ _ _) _ _ => apply: reduce_outO
-    | |- reduceO (@map _ _ _ _ _ _ _) ?o _ => idtac "map_out" o;apply: reduce_mapO
-    | |- reduceO (@sta _ _ _ _ _ ?v _) _ _ => idtac "state" v;apply: reduce_staO
-    | |- reduceO (@swi _ _ _ _) None _ => apply: reduce_swiO
-    | |- reduceO (@swi _ _ _ _) (Some _) _ => apply: reduce_swiO2
-    | |- reduceO (@swi _ _ false _) _ _ => apply: reduce_swiO
-    | |- reduceO (@swi _ _ true _) _ _ => apply: reduce_swiO2                                                       
-    | |- reduceO (par _ _) _ _ => apply: reduce_parO
-    | |- reduceO (@loop _ _) _ _ => apply: reduce_loopO
-    | |- reduceO (@maybe _ _ _) _ _ => apply: reduce_maybeO
-    end.
-
-Ltac controlled_eauto := 
-    match goal with
-    | |- reduceI _ _ _ => idtac
-    | |- reduceO _ _ _ => idtac
-    | |- _ => eauto                        
-    end.
-
-Ltac reduce_tac :=
-  (try rewr);
-   (repeat
-      reduce_once);(try swi_instans);controlled_eauto; rewrite ?eqxx /= /xor /=.
-
-Ltac reduce_tac_v :=
-  (try rewr);(rewrite ?eqxx /= /xor /= );
-   repeat first [reduce_once_v;first try econ | swi_instans].
-(*Ltac reduce_tac' :=
-  (try rewr);
-   (repeat
-      reduce_once);(try swi_instans); rewrite ?eqxx /= /xor /=.*)
-
-(*Ltac reduce_tac_ne :=
-  (try rewr);
-   (repeat
-    reduce_once);(try swi_instans);rewrite ?eqxx /= /xor /=.*)
-
-
-Ltac appTrace := apply: traceI || apply: traceO.
-
-
-Ltac bundle :=
-  (pfold;
-  first [ appTrace | rewr;appTrace ];
-   first (do ? reduce_tac));controlled_eauto;simpl.
-
-Ltac bundle_v :=
-  (pfold;
-  first [ appTrace | rewr;appTrace ];
-  first (do ? reduce_tac_v));simpl;try econ.
-
-Ltac check_if_var x :=
-  first [ is_var x;fail 1 "Term" x "is not a bare variable" | idtac ].
-
-(*Ltac match_dd := 
-   repeat
-    match goal with
-    | H : reduceI ?p _ _ |- _ => dependent destruction  H
-    | H : reduceO ?p _ _ |- _ => dependent destruction  H
-    end.*)
-
-Ltac match_dd := 
-   repeat
-    match goal with
-    | H : reduceI ?p _ _ |- _ => check_if_var p; dependent destruction  H
-    | H : reduceO ?p _ _ |- _ => check_if_var p; dependent destruction  H
-    end.
 
 
 (*Types used in all examples*)
@@ -906,13 +789,25 @@ Definition Output_option_prod : myrel ([ExOutputType]).
   Defined.
 
 
+
+
+
+
+
+(**Examples*)
+
+
+
+(*Example 1: Interference
+  Scheduler switches between p1 and p2 based on secret input (DiskRead)*)
 Module Example1.
 (*Process*)
-Definition p1_simple := @out TInput TOutput Step.
+Definition p1 := @out TInput TOutput Step.
 Definition p2 := @out TInput TOutput Idle.
-Definition processes_simple := par_swiI false p1_simple p2.
-Definition leaking_scheduler := @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [TInput]) => (i == DiskRead,(i,i))) id processes_simple.
+Definition process_pool := par_swiI false p1 p2.
 
+Definition scheduler (p : Proc (Times Bool (Times TInput TInput)) (Times (Option TOutput) (Option TOutput))) :=
+  @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [TInput]) => (i == DiskRead,(i,i))) id p.
 
 (*Trace*)
 Definition newtraceF_simple (newtrace : streamType) := Cons (inl (DiskRead))
@@ -931,8 +826,8 @@ Qed.
 
 
 (*Trace derivation*)
-Ltac rewr ::=  (try rewrite newtrace_simple_eq); rewrite /newtraceF_simple /processes_simple /par_swiI /leaking_scheduler /p1_simple /p2.
-Lemma simple_trace : trace newtrace_simple leaking_scheduler.
+Ltac rewr ::=  (try rewrite newtrace_simple_eq); rewrite /newtraceF_simple /process_pool /par_swiI /scheduler /p1 /p2.
+Lemma simple_trace : trace newtrace_simple (scheduler process_pool).
 Proof.
   pcofix CIH.
   rewr.
@@ -943,7 +838,7 @@ Proof.
 Qed.
 
 (*NotSim*)
-Example counterexample : NotSim \bot InputRel Output_option_prod newtrace_simple leaking_scheduler.
+Example counterexample : NotSim \bot InputRel Output_option_prod newtrace_simple (scheduler process_pool).
 Proof. 
   rewrite newtrace_simple_eq /newtraceF_simple.
   apply: NS2. instantiate (1:= (DiskRead)).
@@ -959,24 +854,23 @@ Proof.
 Qed.  
 
 (*Not NI*)
-Example example_not_NI :  ~ NI InputRel Output_option_prod leaking_scheduler.
+Example example_not_NI :  ~ NI InputRel Output_option_prod (scheduler process_pool).
 Proof.
   rewrite /NI. ssa. intro.
   Search _ NotSim.
   apply/toNotSim. apply/counterexample.
   apply/H. apply simple_trace.
 Qed.
-
 End Example1.
 
-
+(*Example 2: Non-interference
+ round-robin between p1 with low output and p2 with high output
+ Both have low input*)
 Module Example2.
-(*high low*)
-
-Definition naive_scheduler {I O} (p : Proc (Times Bool (Times I I)) O) : Proc I O :=
-  @map _ (Times Bool (Times _ _)) _ _ (fun i => (true,(i,i))) id p.
-
-Definition hp_lp := naive_scheduler (par_swiI true (@out TInput TOutput Idle) (@out TInput TOutput Step)).
+Definition p1 := (@out TInput TOutput Step). (*high*)  
+Definition p2 := (@out TInput TOutput Idle). (*low*)
+Definition process_pool := par_swiI false p1 p2.
+Definition scheduler {I O} (p : Proc (Times Bool (Times I I)) O) : Proc I O := @map _ (Times Bool (Times _ _)) _ _ (fun i => (true,(i,i))) id p.
 
 Definition InputRelPublic : myrel ([TInput]). 
   refine (@MyRel _
@@ -994,36 +888,14 @@ Lemma specific_monotone : monotone2 TraceF_specific.
 Qed.
 
 Hint Resolve specific_monotone : paco.
-Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), @NI I O IRel ORel (out o).
-Proof.
-  intros. rewrite /NI.
-  move=>l. pcofix CIH.
-  ssa. punfold H0. inv H0.
-  - pc. match_dd.
-    pfold. con.
-    * rc. intros. inv H. right. apply CIH. done.
-    * rc. intros. exists (@out _ _ o). con. eauto;con. right. apply CIH.
-      pfold. done.
-    * rc. intros. exists (@out _ _ o). con. eauto.
-      right. inv H. eauto.
-    * rc. intros. inv H.
-  - pc. match_dd.
-    pfold. con.
-    * rc. intros. inv H.
-    * rc. intros. exists (@out _ _ o). con. eauto. right. apply CIH.
-      pfold. done.
-    * rc. intros. exists (@out _ _ o). con. eauto.
-      right. inv H. eauto.
-    * rc. intros. inv H.
-      exists o0. ssa. exists (@out _ _ o0). con. eauto. eauto.
-Qed.
+
 
 
 Arguments NI : clear implicits.
 Arguments NI I O [_] [_].
-Example hl_lp_NI : @NI _ _ InputRelPublic Output_option_prod hp_lp.
+Example hl_lp_NI : @NI _ _ InputRelPublic Output_option_prod (scheduler process_pool).
 Proof.
-  rewrite /hp_lp /naive_scheduler.
+  rewrite /scheduler.
   eapply map_NI.
   eapply par_swiI_NI.
   apply out_NI.
@@ -1037,46 +909,21 @@ Proof.
 
   instantiate (1:= OutputRel).
   instantiate (1:= OutputRel).
-
   ssa.
 Qed.
-
 End Example2.
 
-Section Example3.
-(*high process: out InternalStep *)
-
-(*Definition SimpleTypeRel (t : Ty): myrel [t].
-    refine (@MyRel _ 
-            (fun (l : level) _ => False)
-            (fun l io1 io2 => io1 = io2)
-                        _
-            _
-            _
-            _).
-  - intros. done.
-  - intros. done.
-  - done.
-Defined.*)
-
-(*Definition collapse_opair (A : Set) (o : option A * (option A)) (d : A) :=
-  match o with
-  | (Some o', _) => o'
-  | (_, Some o') => o'
-  | _ => d
-  end.*)
-
-(*Definition alternate (I O : Ty) (o1 o2 : [O]) := @map I _ (Times Nat _) _ id (fun o => if ((fst o) %% 2 == 1) then o1 else o2 )(@sta _ _ Nat (fun i v => v) (fun o v => (v+1)%%2) 0 (@out (Times Nat I) Unit tt)).*)
-
+(*Example 3*)
+Module Example3.
   
 Definition low_p := @out TInput TPublicOutput GetRequest.
-Definition high_p := @out THandlerOutput TTypeSyscall Syscall. Check sta.
+Definition high_p := @out THandlerOutput TTypeSyscall Syscall. 
 
-(*Got complicated because we need to do 2 things:
-1) Distinguish what we output based on whether an input has happened since the last output
-2) reset the state after the output has performed
+(*Handler is complicated because we need to do 2 things:
+1) Switch what we output based on whether an input has happened since the last output
+2) reset the state after the output has been performed
 
-in sta, the state cannot be expected during creation of output, resetting the state therefore removes the information we would need to distinguish states.
+in sta, the state cannot be inspected in the making of the output, resetting the state therefore removes the information we would need to distinguish states.
 Using the loop construct we can turn "on" the Notify output by receiving an input. Sending the Notify output will due to the loop construct, create a new input, tagged with inr, which resets the state
  *)
 Definition handler := @map _ (Sum _ _) (Sum _ (Times Bool Unit)) THandlerOutput 
@@ -1098,25 +945,22 @@ Definition OutputType :=  (Times (Option TPublicOutput) (Times (Option TTypeSysc
 
 Definition IOType := Sum InputType OutputType. 
 
-(*Definition mytest := par_swiI3 0 (maybe p1_simple) (maybe high_p) (maybe handler).
-Check mytest. Print HandlerOutput. Check high_p.*)
-
 Definition process_pool := par_swiI3 0 (maybe low_p) (maybe high_p) (maybe handler).
 
 
-Definition myvT := Times Bool (Times Nat Nat).
+Definition state_type1 := Times Bool (Times Nat Nat).
 
-Definition inc_myv (v : [myvT]) :=
+Definition inc_state1 (v : [state_type1]) :=
   let: (b,(c,n)) := v in if b then v else if c == 0 then (b,(c+1,n)) else (b,(0,(n+1)%%2)). (* low process: n = 0 and (b = false)
                                                                                                high process: n = 1 and (b = false)
                                                                                                handler: b = true
                                                                                                two steps per low/high process counted by (c), with c == 0 meaning has the first step been taken yet
                                                                                                nat used for c instead of bool both for readability and in case we increase step count for examples in the future*)
 
-Definition myv_to_n (v: [myvT]) : nat :=
-  let: (b,(c,n)) := v in if b then 2 else n. (*mapping state myvT to the process that should be scheduled*)
+Definition to_schedule1 (v: [state_type1]) : nat :=
+  let: (b,(c,n)) := v in if b then 2 else n. (*mapping state state_type1 to the process that should be scheduled*)
 
-Definition handler_up_v (o : [IOType]) (v: [myvT])  : [myvT] := (*based on output and state, schedule/deschedule handler using the bool flag*)
+Definition state_in1 (o : [IOType]) (v: [state_type1])  : [state_type1] := (*based on output and state, schedule/deschedule handler using the bool flag*)
   let: (b,(c,n)) := v in
   match b,o with
   | false,inl (None,(None, Some i)) => (true,(c,n))
@@ -1124,14 +968,14 @@ Definition handler_up_v (o : [IOType]) (v: [myvT])  : [myvT] := (*based on outpu
   | _,_ => v
   end.
 
-(*Definition bad_scheduler := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ myvT handler_up_v (fun o v => inc_myv v) (false,(0,0)) (@map (Times myvT _) (Times Nat _) _ _ (fun x => (myv_to_n (fst x), snd x)) id process2))).*)
+(*Definition bad_scheduler := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ state_type1 state_in1 (fun o v => inc_state1 v) (false,(0,0)) (@map (Times state_type1 _) (Times Nat _) _ _ (fun x => (to_schedule1 (fst x), snd x)) id process2))).*)
 
 Definition scheduler
-  (stateType : Ty)
-  (state_in : [IOType] -> [stateType] -> [stateType])
-  (state_out : [IOType] -> [stateType] -> [stateType])
-  (initial_state : [stateType])
-  (to_schedule : [stateType] -> nat)
+  (state_type : Ty)
+  (state_in : [IOType] -> [state_type] -> [state_type])
+  (state_out : [IOType] -> [state_type] -> [state_type])
+  (initial_state : [state_type])
+  (to_schedule : [state_type] -> nat)
   (p : Proc NInputType OutputType)  :=
   @map InputType IOType IOType OutputType
     inl
@@ -1140,11 +984,11 @@ Definition scheduler
        (@map _ _ (Times _ _) _
           id
           snd (*removes state*)
-          (@sta _ _ stateType
+          (@sta _ _ state_type
              state_in
              state_out
              initial_state
-             (@map (Times stateType IOType) NInputType OutputType IOType
+             (@map (Times state_type IOType) NInputType OutputType IOType
                 (fun x => let n := to_schedule (fst x) in (*map *)
                           match snd x with
                           | inl i' => (n,i') (*inl = input*)
@@ -1156,68 +1000,7 @@ Definition scheduler
     )))).
 
 (*schedules handler on hardware interrupt input*)
-Definition bad_scheduler := scheduler myvT handler_up_v (fun _ v => inc_myv v) (false,(0,0)) myv_to_n.
-
-
-
-
-
-
-
-
-Definition myvT2 := (Times Nat Nat).
-
-Definition inc_myv2 (v : [myvT2]) :=
-  let: ((c,n)) := v in if c == 0 then (c+1,n) else (0,(n+1)%%3).
-
-Definition myv_to_n2 (v: [myvT2]) : nat :=
-  let: (c,n) := v in n.
-
-
-(*Treats handler as the third process, round-robin scheduling between the three*)
-Definition good_scheduler := scheduler myvT2 (fun _ v => v) (fun _ v => inc_myv2 v) ((0,0)) myv_to_n2.
-
-Definition myvT3 := Times (Option Nat) (Times Nat Nat).
-
-Definition inc_myv3 (v : [myvT3]) :=
-  match v with
-  | (None, (0, n)) => (None,(1,n)) (*low/high first step*)
-  | (None, (1, 0)) => (Some 0,(0,1)) (*low second step, switch to handler*)
-  | (None, (1, 1)) => (Some 0, (0,0)) (*high second step, switch to handler*)                      
-  | (Some 0, cn) => (Some 1,cn) (*handler first step*)
-  | (Some 1, cn) => (None, cn) (*handler second step, switch to low/high*)
-  | _ => v
-  end.           
-         
-
-Definition mv_to_n3 (v : [myvT3]) :=
-  match v with
-    | (None,cn) => snd cn
-    | (Some _, _) => 2
-  end.
-
-(*schedules handler between each context switch*)
-Definition mitigator := scheduler myvT3 (fun _ v => v) (fun _ v => inc_myv3 v) (None,(0,0)) mv_to_n3.
-
-
-(*
-Definition bad_scheduler (p : Proc (Times Nat IOType) IOType)  :=
-  @map InputType IOType IOType OutputType
-    inl
-    (fun x => match x with | inl _ => (None,(None,None)) | inr y => y end)
-    (loop
-       (@map _ _ (Times _ _) _
-          id
-          snd (*removes state*)
-          (@sta _ _ myvT
-             handler_up_v
-             (fun o v => inc_myv v)
-             (false,(0,0))
-             (@map (Times myvT _) (Times Nat _) _ _
-                (fun x => (myv_to_n (fst x), snd x))
-                id
-                p
-    )))).*)
+Definition bad_scheduler := scheduler state_type1 state_in1 (fun _ v => inc_state1 v) (false,(0,0)) to_schedule1.
 
 Definition full_process := bad_scheduler process_pool.
 
@@ -1246,7 +1029,7 @@ rewrite /ex3_streamF.
 do ? f_equal.
 Qed.
 
-Ltac rewr ::=  (try rewrite ex3_stream_eq); rewrite /par_swiI /bad_scheduler /process_pool /low_p  /ex3_streamF /bad_scheduler /process_pool /par_swiI3 /high_p /handler /sta_swi.
+Ltac rewr ::=  (try rewrite ex3_stream_eq); rewrite /par_swiI /bad_scheduler /process_pool /low_p  /ex3_streamF /bad_scheduler /process_pool /par_swiI3 /high_p /handler /sta_swi /scheduler.
 
 
 Ltac reduce_twice := reduce_once;(try reduce_once);(try eapply Logic.eq_refl).
@@ -1262,8 +1045,6 @@ Proof.
   swi_instans.
   exact CIH.
 Qed.
-
-
 
 Definition InputTypeRel : myrel [InputType].
   rewrite /InputType. 
@@ -1297,17 +1078,11 @@ Defined.
 
 Ltac dd H := dependent destruction H.
 
-Ltac temp_match := 
-    match goal with
-    | H : reduceI ?p _ _ |- _ =>  check_if_var p;  dependent destruction  H
-    | H : reduceO ?p _ _ |- _ => check_if_var p; dependent destruction  H
-    end.
-
 Example counterexample : NotSim \bot InputTypeRel OutputTypeRel ex3_stream (bad_scheduler process_pool).
 Proof.
   apply: NS2.
-  instantiate (1:= (None,(None,(Some TimerInterrupt)))). ssa. rewrite eqxx //.
-
+  instantiate (1:= (None,(None,(Some TimerInterrupt)))).
+  ssa. rewrite eqxx //.
   move=>p'. rewr. ssa.
   match_dd.
   apply:NS4.
@@ -1320,24 +1095,66 @@ Proof.
   rewrite /NI. ssa. intro.
   apply/toNotSim. apply/counterexample.
   apply/H. apply simple_trace.
-Qed.  
+Qed.
 
+
+
+
+
+
+Definition state_type2 := Times (Option Nat) (Times Nat Nat).
+
+Definition inc_state2 (v : [state_type2]) :=
+  match v with
+  | (None, (0, n)) => (None,(1,n)) (*low/high first step*)
+  | (None, (1, 0)) => (Some 0,(0,1)) (*low second step, switch to handler*)
+  | (None, (1, 1)) => (Some 0, (0,0)) (*high second step, switch to handler*)                      
+  | (Some 0, cn) => (Some 1,cn) (*handler first step*)
+  | (Some 1, cn) => (None, cn) (*handler second step, switch to low/high*)
+  | _ => v
+  end.           
+         
+
+Definition to_schedule2 (v : [state_type2]) :=
+  match v with
+    | (None,cn) => snd cn
+    | (Some _, _) => 2
+  end.
+
+(*schedules handler between each context switch*)
+Definition mitigator := scheduler state_type2 (fun _ v => v) (fun _ v => inc_state2 v) (None,(0,0)) to_schedule2.
+
+Ltac rewr ::=  (try rewrite ex3_stream_eq); rewrite /par_swiI /bad_scheduler /process_pool /low_p  /ex3_streamF /bad_scheduler /process_pool /par_swiI3 /high_p /handler /sta_swi /scheduler /mitigator.
+
+Theorem mitigator_NI : @NI _ _ InputTypeRel OutputTypeRel (mitigator process_pool).
+Proof.
+  rewr. rewrite /scheduler.
+Search _ NI.
+(*apply: map_NI.
+apply: loop_NI.*) Search _ out.
+Ltac NI_tac := match goal with 
+               | [ |- @NI _ _ _ _ (map _ _ _)] => apply: map_NI
+               | [ |- @NI _ _ _ _ (loop _)] => apply: loop_NI
+               | [ |- @NI _ _ _ _ (sta _ _ _ _)] => apply: sta_NI
+               | [ |- @NI _ _ _ _ (par _ _)] => apply: par_NI
+               | [ |- @NI _ _ _ _ (swi _ _)] => apply: swi_NI
+               | [ |- @NI _ _ _ _ (maybe _)] => apply: maybe_NI
+               | [ |- @NI _ _ _ _ (out _)] => apply: out_NI
+                                                         
+                end.
+do 12 (try NI_tac).
+NI_tac.
+NI_tac.
+
+
+
+(*good_scheduler not used currently, should it be removed?*)
+(*
+Definition myvT2 := (Times Nat Nat).
+Definition inc_myv2 (v : [myvT2]) := let: ((c,n)) := v in if c == 0 then (c+1,n) else (0,(n+1)%%3).
+Definition myv_to_n2 (v: [myvT2]) : nat := let: (c,n) := v in n.
+
+(*Treats handler as the third process, round-robin scheduling between the three*)
+Definition good_scheduler := scheduler myvT2 (fun _ v => v) (fun _ v => inc_myv2 v) ((0,0)) myv_to_n2.
+ *)
 End Example3.
-
-
-
-
-
-Definition naive_mitigator (*: Proc (I1 * I2) (O1 + O2) :=*) :=
-  naive_scheduler processes.
-
-Definition scheduler {I O : Set} n (p : Proc (bool * I) O) : Proc I O :=
-  map id snd
-    (sta (fun i v => ((fst v) + 1, ((fst v) %% n) == 0)) (fun o v => v) (0,false)
-       (map (fun (nbi : ((nat * bool) * I)) => (snd (fst nbi) , snd nbi)) id
-          p)).
-
-Definition mitigator :=
-  scheduler 10 processes.
-
-Check mitigator.
