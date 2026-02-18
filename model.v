@@ -563,7 +563,7 @@ Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
   - intros. de IRel;de ORel. eauto.
 Defined.
 
-Definition eqsum (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
+Canonical eqsum (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
   refine (@MyRel _ 
             (fun (l : level) io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end)
             (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2 | inr o1,inr o2 => rel ORel l o1 o2 | _,_ => False end)
@@ -1046,7 +1046,7 @@ Proof.
   exact CIH.
 Qed.
 
-Definition InputTypeRel : myrel [InputType].
+Canonical InputTypeRel : myrel [InputType].
   rewrite /InputType. 
   refine (@MyRel _ 
             (fun (l : level) v => if l == \bot then match v with | (_,(None,None)) => False | _ => True end else False)
@@ -1061,7 +1061,7 @@ Definition InputTypeRel : myrel [InputType].
   - intros. subst. destruct (eqVneq l \bot). subst. de a1. done.
 Defined.
 
-Definition OutputTypeRel : myrel [OutputType].
+Canonical OutputTypeRel : myrel [OutputType].
   rewrite /OutputType.
   refine (@MyRel _ 
             (fun (l : level) v => if l == \bot then match v with | (_,(Some NPublic,Some SPublic)) => False | _ => True end else False)
@@ -1141,8 +1141,11 @@ Ltac NI_tac := match goal with
                | [ |- @NI _ _ _ _ (maybe _)] => apply: maybe_NI
                | [ |- @NI _ _ _ _ (out _)] => apply: out_NI
                                                          
-                end.
-do 12 (try NI_tac).
+               end.
+Check map_NI.
+Set Printing Implicit.
+NI_tac.
+do 1 (try NI_tac).
 NI_tac.
 NI_tac.
 
