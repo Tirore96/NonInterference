@@ -1,4 +1,6 @@
 Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
 
 Require Import RelationClasses.
 From Paco Require Import paco.
@@ -82,6 +84,8 @@ Record myrel (A : Set) :=
 
           }.
 
+(*Existing Class myrel. 
+Hint Mode myrel +.*)
 
 (* Types *)
 
@@ -125,7 +129,8 @@ Canonical Output_indType := IndType Output Output_indDef.
 Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
-Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | TInterrupt | THandlerOutput |  TPublicOutput. 
+Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool
+                 | Option : Ty -> Ty | Option_swi : Ty -> Ty | Option_maybe : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | TInterrupt | THandlerOutput |  TPublicOutput. 
 
 Derive NoConfusion for Ty.
 Derive EqDec for Ty.
@@ -140,7 +145,7 @@ Fixpoint interp (t : Ty) : Set :=
   | Nat => nat
   | Times t0 t1 => (interp t0) * (interp t1)
   | Bool => bool
-  | Option t' => option (interp t')
+  | Option t' | Option_swi t' | Option_maybe t' => option (interp t')
   | TInput => Input
   | TOutput => Output
   | Sum t0 t1 => (interp t0) + (interp t1)            
@@ -148,7 +153,7 @@ Fixpoint interp (t : Ty) : Set :=
   | Unit => unit                     
   | TInterrupt => Interrupt
   | THandlerOutput => HandlerOutput
-  | TPublicOutput => PublicOutput              
+  | TPublicOutput => PublicOutput
   end.
 Notation "[ i ]" := (interp i).
 
@@ -163,10 +168,10 @@ Inductive Proc : Ty -> Ty -> Type :=
 | out  : forall {I O : Ty}, interp O -> Proc I O  
 | map   : forall {I I' O O' : Ty}, (interp I -> interp I') -> (interp O -> interp O') -> Proc I' O -> Proc I O'
 | sta   : forall {I O V :Ty}, (interp I -> interp V -> interp V) -> (interp O -> interp V -> interp V) -> interp V -> Proc (Times V I) O -> Proc I (Times V O)
-| swi   : forall {I O : Ty},  bool -> Proc I (Times Bool O)%type -> Proc ((Times Bool I)) (Option O)
+| swi   : forall {I O : Ty},  bool -> Proc I (Times Bool O)%type -> Proc ((Times Bool I)) (Option_swi O)
 | par   : forall {I O1 O2: Ty}, Proc I O1 -> Proc I O2 -> Proc I (Times O1 O2)
 | loop  : forall {I : Ty}, Proc I I -> Proc I I
-| maybe : forall {I O: Ty}, Proc I O -> Proc (Option I) O.
+| maybe : forall {I O: Ty}, Proc I O -> Proc (Option_maybe I) O.
 Arguments out {_} {_} o.
 Derive NoConfusion for Proc.
 Derive NoConfusionHom for Proc.
@@ -227,45 +232,83 @@ Hint Resolve monotone_TraceF : paco.
 
 Definition trace (I O : Ty) eff p := paco2 (@TraceF I O) bot2 eff p.
 
+Definition publicRel (A : Ty) : myrel ([A]).
+  refine (@MyRel _
+            (fun l b => False)
+            (fun l b1 b2 => b1 = b2)
+            _
+            _
+            _
+            _).
+intros.
+done.
+eauto.
+eauto.
+Defined.
 
-Definition Clause1 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+Definition toPublicRel (A : Ty) (ARel : myrel [A]) : myrel ([A]).
+  refine (@MyRel _
+            (fun l b => False)
+            (rel ARel)
+            _
+            _
+            _
+            _).
+intros. all: de ARel. eauto.
+Defined.
+
+Definition privateRel (A : Ty) : myrel ([A]).
+  refine (@MyRel _
+            (fun l b => True)
+            (fun l b1 b2 => b1 = b2)
+            _
+            _
+            _
+            _).
+intros.
+done.
+eauto.
+eauto.
+Defined.
+
+Definition Clause1 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   forall i s', s = (Cons (inl i) s') -> dis IRel l i -> R s' p.
 
-Definition Clause2 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+Definition Clause2 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   (forall i, dis IRel l i -> exists p', reduceI p i p' /\ R s p').
 
-Definition Clause3 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+Definition Clause3 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   forall i s', s = (Cons (inl i) s') -> (forall i', rel IRel l i' i -> exists p', reduceI p i' p' /\ R s' p').
 
-Definition Clause4 {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+Definition Clause4 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   forall o s', s = (Cons (inr o) s') -> exists o', rel ORel l o' o /\ exists p', reduceO p o' p' /\ R s' p'.
 
-Variant SimulationF {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | SI s p : Clause1 l IRel ORel R s p ->
-             Clause2 l IRel ORel R s p ->
-             Clause3 l IRel ORel R s p ->
-             Clause4 l IRel ORel R s p ->
-             SimulationF l IRel ORel R s p.
+Variant SimulationF (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
+  | SI s p  : Clause1 l IRel ORel R s p ->
+              Clause2 l IRel ORel R s p ->
+              Clause3 l IRel ORel R s p ->
+              Clause4 l IRel ORel R s p ->
+              SimulationF l IRel ORel R s p.
 
 Ltac rc := rewrite /Clause1 /Clause2 /Clause3 /Clause4.
-Lemma monotone_Clause1 {I O : Ty}  l IRel ORel :  monotone2 (@Clause1 I O l IRel ORel).
+Lemma monotone_Clause1 {I O : Ty}  l IRel ORel :  monotone2 (@Clause1 I O l  IRel ORel ).
 Proof.
 intro. ssa. rc. eauto.
 Qed.
 
-Lemma monotone_Clause2 {I O : Ty}  l IRel ORel :  monotone2 (@Clause2 I O l IRel ORel).
+Lemma monotone_Clause2 {I O : Ty}  l  IRel ORel  :  monotone2 (@Clause2 I O l  IRel ORel ).
 Proof.
   intro. rc. ssa. 
   move: (IN _ H). ssa. eauto.
 Qed.
 
-Lemma monotone_Clause3 {I O : Ty}  l IRel ORel :  monotone2 (@Clause3 I O l IRel ORel).
+Lemma monotone_Clause3 {I O : Ty}  l  IRel ORel  :  monotone2 (@Clause3 I O l  IRel ORel ).
 Proof.
   intro. rc. ssa. subst.
   move: (IN _ _ Logic.eq_refl _ H0). ssa. eauto.
 Qed.
 
-Lemma monotone_Clause4 {I O : Ty}  l IRel ORel :  monotone2 (@Clause4 I O l IRel ORel).
+Lemma monotone_Clause4 {I O : Ty}  l  IRel ORel  :  monotone2 (@Clause4 I O l  IRel ORel ).
 Proof.
   intro. rc. ssa. subst.
   move: (IN _ _ Logic.eq_refl). ssa. eauto.
@@ -273,7 +316,7 @@ Proof.
 Qed.
 
 
-Lemma monotone_SimulationF {I O : Ty}  l IRel ORel :  monotone2 (@SimulationF I O l IRel ORel).
+Lemma monotone_SimulationF {I O : Ty} IRel ORel l:  monotone2 (@SimulationF I O l IRel ORel).
 Proof.
 rewrite /monotone2. ssa.
 inv IN.
@@ -285,14 +328,373 @@ eapply monotone_Clause4. eauto. eauto.
 Qed.
 Hint Resolve monotone_SimulationF : paco.
 
-Definition simulation {I O : Ty} l IRel ORel s p := paco2 (@SimulationF I O l IRel ORel) bot2 s p.
+Definition simulation {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) l s p := paco2 (@SimulationF I O l IRel ORel) bot2 s p.
+Definition NI (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O])  (p : Proc I O) := forall l s, trace s p -> simulation IRel ORel l s p.
 
+Check paco2.
+
+Lemma paco2_imp : forall A B (a : A) (b : B) F F' R, monotone2 F -> (forall a b R, F R a b -> F' R a b) -> paco2 F R a b -> paco2 F' R a b.
+Proof.
+  intros. move: a b H1. pcofix CIH. intros. pfold. apply H0.
+  punfold H2. eapply H. apply:H2.
+  intros. inv PR. right. apply CIH. done. right. eauto.
+Qed.
+
+Lemma paco2_iff : forall A B (a : A) (b : B) F F' R, monotone2 F -> monotone2 F' -> (forall a b R, F R a b <-> F' R a b) -> paco2 F R a b <-> paco2 F' R a b.
+Proof.
+  intros. split;apply/paco2_imp;eauto.
+  intros. apply/H1. eauto.
+  intros. apply/H1. eauto.
+Qed.  
+
+Lemma SimulationF_imp : forall I O l (IRel : myrel [I]) (ORel : myrel [O]) R s p, SimulationF l IRel ORel R s p -> SimulationF l IRel (toPublicRel ORel) R s p.
+Proof.
+  intros. inv H. con;eauto.
+Qed.
+
+Lemma SimulationF_imp2 : forall I O l (IRel : myrel [I]) (ORel : myrel [O]) R s p, SimulationF l IRel (toPublicRel ORel) R s p -> SimulationF l IRel ORel R s p.
+Proof.
+  intros. inv H. con;eauto.
+Qed.
+
+
+
+Lemma simulation_equiv : forall I O (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p <-> NI IRel (toPublicRel ORel) p.
+Proof.
+  intros. split.
+  intros. rewrite /NI. intros. eapply H in H0.
+  move: H0. instantiate (1:=l).
+  apply:paco2_imp. apply monotone_SimulationF.
+  intros. apply/SimulationF_imp. done.
+
+  intros. rewrite /NI. intros. eapply H in H0.
+  move: H0. instantiate (1:=l).
+  apply:paco2_imp. apply monotone_SimulationF.
+  intros. apply/SimulationF_imp2. eauto.
+Qed.  
+
+
+Definition eqpair {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
+  refine (@MyRel _ 
+            (fun (l : level) _ => False)
+            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con. destruct IRel. destruct ORel. simpl. con.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+  - con. destruct H. destruct IRel. destruct ORel. simpl. 
+    move: (equiv0 l). case.
+    move => _ Hsym _.  apply Hsym. eauto.
+
+    destruct H. destruct IRel. destruct ORel. simpl. 
+    move: (equiv1 l). case. eauto.
+
+  - destruct IRel,ORel. simpl. con.
+    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
+    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+
+
+  - move=> l0 l1 HOrder a0 a1 [] HI HO.
+    destruct IRel,ORel;ssa. eauto. eauto.
+
+  - eauto. eauto.
+Defined.
+
+Definition eqpair_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => dis IRel l (fst io) \/ dis ORel l (snd io))
+            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con. destruct IRel. destruct ORel. simpl. con.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+  - con. destruct H. destruct IRel. destruct ORel. simpl. 
+    move: (equiv0 l). case.
+    move => _ Hsym _.  apply Hsym. eauto.
+
+    destruct H. destruct IRel. destruct ORel. simpl. 
+    move: (equiv1 l). case. eauto.
+
+  - destruct IRel,ORel. simpl. con.
+    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
+    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+
+
+  - move=> l0 l1 HOrder a0 a1 [] HI HO.
+    destruct IRel,ORel;ssa. eauto. eauto.
+
+  - intros. de IRel;de ORel.
+    de H0;eauto.
+  - intros. de IRel;de ORel.
+    de H;eauto.
+Defined.
+
+Definition eqpair_L {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => dis IRel l (fst io))
+            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con. destruct IRel. destruct ORel. simpl. con.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+  - con. destruct H. destruct IRel. destruct ORel. simpl. 
+    move: (equiv0 l). case.
+    move => _ Hsym _.  apply Hsym. eauto.
+
+    destruct H. destruct IRel. destruct ORel. simpl. 
+    move: (equiv1 l). case. eauto.
+
+  - destruct IRel,ORel. simpl. con.
+    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
+    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+
+
+  - move=> l0 l1 HOrder a0 a1 [] HI HO.
+    destruct IRel,ORel;ssa. eauto. eauto.
+
+  - intros. de IRel;de ORel. eauto.
+  - intros. de IRel;de ORel. eauto.
+Defined.
+
+Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => dis ORel l (snd io))
+            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con. destruct IRel. destruct ORel. simpl. con.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+  - con. destruct H. destruct IRel. destruct ORel. simpl. 
+    move: (equiv0 l). case.
+    move => _ Hsym _.  apply Hsym. eauto.
+
+    destruct H. destruct IRel. destruct ORel. simpl. 
+    move: (equiv1 l). case. eauto.
+
+  - destruct IRel,ORel. simpl. con.
+    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
+    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+
+
+  - move=> l0 l1 HOrder a0 a1 [] HI HO.
+    destruct IRel,ORel;ssa. eauto. eauto.
+
+  - intros. de IRel;de ORel. eauto.
+  - intros. de IRel;de ORel. eauto.
+Defined.
+
+Lemma eqsum {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end)
+            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2 | inr o1,inr o2 => rel ORel l o1 o2 | _,_ => False end)
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con.
+    intro. 
+    destruct IRel. destruct ORel. simpl. de x.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y.
+    move: (equiv0 l). case. eauto. 
+    move: (equiv1 l). case. de y.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y. de z.
+    move: (equiv0 l). case. eauto. de y. de z. 
+    move: (equiv1 l). case. eauto.
+
+
+  -     ssa. de a0. de a1. de IRel. eauto.
+        de a1. de ORel. eauto.
+
+        ssa. de a. de IRel. eauto.
+        de ORel. eauto.
+
+        ssa. de a0. de a1. de IRel. eauto.
+        de a1. de ORel. eauto.
+Defined.
+
+Definition levelPred := level -> Prop.
+
+Definition eqmaybe {V : Ty} (P: levelPred) (VRel : myrel [V]) : myrel ([Option V]).
+    refine (@MyRel _
+            (fun l v => if v is Some v' then dis VRel l v' else ~ P l /\ forall x0 x1, order x0 x1 -> P x0 -> P x1 )
+            (fun l b1 b2 => b1 = b2)
+            _
+            _
+            _
+            _).
+intros. auto.
+ssa. de a.
+de VRel. eauto.
+intro. apply H0. eauto.
+intros. de a0. de a1. inv H0. subst. done.
+subst. done.
+Defined.
+
+Definition eqmaybe_swi {V : Ty} (P: levelPred) (VRel : myrel [V]) : myrel ([Option_swi V]).
+    refine (@MyRel _
+            (fun l v => if v is Some v' then dis VRel l v' else ~ P l /\ forall x0 x1, order x0 x1 -> P x0 -> P x1 )
+            (fun l b1 b2 => b1 = b2)
+            _
+            _
+            _
+            _).
+intros. auto.
+ssa. de a.
+de VRel. eauto.
+intro. apply H0. eauto.
+intros. de a0. de a1. inv H0. subst. done.
+subst. done.
+Defined.
+
+Definition eqmaybe_maybe {V : Ty} (P: levelPred) (VRel : myrel [V]) : myrel ([Option_maybe V]).
+    refine (@MyRel _
+            (fun l v => if v is Some v' then dis VRel l v' else ~ P l /\ forall x0 x1, order x0 x1 -> P x0 -> P x1 )
+            (fun l b1 b2 => b1 = b2)
+            _
+            _
+            _
+            _).
+intros. auto.
+ssa. de a.
+de VRel. eauto.
+intro. apply H0. eauto.
+intros. de a0. de a1. inv H0. subst. done.
+subst. done.
+Defined.
+
+(*Definition eqmaybeT {V : Ty} (VRel : myrel [V]) : myrel ([Option V]) := eqmaybe VRel (fun _ => True).*)
+
+Definition boolRel : myrel ([Bool]) := publicRel Bool.
+
+Definition aware (V : Ty) (VRel : myrel [V]) (v : [V]) : levelPred
+   := fun l => (forall v', rel VRel l v v' -> v = v') /\ ~ dis VRel l v.
+Check publicRel.
+
+Fixpoint to_rel (ty : Ty): myrel [ty]:=
+      match ty as x return myrel [x] with
+    | TInput => publicRel TInput
+    | THandlerOutput => privateRel THandlerOutput
+    | TInterrupt => privateRel TInterrupt
+    | Option t => eqmaybe (fun _ => True) (to_rel t)
+    | Option_swi t => eqmaybe (fun l => @aware Bool boolRel true l) (to_rel t)
+    | Option_maybe t => eqmaybe (fun _ => False) (to_rel t)
+    | Times t0 t1 => eqpair_LR (to_rel t0) (to_rel t1)
+(*    | Times_L t0 t1 => eqpair_L (to_rel t0) (to_rel t1)
+    | Times_R t0 t1 => eqpair_R (to_rel t0) (to_rel t1)
+      | Times_LR t0 t1 => eqpair_LR (to_rel t0) (to_rel t1)
+                                    *)
+    | Sum t0 t1 => eqsum (to_rel t0) (to_rel t1)
+    | ty' => publicRel ty'
+    end.
+
+
+(*Definition to_rel2 (ty : Ty): myrel [ty].
+  refine(
+    match ty as x return myrel [x] with
+      | Times ((Times (Option Nat) (Times Nat Nat))) InputTypeRel => eqpair (to_rel ((Times (Option Nat) (Times Nat Nat)))) (to_rel InputTypeRel)
+      | ty' => to_rel ty'
+    end).
+Defined.*)
+
+
+Definition to_rel_locked := to_rel.
+
+Notation "# A" := (to_rel_locked A)(at level 5).
+Lemma to_rel_unlock : to_rel_locked = to_rel. done.
+Qed.
+Opaque to_rel_locked.
+Ltac ulock := rewrite to_rel_unlock.
+
+
+
+
+(*Definition Clause1 (I O : Ty) (l : level) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+  forall i s', s = (Cons (inl i) s') -> dis I l i -> R s' p.
+
+Definition Clause2 (I O : Ty) (l : level) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+  (forall i, dis I l i -> exists p', reduceI p i p' /\ R s p').
+
+Definition Clause3 (I O : Ty) (l : level) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+  forall i s', s = (Cons (inl i) s') -> (forall i', rel I l i' i -> exists p', reduceI p i' p' /\ R s' p').
+
+Definition Clause4 (I O : Ty) (l : level) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+  forall o s', s = (Cons (inr o) s') -> exists o', rel O l o' o /\ exists p', reduceO p o' p' /\ R s' p'.
+
+Variant SimulationF (I O : Ty) (l : level) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
+  | SI s p : Clause1 l R s p ->
+             Clause2 l R s p ->
+             Clause3 l R s p ->
+             Clause4 l R s p ->
+             SimulationF l R s p.
+
+Ltac rc := rewrite /Clause1 /Clause2 /Clause3 /Clause4.
+Lemma monotone_Clause1 {I O : Ty}  l :  monotone2 (@Clause1 I O l).
+Proof.
+intro. ssa. rc. eauto.
+Qed.
+
+Lemma monotone_Clause2 {I O : Ty}  l :  monotone2 (@Clause2 I O l).
+Proof.
+  intro. rc. ssa. 
+  move: (IN _ H). ssa. eauto.
+Qed.
+
+Lemma monotone_Clause3 {I O : Ty}  l :  monotone2 (@Clause3 I O l).
+Proof.
+  intro. rc. ssa. subst.
+  move: (IN _ _ Logic.eq_refl _ H0). ssa. eauto.
+Qed.
+
+Lemma monotone_Clause4 {I O : Ty}  l :  monotone2 (@Clause4 I O l).
+Proof.
+  intro. rc. ssa. subst.
+  move: (IN _ _ Logic.eq_refl). ssa. eauto.
+  exists x. ssa. eauto.
+Qed.
+
+
+Lemma monotone_SimulationF {I O : Ty}  l:  monotone2 (@SimulationF I O l).
+Proof.
+rewrite /monotone2. ssa.
+inv IN.
+eapply SI.
+eapply monotone_Clause1. eauto. eauto.
+eapply monotone_Clause2. eauto. eauto.
+eapply monotone_Clause3. eauto. eauto.
+eapply monotone_Clause4. eauto. eauto.
+Qed.
+Hint Resolve monotone_SimulationF : paco.
+
+Definition simulation {I O : Ty} l s p := paco2 (@SimulationF I O l) bot2 s p.*)
+(*Arguments simulation : clear implicits.*)
 Inductive NotSim {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) : Stream ([I] + [O]) -> Proc I O -> Prop :=
 | NS1 i s p : dis IRel l i -> NotSim l IRel ORel s p -> NotSim l IRel ORel (Cons (inl i) s) p
 | NS2 i s p : dis IRel l i -> (forall p', reduceI p i p' -> NotSim l IRel ORel s p') -> NotSim l IRel ORel s p
 | NS3 i s p : (forall p', (exists i', rel IRel l i i' /\ reduceI p i' p') ->  NotSim l IRel ORel s p') -> NotSim l IRel ORel (Cons (inl i) s) p
 | NS4 o s p : (forall p' o', rel ORel l o o' -> reduceO p o' p' -> NotSim l IRel ORel s p') -> NotSim l IRel ORel (Cons (inr o) s) p.
-
     
 Ltac pc := pclearbot.
 Definition streampred (I O : Set) l (IRel : myrel I) (ORel : myrel O) (s : Stream (I + O))  := ForAll (fun x => match x with | Cons (inl x') _ => dis IRel l x' | Cons (inr x') _ => dis ORel l x' end) s.
@@ -310,9 +712,11 @@ Lemma rel_sym : forall A (ARel : myrel A) l x y, rel ARel l x y -> rel ARel l y 
   Proof.
     intros. destruct ARel;ssa.
     move: (equiv0 l). case. ssa.
-Qed.    
-Lemma toNotSim : forall {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) s (p : Proc I O), NotSim l IRel ORel s p -> ~simulation l IRel ORel s p.
-Proof.
+  Qed.
+  Check simulation.
+
+  Lemma toNotSim : forall {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) s (p : Proc I O), NotSim l IRel ORel s p -> ~simulation IRel ORel l s p.
+  Proof.
   move=> I O l IRel ORel s p H Hsim.
   elim: H Hsim;intros.
   - punfold Hsim. inv Hsim.
@@ -333,8 +737,28 @@ Proof.
     eapply H0. eauto. eauto. pc. done.
 Qed.
 
+  Variant ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) (R : Proc I O -> Prop) : Proc I O -> Prop :=
+  OF1 p : (forall i p', reduceI p i p' -> R p') -> (forall o p', reduceO p o p' -> R p' /\ dis ORel l o) ->  ObliviousF ORel l R p.
 
-Ltac rewr := idtac. (*updated later*)
+Lemma monotone_ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) : monotone1 (@ObliviousF I O ORel l).
+Proof.
+intro;ssa.
+inv IN;eauto.
+econ;eauto.
+intros.
+move: (H0 _ _ H1). case. eauto.
+Qed.
+Hint Resolve monotone_ObliviousF : paco.
+
+Definition oblivious {I O : Ty} (ORel : myrel [O]) p : levelPred := fun l => paco1 (@ObliviousF I O ORel l) bot1 p.
+
+(*Inductive NotObl (I O : Ty) (l : level) : Proc I O -> Prop :=
+  | NotObl_I p i p' : reduceI p i p' -> NotObl l p' -> NotObl l p
+  | NotObl_O p o p' : reduceO p o p' -> NotObl l p' -> NotObl l p                                                          
+  | NotObl_dis p o : dis O l o -> NotObl l p.*)
+
+Definition aware_or_oblivious  {I O : Ty} (ORel : myrel [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware ORel o l \/ oblivious ORel p l.
+
 
 Lemma zerol : 0 < 0 = false.
 Proof. done.
@@ -408,6 +832,7 @@ Ltac controlled_eauto :=
     | |- _ => eauto                        
     end.
 
+Ltac rewr := idtac. (*updated later*)
 Ltac reduce_tac :=
   (try rewr);
    (repeat
@@ -429,12 +854,25 @@ Ltac bundle_v :=
   (pfold;
   first [ appTrace | rewr;appTrace ];
   first (do ? reduce_tac_v));simpl;try econ.
-  
-Section AdmittedTheorems.
 
-  Definition NI (I O :Ty) IRel ORel (p : Proc I O) := forall l s, trace s p -> @simulation I O l IRel ORel s p.
 
-  Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), @NI I O IRel ORel (out o).
+
+
+Definition f_NI {I O :Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall (l : level) (i i' : [I]) (o o' : [O]), rel IRel l i i' -> rel ORel l (f i) (f i').
+Definition f_PU {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall l (i : [I]), dis IRel l i -> dis ORel l (f i).
+Definition f_NI_PU {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O])  := f_NI IRel ORel f /\ f_PU IRel ORel f.
+Definition fv_NI (I O V: Ty) (IRel : myrel [I]) (ORel : myrel [O]) (VRel : myrel [V])  (f : [I] -> [V] -> [O]) := forall l (i i' : [I]), rel IRel l i i' -> forall (v v' : [V]), rel VRel l v v' -> rel ORel l (f i v) (f i' v').
+Definition f_EP (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f : [I] -> [V] -> [V]) := forall l i, dis IRel l i -> forall v, rel VRel l (f i v) v. (*equivalence preserving*)
+
+(*Definition f_NI {I O :Ty} (f : [I] -> [O]) := forall (l : level) (i i' : [I]) (o o' : [O]), rel I l i i' -> rel O l (f i) (f i').
+Definition f_PU {I O : Ty} (f : [I] -> [O]) := forall l (i : [I]), dis I l i -> dis O l (f i).
+Definition f_NI_PU {I O : Ty} (f : [I] -> [O]) := f_NI f /\ f_PU f.
+Definition fv_NI (I O V: Ty) (f : [I] -> [V] -> [O]) := forall l (i i' : [I]), rel I l i i' -> forall (v v' : [V]), rel V l v v' -> rel O l (f i v) (f i' v').
+Definition f_EP (I V: Ty) (f : [I] -> [V] -> [V]) := forall l i, dis I l i -> forall v, rel V l (f i v) v. (*equivalence preserving*)*)
+
+(*Admitted theorems*)
+
+Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), @NI I O IRel ORel (out o).
 Proof.
   intros. rewrite /NI.
   move=>l. pcofix CIH.
@@ -458,210 +896,22 @@ Proof.
       exists o0. ssa. exists (@out _ _ o0). con. eauto. eauto.
 Qed.
 
-Definition f_NI {I O :Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall (l : level) (i i' : [I]) (o o' : [O]), rel IRel l i i' -> rel ORel l (f i) (f i').
-Definition f_PU {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall l (i : [I]), dis IRel l i -> dis ORel l (f i).
+Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O] -> [O']) (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']),
+    NI IRel' ORel p -> f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g -> NI IRel ORel' (map f g p).
+Proof. Admitted.
 
-Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O] -> [O']) (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']), NI IRel' ORel p -> f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g -> NI IRel ORel' (map f g p).
+
+Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
+    NI (eqpair_R VRel IRel) ORel p -> fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f -> NI IRel (eqpair VRel ORel) (sta f g v p).
 Admitted.
 
-
-Definition fv_NI {I O V: Ty} (f : [I] -> [V] -> [O]) (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]) := forall l (i i' : [I]), rel IRel l i i' -> forall (v v' : [V]), rel VRel l v v' -> rel ORel l (f i v) (f i' v').
-
-Definition equivalence_preserving {I V: Ty} (f : [I] -> [V] -> [V]) (IRel : myrel [I]) (VRel : myrel [V]) := forall l i, dis IRel l i -> forall v, rel VRel l (f i v) v.
-
-Definition eqpair {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
-            (fun (l : level) _ => False)
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con. destruct IRel. destruct ORel. simpl. con.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-  - con. destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv0 l). case.
-    move => _ Hsym _.  apply Hsym. eauto.
-
-    destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv1 l). case. eauto.
-
-  - destruct IRel,ORel. simpl. con.
-    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
-
-
-  - move=> l0 l1 HOrder a0 a1 [] HI HO.
-    destruct IRel,ORel;ssa. eauto. eauto.
-
-  - eauto. eauto.
-Defined.
-
-Definition eqpair_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
-            (fun (l : level) io => dis IRel l (fst io) \/ dis ORel l (snd io))
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con. destruct IRel. destruct ORel. simpl. con.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-  - con. destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv0 l). case.
-    move => _ Hsym _.  apply Hsym. eauto.
-
-    destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv1 l). case. eauto.
-
-  - destruct IRel,ORel. simpl. con.
-    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
-
-
-  - move=> l0 l1 HOrder a0 a1 [] HI HO.
-    destruct IRel,ORel;ssa. eauto. eauto.
-
-  - intros. de IRel;de ORel.
-    de H0;eauto.
-  - intros. de IRel;de ORel.
-    de H;eauto.
-Defined.
-
-Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
-            (fun (l : level) io => dis ORel l (snd io))
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con. destruct IRel. destruct ORel. simpl. con.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-  - con. destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv0 l). case.
-    move => _ Hsym _.  apply Hsym. eauto.
-
-    destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv1 l). case. eauto.
-
-  - destruct IRel,ORel. simpl. con.
-    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
-
-
-  - move=> l0 l1 HOrder a0 a1 [] HI HO.
-    destruct IRel,ORel;ssa. eauto. eauto.
-
-  - intros. de IRel;de ORel. eauto.
-  - intros. de IRel;de ORel. eauto.
-Defined.
-
-Canonical eqsum (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
-  refine (@MyRel _ 
-            (fun (l : level) io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end)
-            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2 | inr o1,inr o2 => rel ORel l o1 o2 | _,_ => False end)
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con.
-    intro. 
-    destruct IRel. destruct ORel. simpl. de x.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y.
-    move: (equiv0 l). case. eauto. 
-    move: (equiv1 l). case. de y.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y. de z.
-    move: (equiv0 l). case. eauto. de y. de z. 
-    move: (equiv1 l). case. eauto.
-
-
-  -     ssa. de a0. de a1. de IRel. eauto.
-        de a1. de ORel. eauto.
-
-        ssa. de a. de IRel. eauto.
-        de ORel. eauto.
-
-        ssa. de a0. de a1. de IRel. eauto.
-        de a1. de ORel. eauto.
-Defined.
-
-
- Theorem sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]), NI (eqpair_LR VRel IRel) ORel p -> fv_NI g ORel VRel VRel -> fv_NI f IRel VRel VRel -> equivalence_preserving f IRel VRel -> NI IRel (eqpair VRel ORel) (sta f g v p).
+ (*fixed typo in paper: In conclusion, replaced I with Bool * I  *) 
+Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) p b, NI IRel (eqpair_LR boolRel ORel) p ->
+(forall l, aware boolRel true l \/  oblivious (eqpair_R boolRel ORel) p l ) ->                                                                              
+NI (eqpair_LR boolRel IRel) (eqmaybe_swi (fun l => aware boolRel true l) ORel) (swi b p).
  Admitted.
 
-
-Definition levelPred := level -> Prop.
- Definition aware (V : Ty) (VRel : myrel [V])  (v : [V]) : levelPred
-   := fun l => (forall v', rel VRel l v v' -> v = v') /\ ~ dis VRel l v.
-
-Variant ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) (R : Proc I O -> Prop) : Proc I O -> Prop :=
-  OF1 p : (forall i p', reduceI p i p' -> R p') -> (forall o p', reduceO p o p' -> R p' /\ dis ORel l o) ->  ObliviousF ORel l R p.
-
-Lemma monotone_ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) : monotone1 (@ObliviousF I O ORel l).
-Proof.
-intro;ssa.
-inv IN;eauto.
-econ;eauto.
-intros.
-move: (H0 _ _ H1). case. eauto.
-Qed.
-Hint Resolve monotone_ObliviousF : paco.
-
-Definition oblivious {I O : Ty} (ORel : myrel [O]) p : levelPred := fun l => paco1 (@ObliviousF I O ORel l) bot1 p.
-
-Definition boolRel : myrel ([Bool]).
-  refine (@MyRel _
-            (fun l b => False)
-            (fun l b1 b2 => b1 = b2)
-            _
-            _
-            _
-            _).
-intros.
-done.
-eauto.
-eauto.
-Defined.
-
-Definition eqmaybe {V : Ty} (VRel : myrel [V]) (P: levelPred) : myrel ([Option V]).
-    refine (@MyRel _
-            (fun l v => if v is Some v' then dis VRel l v' else ~ P l /\ forall x0 x1, order x0 x1 -> P x0 -> P x1 )
-            (fun l b1 b2 => b1 = b2)
-            _
-            _
-            _
-            _).
-intros. auto.
-ssa. de a.
-de VRel. eauto.
-intro. apply H0. eauto.
-
-intros. de a0. de a1. inv H0. subst. done.
-subst. done.
-Defined.
-
-Definition aware_or_oblivious  {I O : Ty} (ORel : myrel [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware O ORel o l \/ oblivious ORel p l.
-
-Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) p b, NI IRel (eqpair_LR boolRel ORel) p ->
- NI (eqpair_LR boolRel IRel) (eqmaybe ORel (fun l => aware Bool boolRel true l \/ oblivious (eqpair_LR boolRel ORel) p l)) (swi b p).
-Admitted.
-
-
-Theorem maybe_NI : forall (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p -> NI (eqmaybe IRel (fun _ => False)) ORel (maybe p).
+Theorem maybe_NI : forall (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p -> NI (eqmaybe_maybe (fun _ => False) IRel) ORel (maybe p).
 Admitted.
 
 Theorem loop_NI : forall (I : Ty) (IRel : myrel [I]) p, NI IRel IRel p -> NI IRel IRel (loop p).
@@ -670,70 +920,89 @@ Admitted.
 Theorem par_NI : forall (I O1 O2 : Ty) (IRel : myrel [I]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]) p1 p2, NI IRel ORel1 p1 -> NI IRel ORel2 p2 -> NI IRel (eqpair ORel1 ORel2) (par p1 p2).
 Admitted.
 
-End AdmittedTheorems.
+
+(*par_swi is incorrect, it is always receiving input. It needs to be wrapped in maybe, such as is seen in scheduled_p*)
+(*Hint Extern 1 (Ty) => constructor : core.*)
+(*Hint Extern 1 ([ ?T ]) => econstructor : core.
+Hint Extern 1 ([ ?T * ?T2 ]) => apply: Times_R*)
+(*Print Ty.
+Hint Extern 5 ([ ?T ]) =>
+  (* We 'refine' the goal by providing a specific constructor 
+     wrapped in the interpretation notation *)
+  first [ 
+    refine [ Times _ _ ] | 
+    refine [ Times_LR _ _ ] | 
+    refine [ Times_R Bool _ ] 
+  ];
+                simpl : core.
 
 
-(*Definition mapO {I O O' : Ty} (f : [O] -> [O']) : Proc I O  -> Proc I O' :=
-  map (@id [I]) f.
+Hint Extern 1 ([ Times_R _ _ ]) =>
+       unfold interp; simpl : core.
+*)
 
 
-(*** Message transformation *)
-Definition mapI {I I' O : Ty} (f : [I] -> [I']) : Proc I' O -> Proc I O := map f (@id [O]).
-Definition mapO_version {I O O' : Ty} (f : [O] -> [O']) : Proc I O  -> Proc I O' := map (@id [I]) f.
-
-Definition staI {I O V : Ty} (f : [I] -> [V] -> [V]) (v:[V]) (p:Proc (Times V I) O) : Proc I (Times V O) :=
-  sta f (fun o v => v) v p.
-Definition staO {I O V : Ty} (f : [O] -> [V] -> [V]) (v:[V]) (p:Proc (Times V I) O) : Proc I (Times V O) :=
-  sta (fun i v => v) f v p.
-
-
-
-(*** Process switching *)
-
-Definition swiI {I O : Ty} (b : [Bool]) (p : Proc I O) : Proc (Times Bool I) (Option O) :=
-  swi b (@mapO _ _ (Times Bool _) (fun x => (false,x)) p).
-Definition swiO {I O : Ty} (b : bool) (p : Proc I (Times Bool O)) : Proc I (Option O) :=
-  @mapI _ (Times Bool _) _ (fun x => (false,x)) (swi b p).*)
+Hint Extern 1 =>
+  match goal with
+  | [ |- [ ?target ] ] => 
+      is_evar target;  (* If the type index is unknown *)
+      (* Force the index to be a pair-producing constructor *)
+      unshelve (refine [ _ ]); [ constructor | simpl ]
+  end : core.
 
 Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
-  : Proc (Times Bool (Times I1 I2)) (Times (Option O1) (Option O2)) :=
-    par
-      (swi b (@map (Times _ _) _ _ (Times Bool _) fst (fun x => (false,x)) p1))
+  := par
+      (swi b (@map (Times _ _) _ _ _ fst (fun x => (false,x) : [Times Bool _]) p1))
       (swi (negb b) (@map (Times _ _) _ _ (Times Bool _) snd (fun x => (false,x)) p2)).
 
 
+(*Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
+  := par
+      (swi b (@map (Times _ _) _ _ (Times_R Bool _) fst (fun x => (false,x)) p1))
+      (swi (negb b) (@map (Times _ _) _ _ (Times_R Bool _) snd (fun x => (false,x)) p2)).*)
 
-Definition scheduled_p (I O : Ty) (b : bool) (p : Proc I O) := @map _ _ (Times _ _) _ id snd
-                                                                 (@sta (Times Bool _) _ Bool (fun i v => xor (fst i) v) (fun o v => v) b
-                                                                 (@map (Times _ (Times _ _))  (Times _ (Times _ _)) _ _ (fun i => (fst (snd i),(fst i,snd (snd i)))) id
-                                                                 (swi b (@map (Times Bool _) (Option _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o))
-                                                                           (maybe p))))).
+
+(*Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
+  : Proc (_ Bool (Times I1 I2)) (_ (Option_swi O1) (Option_swi O2)) :=
+    par
+      (swi b (@map (Times _ _) _ _ (Times_R Bool _) fst (fun x => (false,x)) p1))
+      (swi (negb b) (@map (Times _ _) _ _ (Times_R Bool _) snd (fun x => (false,x)) p2)).*)
+
+
+(*Not used for anything*) Check sta.
+Definition scheduled_p (I O : Ty) (b : bool) (p : Proc I O) :=
+  @map _ _ (Times _ _) _ id snd (*drop state*)
+    (@sta (Times Bool _) _ Bool (fun i v => xor (fst i) v) (fun o v => v) b (*track swi flag*)
+       (@map (Times _ (Times _ _))  (Times _ (Times _ _)) _ _ (fun i => (fst (snd i),(fst i,snd (snd i)))) id (*(v,(b,i)) -> (b,(v,i))*)
+          (swi b (@map (Times Bool _) (Option_maybe _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o)) (*if b then send input to p*)
+                    (maybe p))))).
+
 
 Lemma par_swiI_NI : forall (I1 I2 O1 O2 : Ty) (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (IRel1 : myrel [I1]) (IRel2 : myrel [I2]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]),
-     NI IRel1 ORel1 p1 -> NI IRel2 ORel2 p2 -> NI (eqpair_LR boolRel (eqpair IRel1 IRel2)) (eqpair (eqmaybe ORel1 (aware Bool boolRel true)) (eqmaybe ORel2 (aware Bool boolRel false))) (par_swiI b p1 p2).
+     NI IRel1 ORel1 p1 -> NI IRel2 ORel2 p2 -> NI (eqpair_LR boolRel (eqpair IRel1 IRel2)) (eqpair (eqmaybe_swi (aware boolRel true) ORel1) (eqmaybe_swi (aware boolRel false) ORel2)) (par_swiI b p1 p2).
 Proof. Admitted.
 
 (*sta_swi b n f p:
  (i == n,I') -> enables p
  (i <> n,I') -> disables p
- f projects input from pair e.g. f (I1,I2) = I1*)
+ f projects input from pair e.g. f (I1,I2) = I1
+ maybe is used to disgard input to p when i<>n.
+ *)
+
 Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Proc I O) :=
 @map (Times Nat _) (Times Bool _) (Times _ _) _ (fun x => (fst x == n,snd x)) snd
   (@sta (Times Bool _) _ Bool
        (fun i v => xor (fst i) v)
        (fun o v => false)
        b
-       ( @map (Times Bool (Times Bool _)) (Times Bool _) _ _
-          (fun i => (fst i,snd (snd i)))
-          id
-          (swi b (@map _ _ _ (Times Bool _)
-                    f
+       (swi b (@map (Times Bool _) (Option_maybe _) _ (Times Bool _)
+                    (fun i => if fst i then Some (f (snd i)) else None)
                     (fun o => (true,o))
-                    (p)
-  )))).
+                    (maybe p)
+  ))).
 
 Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
-  : Proc (Times Nat (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
+  : Proc (Times Nat (Times I1 (Times I2 I3))) (Times (Option_swi O1) (Times (Option_swi O2) (Option_swi O3))) :=
     par
       (@sta_swi (Times _ _) _ O1 (n == 0) 0 fst p1)
       (par
@@ -744,7 +1013,7 @@ Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc 
 
 (*Types used in all examples*)
 Definition ExInputType := Times TInput TInput.
-Definition ExOutputType := Times (Option TOutput) (Option TOutput).
+Definition ExOutputType := Times (Option_swi TOutput) (Option_swi TOutput).
 
 Definition streamType := Stream ([TInput] + (([ExOutputType]))).
 
@@ -782,7 +1051,7 @@ Definition Input_prod : myrel ([ExInputType]).
   apply: eqpair_LR;apply InputRel;apply InputRel.
 Defined.
 
-Definition Output_option : myrel ([Option TOutput]) := eqmaybe OutputRel (fun l => l = \top).
+Definition Output_option : myrel ([Option TOutput]) := eqmaybe (fun l => l = \top) OutputRel.
 
 Definition Output_option_prod : myrel ([ExOutputType]).
   apply eqpair. apply Output_option. apply Output_option.
@@ -806,7 +1075,7 @@ Definition p1 := @out TInput TOutput Step.
 Definition p2 := @out TInput TOutput Idle.
 Definition process_pool := par_swiI false p1 p2.
 
-Definition scheduler (p : Proc (Times Bool (Times TInput TInput)) (Times (Option TOutput) (Option TOutput))) :=
+Definition scheduler (p : Proc (Times Bool (Times TInput TInput)) (Times (Option_swi TOutput) (Option_swi TOutput))) :=
   @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [TInput]) => (i == DiskRead,(i,i))) id p.
 
 (*Trace*)
@@ -827,6 +1096,7 @@ Qed.
 
 (*Trace derivation*)
 Ltac rewr ::=  (try rewrite newtrace_simple_eq); rewrite /newtraceF_simple /process_pool /par_swiI /scheduler /p1 /p2.
+Check process_pool.
 Lemma simple_trace : trace newtrace_simple (scheduler process_pool).
 Proof.
   pcofix CIH.
@@ -857,7 +1127,7 @@ Qed.
 Example example_not_NI :  ~ NI InputRel Output_option_prod (scheduler process_pool).
 Proof.
   rewrite /NI. ssa. intro.
-  Search _ NotSim.
+
   apply/toNotSim. apply/counterexample.
   apply/H. apply simple_trace.
 Qed.
@@ -872,15 +1142,7 @@ Definition p2 := (@out TInput TOutput Idle). (*low*)
 Definition process_pool := par_swiI false p1 p2.
 Definition scheduler {I O} (p : Proc (Times Bool (Times I I)) O) : Proc I O := @map _ (Times Bool (Times _ _)) _ _ (fun i => (true,(i,i))) id p.
 
-Definition InputRelPublic : myrel ([TInput]). 
-  refine (@MyRel _
-            (fun l a => False)
-            (fun l a b => a = b) _ _ _ _).
-  intros.
-  done.
-  intros. done.
-  intros. subst. done.
-Defined.
+Definition InputRelPublic : myrel ([TInput]) := publicRel TInput. 
 
 Definition TraceF_specific := (@TraceF TInput (Times (Option TOutput) (Option TOutput))).
 Lemma specific_monotone : monotone2 TraceF_specific.
@@ -890,9 +1152,8 @@ Qed.
 Hint Resolve specific_monotone : paco.
 
 
-
 Arguments NI : clear implicits.
-Arguments NI I O [_] [_].
+(*Arguments NI I O [_] [_].*)
 Example hl_lp_NI : @NI _ _ InputRelPublic Output_option_prod (scheduler process_pool).
 Proof.
   rewrite /scheduler.
@@ -900,19 +1161,17 @@ Proof.
   eapply par_swiI_NI.
   apply out_NI.
   apply out_NI.
-
   instantiate (1:= (InputRelPublic)).
   instantiate (1:= (InputRelPublic)).  
   rewrite /f_NI. ssa.
 
   rewrite /f_PU. ssa.
-
-  instantiate (1:= OutputRel).
-  instantiate (1:= OutputRel).
-  ssa.
+  rewrite /f_NI. ssa.
+  Unshelve. apply OutputRel. apply OutputRel.
 Qed.
 End Example2.
 
+Print Hint *. 
 (*Example 3*)
 Module Example3.
   
@@ -938,10 +1197,10 @@ Definition handler := @map _ (Sum _ _) (Sum _ (Times Bool Unit)) THandlerOutput
                            (@out (Times Bool _ ) Unit tt)
                         )))).
 
-Definition InputType := (Times (Option TInput) (Times (Option THandlerOutput) (Option TInterrupt))).
+Definition InputType := (Times (Option_maybe TInput) (Times (Option_maybe THandlerOutput) (Option_maybe TInterrupt))).
 
 Definition NInputType := Times Nat InputType.
-Definition OutputType :=  (Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Option THandlerOutput))).
+Definition OutputType :=  (Times (Option_swi TPublicOutput) (Times (Option_swi TTypeSyscall) (Option_swi THandlerOutput))).
 
 Definition IOType := Sum InputType OutputType. 
 
@@ -1000,7 +1259,7 @@ Definition scheduler
     )))).
 
 (*schedules handler on hardware interrupt input*)
-Definition bad_scheduler := scheduler state_type1 state_in1 (fun _ v => inc_state1 v) (false,(0,0)) to_schedule1.
+Definition bad_scheduler := @scheduler state_type1 state_in1 (fun _ v => inc_state1 v) (false,(0,0)) to_schedule1.
 
 Definition full_process := bad_scheduler process_pool.
 
@@ -1046,49 +1305,26 @@ Proof.
   exact CIH.
 Qed.
 
-Canonical InputTypeRel : myrel [InputType].
-  rewrite /InputType. 
-  refine (@MyRel _ 
-            (fun (l : level) v => if l == \bot then match v with | (_,(None,None)) => False | _ => True end else False)
-            (fun l io1 io2 => io1 = io2)
-            _
-            _
-            _
-            _).
-  - by intros.
-  - intros. rewrite /order in H. destruct (eqVneq l1 \bot). subst. rewrite lex0 in H. rewrite (eqP H) eqxx.
-    de a. done.
-  - intros. subst. destruct (eqVneq l \bot). subst. de a1. done.
-Defined.
 
-Canonical OutputTypeRel : myrel [OutputType].
-  rewrite /OutputType.
-  refine (@MyRel _ 
-            (fun (l : level) v => if l == \bot then match v with | (_,(Some NPublic,Some SPublic)) => False | _ => True end else False)
-            (fun l io1 io2 => io1 = io2)
-            _
-            _
-            _
-            _).
-  - by intros. 
-  - intros. rewrite /order in H. destruct (eqVneq l1 \bot). subst. rewrite lex0 in H. rewrite (eqP H) eqxx.
-    de a. done.
-  - intros. subst. destruct (eqVneq l \bot). subst. de a1. done.
-Defined.
+Definition InputTypeRel : myrel [InputType] := to_rel InputType.
+
+Definition OutputTypeRel : myrel [OutputType] := to_rel OutputType.
 
 Ltac dd H := dependent destruction H.
-
+(*got to here, probably eqmaybeT dis predicate is wrong?*)
 Example counterexample : NotSim \bot InputTypeRel OutputTypeRel ex3_stream (bad_scheduler process_pool).
 Proof.
-  apply: NS2.
+  Admitted. (*outcomment proof because it is slow*)
+(*
+apply: NS2.
   instantiate (1:= (None,(None,(Some TimerInterrupt)))).
-  ssa. rewrite eqxx //.
+  ssa.
   move=>p'. rewr. ssa.
   match_dd.
   apply:NS4.
   ssa.
   match_dd.
-Qed.  
+Qed.  *)
 
 Example example_not_NI : ~ @NI _ _ InputTypeRel OutputTypeRel (bad_scheduler process_pool).
 Proof.
@@ -1097,9 +1333,101 @@ Proof.
   apply/H. apply simple_trace.
 Qed.
 
+Coercion to_rel_locked : Ty >-> myrel.
+
+Definition NI2 I O (p : Proc I O) := NI I O I O p.
+Definition f_NI2 {I O :Ty} (f : [I] -> [O]) := forall (l : level) (i i' : [I]) (o o' : [O]), rel I l i i' -> rel O l (f i) (f i').
+Definition f_PU2 {I O : Ty} (f : [I] -> [O]) := forall l (i : [I]), dis I l i -> dis O l (f i).
+Definition f_NI_PU2 {I O : Ty} (f : [I] -> [O])  := f_NI I O f /\ f_PU I O f.
+Definition fv_NI2 (I O V: Ty) (f : [I] -> [V] -> [O]) := forall l (i i' : [I]), rel I l i i' -> forall (v v' : [V]), rel V l v v' -> rel O l (f i v) (f i' v').
+Definition f_EP2 (I V: Ty) (f : [I] -> [V] -> [V]) := forall l i, dis I l i -> forall v, rel V l (f i v) v. (*equivalence preserving*)
+
+Lemma out_NI2 : forall I O (o : [O]), NI2 (@out I O o).
+Proof. intros. apply: out_NI. Qed.
+
+Lemma map_NI2 : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O] -> [O']),
+    f_NI_PU2 f ->
+    f_NI2 g ->
+    NI2 p ->        
+    NI2 (map f g p).
+Proof.
+  intros. apply/map_NI;eauto.
+  all:move: H;rewrite /f_NI_PU2;ssa.
+Qed.
+
+Lemma NI_swap_rel : forall I O (p : Proc I O) (IRel : myrel [I]) (ORel ORel' : myrel [O]), (forall l x y, rel ORel l x y <-> rel ORel' l x y) -> NI I O IRel ORel p -> NI I O IRel ORel' p.
+Proof.
+  intros. intro. intros. eapply H0 in H1.
+  move: H1. instantiate (1:= l).
+  intros. apply/paco2_imp. apply monotone_SimulationF.
+  2:eauto. ssa.
+  inv H2;econ;eauto.
+  rewrite /Clause4. ssa. apply H6 in H7. ssa. exists x.
+  ssa;eauto. apply/H. done.
+Qed.  
+
+Lemma NI_add_L : forall I V O (p : Proc I (Times V O)),
+    NI I (Times V O) (to_rel I) (eqpair_R (to_rel V) (to_rel O)) p ->
+    NI I (Times V O) (to_rel I) (eqpair_LR (to_rel V) (to_rel O)) p.
+Proof.
+  intros. 
+  apply/simulation_equiv.
+  move/simulation_equiv : H.
+  intros. apply/NI_swap_rel. 2:eauto.
+  ssa.
+Qed.
+
+Lemma NI_add_R : forall I V O (p : Proc I (Times V O)),
+    NI I (Times V O) (to_rel I) (eqpair (to_rel V) (to_rel O)) p ->
+    NI I (Times V O) (to_rel I) (eqpair_R (to_rel V) (to_rel O)) p.
+Proof.
+  intros. 
+  apply/simulation_equiv.
+  move/simulation_equiv : H.
+  intros. apply/NI_swap_rel. 2:eauto.
+  ssa.
+Qed.
 
 
+Lemma sta_NI2 : forall (I O V : Ty) (p : Proc (Times V I) O) f g v,
+    NI2 p ->
+    fv_NI2 g->
+    fv_NI2 f /\ f_EP2 f ->
+    NI2 (sta f g v p).
+Proof.
+  intros. rewrite /NI2.
+  ulock. simpl.  apply/NI_add_L.
+  apply:sta_NI;eauto.
+  rewrite /fv_NI;ssa.
+  rewrite /f_EP. ssa.
+Qed.
 
+
+Lemma swi_NI2 : forall (I O : Ty) (p : Proc I (Times Bool O)) b,
+    NI2 p ->
+   (* (forall l, aware Bool true l \/ oblivious (Times Bool O) p l) ->*) (*remove this part, because (to_rel Bool) : myrel [Bool] is always aware*)
+    NI2 (swi b p).
+Proof.
+intros. 
+rewrite /NI2. ulock. simpl.
+apply/swi_NI. eauto.
+ssa. left. rewrite /aware. ssa.
+Qed.
+
+Lemma maybe_NI2 : forall (I O :Ty) (p : Proc I O), NI2 p -> NI2 (maybe p).
+Proof.
+  intros. apply/maybe_NI. eauto.
+Qed.
+
+Lemma loop_NI2 : forall (I : Ty) (p : Proc I I), NI2 p -> NI2 (loop p).
+Proof.
+  intros. apply/loop_NI. ssa.
+Qed.
+
+Lemma par_NI2 : forall (I O1 O2 : Ty) (p1 : Proc I O1) (p2 : Proc I O2), NI2 p1 -> NI2 p2 -> NI2 (par p1 p2).
+Proof.
+  intros. rewrite /NI2. ulock. simpl. apply/NI_add_L/NI_add_R/par_NI;eauto.
+  Qed.
 
 
 Definition state_type2 := Times (Option Nat) (Times Nat Nat).
@@ -1122,30 +1450,107 @@ Definition to_schedule2 (v : [state_type2]) :=
   end.
 
 (*schedules handler between each context switch*)
-Definition mitigator := scheduler state_type2 (fun _ v => v) (fun _ v => inc_state2 v) (None,(0,0)) to_schedule2.
+Definition mitigator := @scheduler state_type2 (fun _ v => v) (fun _ v => inc_state2 v) (None,(0,0)) to_schedule2.
 
 Ltac rewr ::=  (try rewrite ex3_stream_eq); rewrite /par_swiI /bad_scheduler /process_pool /low_p  /ex3_streamF /bad_scheduler /process_pool /par_swiI3 /high_p /handler /sta_swi /scheduler /mitigator.
 
-Theorem mitigator_NI : @NI _ _ InputTypeRel OutputTypeRel (mitigator process_pool).
+Hint Resolve InputTypeRel OutputTypeRel eqsum : rels.
+
+Ltac NI_tac := rewrite /IOType /state_type2;(match goal with 
+               | [ |- @NI _ _ _ _ (map _ _ _)] => apply: map_NI2
+               | [ |- @NI _ _ _ _ (loop _)] => apply: loop_NI2
+               | [ |- @NI _ _ _ _ (sta _ _ _ _)] => apply: sta_NI2
+               | [ |- @NI _ _ _ _ (par _ _)] => apply: par_NI2
+               | [ |- @NI _ _ _ _ (swi _ _)] => apply: swi_NI2
+               | [ |- @NI _ _ _ _ (maybe _)] => apply: maybe_NI2
+               | [ |- @NI _ _ _ _ (out _)] => apply: out_NI2
+               end);eauto with rels;try solve [ssa].
+
+Print InputType.
+Print OutputType.
+Print IOType.
+(*overview over types
+  InputType  = Times (Option TInput) (Times (Option THandlerOutput) (Option TInterrupt))
+  OutputType = Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Option THandlerOutput))
+  IOType = Sum InputType OutputType
+ *)
+(*Lemma test_f_NI :  @f_NI InputType IOType InputTypeRel _ (@inl [InputType] (option PublicOutput * (option TypeSyscall * option HandlerOutput))).*)
+
+Lemma to_rel_eq l (A : Ty) x y  : rel (to_rel A) l x y -> x = y.
+Proof.
+  move: A x y. elim;ssa.
+  de x. de y. f_equal;eauto.
+  de x. de y. f_equal. eauto. de y. f_equal. eauto.
+Qed.
+
+Lemma eq_to_rel (A : Ty) l x y  : x = y -> rel (to_rel A) l x y.
+Proof.
+  move=>->. eauto.
+Qed.
+
+Lemma f_NI_eq A B f: f_NI #A #B f.
+  rewrite /f_NI. ssa. apply/eq_to_rel.
+  apply to_rel_eq in H. subst. done.
+Qed.
+
+Lemma f_NI_id (A : Ty) B : @f_NI A A B B id.
+  rewrite /f_NI. done.
+Qed.
+
+Lemma f_PU_id (A : Ty) B : @f_PU A A B B id.
+  rewrite /f_PU. done.
+Qed.  
+Hint Resolve f_NI_eq f_NI_id f_PU_id. 
+
+Theorem mitigator_NI : @NI _ _ #InputType #OutputType (mitigator process_pool).
 Proof.
   rewr. rewrite /scheduler.
-Search _ NI.
-(*apply: map_NI.
-apply: loop_NI.*) Search _ out.
-Ltac NI_tac := match goal with 
-               | [ |- @NI _ _ _ _ (map _ _ _)] => apply: map_NI
-               | [ |- @NI _ _ _ _ (loop _)] => apply: loop_NI
-               | [ |- @NI _ _ _ _ (sta _ _ _ _)] => apply: sta_NI
-               | [ |- @NI _ _ _ _ (par _ _)] => apply: par_NI
-               | [ |- @NI _ _ _ _ (swi _ _)] => apply: swi_NI
-               | [ |- @NI _ _ _ _ (maybe _)] => apply: maybe_NI
-               | [ |- @NI _ _ _ _ (out _)] => apply: out_NI
-                                                         
-               end.
-Check map_NI.
-Set Printing Implicit.
-NI_tac.
-do 1 (try NI_tac).
+  
+  NI_tac.
+  NI_tac.
+  NI_tac.
+  NI_tac.
+  Check sta_NI2.
+
+  unshelve NI_tac.
+
+  NI_tac. con;eauto with rels. eauto.
+  con. eauto with rels.
+  rewrite /f_NI. Print f_NI.
+  eauto with rels. eauto with rels.
+  all:ssa. 2: { rewrite /f_NI. intros. have: (eqsum InputType OutputType InputTypeRel OutputTypeRel)
+                eauto. apply rel_eq. ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. } 
+
+  unshelve NI_tac.
+
+  un
+    NI_tac. 3: NI_tac.  
+
+
+
+    eauto with rels. 
+(*    apply publicRel;ssa.
+    ssa. 
+    rewrite /f_NI. ssa. subst. de i'. de s.*)
+Check sta_NI.
+    apply: sta_NI.
+    unshelve NI_tac.
+  - Unshelve 1.
+  NI_tac.
+  NI_tac.
+  NI_tac.
+  do 10 (try NI_tac).
+  rewrite /
+  unshelve apply: map_NI.
+
+  Ltac mytest := rewrite /IOType;eauto with rels.
+  mytest. mytest.
+  un
+  apply eqsum; eauto with rels.
+  NI_tac. instantiate (2:=eqsum _ _ _ _);simpl. 
+2: { Set Printing Implicit. rewrite /f_NI.
+2: { rewrite /f_NI. intros.
+do 2 (try NI_tac).
 NI_tac.
 NI_tac.
 
