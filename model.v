@@ -129,7 +129,7 @@ Canonical Output_indType := IndType Output Output_indDef.
 Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
-Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool
+Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool | PrivateBool
                  | Option : Ty -> Ty | Option_swi : Ty -> Ty | Option_maybe : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | TInterrupt | THandlerOutput |  TPublicOutput. 
 
 Derive NoConfusion for Ty.
@@ -144,7 +144,7 @@ Fixpoint interp (t : Ty) : Set :=
   match t with
   | Nat => nat
   | Times t0 t1 => (interp t0) * (interp t1)
-  | Bool => bool
+  | Bool | PrivateBool => bool
   | Option t' | Option_swi t' | Option_maybe t' => option (interp t')
   | TInput => Input
   | TOutput => Output
@@ -587,11 +587,10 @@ Defined.
 
 (*Definition eqmaybeT {V : Ty} (VRel : myrel [V]) : myrel ([Option V]) := eqmaybe VRel (fun _ => True).*)
 
-Definition boolRel : myrel ([Bool]) := publicRel Bool.
+Definition boolRel : myrel ([Bool]) := privateRel Bool. (*publicRel Bool.*)
 
 Definition aware (V : Ty) (VRel : myrel [V]) (v : [V]) : levelPred
-   := fun l => (forall v', rel VRel l v v' -> v = v') /\ ~ dis VRel l v.
-Check publicRel.
+   := fun l => (forall v', rel VRel l v v' -> v = v' /\ ~ dis VRel l v').
 
 Fixpoint to_rel (ty : Ty): myrel [ty]:=
       match ty as x return myrel [x] with
@@ -606,7 +605,9 @@ Fixpoint to_rel (ty : Ty): myrel [ty]:=
     | Times_R t0 t1 => eqpair_R (to_rel t0) (to_rel t1)
       | Times_LR t0 t1 => eqpair_LR (to_rel t0) (to_rel t1)
                                     *)
-    | Sum t0 t1 => eqsum (to_rel t0) (to_rel t1)
+      | Sum t0 t1 => eqsum (to_rel t0) (to_rel t1)
+      | PrivateBool => privateRel PrivateBool
+      | Bool => boolRel
     | ty' => publicRel ty'
     end.
 
@@ -1229,6 +1230,8 @@ Definition state_in1 (o : [IOType]) (v: [state_type1])  : [state_type1] := (*bas
 
 (*Definition bad_scheduler := loop (@map _ _ (Times _ _) _ id snd (@sta _ _ state_type1 state_in1 (fun o v => inc_state1 v) (false,(0,0)) (@map (Times state_type1 _) (Times Nat _) _ _ (fun x => (to_schedule1 (fst x), snd x)) id process2))).*)
 
+Definition outf : [IOType] -> [OutputType] :=  (fun x => match x with | inl _ => (None,(None,None)) | inr y => y end).
+
 Definition scheduler
   (state_type : Ty)
   (state_in : [IOType] -> [state_type] -> [state_type])
@@ -1238,7 +1241,7 @@ Definition scheduler
   (p : Proc NInputType OutputType)  :=
   @map InputType IOType IOType OutputType
     inl
-    (fun x => match x with | inl _ => (None,(None,None)) | inr y => y end)
+    outf
     (loop (*scheduler needs loop - We can only switch par_swiI3 on input, thus output rerouted as input allows scheduler to count outputs - Outputs is our unit of time*)
        (@map _ _ (Times _ _) _
           id
@@ -1388,18 +1391,46 @@ Proof.
   ssa.
 Qed.
 
+Lemma SimulationF_I_imp : forall I O l (IRel IRel' : myrel [I]) (ORel : myrel [O]) R s p, (forall l x, dis IRel' l x -> dis IRel l x) -> (forall l x y, rel IRel l x y <-> rel IRel' l x y) -> SimulationF l IRel ORel R s p -> SimulationF l IRel' ORel R s p.
+Proof.
+  intros. inv H1. con;eauto.
+  rewrite /Clause1. ssa. eauto.
+  rewrite /Clause2. ssa. 
+  rewrite /Clause3. ssa.
+  move: H4. rewrite /Clause3. ssa. eapply H4 in H6;eauto. apply/H0. done.
+Qed.
+
+
+Lemma simulation_I_imp : forall I O (IRel IRel' : myrel [I]) (ORel : myrel [O]) p,
+    (forall l x, dis IRel' l x -> dis IRel l x) -> (forall l x y, rel IRel l x y <-> rel IRel' l x y) -> NI I O IRel ORel p -> NI I O IRel' ORel p.
+Proof.
+  intros. 
+  intros. rewrite /NI. intros. eapply H1 in H2.
+  move: H2. instantiate (1:=l).
+  apply:paco2_imp. apply monotone_SimulationF.
+  intros. apply/SimulationF_I_imp. 3:eauto. eauto. eauto.
+Qed.  
+
+Lemma NI_I_remove_L : forall I V O (p : Proc (Times V I) O),
+    NI (Times V I) O (eqpair_LR (to_rel V) (to_rel I)) (to_rel O) p ->
+    NI (Times V I) O (eqpair_R (to_rel V) (to_rel I)) (to_rel O) p.
+Proof.
+  intros. apply/simulation_I_imp. 3:eauto.
+  ssa. ssa.
+Qed.
+
 
 Lemma sta_NI2 : forall (I O V : Ty) (p : Proc (Times V I) O) f g v,
-    NI2 p ->
     fv_NI2 g->
     fv_NI2 f /\ f_EP2 f ->
+    NI2 p ->    
     NI2 (sta f g v p).
 Proof.
   intros. rewrite /NI2.
-  ulock. simpl.  apply/NI_add_L.
-  apply:sta_NI;eauto.
+  ulock. simpl. apply/NI_add_L/NI_add_R.
+  apply:sta_NI;eauto. rewrite /NI2 in H. ssa. apply/NI_I_remove_L. done.
+  move: H. rewrite /NI2. ssa.
   rewrite /fv_NI;ssa.
-  rewrite /f_EP. ssa.
 Qed.
 
 
@@ -1409,7 +1440,7 @@ Lemma swi_NI2 : forall (I O : Ty) (p : Proc I (Times Bool O)) b,
     NI2 (swi b p).
 Proof.
 intros. 
-rewrite /NI2. ulock. simpl.
+rewrite /NI2. ulock. simpl. 
 apply/swi_NI. eauto.
 ssa. left. rewrite /aware. ssa.
 Qed.
@@ -1456,7 +1487,7 @@ Ltac rewr ::=  (try rewrite ex3_stream_eq); rewrite /par_swiI /bad_scheduler /pr
 
 Hint Resolve InputTypeRel OutputTypeRel eqsum : rels.
 
-Ltac NI_tac := rewrite /IOType /state_type2;(match goal with 
+(*Ltac NI_tac := (*rewrite /IOType /state_type2;*)(match goal with 
                | [ |- @NI _ _ _ _ (map _ _ _)] => apply: map_NI2
                | [ |- @NI _ _ _ _ (loop _)] => apply: loop_NI2
                | [ |- @NI _ _ _ _ (sta _ _ _ _)] => apply: sta_NI2
@@ -1464,11 +1495,18 @@ Ltac NI_tac := rewrite /IOType /state_type2;(match goal with
                | [ |- @NI _ _ _ _ (swi _ _)] => apply: swi_NI2
                | [ |- @NI _ _ _ _ (maybe _)] => apply: maybe_NI2
                | [ |- @NI _ _ _ _ (out _)] => apply: out_NI2
-               end);eauto with rels;try solve [ssa].
+                                                 end);eauto with rels;try solve [ssa].*)
 
-Print InputType.
-Print OutputType.
-Print IOType.
+
+(*               | [ |- @NI _ _ _ _ (map _ _ _)] => apply: map_NI2
+               | [ |- @NI _ _ _ _ (loop _)] => apply: loop_NI2
+               | [ |- @NI _ _ _ _ (sta _ _ _ _)] => apply: sta_NI2
+               | [ |- @NI _ _ _ _ (par _ _)] => apply: par_NI2
+               | [ |- @NI _ _ _ _ (swi _ _)] => apply: swi_NI2
+               | [ |- @NI _ _ _ _ (maybe _)] => apply: maybe_NI2
+               | [ |- @NI _ _ _ _ (out _)] => apply: out_NI2
+               end);eauto with rels;try solve [ssa].*)
+
 (*overview over types
   InputType  = Times (Option TInput) (Times (Option THandlerOutput) (Option TInterrupt))
   OutputType = Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Option THandlerOutput))
@@ -1476,17 +1514,23 @@ Print IOType.
  *)
 (*Lemma test_f_NI :  @f_NI InputType IOType InputTypeRel _ (@inl [InputType] (option PublicOutput * (option TypeSyscall * option HandlerOutput))).*)
 
-Lemma to_rel_eq l (A : Ty) x y  : rel (to_rel A) l x y -> x = y.
-Proof.
+Lemma to_rel_eq (A : Ty) l x y  : rel (# A) l x y -> x = y.
+Proof. ulock.
   move: A x y. elim;ssa.
   de x. de y. f_equal;eauto.
   de x. de y. f_equal. eauto. de y. f_equal. eauto.
 Qed.
 
-Lemma eq_to_rel (A : Ty) l x y  : x = y -> rel (to_rel A) l x y.
+Definition to_rel_eq_IOType := @to_rel_eq IOType.
+Definition to_rel_eq_state_type2 := @to_rel_eq state_type2.
+
+
+Lemma eq_to_rel (A : Ty) l x y  : x = y -> rel (# A) l x y.
 Proof.
   move=>->. eauto.
 Qed.
+
+Definition eq_to_rel_OutputType := @eq_to_rel OutputType.
 
 Lemma f_NI_eq A B f: f_NI #A #B f.
   rewrite /f_NI. ssa. apply/eq_to_rel.
@@ -1500,18 +1544,56 @@ Qed.
 Lemma f_PU_id (A : Ty) B : @f_PU A A B B id.
   rewrite /f_PU. done.
 Qed.  
-Hint Resolve f_NI_eq f_NI_id f_PU_id. 
+Hint Resolve f_NI_eq f_NI_id f_PU_id.
 
-Theorem mitigator_NI : @NI _ _ #InputType #OutputType (mitigator process_pool).
+(*Lemma mitigator_lem1 : f_NI2 outf.
 Proof.
-  rewr. rewrite /scheduler.
-  
-  NI_tac.
-  NI_tac.
-  NI_tac.
-  NI_tac.
-  Check sta_NI2.
+  rewrite /f_NI2 /outf. ssa.
+  move/to_rel_eq_IOType: H=>->.
+  by apply/eq_to_rel_OutputType.
+Qed.
+Check f_NI2.
+Lemma mitigator_lem2 : @f_NI2 (Times state_type2 IOType) _ (@snd [state_type2] [IOType]).
+Proof.
+  rewrite /f_NI2. ssa. apply (@to_rel_eq (Times _ _)) in H. subst.
+  by apply/(@eq_to_rel IOType).
+Qed.  
+Hint Resolve mitigator_lem1 mitigator_lem2 : mitdb.*)
 
+Ltac clean_rel := repeat match goal with | H : rel (to_rel_locked ?T) _ _ _ |- _  => apply (@to_rel_eq T) in H | |- rel (to_rel_locked ?T) _ _ _ => apply (@eq_to_rel T); subst end.
+Ltac NI_tac := first [ apply:map_NI2 | apply:loop_NI2 | apply:sta_NI2 | apply:par_NI2 | apply:swi_NI2 | apply:maybe_NI2 | apply:out_NI2 ];ssa;rewrite /outf /f_NI2 /f_NI_PU2 /fv_NI2 /fv_NI /f_PU /f_NI /f_EP2;ssa;
+               try solve [ intros;clean_rel;ssa | eauto with mitdb].
+
+
+
+Theorem mitigator_NI : NI2 (mitigator process_pool).
+Proof.
+  NI_tac.
+  NI_tac.
+  NI_tac.
+  NI_tac.
+  NI_tac.
+  ssa.
+  move: H. ulock. ssa. right. de i. de s. de p0. de o. right. de p0. de o.
+  de p0. de o. de p0. de o. de o0.
+
+  NI_tac.
+  NI_tac.
+
+  apply:sta_NI2. admit. con. rewrite /fv_NI2. ssa. by clean_rel.
+  rewrite /f_EP2. ssa.
+  NI_tac.
+  move: H. ulock. ssa. de H. de i. de p. de o. de H. de p. de o. de H.
+ de H.  rewrite /fv_NI2. ssa. by clean_rel.
+  intros. by  clean_rel.
+
+  
+  rewrite /f_NI_PU2. con. rewrite /f_NI. intros. by clean_rel.
+  rewrite /fv_NI2. intros. by 
+
+  test.
+  apply (@to_rel_eq IOType) in H.
+  apply (
   unshelve NI_tac.
 
   NI_tac. con;eauto with rels. eauto.
