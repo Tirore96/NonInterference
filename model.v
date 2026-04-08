@@ -159,7 +159,7 @@ Notation "[ i ]" := (interp i).
 
 
 
-
+Check nat.
 
 
 
@@ -178,7 +178,7 @@ Derive NoConfusionHom for Proc.
 Derive Signature for Proc.
 
 Definition xor (b1 b2 : bool) := (Datatypes.negb (b1 == b2)).
-
+Arguments out I O o.
 
 Inductive reduceI : forall (I O : Ty), Proc I O -> interp I -> Proc I O -> Prop :=
 | reduce_outI I O i (o : [O]) : reduceI (@out I _ o) i (@out I _ o)
@@ -189,6 +189,7 @@ Inductive reduceI : forall (I O : Ty), Proc I O -> interp I -> Proc I O -> Prop 
 | reduce_maybeI2 (I O : Ty) (p p' : Proc I O) (i : [I]) : reduceI p i p' -> reduceI (maybe p) (Some i) (maybe p')
 | reduce_parI (I O1 O2 : Ty) (p1 p1' : Proc I O1) (p2 p2' : Proc I O2) (i : [I]) : reduceI p1 i p1' -> reduceI p2 i p2' -> reduceI (par p1 p2) i (par p1' p2')
 | reduce_loopI (I :Ty) (p p' : Proc I I) (i : [I]) : reduceI p i p' -> reduceI (loop p) i (loop p').
+
 Hint Constructors reduceI : core.
 
 (*Create HintDb omitdb.
@@ -232,6 +233,28 @@ Hint Resolve monotone_TraceF : paco.
 
 Definition trace (I O : Ty) eff p := paco2 (@TraceF I O) bot2 eff p.
 
+Variant MapSF (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (R : Stream ([I'] + [O]) -> Stream ([I] + [O']) -> Prop) : Stream ([I'] + [O]) -> Stream ([I] + [O']) -> Prop :=
+  | MapI i i' s s' : R s' s -> f i = i' -> MapSF f g R (Cons (inl i') s') (Cons (inl i) s)
+  | MapO o o' s s' : R s' s -> g o = o' -> MapSF f g R (Cons (inr o) s') (Cons (inr o') s).
+
+Lemma MapSF_monotone2 : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']), monotone2 (@MapSF I I' O O' f g).
+Proof.
+Admitted.
+Hint Resolve MapSF_monotone2 : paco.
+
+Definition MapS  (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s s' := paco2 (@MapSF I I' O O' f g) bot2 s s'.
+
+Definition MapRel (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p := exists s', MapS f g s' s /\ trace s' p.
+
+Lemma TraceLemma : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p, MapRel f g s p -> TraceF (MapRel f g) s p.
+
+
+Lemma MapSP : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p, trace s (map f g p) -> exists s', MapS f g s' s /\ trace s' p.
+Proof.
+
+
+
+  
 Definition publicRel (A : Ty) : myrel ([A]).
   refine (@MyRel _
             (fun l b => False)
@@ -607,7 +630,7 @@ Defined.
 
 
 Definition aware (V : Ty) (VRel : myrel [V]) (v : [V]) : levelPred
-  := fun l => (forall v', rel VRel l v v' -> v = v').
+  := fun l => (forall v', rel VRel l v v' -> v = v' /\ ~ dis VRel l v').
 Definition boolRel : myrel ([Bool]) := semiprivateRel Bool. (*publicRel Bool.*)
 
 Definition Option_swi_presP : presP (fun l => @aware Bool (publicRel Bool) true l).
@@ -935,8 +958,10 @@ Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O
     NI IRel' ORel p -> 
     f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
     NI IRel ORel' (map f g p).
-Proof. Admitted.
-
+Proof.
+  intros.
+  move: H. rewrite /NI. intros.
+  suff: simulation IRel' ORel l s p -> simulation IRel ORel' l s (map f g p).
 
 Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
     NI (eqpair_R VRel IRel) ORel p -> fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f -> NI IRel (eqpair VRel ORel) (sta f g v p).
@@ -1263,13 +1288,17 @@ Definition IOType := Sum InputType OutputType.
 
 
 Definition outf : [IOType] -> [OutputType] :=  (fun x => match x with | inl _ => (None,(None,None)) | inr y => y end).
-Definition route (state_type : Ty) (to_schedule : [state_type] -> nat) (x : [Times state_type IOType]) :=
-                  let n := to_schedule (fst x) in (*map *)
-                          match snd x with
-                          | inl i' => (n,i') (*inl = input*)
-                          | inr (None,(None,Some h)) => (n,(None,(Some h,None))) (*inr = output from handler rerouted as input to high process *)
-                          | inr _ => (n,(None,(None,None))) (*inr = output that is discarded, but n is used to ac*)
+
+Definition route_aux (state_type : Ty) (x : [IOType]) :=
+                          match x with
+                          | inl i' => i' (*inl = input*)
+                          | inr (None,(None,Some h)) => (None,(Some h,None)) (*inr = output from handler rerouted as input to high process *)
+                          | inr _ => (None,(None,None)) (*inr = output that is discarded, but n is used to ac*)
                           end.
+
+Definition route (state_type : Ty) (to_schedule : [state_type] -> nat) (x : [Times state_type IOType]) :=
+                  (to_schedule (fst x), route_aux state_type (snd x)).
+
 Definition scheduler
   (state_type : Ty)
   (state_in : [IOType] -> [state_type] -> [state_type])
@@ -1735,14 +1764,220 @@ Proof.
                         ssa. ssa.
 Qed.
 
-
-Definition InputRel : myrel [InputType] := eqpair_R (eqmaybe (publicRel TInput))
-                                             (eqpair_OR (eqmaybe (semiprivateRel THandlerOutput)) (eqmaybe (semiprivateRel TInterrupt))).
+Definition InputRel3 := eqmaybe (semiprivateRel TInterrupt).
+Definition InputRel2 := eqpair_OR (eqmaybe (semiprivateRel THandlerOutput)) InputRel3.
+Definition InputRel : myrel [InputType] := eqpair_R (eqmaybe (publicRel TInput)) InputRel2.
 
 Definition OutputRel : myrel [OutputType] := eqpair_R (eqmaybe_swi (publicRel TPublicOutput))
                                                (eqpair_OR (eqmaybe_swi (semiprivateRel TTypeSyscall)) (eqmaybe_swi (semiprivateRel THandlerOutput))).
 
 Ltac mrw := rewrite /f_NI /f_PU /fv_NI /f_EP.
+
+Check f_NI.
+
+(*Lemma f_NI_inl : forall (A B : Ty) ARel BRel, f_NI (eqpair ARel BRel) ARel inl.*)
+
+Lemma rel_eqpair : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_L ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_R : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_R ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_R2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 b1 /\ rel BRel l a2 b2 -> rel (eqpair_R ARel BRel) l (a1,a2) (b1,b2).
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_LR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_LR ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_LR2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 b1 /\ rel BRel l a2 b2 -> rel (eqpair_LR ARel BRel) l (a1,a2) (b1,b2).
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_OR ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+Proof.
+  ssa.
+Qed.
+
+
+
+Lemma f_NI_snd_eqpair : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair ARel BRel) BRel snd. 
+Proof.
+mrw. ssa.
+Qed.
+
+Lemma f_NI_snd_eqpair_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_L ARel BRel) BRel snd. 
+Proof.
+mrw. ssa.
+Qed.
+
+Lemma f_NI_snd_eqpair_R : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_R ARel BRel) BRel snd. 
+Proof.
+mrw. ssa.
+Qed.
+
+Lemma f_NI_snd_eqpair_LR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_LR ARel BRel) BRel snd. 
+Proof.
+mrw. ssa.
+Qed.
+
+Lemma f_NI_snd_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_OR ARel BRel) BRel snd. 
+Proof.
+mrw. ssa.
+Qed.
+
+Hint Resolve f_NI_snd_eqpair f_NI_snd_eqpair_L f_NI_snd_eqpair_R f_NI_snd_eqpair_LR f_NI_snd_eqpair_OR : tempdb.
+
+Lemma rel_eqsum : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum ARel BRel) l (inl a1) (inl a2). 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel BRel l b1 b2 -> rel (eqsum ARel BRel) l (inr b1) (inr b2). 
+Proof. ssa.
+Qed.
+
+Lemma dis_eqsum : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis ARel l a -> dis (eqsum ARel BRel) l (inl a). 
+Proof. ssa.
+Qed.
+
+Example dis_test : dis InputRel \bot (None, (None, Some DiskInterrupt)).
+ssa. rewrite eqxx. auto.
+Defined.
+
+
+Definition streamTypeb := Stream ([InputType] + [OutputType]). Print OutputType. Print HandlerOutput.
+Definition newtraceFb (s : streamTypeb) := Cons (inr (Some GetRequest,(None,None)))
+                                             (Cons (inr (Some GetRequest, (None,None)))
+                                             (Cons (inr (None, (None, Some Nothing)))
+                                             (Cons (inr (None, (None, Some Nothing)))
+                                             (Cons (inr (None,(Some Syscall, None)))
+                                                (Cons (inr (None, (Some Syscall, None)))
+                                                   (Cons (inr (None, (None, Some Nothing)))
+                                                      (Cons (inr (None, (None, Some Nothing))) s))))))). 
+CoFixpoint newtraceb := newtraceFb newtraceb.                                             
+
+Lemma newtraceb_eq : newtraceb = newtraceFb newtraceb.
+Proof.
+rewrite {1}/newtraceb.
+rewrite {1}(coseq_match (cofix newtrace : streamTypeb := newtraceFb newtrace)).
+simpl.
+rewrite /newtraceFb.
+do ? f_equal.
+Qed.
+
+(*Trace derivation*)
+Ltac rewr ::=  (try rewrite newtraceb_eq); rewrite /mitigator /par_swiI3 /sta_swi /low_p /newtraceFb /process_pool /par_swiI /scheduler /handler /high_p.
+
+Lemma newtraceb_trace : trace newtraceb (mitigator process_pool).
+Proof.
+  pcofix CIH.
+  rewr.
+  do 7 try (bundle;left).
+
+  bundle. right. 
+  swi_instans. eauto.
+Qed.
+
+Lemma counterexampleb : NotSim \bot InputRel OutputRel newtraceb (mitigator process_pool).
+Proof.
+  rewr.
+  apply/NS4.
+  intros. match_dd. ssa.
+  apply/NS4.
+  intros. match_dd;ssa.
+  apply/NS2. apply/dis_test.
+  intros. match_dd.
+  apply/NS4. intros. match_dd;ssa.
+Qed.
+
+
+End Example3.
+
+
+
+
+
+
+
+
+
+
+
+
+(*
+,Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
+Proof.
+  rewr. rewrite /scheduler.
+  apply/map_NI.
+  2: { instantiate (1:= eqsum InputRel OutputRel). mrw. intros. apply/rel_eqsum. eauto. }
+  2: { mrw. intros. apply/dis_eqsum. eauto. }
+  2: { mrw. instantiate (1:= eqsum InputRel OutputRel). ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. } 
+
+  apply/loop_NI.
+  apply/map_NI.
+  all: try solve [apply:f_NI_id | apply:f_PU_id ].
+  2: { mrw. instantiate (1:= eqpair _ _).
+       intros. apply rel_eqpair in H. destruct H. eauto. }
+  
+  apply/sta_NI. Print InputRel. Print InputRel2.
+  2: { mrw.
+(*  3: mrw;eauto.
+  3: { mrw.*)
+  apply/map_NI.
+  apply/par_NI.
+  * 1: { apply/map_NI.
+         apply/sta_NI. 
+         apply/swi_NI'. 
+         apply/map_NI.
+         apply/maybe_NI. (*(maybe remove this*)
+         apply/public_NI. (*The magic happens here.*)
+         4: { mrw. intros.
+              apply/rel_eqpair_LR2. con. done. eauto. }
+         10: { mrw. move=> l i i'. move/rel_eqpair. case. eauto. }
+         5: done.
+
+         4: { move=>l. right. instantiate (1:= privateRel _). (*the output is public (as per the first component in the pair in OutputRel, but using (publicRel _) then obliviousness cannot be shown, so let's try with (privateRel _) even though it does not make sense*)
+              simpl. pcofix CIH.  pfold. con.
+              intros. match_dd. de i. de i. de i.
+              intros. ssa. match_dd. eauto. (*It works... and does not seem like later goals depend on it.
+                                             So the magic happens in public_NI which allows us to ignore the distinguishability of the output relation when we show NI (maybe (out (GetRequest))). So when we reach the problematic side condition of swi we must show forall l, aware BoolRel true l \/ oblivious (eqpair_R BoolRel ...) P l and since we chose BoolRel to be private for all l, we must show obliviousness, requiring ... to be private. And this we can do even though we are deriving a public output (GetRequest) because public_NI allows us to increase the set of distinguished elements (increasing privacy.
+                                             A thought is whether we need privateRel for bool? Where did it come from?
+                                             It came from swi_NI' which changes eqpair_LR to eqpair_R using privateRel
+                                             This we need because after sta_NI the goal has input rel with eqpair_LR
+                                             Maybe it is possible to change to semiprivateRel but it does not seem worth pursuing right now. *) }
+         done.
+         all: shelve. }
+    4: { Unshelve. 4: eapply eqsum. all:shelve. }
+    7: { mrw. move=> l i i' /rel_eqpair. case. eauto. }
+    7: { mrw. intros. apply/rel_eqsum. eauto. }
+    7: { mrw. intros. apply/dis_eqsum. done. }
+    7: { mrw. instantiate (1:= OutputRel). ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
+    (*at this point we still have not chosen a privacy level for the state (currently named ?m), nor the routed messsage (currently named ?Goal2).
+     The routed message should be an eqpair of a nat and InputRel. But I am not sure between eqpair_LR and eqpair_R. I guess eqpair_R but only because that is what we use to join the state to the IOType (Input + Output
+     For now let us try eqpair_R
+     THIS MAY BE WRONG*)
+    2: { Unshelve. 3:{ apply:eqpair_R. shelve. apply InputRel. }
+    
+                 mrw. move=> l i i'. move/rel_eqpair_R. case.
+         intros. apply/rel_eqpair_R2. con. shelve.
+         have: i.2 = i'.2. ssa. de i. de s. de i'. de s. de p0. de p0. de p2. de p0. subst. done. de i'.
+         de s. de p0. de p2. de p0. de p2. subst. done.
+         move=>->. ssa.
+         mrw. intros. apply/rel_eqsum2. eauto. Print OutputRel.
+ 
 
 Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
 Proof.
@@ -1750,9 +1985,132 @@ Proof.
   apply/map_NI.
   apply/loop_NI.
   apply/map_NI.
+  all: try solve [apply:f_NI_id | apply:f_PU_id ].
   apply/sta_NI.
   apply/map_NI.
   apply/par_NI.
+  * 1: { apply/map_NI.
+         apply/sta_NI. 
+         apply/swi_NI'. 
+         apply/map_NI.
+         apply/maybe_NI. (*(maybe remove this*)
+         apply/public_NI. (*The magic happens here.*)
+         4: { mrw. intros.
+              apply/rel_eqpair_LR2. con. done. eauto. }
+         10: { mrw. move=> l i i'. move/rel_eqpair. case. eauto. }
+         5: done.
+
+         4: { move=>l. right. instantiate (1:= privateRel _). (*the output is public (as per the first component in the pair in OutputRel, but using (publicRel _) then obliviousness cannot be shown, so let's try with (privateRel _) even though it does not make sense*)
+              simpl. pcofix CIH.  pfold. con.
+              intros. match_dd. de i. de i. de i.
+              intros. ssa. match_dd. eauto. (*It works... and does not seem like later goals depend on it.
+                                             So the magic happens in public_NI which allows us to ignore the distinguishability of the output relation when we show NI (maybe (out (GetRequest))). So when we reach the problematic side condition of swi we must show forall l, aware BoolRel true l \/ oblivious (eqpair_R BoolRel ...) P l and since we chose BoolRel to be private for all l, we must show obliviousness, requiring ... to be private. And this we can do even though we are deriving a public output (GetRequest) because public_NI allows us to increase the set of distinguished elements (increasing privacy.
+                                             A thought is whether we need privateRel for bool? Where did it come from?
+                                             It came from swi_NI' which changes eqpair_LR to eqpair_R using privateRel
+                                             This we need because after sta_NI the goal has input rel with eqpair_LR
+                                             Maybe it is possible to change to semiprivateRel but it does not seem worth pursuing right now. *) }
+         done.
+         all: shelve. }
+    4: { Unshelve. 4: eapply eqsum. all:shelve. }
+    7: { mrw. move=> l i i' /rel_eqpair. case. eauto. }
+    7: { mrw. intros. apply/rel_eqsum. eauto. }
+    7: { mrw. intros. apply/dis_eqsum. done. }
+    7: { mrw. instantiate (1:= OutputRel). ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
+    (*at this point we still have not chosen a privacy level for the state (currently named ?m), nor the routed messsage (currently named ?Goal2).
+     The routed message should be an eqpair of a nat and InputRel. But I am not sure between eqpair_LR and eqpair_R. I guess eqpair_R but only because that is what we use to join the state to the IOType (Input + Output
+     For now let us try eqpair_R
+     THIS MAY BE WRONG*)
+    2: { Unshelve. 3:{ apply:eqpair_R. shelve. apply InputRel. }
+    
+                 mrw. move=> l i i'. move/rel_eqpair_R. case.
+         intros. apply/rel_eqpair_R2. con. shelve.
+         have: i.2 = i'.2. ssa. de i. de s. de i'. de s. de p0. de p0. de p2. de p0. subst. done. de i'.
+         de s. de p0. de p2. de p0. de p2. subst. done.
+         move=>->. ssa.
+         mrw. intros. apply/rel_eqsum2. eauto. Print OutputRel.
+         
+    } 
+         
+         Print clean_rel.
+    3: { mrw.
+         Search _ (rel (eqsum _ _)).
+
+    8: { mrw.  move=> l i i' /rel_eqpair []. eauto. }
+    8: { instantiate (1 := eqsum InputRel OutputRel). done. }
+    8: done.
+    8: { mrw. ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
+
+
+
+(*         instantiate (1:= publicRel _). mrw. ssa. subst. done.
+         ssa.
+         mrw. ssa. subst. done.
+         mrw. done.
+         admit. admit.*)
+(*         mrw. instantiate (1:= publicRel _). ssa. subst. done.
+         mrw. done. *)
+
+    4: { mrw. Print OutputRel.
+
+
+  * apply/par_NI.
+    ** 1: { apply/map_NI.
+            apply/sta_NI.
+            apply/swi_NI'.
+            apply/map_NI.
+            apply/maybe_NI. 
+            apply/maybe_NI.
+            apply/out_NI.
+            all: shelve. }
+    ** 1 : { apply/map_NI.
+             apply/sta_NI.
+             apply/swi_NI'.
+             apply/map_NI.
+             apply/maybe_NI.
+             apply/maybe_NI.
+             apply/map_NI.
+             apply/loop_NI.
+             apply/map_NI.
+             apply/sta_NI.
+             apply/out_NI.
+             all: shelve. }
+Unshelve.
+
+
+Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
+Proof.
+  rewr. rewrite /scheduler.
+  apply/map_NI.
+  2: instantiate (1:= eqsum InputRel OutputRel);ssa.
+  2: ssa.
+  2: { instantiate (1:=eqsum InputRel OutputRel). mrw. ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
+  apply/loop_NI.
+  apply/map_NI.
+  all: try solve [apply:f_NI_id | apply:f_PU_id ].
+
+  apply/sta_NI.
+  5: { rewrite /f_NI. move=> l i i' /rel_eqpair. case. eauto. }
+
+  Unshelve. 5: { apply:publicRel. } (*make state public, see what happens*)
+
+          2: { mrw. ssa. de i. de i'. subst. done. de i'. subst. done. }
+          2: { mrw. ssa. }
+          2: { mrw. eauto. }
+
+          apply/map_NI.
+  apply/par_NI.
+  3: { mrw. instantiate (1:= 
+  
+
+  2: { mrw. Print route.
+  2: { mrw. Check route.
+  
+  apply/par_NI.
+
+  5: { rewrite /f_NI. intros. instantiate (1:= eqsum _ (eqpair _ _)).
+       unify ?Goal14 ?IRel0.
+       apply rel_eqpair in H.
+
   * 1: { apply/map_NI.
          apply/sta_NI. 
          apply/swi_NI'.
@@ -1783,6 +2141,41 @@ Proof.
              all: shelve. }
 
       Unshelve.
+
+       13:shelve.
+       13:shelve.
+       13:shelve.       
+       13:shelve.
+       13:shelve.
+       13:shelve.
+       13:shelve.
+       13:shelve.
+       13:shelve.
+
+       24:shelve.
+       24:shelve.
+       24:shelve.
+       24:shelve.
+       24:shelve.
+       24:shelve.
+
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+
+       30: { ulock.  simpl. Search _ myrel.
+         move: f_NI_id. rewrite /f_NI. intro. move=> l i i' HH. apply:f_NI_id0. 
+         rewrite /f_NI. intros. apply f_NI_id0. ssa. ulock. ssa.
+       30: try solve [apply:f_NI_id ].       
+       Check route.
+       7: { Search _ f_NI.
+         mrw. move=>l i i' /rel_eqpair []. eauto.
+            Search _ eqpair. 
 
        shelve. shelve. shelve. shelve. shelve. shelve.
        eauto. eauto. mrw. intros. simpl in H. destruct H. eauto.
@@ -2021,3 +2414,4 @@ Definition myv_to_n2 (v: [myvT2]) : nat := let: (c,n) := v in n.
 Definition good_scheduler := scheduler myvT2 (fun _ v => v) (fun _ v => inc_myv2 v) ((0,0)) myv_to_n2.
  *)
 End Example3.
+*)
