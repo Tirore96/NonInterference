@@ -292,6 +292,18 @@ done.
 Qed.
 Hint Resolve not_booleq.
 
+Definition privateRel (A : Ty) : myrel ([A]).
+  refine (@MyRel _
+            (fun l b => True)
+            (fun l b1 b2 => True) (*Since everything is always hidden, there the value space is an equivalence class*)
+            _
+            _
+            _
+            _).
+intros.
+done. done.
+intros. done. done.
+Defined.
 
   
 Definition semiprivateRel (A : Ty) : myrel ([A]).
@@ -1189,10 +1201,29 @@ Proof. Admitted.*)
  (i <> n,I') -> disables p
  f projects input from pair e.g. f (I1,I2) = I1
  maybe is used to disgard input to p when i<>n.
- *)
+ *) 
+
+Definition sta_swi_base (I O : Ty) (b : bool) (p : Proc I O) :=
+  (@sta (Times Bool _) _ Bool
+       (fun i v => xor (fst i) v)
+       (fun o v => false)
+       b
+       (@map (Times Bool (Times Bool _)) (Option_maybe _) _ _
+                    (fun i => if fst i then Some (snd (snd i)) else None)
+                    id
+                    (maybe p)
+  )).
+
+(*Got to here...*)
+Lemma sta_swi_base_NI I O (p : Proc I O) (IRel : myrel [I]) (ORel : myrel [O]) b : NI (eqpair (privateRel _) IRel) (eqmaybe_swi ORel) (sta_swi_base b p).
+
 
 Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Proc I O) :=
-@map (Times Nat _) (Times Bool _) (Times _ _) _ (fun x => (fst x == n, f (snd x))) snd (*apply f to input before entering sta because it caused issues with the mitigator NI proof*)
+  @map (Times Nat _) (Times Bool _) (Times _ _) _ (fun x => (fst x == n, f (snd x))) snd
+       (sta_swi_base b p).
+
+
+(*Definition sta_swi_base (I O : Ty) (b : bool) (p : Proc I O) :=
   (@sta (Times Bool _) _ Bool
        (fun i v => xor (fst i) v)
        (fun o v => false)
@@ -1204,7 +1235,24 @@ Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Pro
   ))).
 
 
-(*Lemma sta_swi_NI I' I O b n (p : Proc I O) : NI IRel ORel sta_swi b n fst p.*)
+
+Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Proc I O) :=
+@map (Times Nat _) (Times Bool _) (Times _ _) _ (fun x => (fst x == n, f (snd x))) snd (*apply f to input before entering sta because it caused issues with the mitigator NI proof*)
+  (@sta (Times Bool _) _ Bool
+       (fun i v => xor (fst i) v)
+       (fun o v => false)
+       b
+       (swi b (@map (Times Bool _) (Option_maybe _) _ (Times Bool _)
+                    (fun i => if fst i then Some (snd i) else None)
+                    (fun o => (true,o))
+                    (maybe p)
+  ))).*)
+
+
+Lemma sta_swi_NI I' I O b n (p : Proc I O) (f : [I'] -> [I]) (IRel' : myrel [I']) (ORel : myrel [O]) : NI (eqpair (privateRel _) IRel) (eqmaybe_swi ORel) (sta_swi b n f p).
+
+
+
 
 Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
   : Proc (Times Nat (Times I1 (Times I2 I3))) (Times (Option_swi O1) (Times (Option_swi O2) (Option_swi O3))) :=
@@ -1701,8 +1749,8 @@ Definition OutputTypeRel : myrel [OutputType] := to_rel OutputType.
 Ltac dd H := dependent destruction H.
 Example counterexample : NotSim \bot InputTypeRel OutputTypeRel ex3b_stream (bad_scheduler process_pool).
 Proof.
-(*  Admitted. (*outcomment proof because it is slow*)*)
-apply: NS2.
+Admitted. (*outcomment proof because it is slow*)
+(*apply: NS2.
   instantiate (1:= (None,(None,(Some TimerInterrupt)))). (*Input secret timer interrupt*)
   ssa.
   move=>p'. rewr. ssa.
@@ -1712,11 +1760,12 @@ apply: NS2.
                                                            This is a contradiction
                                                           *)
   ssa.
-  Print match_dd.
   match_dd.
-  eauto.
+  ssa.
+* de H.
+* all: try solve [ssa; simpl in H; de H].
 Qed.
-
+*)
 Example example_not_NI : ~ @NI _ _ InputTypeRel OutputTypeRel (bad_scheduler process_pool).
 Proof.
   rewrite /NI. ssa. intro.
@@ -1838,15 +1887,15 @@ Ltac rewr ::=  (try rewrite ex3_stream_eq); rewrite /par_swiI /bad_scheduler /pr
 
 Hint Resolve InputTypeRel OutputTypeRel eqsum : rels.
 
-Lemma to_rel_eq (A : Ty) l x y  : rel (# A) l x y -> x = y.
+(*Lemma to_rel_eq (A : Ty) l x y  : rel (# A) l x y -> x = y.
 Proof. ulock.
   move: A x y. elim;ssa.
   de x. de y. f_equal;eauto.
   de x. de y. f_equal. eauto. de y. f_equal. eauto.
-Qed.
+Qed.*)
 
-Definition to_rel_eq_IOType := @to_rel_eq IOType.
-Definition to_rel_eq_state_type2 := @to_rel_eq state_type2.
+(*Definition to_rel_eq_IOType := @to_rel_eq IOType.
+Definition to_rel_eq_state_type2 := @to_rel_eq state_type2.*)
 
 
 Lemma eq_to_rel (A : Ty) l x y  : x = y -> rel (# A) l x y.
@@ -1856,10 +1905,10 @@ Qed.
 
 Definition eq_to_rel_OutputType := @eq_to_rel OutputType.
 
-Lemma f_NI_eq A B f: f_NI #A #B f.
+(*Lemma f_NI_eq A B f: f_NI #A #B f.
   rewrite /f_NI. ssa. apply/eq_to_rel.
   apply to_rel_eq in H. subst. done.
-Qed.
+Qed.*)
 
 Lemma f_NI_id (A : Ty) B : @f_NI A A B B id.
   rewrite /f_NI. done.
@@ -1868,7 +1917,7 @@ Qed.
 Lemma f_PU_id (A : Ty) B : @f_PU A A B B id.
   rewrite /f_PU. done.
 Qed.  
-Hint Resolve f_NI_eq f_NI_id f_PU_id.
+Hint Resolve (*f_NI_eq*) f_NI_id f_PU_id.
 
 (*Lemma mitigator_lem1 : f_NI2 outf.
 Proof.
@@ -1884,15 +1933,15 @@ Proof.
 Qed.  
 Hint Resolve mitigator_lem1 mitigator_lem2 : mitdb.*)
 
-Ltac clean_rel := repeat match goal with | H : rel (to_rel_locked ?T) _ _ _ |- _  => apply (@to_rel_eq T) in H | |- rel (to_rel_locked ?T) _ _ _ => apply (@eq_to_rel T); subst end.
+(*Ltac clean_rel := repeat match goal with | H : rel (to_rel_locked ?T) _ _ _ |- _  => apply (@to_rel_eq T) in H | |- rel (to_rel_locked ?T) _ _ _ => apply (@eq_to_rel T); subst end.*)
 
 Ltac unify_rels := repeat match goal with
                      | |- NI ?I ?O ?IRel ?ORel _ => first [is_evar IRel; unify IRel (# I)| is_evar ORel; unify ORel (#O)]
                      end.
 
 Ltac NI_apply :=  first [ apply: map_NI | apply:sta_NI | apply:swi_NI | apply:loop_NI | apply:out_NI (*apply:map_NI2 | apply:loop_NI2 | apply:sta_NI2 | apply:par_NI2 | apply:maybe_NI2 | apply:out_NI2*) ].
-Ltac NI_post := ssa;rewrite /outf /fv_NI /f_PU /f_NI /par_swiI3 /process_pool;ssa;clean_rel;
-               try solve [ intros;clean_rel;ssa | eauto with mitdb].
+Ltac NI_post := ssa;rewrite /outf /fv_NI /f_PU /f_NI /par_swiI3 /process_pool;ssa;(*clean_rel;*)
+               try solve [ intros;(*clean_rel;*)ssa | eauto with mitdb].
 Ltac NI_tac := NI_apply;NI_post.
 Lemma dis_pair : forall A B l a b, dis (Times A B) l (a,b) -> dis A l a.
 Proof.
@@ -1928,6 +1977,7 @@ Proof.
   intros.
   apply/simulation_I_imp. 3: { apply/swi_NI. eauto. eauto. }
                         ssa. ssa.
+  con. ssa. ssa. de H1.
 Qed.
 
 Definition InputRel3 := eqmaybe (semiprivateRel TInterrupt).
@@ -1948,15 +1998,15 @@ Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_L ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+(*Lemma rel_eqpair_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_L ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
 Proof.
-  ssa.
+  ssa. de H. de H.
 Qed.
 
 Lemma rel_eqpair_R : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_R ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
 Proof.
   ssa.
-Qed.
+Qed.*)
 
 Lemma rel_eqpair_R2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 b1 /\ rel BRel l a2 b2 -> rel (eqpair_R ARel BRel) l (a1,a2) (b1,b2).
 Proof.
@@ -1973,10 +2023,10 @@ Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_OR ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+(*Lemma rel_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_OR ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
 Proof.
-  ssa.
-Qed.
+  ssa. de H. de H. de H0.
+Qed.*)
 
 
 
@@ -1985,27 +2035,27 @@ Proof.
 mrw. ssa.
 Qed.
 
-Lemma f_NI_snd_eqpair_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_L ARel BRel) BRel snd. 
+(*Lemma f_NI_snd_eqpair_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_L ARel BRel) BRel snd. 
 Proof.
-mrw. ssa.
+mrw. ssa. de H.
 Qed.
 
 Lemma f_NI_snd_eqpair_R : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_R ARel BRel) BRel snd. 
 Proof.
 mrw. ssa.
-Qed.
+Qed.*)
 
 Lemma f_NI_snd_eqpair_LR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_LR ARel BRel) BRel snd. 
 Proof.
 mrw. ssa.
 Qed.
 
-Lemma f_NI_snd_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_OR ARel BRel) BRel snd. 
+(*Lemma f_NI_snd_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_OR ARel BRel) BRel snd. 
 Proof.
-mrw. ssa.
-Qed.
+mrw. ssa. de H. de H. de H0.
+Qed.*)
 
-Hint Resolve f_NI_snd_eqpair f_NI_snd_eqpair_L f_NI_snd_eqpair_R f_NI_snd_eqpair_LR f_NI_snd_eqpair_OR : tempdb.
+Hint Resolve f_NI_snd_eqpair (*f_NI_snd_eqpair_L f_NI_snd_eqpair_R*) f_NI_snd_eqpair_LR (*f_NI_snd_eqpair_OR*) : tempdb.
 
 Lemma rel_eqsum : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum ARel BRel) l (inl a1) (inl a2). 
 Proof. ssa.
@@ -2020,7 +2070,7 @@ Proof. ssa.
 Qed.
 
 Example dis_test : dis InputRel \bot (None, (None, Some DiskInterrupt)).
-ssa. rewrite eqxx. auto.
+ssa. 
 Defined.
 
 
@@ -2057,7 +2107,8 @@ Proof.
   swi_instans. eauto.
 Qed.
 
-Lemma counterexampleb : NotSim \bot InputRel OutputRel newtraceb (mitigator process_pool).
+(*counterexample no longer derivable*)
+(*Lemma counterexampleb : NotSim \bot InputRel OutputRel newtraceb (mitigator process_pool).
 Proof.
   rewr.
   apply/NS4.
@@ -2067,24 +2118,111 @@ Proof.
   apply/NS2. apply/dis_test.
   intros. match_dd.
   apply/NS4. intros. match_dd;ssa.
-Qed.
+Qed.*)
+
+Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
+Proof.
+  rewr. rewrite /scheduler.
+  apply/map_NI.
+  apply/loop_NI.
+  apply/map_NI.
+(*  all: try solve [apply:f_NI_id | apply:f_PU_id ].*)
+  apply/sta_NI.
+(*  5: { rewrite /f_NI. move=> l i i' /rel_eqpair. case. eauto. }*)
+
+  apply/map_NI.
+  apply/par_NI. 2:apply/par_NI.
+  * apply/map_NI. (*process 1*)
+    apply/sta_NI.
+    apply/swi_NI'.
+    apply/map_NI.
+    apply/public_NI. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve.
+  * apply/
+  apply/sta_NI. 
+  apply/swi_NI'.
+  apply/map_NI.
+  apply/maybe_NI. (*maybe remove this*) 
+  apply/public_NI.
+         all: shelve. }
+  * apply/par_NI.
+    ** 1: { apply/map_NI.
+            apply/sta_NI.
+            apply/swi_NI'.
+            apply/map_NI.
+            apply/maybe_NI. 
+            apply/maybe_NI.
+            apply/out_NI.
+            all: shelve. }
+    ** 1 : { apply/map_NI.
+             apply/sta_NI.
+             apply/swi_NI'.
+             apply/map_NI.
+             apply/maybe_NI.
+             apply/maybe_NI.
+             apply/map_NI.
+             apply/loop_NI.
+             apply/map_NI.
+             apply/sta_NI.
+             apply/out_NI.
+             all: shelve. }
+
+      Unshelve.
+
+       13:shelve.
+       13:shelve.
+       13:shelve.       
+       13:shelve.
+       13:shelve.
+       13:shelve.
+       13:shelve.
+       13:shelve.
+       13:shelve.
+
+       24:shelve.
+       24:shelve.
+       24:shelve.
+       24:shelve.
+       24:shelve.
+       24:shelve.
+
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+       34:shelve.
+
+       30: { ulock.  simpl. Search _ myrel.
+         move: f_NI_id. rewrite /f_NI. intro. move=> l i i' HH. apply:f_NI_id0. 
+         rewrite /f_NI. intros. apply f_NI_id0. ssa. ulock. ssa.
+       30: try solve [apply:f_NI_id ].       
+       Check route.
+       7: { Search _ f_NI.
+         mrw. move=>l i i' /rel_eqpair []. eauto.
+            Search _ eqpair. 
+
+       shelve. shelve. shelve. shelve. shelve. shelve.
+       eauto. eauto. mrw. intros. simpl in H. destruct H. eauto.
+       mrw. intros.
+7: eauto.
+7: eauto.
+57: eauto.
+56:eauto.
+30: apply:to_rel.
+30: apply:to_rel.
+31: apply:to_rel.
+31: apply:to_rel.
 
 
-End Example3.
 
 
 
 
 
 
-
-
-
-
-
-
-(*
-,Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
+Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
 Proof.
   rewr. rewrite /scheduler.
   apply/map_NI.
