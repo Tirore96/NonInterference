@@ -6,7 +6,7 @@ Require Import RelationClasses.
 From Paco Require Import paco.
 From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
-Require Import Stdlib.Streams.Streams.
+Require Import Coq.Lists.Streams.
 From HB Require Import structures.
 From deriving Require Import deriving.
 Require Import Coq.Program.Equality.
@@ -80,8 +80,9 @@ Record myrel (A : Set) :=
                              forall a0 a1, rel l1 a0 a1 -> rel l0 a0 a1;
            _ : forall l0 l1, order l0 l1 ->
                              forall a, dis l1 a -> dis l0 a;
-           _: forall l a0 a1, dis l a0 -> rel l a0 a1 -> dis l a1
-
+           _: forall l a0, dis l a0 -> forall a1, dis l a1 <-> rel l a0 a1 (* dis is an equivalence class: (->) contains enough, (<-) does not include too much s  *)
+(*           _: forall l a0 a1, dis l a0 -> rel l a0 a1 -> dis l a1;
+           _: forall l a0 a1, dis l a0 -> dis l a1 -> rel l a0 a1*)
           }.
 
 (*Existing Class myrel. 
@@ -159,10 +160,6 @@ Notation "[ i ]" := (interp i).
 
 
 
-Check nat.
-
-
-
 (** Process type **)
 Inductive Proc : Ty -> Ty -> Type :=
 | out  : forall {I O : Ty}, interp O -> Proc I O  
@@ -178,10 +175,9 @@ Derive NoConfusionHom for Proc.
 Derive Signature for Proc.
 
 Definition xor (b1 b2 : bool) := (Datatypes.negb (b1 == b2)).
-Arguments out I O o.
 
 Inductive reduceI : forall (I O : Ty), Proc I O -> interp I -> Proc I O -> Prop :=
-| reduce_outI I O i (o : [O]) : reduceI (@out I _ o) i (@out I _ o)
+| reduce_outI I O i (o : [O]) : reduceI ( @out I _ o) i ( @out I _ o)
 | reduce_mapI (I I' O O' : Ty) p p' i i' (f : [I] -> [I']) (g : [O] -> [O']) : f i = i' -> reduceI p i' p' -> reduceI (map f g p) i (map f g p')
 | reduce_staI (V I O : Ty) v v' (p : Proc (Times V I) O) p' i (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) : f i v = v' -> reduceI p (v', i) p' -> reduceI (sta f g v p) i (sta f g v' p')
 | reduce_swiI (I O : Ty) b b' b'' (p : Proc I (Times Bool O)) p' (i : [I]) : b'' = xor b b' -> reduceI p i p' -> reduceI (swi b p) (b', i) (swi b'' p')
@@ -196,7 +192,7 @@ Hint Constructors reduceI : core.
 Hint Resolve reduce_mapI reduce_staI reduce_swiI reduce_maybeI reduce_maybeI2 reduce_parI reduce_loopI : omitdb.*)
 
 Inductive reduceO : forall (I O : Ty), Proc I O -> [O] -> Proc I O -> Prop :=
-| reduce_outO (I O : Ty) (o : [O]) : reduceO (@out I _ o) o (@out I _ o)
+| reduce_outO (I O : Ty) (o : [O]) : reduceO ( @out I _ o) o ( @out I _ o)
 | reduce_mapO (I I' O O' : Ty) p p' o o' (f : [I] -> [I']) (g : [O] -> [O']) : g o = o' -> reduceO p o p' -> reduceO (map f g p) o' (map f g p')
 | reduce_staO (V I O : Ty) v v' p p' o (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) : g o v = v' -> reduceO p o p' -> reduceO (sta f g v p) (v', o) (sta f g v' p')
 | reduce_swiO (I O : Ty) (p : Proc I (Times Bool O)): reduceO (swi false p) None (swi false p)
@@ -209,12 +205,15 @@ Hint Constructors reduceO : core.
 Ltac check_if_var x :=
   first [ is_var x;fail 1 "Term" x "is not a bare variable" | idtac ].
 
-Ltac match_dd := 
-   repeat
+Ltac match_dd_once := 
     match goal with
     | H : reduceI ?p _ _ |- _ => check_if_var p; dependent destruction  H
     | H : reduceO ?p _ _ |- _ => check_if_var p; dependent destruction  H
     end.
+
+
+Ltac match_dd := 
+   repeat match_dd_once.
 
 (*Hint Resolve reduce_mapO reduce_staO reduce_swiO reduce_swiO2 reduce_maybeO reduce_parO reduce_loopO : omitdb.*)
 
@@ -246,15 +245,11 @@ Definition MapS  (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s s' := pa
 
 Definition MapRel (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p := exists s', MapS f g s' s /\ trace s' p.
 
-Lemma TraceLemma : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p, MapRel f g s p -> TraceF (MapRel f g) s p.
 
 
-Lemma MapSP : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p, trace s (map f g p) -> exists s', MapS f g s' s /\ trace s' p.
-Proof.
+(*Lemma MapSP : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p, trace s (map f g p) -> exists s', MapS f g s' s /\ trace s' p.
+Proof.*)
 
-
-
-  
 Definition publicRel (A : Ty) : myrel ([A]).
   refine (@MyRel _
             (fun l b => False)
@@ -267,6 +262,7 @@ intros.
 done.
 eauto.
 eauto.
+intros. done.
 Defined.
 
 Definition toPublicRel (A : Ty) (ARel : myrel [A]) : myrel ([A]).
@@ -280,32 +276,55 @@ Definition toPublicRel (A : Ty) (ARel : myrel [A]) : myrel ([A]).
 intros. all: de ARel. eauto.
 Defined.
 
+Lemma order_bot : forall (l : level), order l \bot -> l = \bot.
+Proof.
+intros.
+rewrite /order lex0 in H.
+by apply/eqP.
+Qed.
+
+
+Lemma not_booleq : forall (A : eqType) (a : A), a != a -> False.
+Proof.
+intros.
+move/eqP : H.
+done.
+Qed.
+Hint Resolve not_booleq.
+
+
+  
 Definition semiprivateRel (A : Ty) : myrel ([A]).
   refine (@MyRel _
-            (fun l b => if l == \bot then True else False)
-            (fun l b1 b2 => b1 = b2)
+            (fun l b => l = \bot)
+            (fun l b1 b2 => b1 = b2 \/ l = \bot)
             _
             _
             _
             _).
+  - intros l. con. 
+    + intro. auto. 
+    + intros x y. case. auto.
+      intros. subst. auto.
+      rewrite /Transitive.
+      intros. de H. de H0. subst.
+      auto.
+intros.      
+de H0.
+subst.
+move/order_bot : H.
+move=>->. auto.
 intros.
-done.
-intros. de (eqVneq l1 \bot). rewrite /order in H. subst. rewrite lex0 in H. rewrite H. done.
-eauto.
+subst.
+move/order_bot : H.
+move=>->. done.
+intros.
+subst.
+con.
+auto.
+auto.
 Defined.
 
-Definition privateRel (A : Ty) : myrel ([A]).
-  refine (@MyRel _
-            (fun l b => True)
-            (fun l b1 b2 => b1 = b2)
-            _
-            _
-            _
-            _).
-intros.
-done. done.
-eauto.
-Defined.
 
 Definition Clause1 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   forall i s', s = (Cons (inl i) s') -> dis IRel l i -> R s' p.
@@ -437,7 +456,11 @@ Definition eqpair {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Tim
   - move=> l0 l1 HOrder a0 a1 [] HI HO.
     destruct IRel,ORel;ssa. eauto. eauto.
 
-  - eauto. eauto.
+  - eauto.
+
+    intros. con.
+done.
+done.
 Defined.
 
 Definition eqpair_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
@@ -468,13 +491,17 @@ Definition eqpair_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([
     destruct IRel,ORel;ssa. eauto. eauto.
 
   - intros. ssa. de IRel. eauto. de ORel. eauto.
-  - intros. ssa. de IRel. eauto. de ORel. eauto.
+  - intros. ssa. de IRel. con.
+    ssa. apply/i;eauto.
+    de ORel. apply/i0;eauto.
+    ssa. apply/i;eauto.
+    de ORel. apply/i0;eauto.
 Defined.
 
 Definition eqpair_L {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
   refine (@MyRel _ 
             (fun (l : level) io => dis IRel l (fst io))
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
+            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ dis IRel l (fst io1) /\ dis IRel l (fst io2))
             _
             _
             _
@@ -483,29 +510,51 @@ Definition eqpair_L {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
     con. destruct IRel. destruct ORel. simpl. con.
     move: (equiv0 l). case. eauto.
     move: (equiv1 l). case. eauto.
-  - con. destruct H. destruct IRel. destruct ORel. simpl. 
+  - rewrite /Symmetric. intros. destruct H. destruct IRel. destruct ORel. simpl.
+    ssa. left.
     move: (equiv0 l). case.
-    move => _ Hsym _.  apply Hsym. eauto.
+    move => _ Hsym _. con.  apply Hsym. eauto.
 
-    destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv1 l). case. eauto.
+    move: (equiv1 l). case.
+    move => _ Hsym' _.  apply Hsym'. eauto.
 
-  - destruct IRel,ORel. simpl. con.
-    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+    ssa.
+
+  - destruct IRel,ORel. simpl. intro. intros.
+
+    de H. de H0. left. ssa.
+    move: (equiv0 l). case. move=> _ _ Htrans. eauto.
+    move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+
+    right. ssa. apply/i. apply: H0.
+    move: (equiv0 l). case.
+    move=> _ Hsym _. apply/Hsym. done.
+
+    de H0.
+
+    right. ssa. apply/i. apply: H1. done.
 
 
-  - move=> l0 l1 HOrder a0 a1 [] HI HO.
-    destruct IRel,ORel;ssa. eauto. eauto.
+  - intros. de H0.
+    left.
+    de IRel;eauto.
+    de ORel;eauto.
+    right.
+    de IRel;eauto.
 
-  - intros. de IRel;de ORel. eauto.
-  - intros. de IRel;de ORel. eauto.
+  - intros. de IRel;eauto.
+
+  - intros. con.
+    intros. eauto.
+    case. case. move=> HH _.
+    de IRel;eauto. apply/i. 2:eauto. done.
+    ssa.
 Defined.
 
 Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
   refine (@MyRel _ 
             (fun (l : level) io => dis ORel l (snd io))
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
+            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ dis ORel l (snd io1) /\ dis ORel l (snd io2))
             _
             _
             _
@@ -514,29 +563,72 @@ Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
     con. destruct IRel. destruct ORel. simpl. con.
     move: (equiv0 l). case. eauto.
     move: (equiv1 l). case. eauto.
-  - con. destruct H. destruct IRel. destruct ORel. simpl. 
+  - rewrite /Symmetric. intros. destruct H. destruct IRel. destruct ORel. simpl.
+    ssa. left.
     move: (equiv0 l). case.
-    move => _ Hsym _.  apply Hsym. eauto.
+    move => _ Hsym _. con.  apply Hsym. eauto.
 
-    destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv1 l). case. eauto.
+    move: (equiv1 l). case.
+    move => _ Hsym' _.  apply Hsym'. eauto.
 
-  - destruct IRel,ORel. simpl. con.
-    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+    ssa.
+
+  - destruct IRel,ORel. simpl. intro. intros.
+
+    de H. de H0. left. ssa.
+    move: (equiv0 l). case. move=> _ _ Htrans. eauto.
+    move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+
+    right. ssa. apply/i0. apply: H0.
+    move: (equiv1 l). case.
+    move=> _ Hsym _. apply/Hsym. done.
+
+    de H0.
+
+    right. ssa. apply/i0. apply: H1. done.
 
 
-  - move=> l0 l1 HOrder a0 a1 [] HI HO.
-    destruct IRel,ORel;ssa. eauto. eauto.
+  - intros. de H0.
+    left.
+    de IRel;eauto.
+    de ORel;eauto.
+    right.
+    de IRel;eauto.
 
-  - intros. de IRel;de ORel. eauto.
-  - intros. de IRel;de ORel. eauto.
+  - intros. de ORel;eauto. de ORel;eauto.
+
+  - intros. de ORel;eauto.
+    intros. con. ssa.
+    case. case. intros. de ORel. apply/i. 2:eauto. done.
+    case. ssa.
 Defined.
+
+Lemma dis_rel_dis : forall (I : Ty) (IRel : myrel [I]) l x y, dis IRel l x -> rel IRel l x y -> dis IRel l y.
+Proof.
+  intros. de IRel. apply/i;eauto.
+Qed.
+Lemma dis_rel_dis2 : forall (I : Ty) (IRel : myrel [I]) l x y, dis IRel l x -> rel IRel l y x -> dis IRel l y.
+Proof.
+  intros. de IRel. apply/i;eauto.
+  move:(equiv0 l)=> [] _ Hsym _. apply/Hsym. auto.
+Qed.
+Lemma dis_dis_rel : forall (I : Ty) (IRel : myrel [I]) l x y, dis IRel l x -> dis IRel l y -> rel IRel l x y.
+Proof.
+  intros. de IRel;eauto. apply/i;eauto.
+Qed.
+
+
+Hint Resolve dis_rel_dis dis_rel_dis2 dis_dis_rel.
+
+
 
 Definition eqpair_OR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
   refine (@MyRel _ 
             (fun (l : level) io => dis IRel l (fst io) \/ dis ORel l (snd io))
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
+            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/
+                                (dis IRel l (fst io1) \/ dis ORel l (snd io1)) /\
+                                (dis IRel l (fst io2) \/ dis ORel l (snd io2))                                  
+            )
             _
             _
             _
@@ -545,30 +637,52 @@ Definition eqpair_OR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([
     con. destruct IRel. destruct ORel. simpl. con.
     move: (equiv0 l). case. eauto.
     move: (equiv1 l). case. eauto.
-  - con. destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv0 l). case.
-    move => _ Hsym _.  apply Hsym. eauto.
+  - intro. intros. destruct H.
+    left. destruct IRel,ORel. simpl in *.
+    destruct H.
+    con.
+    move: (equiv0 l)=> [] _ Hsym _.
+    apply/Hsym. done.
+    move: (equiv1 l)=> [] _ Hsym _.
+    apply/Hsym. done. ssa.
 
-    destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv1 l). case. eauto.
+    
+    intro. intros.
+    de H.
+    * de H0.
+      ** left. con.
+         de IRel. move: (equiv0 l)=>[] _ _ Htrans. apply/Htrans;eauto.
+         de ORel. move: (equiv0 l)=>[] _ _ Htrans. apply/Htrans;eauto.    
+      ** de H0. have: dis IRel l x.1 by eauto. move=>HH.
+         right. con. auto. auto.
+         have: dis ORel l x.2 by eauto. move=>HH.
+         right. con. auto. auto.
+    * de H0. right. con. auto.
+      de H1. eauto. eauto.
 
-  - destruct IRel,ORel. simpl. con.
-    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
+
+      intros. destruct H0.
+      ** left. destruct IRel. destruct ORel. simpl in *. ssa;eauto.
+      ** right. destruct IRel. destruct ORel. simpl in *. ssa;eauto.
+         de H0;eauto. de H1;eauto.
 
 
-  - move=> l0 l1 HOrder a0 a1 [] HI HO.
-    destruct IRel,ORel;ssa. eauto. eauto.
+         intros. destruct IRel. destruct ORel. simpl in *.
+         destruct H0;eauto.
 
-  - intros. de H0. de IRel. eauto. 
-  - intros. de ORel. eauto.
-  - intros. ssa. de IRel. de ORel. de H. eauto. eauto.
+
+         intros. con. intros. de H.
+         case. case. intros. de H. eauto. eauto.
+         de H.
 Defined.
 
 Lemma eqsum {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
   refine (@MyRel _ 
             (fun (l : level) io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end)
-            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2 | inr o1,inr o2 => rel ORel l o1 o2 | _,_ => False end)
+            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
+                                            | inr o1,inr o2 => rel ORel l o1 o2
+                                            | inl i1, inr i2 => dis IRel l i1 /\ dis ORel l i2
+                                            | inr i1, inl i2 => dis ORel l i1 /\ dis IRel l i2 end)
             _
             _
             _
@@ -587,18 +701,31 @@ Lemma eqsum {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O])
 
     destruct IRel. destruct ORel. simpl.
     intro. ssa. de x. de y. de z.
-    move: (equiv0 l). case. eauto. de y. de z. 
+    move: (equiv0 l). case. eauto. apply/i. 2:eauto.
     move: (equiv1 l). case. eauto.
 
+    move: (equiv0 l). case. eauto. 
+    de z. apply/i. done. done.
+    apply/i0. eauto.
+    done.
+    de y. de z. apply/i. 2:eauto. done.
+    apply/i0. done. done.
+    de z. apply/i0. eauto.
+    move:(equiv1 l)=> [] _ Hsym _. eauto.
+    move:(equiv1 l)=> [] _ _ Htrans. eauto.
 
-  -     ssa. de a0. de a1. de IRel. eauto.
-        de a1. de ORel. eauto.
 
-        ssa. de a. de IRel. eauto.
-        de ORel. eauto.
+    intros. de a0. de a1. de IRel;eauto. de IRel;eauto.
+    de ORel;eauto.
+    de a1. de ORel;eauto. de IRel;eauto. de ORel;eauto.
 
-        ssa. de a0. de a1. de IRel. eauto.
-        de a1. de ORel. eauto.
+
+    intros. de a. de IRel;eauto. de ORel;eauto.
+
+    intros. con.
+    intros. de a0. de a1. de a1.
+    de a0. de a1. eauto.
+    de a1. eauto.
 Defined.
 
 Definition levelPred := level -> Prop.
@@ -608,18 +735,31 @@ Definition eqmaybe_aux {V : Ty} (P: levelPred) (VRel : myrel [V]) : presP P -> m
 intros.  
     refine (@MyRel _
             (fun l v => if v is Some v' then dis VRel l v' else ~ P l)
-            (fun l b1 b2 => b1 = b2)
+            (fun l b1 b2 => b1 = b2 \/
+                              (if b1 is Some v' then dis VRel l v' else ~ P l) /\
+                               if b2 is Some v' then dis VRel l v' else ~ P l)
             _
             _
             _
             _).
-    intros. auto.
-ssa. de a.
-de VRel. eauto. intro. apply H1. apply/H. eauto. done.
-intros. de a0. de a1. inv H1. subst. done.
-subst. done.
-Defined.
+    intros. con.
+    intro. auto.
+    intro. intros. de H0.
+    intro. intros. de H0. de H1. subst. auto.
+    subst. de y. de x. de y. de H1. subst. auto.
+    de H1. subst. auto.
+    de H1. subst. auto.
 
+    intros. de H1. right.
+    de VRel. de a0. eauto. eauto. de a1. eauto. eauto.
+
+    intros. de VRel. de a. eauto. eauto.
+
+    intros. con.
+
+    intros. right. de a0.
+    intros. de H1. subst. done.
+Defined.    
 
 Definition Option_presP : presP (fun _ => True).
   rewrite /presP. eauto.
@@ -652,9 +792,9 @@ Defined.
 Fixpoint to_rel (ty : Ty): myrel [ty]:=
       match ty as x return myrel [x] with
     | TInput => publicRel TInput
-    | THandlerOutput => privateRel THandlerOutput
-    | TTypeSyscall => privateRel TTypeSyscall                                 
-    | TInterrupt => privateRel TInterrupt
+    | THandlerOutput => semiprivateRel THandlerOutput
+    | TTypeSyscall => semiprivateRel TTypeSyscall                                 
+    | TInterrupt => semiprivateRel TInterrupt
     | Option t => eqmaybe (to_rel t)
     | Option_swi t => eqmaybe_swi (to_rel t)
     | Option_maybe t => eqmaybe_maybe (to_rel t)
@@ -954,14 +1094,13 @@ Proof.
       exists o0. ssa. exists (@out _ _ o0). con. eauto. eauto.
 Qed.
 
+
 Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O] -> [O']) (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']),
     NI IRel' ORel p -> 
     f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
     NI IRel ORel' (map f g p).
 Proof.
-  intros.
-  move: H. rewrite /NI. intros.
-  suff: simulation IRel' ORel l s p -> simulation IRel ORel' l s (map f g p).
+Admitted. 
 
 Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
     NI (eqpair_R VRel IRel) ORel p -> fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f -> NI IRel (eqpair VRel ORel) (sta f g v p).
@@ -1040,9 +1179,10 @@ Definition scheduled_p (I O : Ty) (b : bool) (p : Proc I O) :=
                     (maybe p))))).
 
 
-Lemma par_swiI_NI : forall (I1 I2 O1 O2 : Ty) (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (IRel1 : myrel [I1]) (IRel2 : myrel [I2]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]),
+(*Comment: Maybe prove this? We need it for example 2 (shows noninterference)*)
+(*Lemma par_swiI_NI : forall (I1 I2 O1 O2 : Ty) (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (IRel1 : myrel [I1]) (IRel2 : myrel [I2]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]),
      NI IRel1 ORel1 p1 -> NI IRel2 ORel2 p2 -> NI (eqpair_LR boolRel (eqpair IRel1 IRel2)) (eqpair (eqmaybe_swi ORel1) (eqmaybe_swi ORel2)) (par_swiI b p1 p2).
-Proof. Admitted.
+Proof. Admitted.*)
 
 (*sta_swi b n f p:
  (i == n,I') -> enables p
@@ -1086,17 +1226,16 @@ Definition streamType := Stream ([TInput] + (([ExOutputType]))).
 
 Definition OutputRel : myrel ([TOutput]).
   refine (@MyRel _
-            (fun l a => if l == \bot  then a = Step else False)
+            (fun l a => l = \bot /\ a = Step )
             (fun l a b => a = b) _ _ _ _).
   intros.
   done.
-  intros.
-  move: H0.
-  case_if;last by [].
-  rewrite /order (eqP H0) lex0 in H.
-  by rewrite H.
-
-  by intros;subst.
+  intros. ssa. subst. subst. subst.
+  Search _ order.
+  move/order_bot : H. move=>->. done.
+  intros. ssa. subst. con.
+  ssa.
+  ssa.
 Defined.
 
 Definition Output_option_presP : presP (fun l => l = \top).
@@ -1168,18 +1307,17 @@ Qed.
 
 Definition InputRel : myrel ([TInput]). 
   refine (@MyRel _
-            (fun l a => if l == \bot then a = DiskRead else False)
+            (fun l a => l = \bot /\ a = DiskRead)
             (fun l a b => a = b) _ _ _ _).
   intros.
   done.
-  intros.
-  move: H0.
-  case_if;last by [].
-  move: H. rewrite /order.
-  move/eqP: H0. intros. subst.
-  rewrite lex0 in H. rewrite H. done.
-  intros. subst. done.
-Defined.
+  intros. ssa. subst. subst. subst.
+  Search _ order.
+  move/order_bot : H. move=>->. done.
+  intros. ssa. subst. con.
+  ssa.
+  ssa.
+Defined.  
 
 (*NotSim*)
 Example counterexample : NotSim \bot InputRel (publicRel _) newtrace_simple (scheduler process_pool).
@@ -1188,7 +1326,7 @@ Proof.
   apply:NS4. ssa. de o'. subst.
   
   apply: NS2. instantiate (1:= (DiskRead)).
-  rewrite /= eqxx. auto.
+  ssa.
 
   intros. match_dd.
 
@@ -1209,46 +1347,137 @@ Proof.
 Qed.
 End Example1.
 
-(*Example 2: Non-interference
- round-robin between p_high and p_low
- input is public*)
-Module Example2.
-Definition p_high := (@out TInput TOutput Step). 
-Definition p_low := (@out TInput TOutput Idle). 
-Definition process_pool := par_swiI false p_high p_low.
-Definition scheduler {I O} (p : Proc (Times Bool (Times I I)) O) : Proc I O := @map _ (Times Bool (Times _ _)) _ _ (fun i => (true,(i,i))) id p.
-
-Definition InputRelPublic : myrel ([TInput]) := publicRel TInput. 
 
 Definition TraceF_specific := (@TraceF TInput (Times (Option TOutput) (Option TOutput))).
 Lemma specific_monotone : monotone2 TraceF_specific.
   apply (@monotone_TraceF TInput (Times (Option TOutput) (Option TOutput))).
 Qed.
-
 Hint Resolve specific_monotone : paco.
 
 
+
+
+Coercion to_rel_locked : Ty >-> myrel.
+
 Arguments NI : clear implicits.
-(*Arguments NI I O [_] [_].*)
-Example hl_lp_NI : @NI _ _ InputRelPublic (publicRel _) (scheduler process_pool).
+Arguments NI I O IRel ORel.
+Lemma NI_swap_rel : forall I O (p : Proc I O) (IRel : myrel [I]) (ORel ORel' : myrel [O]), (forall l x y, rel ORel l x y <-> rel ORel' l x y) -> NI I O IRel ORel p -> NI I O IRel ORel' p.
 Proof.
+  intros. intro. intros. eapply H0 in H1.
+  move: H1. instantiate (1:= l).
+  intros. apply/paco2_imp. apply monotone_SimulationF.
+  2:eauto. ssa.
+  inv H2;econ;eauto.
+  rewrite /Clause4. ssa. apply H6 in H7. ssa. exists x.
+  ssa;eauto. apply/H. done.
+Qed.  
+
+(*Lemma NI_add_L : forall I V O (p : Proc I (Times V O)) IRel,
+    NI I (Times V O) IRel (eqpair_R (to_rel V) (to_rel O)) p ->
+    NI I (Times V O) IRel (eqpair_LR (to_rel V) (to_rel O)) p.
+Proof.
+  intros. 
+  apply/simulation_equiv.
+  move/simulation_equiv : H.
+  intros. apply/NI_swap_rel. 2:eauto.
+  ssa.
+Qed.
+
+Lemma NI_add_R : forall I V O (p : Proc I (Times V O)) IRel,
+    NI I (Times V O) IRel (eqpair (to_rel V) (to_rel O)) p ->
+    NI I (Times V O) IRel (eqpair_R (to_rel V) (to_rel O)) p.
+Proof.
+  intros. 
+  apply/simulation_equiv.
+  move/simulation_equiv : H.
+  intros. apply/NI_swap_rel. 2:eauto.
+  ssa.
+Qed.*)
+
+Lemma SimulationF_I_imp : forall I O l (IRel IRel' : myrel [I]) (ORel : myrel [O]) R s p,
+    (forall l x, dis IRel' l x -> dis IRel l x) ->
+    (forall l x y, rel IRel l x y <-> rel IRel' l x y) ->
+    SimulationF l IRel ORel R s p ->
+    SimulationF l IRel' ORel R s p.
+Proof.
+  intros. inv H1. con;eauto.
+  rewrite /Clause1. ssa. eauto.
+  rewrite /Clause2. ssa. 
+  rewrite /Clause3. ssa.
+  move: H4. rewrite /Clause3. ssa. eapply H4 in H6;eauto. apply/H0. done.
+Qed.
+
+
+Lemma simulation_I_imp : forall I O (IRel IRel' : myrel [I]) (ORel : myrel [O]) p,
+    (forall l x, dis IRel' l x -> dis IRel l x) -> (forall l x y, rel IRel l x y <-> rel IRel' l x y) -> NI I O IRel ORel p -> NI I O IRel' ORel p.
+Proof.
+  intros. 
+  intros. rewrite /NI. intros. eapply H1 in H2.
+  move: H2. instantiate (1:=l).
+  apply:paco2_imp. apply monotone_SimulationF.
+  intros. apply/SimulationF_I_imp. 3:eauto. eauto. eauto.
+Qed.
+
+(*Lemma iNI_add_L : forall I V O (p : Proc (Times V I) O) VRel IRel ORel,
+    NI (Times V I) O (eqpair_R VRel IRel) ORel p ->
+    NI (Times V I) O (eqpair_LR VRel IRel) ORel p.
+Proof.
+  intros. 
+  apply/simulation_I_imp. 3:eauto.
+  ssa. ssa.
+Qed.*)
+
+
+(* Example removed for now. We can add it later if we prove NI for par_swiI
+  
+Example 2: Non-interference
+ round-robin between p_high and p_low
+ input is public*)
+(*Module Example2.
+Definition p_high := (@out TInput TOutput Step). 
+Definition p_low := (@out TInput TOutput Idle). 
+Definition process_pool := par_swiI false p_high p_low.
+Definition scheduler {I O} (p : Proc (Times Bool (Times I I)) O) : Proc I O := @map _ (Times Bool (Times _ _)) _ _ (fun i => (true,(i,i))) id p.
+
+
+Definition InputRel : myrel ([TInput]). 
+  refine (@MyRel _
+            (fun l a => l = \bot /\ a = DiskRead)
+            (fun l a b => a = b) _ _ _ _).
+  intros.
+  done.
+  intros. ssa. subst. subst. subst.
+  Search _ order.
+  move/order_bot : H. move=>->. done.
+  intros. ssa. subst. con.
+  ssa.
+  ssa.
+Defined.  
+(*Definition InputRelPublic : myrel ([TInput]) := publicRel TInput.*)
+
+Example hl_lp_NI : @NI TInput (Times (Option_swi TOutput) (Option_swi TOutput))
+                     InputRel (*InputRel*)
+                     (eqpair (eqmaybe_swi (publicRel TOutput)) (eqmaybe_swi (publicRel TOutput))) (*OutputRel*)
+                     (scheduler process_pool).
+Proof. simpl.
   rewrite /scheduler.
-  eapply map_NI. 
+  eapply map_NI.
   eapply par_swiI_NI.
   apply out_NI.
+  apply/simulation_I_imp. shelve. shelve.
   apply out_NI.
-  instantiate (1:= (InputRelPublic)).
-  instantiate (1:= (InputRelPublic)).  
-  rewrite /f_NI. ssa.
+  instantiate (1:= InputRel). instantiate (1:= InputRel).
+  intro. intros. ssa.
+  intro. intros. simpl in H. simpl. 
+  rewrite /f_NI. intros. rewrite /InputRel /= in H. simpl.
 
-  rewrite /f_PU. ssa.
-  rewrite /f_NI. ssa.
-  de i. de i'. by subst.
-  Unshelve. apply OutputRel. apply OutputRel.
+  rewrite /f_PU. ssa. simpl.
+  rewrite /f_NI. intros. eauto.
 Qed.
-End Example2.
+End Example2.*)
 
-Print Hint *. 
+
+
 (*Example 3
   Consists of two sub-examples (a) and (b)
   (a) round robin between low_p, high_p. Execution of either process is disrupted by hardware interrupt that schedules handler
@@ -1483,7 +1712,9 @@ apply: NS2.
                                                            This is a contradiction
                                                           *)
   ssa.
+  Print match_dd.
   match_dd.
+  eauto.
 Qed.
 
 Example example_not_NI : ~ @NI _ _ InputTypeRel OutputTypeRel (bad_scheduler process_pool).
@@ -1494,7 +1725,6 @@ Proof.
 Qed.
 
 (**** Example (b) ****)
-Coercion to_rel_locked : Ty >-> myrel.
 
 (*Definition NI2 I O (p : Proc I O) := NI I O I O p.
 Definition f_NI2 {I O :Ty} (f : [I] -> [O]) := forall (l : level) (i i' : [I]) (o o' : [O]), rel I l i i' -> rel O l (f i) (f i').
@@ -1520,71 +1750,7 @@ Qed.*)
 (*Lemma map_NI3 : forall (Ia Ib Ia' Ib' O O' : Ty) (p : Proc (Times Ia' Ib') O) (f : [Times Ia Ib] -> [Times Ia' Ib']) (g : [O] -> [O']), NI _ _ (eqpair_R Ia Ib) O (@map (Times _ _) (Times _ _) _ _ f g p).*)
 
 
-Lemma NI_swap_rel : forall I O (p : Proc I O) (IRel : myrel [I]) (ORel ORel' : myrel [O]), (forall l x y, rel ORel l x y <-> rel ORel' l x y) -> NI I O IRel ORel p -> NI I O IRel ORel' p.
-Proof.
-  intros. intro. intros. eapply H0 in H1.
-  move: H1. instantiate (1:= l).
-  intros. apply/paco2_imp. apply monotone_SimulationF.
-  2:eauto. ssa.
-  inv H2;econ;eauto.
-  rewrite /Clause4. ssa. apply H6 in H7. ssa. exists x.
-  ssa;eauto. apply/H. done.
-Qed.  
 
-Lemma NI_add_L : forall I V O (p : Proc I (Times V O)) IRel,
-    NI I (Times V O) IRel (eqpair_R (to_rel V) (to_rel O)) p ->
-    NI I (Times V O) IRel (eqpair_LR (to_rel V) (to_rel O)) p.
-Proof.
-  intros. 
-  apply/simulation_equiv.
-  move/simulation_equiv : H.
-  intros. apply/NI_swap_rel. 2:eauto.
-  ssa.
-Qed.
-
-Lemma NI_add_R : forall I V O (p : Proc I (Times V O)) IRel,
-    NI I (Times V O) IRel (eqpair (to_rel V) (to_rel O)) p ->
-    NI I (Times V O) IRel (eqpair_R (to_rel V) (to_rel O)) p.
-Proof.
-  intros. 
-  apply/simulation_equiv.
-  move/simulation_equiv : H.
-  intros. apply/NI_swap_rel. 2:eauto.
-  ssa.
-Qed.
-
-Lemma SimulationF_I_imp : forall I O l (IRel IRel' : myrel [I]) (ORel : myrel [O]) R s p,
-    (forall l x, dis IRel' l x -> dis IRel l x) ->
-    (forall l x y, rel IRel l x y <-> rel IRel' l x y) ->
-    SimulationF l IRel ORel R s p ->
-    SimulationF l IRel' ORel R s p.
-Proof.
-  intros. inv H1. con;eauto.
-  rewrite /Clause1. ssa. eauto.
-  rewrite /Clause2. ssa. 
-  rewrite /Clause3. ssa.
-  move: H4. rewrite /Clause3. ssa. eapply H4 in H6;eauto. apply/H0. done.
-Qed.
-
-
-Lemma simulation_I_imp : forall I O (IRel IRel' : myrel [I]) (ORel : myrel [O]) p,
-    (forall l x, dis IRel' l x -> dis IRel l x) -> (forall l x y, rel IRel l x y <-> rel IRel' l x y) -> NI I O IRel ORel p -> NI I O IRel' ORel p.
-Proof.
-  intros. 
-  intros. rewrite /NI. intros. eapply H1 in H2.
-  move: H2. instantiate (1:=l).
-  apply:paco2_imp. apply monotone_SimulationF.
-  intros. apply/SimulationF_I_imp. 3:eauto. eauto. eauto.
-Qed.
-
-Lemma iNI_add_L : forall I V O (p : Proc (Times V I) O) VRel IRel ORel,
-    NI (Times V I) O (eqpair_R VRel IRel) ORel p ->
-    NI (Times V I) O (eqpair_LR VRel IRel) ORel p.
-Proof.
-  intros. 
-  apply/simulation_I_imp. 3:eauto.
-  ssa. ssa.
-Qed.
 
 (*Lemma iNI_to_LR_boolRel : forall I O (p : Proc (Times Bool I) O) IRel ORel,
     NI (Times Bool I) O (eqpair_LR boolRel IRel) ORel p ->

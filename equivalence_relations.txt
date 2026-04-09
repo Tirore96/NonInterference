@@ -21,6 +21,8 @@ What is missing in this, is that there should /optionally/ be a characterized eq
 [...] w/ a distinguished set, dis r, satisfying
     ∀ v . v ∈ dis r ⇒ ∀ v' . v r v' ⇒ v' ∈ dis r
 
+    
+  v \in dis r => v' \in dis r => v r v' 
 (that way, if dis r is empty, then nothing is unobservable; if it is non-empty, then one equivalence class is unobservable).
 
 
