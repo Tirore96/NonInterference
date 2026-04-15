@@ -131,7 +131,7 @@ Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
 Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool
-                 | Option : Ty -> Ty | Option_swi : Ty -> Ty | Option_maybe : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | TInterrupt | THandlerOutput |  TPublicOutput. 
+                 | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | TInterrupt | THandlerOutput |  TPublicOutput. 
 
 Derive NoConfusion for Ty.
 Derive EqDec for Ty.
@@ -146,7 +146,7 @@ Fixpoint interp (t : Ty) : Set :=
   | Nat => nat
   | Times t0 t1 => (interp t0) * (interp t1)
   | Bool => bool
-  | Option t' | Option_swi t' | Option_maybe t' => option (interp t')
+  | Option t' => option (interp t')
   | TInput => Input
   | TOutput => Output
   | Sum t0 t1 => (interp t0) + (interp t1)            
@@ -165,10 +165,10 @@ Inductive Proc : Ty -> Ty -> Type :=
 | out  : forall {I O : Ty}, interp O -> Proc I O  
 | map   : forall {I I' O O' : Ty}, (interp I -> interp I') -> (interp O -> interp O') -> Proc I' O -> Proc I O'
 | sta   : forall {I O V :Ty}, (interp I -> interp V -> interp V) -> (interp O -> interp V -> interp V) -> interp V -> Proc (Times V I) O -> Proc I (Times V O)
-| swi   : forall {I O : Ty},  bool -> Proc I (Times Bool O)%type -> Proc ((Times Bool I)) (Option_swi O)
+| swi   : forall {I O : Ty},  bool -> Proc I (Times Bool O)%type -> Proc ((Times Bool I)) (Option O)
 | par   : forall {I O1 O2: Ty}, Proc I O1 -> Proc I O2 -> Proc I (Times O1 O2)
 | loop  : forall {I : Ty}, Proc I I -> Proc I I
-| maybe : forall {I O: Ty}, Proc I O -> Proc (Option_maybe I) O.
+| maybe : forall {I O: Ty}, Proc I O -> Proc (Option I) O.
 Arguments out {_} {_} o.
 Derive NoConfusion for Proc.
 Derive NoConfusionHom for Proc.
@@ -688,7 +688,7 @@ Definition eqpair_OR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([
          de H.
 Defined.
 
-Lemma eqsum {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
+Lemma eqsum_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
   refine (@MyRel _ 
             (fun (l : level) io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end)
             (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
@@ -740,6 +740,142 @@ Lemma eqsum {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O])
     de a1. eauto.
 Defined.
 
+Lemma eqsum_L {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => match io with | inl i => dis IRel l i | inr _ => False  end)
+            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
+                                            | inr o1,inr o2 => rel ORel l o1 o2
+                                            | _,_ => False end)
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con.
+    intro. 
+    destruct IRel. destruct ORel. simpl. de x.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y.
+    move: (equiv0 l). case. eauto. 
+    move: (equiv1 l). case. de y.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y. de z.
+    move: (equiv0 l). case. eauto. de y. de z. 
+    move: (equiv1 l). case. move=> _ _ Htrans. apply/Htrans. eauto. done.
+    intros. de a0. de a1. de IRel;eauto. de IRel;eauto.
+    de ORel;eauto.
+    de a1. eauto.
+    
+    intros. de a. de IRel;eauto.
+    
+    intros. con.
+    intros. de a0. de a1. de a0.
+    de a1. 
+    de IRel. apply/i1;eauto.
+Defined.
+
+Lemma eqsum_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => match io with | inl _ => False | inr o => dis ORel l o end)
+            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
+                                            | inr o1,inr o2 => rel ORel l o1 o2
+                                            | _,_ => False end)
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con.
+    intro. 
+    destruct IRel. destruct ORel. simpl. de x.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y.
+    move: (equiv0 l). case. eauto. 
+    move: (equiv1 l). case. de y.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y. de z.
+    move: (equiv0 l). case. eauto. de y. de z. 
+    move: (equiv1 l). case. move=> _ _ Htrans. apply/Htrans. eauto. done.
+    intros. de a0. de a1. de IRel;eauto. de IRel;eauto.
+    de ORel;eauto.
+    de a1. eauto.
+    
+    intros. de a. de IRel;eauto. de ORel;eauto.
+    
+    intros. con.
+    intros. de a0. de a1. de a0.
+    de a1. 
+    de IRel. de ORel. apply/i2;eauto.
+Defined.
+
+
+
+Lemma eqsum {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => False)
+            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
+                                            | inr o1,inr o2 => rel ORel l o1 o2
+                                            | _,_ => False
+                                            end)           
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con.
+    intro. 
+    destruct IRel. destruct ORel. simpl. de x.
+    move: (equiv0 l). case. eauto.
+    move: (equiv1 l). case. eauto.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y.
+    move: (equiv0 l). case. eauto. 
+    move: (equiv1 l). case. de y.
+
+    destruct IRel. destruct ORel. simpl.
+    intro. ssa. de x. de y. de z.
+    move: (equiv0 l). case. eauto.
+(*    apply/i. 2:eauto.
+    move: (equiv1 l). case. eauto.
+
+    move: (equiv0 l). case. eauto. *)
+    de z. de y. de y.
+    move: (equiv1 l). case. move=> _ _ Htrans. apply/Htrans. eauto. eauto.
+
+    
+(*    apply/i. done. done.
+    apply/i0. eauto.
+    done.
+    de y. de z. apply/i. 2:eauto. done.
+    apply/i0. done. done.
+    de z. apply/i0. eauto.
+    move:(equiv1 l)=> [] _ Hsym _. eauto.
+    move:(equiv1 l)=> [] _ _ Htrans. eauto.*)
+
+
+    intros. de a0. de a1. de IRel;eauto. de IRel;eauto.
+    de ORel;eauto.
+    de a1. eauto.
+    done.
+
+(*    intros. de a. de IRel;eauto. de ORel;eauto.*)
+
+    intros. con. done.
+(*    intros. de a0. de a1. de a1.*)
+    de a0.
+(*    de a1. eauto.
+    de a1. eauto.*)
+Defined.
+
 Definition levelPred := level -> Prop.
 Definition presP (P:levelPred) := forall x0 x1, order x0 x1 -> P x0 -> P x1.
 
@@ -776,8 +912,17 @@ Defined.
 Definition Option_presP : presP (fun _ => True).
   rewrite /presP. eauto.
 Qed.
-Definition eqmaybe {V : Ty} (VRel : myrel [V]) : myrel ([Option_swi V]).
+
+Definition Option_presP_top : presP (fun l => l = \top).
+  rewrite /presP. intros. subst. rewrite /order in H. rewrite le1x in H. by apply/eqP.
+Qed.
+
+Definition eqmaybe {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply: Option_presP.
+Defined.
+
+Definition eqmaybe_top {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
+  apply:eqmaybe_aux. apply VRel. apply: Option_presP_top.
 Defined. 
 
 
@@ -785,20 +930,20 @@ Definition aware (V : Ty) (VRel : myrel [V]) (v : [V]) : levelPred
   := fun l => (forall v', rel VRel l v v' -> v = v' /\ ~ dis VRel l v').
 Definition boolRel : myrel ([Bool]) := semiprivateRel Bool. (*publicRel Bool.*)
 
-Definition Option_swi_presP : presP (fun l => @aware Bool (publicRel Bool) true l).
+(*Definition Option_presP : presP (fun l => @aware Bool (publicRel Bool) true l).
   rewrite /presP. eauto.
+Defined.*)
+
+Definition eqmaybe_swi {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
+  apply:eqmaybe_aux. apply VRel. apply: Option_presP.
 Defined.
 
-Definition eqmaybe_swi {V : Ty} (VRel : myrel [V]) : myrel ([Option_swi V]).
-  apply:eqmaybe_aux. apply VRel. apply: Option_swi_presP.
-Defined.
-
-Definition Option_maybe_presP : presP (fun _ => False).
+(*Definition Option_presP : presP (fun _ => False).
   rewrite /presP. eauto.
-Qed.
+Qed.*)
 
-Definition eqmaybe_maybe {V : Ty} (VRel : myrel [V]) : myrel ([Option_maybe V]).
-  apply:eqmaybe_aux. apply VRel. apply:Option_maybe_presP.
+Definition eqmaybe_maybe {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
+  apply:eqmaybe_aux. apply VRel. apply:Option_presP.
 Defined.    
 
 Fixpoint to_rel (ty : Ty): myrel [ty]:=
@@ -808,14 +953,12 @@ Fixpoint to_rel (ty : Ty): myrel [ty]:=
     | TTypeSyscall => semiprivateRel TTypeSyscall                                 
     | TInterrupt => semiprivateRel TInterrupt
     | Option t => eqmaybe (to_rel t)
-    | Option_swi t => eqmaybe_swi (to_rel t)
-    | Option_maybe t => eqmaybe_maybe (to_rel t)
     | Times t0 t1 => eqpair_LR (to_rel t0) (to_rel t1)
 (*    | Times_L t0 t1 => eqpair_L (to_rel t0) (to_rel t1)
     | Times_R t0 t1 => eqpair_R (to_rel t0) (to_rel t1)
       | Times_LR t0 t1 => eqpair_LR (to_rel t0) (to_rel t1)
                                     *)
-      | Sum t0 t1 => eqsum (to_rel t0) (to_rel t1)
+      | Sum t0 t1 => eqsum_LR (to_rel t0) (to_rel t1)
       | Bool => boolRel
     | ty' => publicRel ty'
     end.
@@ -1176,7 +1319,7 @@ Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
 
 
 (*Definition par_swiI {I1 I2 O1 O2} (b:bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2)
-  : Proc (_ Bool (Times I1 I2)) (_ (Option_swi O1) (Option_swi O2)) :=
+  : Proc (_ Bool (Times I1 I2)) (_ (Option O1) (Option O2)) :=
     par
       (swi b (@map (Times _ _) _ _ (Times_R Bool _) fst (fun x => (false,x)) p1))
       (swi (negb b) (@map (Times _ _) _ _ (Times_R Bool _) snd (fun x => (false,x)) p2)).*)
@@ -1187,7 +1330,7 @@ Definition scheduled_p (I O : Ty) (b : bool) (p : Proc I O) :=
   @map _ _ (Times _ _) _ id snd (*drop state*)
     (@sta (Times Bool _) _ Bool (fun i v => xor (fst i) v) (fun o v => v) b (*track swi flag*)
        (@map (Times _ (Times _ _))  (Times _ (Times _ _)) _ _ (fun i => (fst (snd i),(fst i,snd (snd i)))) id (*(v,(b,i)) -> (b,(v,i))*)
-          (swi b (@map (Times Bool _) (Option_maybe _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o)) (*if b then send input to p*)
+          (swi b (@map (Times Bool _) (Option _) _ (Times Bool _) (fun i => if fst i then Some (snd i) else None) (fun o => (false,o)) (*if b then send input to p*)
                     (maybe p))))).
 
 
@@ -1201,26 +1344,54 @@ Proof. Admitted.*)
  (i <> n,I') -> disables p
  f projects input from pair e.g. f (I1,I2) = I1
  maybe is used to disgard input to p when i<>n.
- *) 
+ *)
 
-Definition sta_swi_base (I O : Ty) (b : bool) (p : Proc I O) :=
+Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Proc I O) :=
+@map (Times Nat _) (Times Bool _) (Times _ _) _ (fun x => (fst x == n, f (snd x))) snd (*apply f to input before entering sta because it caused issues with the mitigator NI proof*)
   (@sta (Times Bool _) _ Bool
        (fun i v => xor (fst i) v)
        (fun o v => false)
        b
-       (@map (Times Bool (Times Bool _)) (Option_maybe _) _ _
+       (swi b (@map (Times Bool _) (Option _) _ (Times Bool _)
+                    (fun i => if fst i then Some (snd i) else None)
+                    (fun o => (true,o))
+                    (maybe p)
+  ))).
+
+(*Definition sta_swi_base (I O : Ty) (b : bool) (p : Proc I O) :=
+  @map _ _ (Times Bool _) (Option _) id (fun bo => if fst bo then Some (snd bo) else None )
+    ((@sta (Times Bool _) _ Bool
+       (fun i v => xor (fst i) v)
+       (fun o v => false)
+       b
+       (@map (Times Bool (Times Bool _)) (Option _) _ _
                     (fun i => if fst i then Some (snd (snd i)) else None)
                     id
-                    (maybe p)
-  )).
+                    (maybe p))
+  )).*)
+
+(*Definition sta_swi_base (I O : Ty) (b : bool) (p : Proc I O) :=
+  @map _ _ (Times Bool _) (Option _) id (fun bo => if fst bo then Some (snd bo) else None ) ((@sta (Times Bool _) _ Bool
+       (fun i v => xor (fst i) v)
+       (fun o v => false)
+       b
+       (@map (Times Bool (Times Bool _)) (Option _) _ _
+                    (fun i => if fst i then Some (snd (snd i)) else None)
+                    id
+                    (maybe p))
+  )).*)
+Check swi. 
 
 (*Got to here...*)
-Lemma sta_swi_base_NI I O (p : Proc I O) (IRel : myrel [I]) (ORel : myrel [O]) b : NI (eqpair (privateRel _) IRel) (eqmaybe_swi ORel) (sta_swi_base b p).
+(*Lemma sta_swi_base_NI I O (p : Proc I O) (IRel : myrel [I]) (ORel : myrel [O]) b :
+  NI (eqpair (privateRel _) IRel)
+    (eqpair (privateRel _) ORel) (
+      sta_swi_base b p).*)
 
 
-Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Proc I O) :=
-  @map (Times Nat _) (Times Bool _) (Times _ _) _ (fun x => (fst x == n, f (snd x))) snd
-       (sta_swi_base b p).
+(*Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Proc I O) :=
+  @map (Times Nat _) (Times Bool _) _ _ (fun x => (fst x == n, f (snd x))) id
+       (sta_swi_base b p).*)
 
 
 (*Definition sta_swi_base (I O : Ty) (b : bool) (p : Proc I O) :=
@@ -1228,7 +1399,7 @@ Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Pro
        (fun i v => xor (fst i) v)
        (fun o v => false)
        b
-       (swi b (@map (Times Bool _) (Option_maybe _) _ (Times Bool _)
+       (swi b (@map (Times Bool _) (Option _) _ (Times Bool _)
                     (fun i => if fst i then Some (snd i) else None)
                     (fun o => (true,o))
                     (maybe p)
@@ -1242,20 +1413,20 @@ Definition sta_swi (I' I O : Ty) (b : bool) (n : nat) (f : [I'] -> [I]) (p : Pro
        (fun i v => xor (fst i) v)
        (fun o v => false)
        b
-       (swi b (@map (Times Bool _) (Option_maybe _) _ (Times Bool _)
+       (swi b (@map (Times Bool _) (Option _) _ (Times Bool _)
                     (fun i => if fst i then Some (snd i) else None)
                     (fun o => (true,o))
                     (maybe p)
   ))).*)
 
 
-Lemma sta_swi_NI I' I O b n (p : Proc I O) (f : [I'] -> [I]) (IRel' : myrel [I']) (ORel : myrel [O]) : NI (eqpair (privateRel _) IRel) (eqmaybe_swi ORel) (sta_swi b n f p).
+(*Lemma sta_swi_NI I' I O b n (p : Proc I O) (f : [I'] -> [I]) (IRel' : myrel [I']) (ORel : myrel [O]) : NI (eqpair (privateRel _) IRel) (eqmaybe_swi ORel) (sta_swi b n f p).*)
 
 
 
 
 Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3)
-  : Proc (Times Nat (Times I1 (Times I2 I3))) (Times (Option_swi O1) (Times (Option_swi O2) (Option_swi O3))) :=
+  : Proc (Times Nat (Times I1 (Times I2 I3))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
     par
       (@sta_swi (Times _ _) _ O1 (n == 0) 0 fst p1)
       (par
@@ -1266,7 +1437,7 @@ Definition par_swiI3 {I1 I2 I3 O1 O2 O3} (n : nat) (p1 : Proc I1 O1) (p2 : Proc 
 
 (*Types used in all examples*)
 Definition ExInputType := Times TInput TInput.
-Definition ExOutputType := Times (Option_swi TOutput) (Option_swi TOutput).
+Definition ExOutputType := Times (Option TOutput) (Option TOutput).
 
 Definition streamType := Stream ([TInput] + (([ExOutputType]))).
 
@@ -1319,7 +1490,7 @@ Definition p_high := @out TInput TOutput Step.
 Definition p_low := @out TInput TOutput Idle.
 Definition process_pool := par_swiI false p_high p_low. (*both p_high and p_low receive inputs no matter who was scheduled. This is because par_swiI does not filter input. p_high and p_low don't change state based on input so it is fine in this example*)
 
-Definition scheduler (p : Proc (Times Bool (Times TInput TInput)) (Times (Option_swi TOutput) (Option_swi TOutput))) :=
+Definition scheduler (p : Proc (Times Bool (Times TInput TInput)) (Times (Option TOutput) (Option TOutput))) :=
   @map _ (Times Bool (Times TInput TInput)) _ _ (fun (i : [TInput]) => (i == DiskRead,(i,i))) id p.
 
 (*Trace*)
@@ -1442,7 +1613,7 @@ Proof.
   ssa.
 Qed.*)
 
-Lemma SimulationF_I_imp : forall I O l (IRel IRel' : myrel [I]) (ORel : myrel [O]) R s p,
+(*Lemma SimulationF_I_imp : forall I O l (IRel IRel' : myrel [I]) (ORel : myrel [O]) R s p,
     (forall l x, dis IRel' l x -> dis IRel l x) ->
     (forall l x y, rel IRel l x y <-> rel IRel' l x y) ->
     SimulationF l IRel ORel R s p ->
@@ -1453,17 +1624,62 @@ Proof.
   rewrite /Clause2. ssa. 
   rewrite /Clause3. ssa.
   move: H4. rewrite /Clause3. ssa. eapply H4 in H6;eauto. apply/H0. done.
+Qed.*)
+
+Lemma SimulationF_I_imp : forall I O l (IRel IRel' : myrel [I]) (ORel : myrel [O]) R s p,
+    (forall l x, dis IRel' l x -> dis IRel l x) ->
+    (forall l x y, rel IRel' l x y -> rel IRel l x y) ->
+    SimulationF l IRel ORel R s p ->
+    SimulationF l IRel' ORel R s p.
+Proof.
+  intros. inv H1. con;eauto.
+  move: H2. rewrite /Clause1. intros.
+  apply/H2. eauto. eauto.
+  move: H3. rewrite /Clause2. intros.
+  apply H in H6. apply H3 in H6. ssa.
+  econ. con. eauto. done.
+  move: H4.
+  rewrite /Clause3. intros.
+  eapply H4 in H6. ssa. econ. eauto. eauto.
 Qed.
 
-
-Lemma simulation_I_imp : forall I O (IRel IRel' : myrel [I]) (ORel : myrel [O]) p,
-    (forall l x, dis IRel' l x -> dis IRel l x) -> (forall l x y, rel IRel l x y <-> rel IRel' l x y) -> NI I O IRel ORel p -> NI I O IRel' ORel p.
+Lemma NI_I_imp : forall I O (IRel IRel' : myrel [I]) (ORel : myrel [O]) R,
+    (forall l x, dis IRel' l x -> dis IRel l x) ->
+    (forall l x y, rel IRel' l x y -> rel IRel l x y) ->
+    NI _ _ IRel ORel R ->
+    NI _ _ IRel' ORel R.
 Proof.
   intros. 
   intros. rewrite /NI. intros. eapply H1 in H2.
   move: H2. instantiate (1:=l).
   apply:paco2_imp. apply monotone_SimulationF.
   intros. apply/SimulationF_I_imp. 3:eauto. eauto. eauto.
+Qed.
+
+
+Lemma SimulationF_O_imp : forall I O l (IRel : myrel [I]) (ORel ORel' : myrel [O]) R s p,
+(*    (forall l x, dis ORel l x -> dis ORel' l x) ->*)
+    (forall l x y, rel ORel l x y -> rel ORel' l x y) ->
+    SimulationF l IRel ORel R s p ->
+    SimulationF l IRel ORel' R s p.
+Proof.
+  intros. inv H0. con;eauto.
+  move: H4.
+  rewrite /Clause4. intros. apply H4 in H5. ssa.
+  econ. con. apply/H. apply:H5. econ. con. eauto. done.
+Qed.
+
+Lemma NI_O_imp : forall I O (IRel : myrel [I]) (ORel ORel' : myrel [O]) R,
+(*    (forall l x, dis ORel l x -> dis ORel' l x) ->*)
+    (forall l x y, rel ORel l x y -> rel ORel' l x y) ->
+    NI _ _ IRel ORel R ->
+    NI _ _ IRel ORel' R.
+Proof.
+  intros. 
+  intros. rewrite /NI. intros. eapply H0 in H1.
+  move: H1. instantiate (1:=l).
+  apply:paco2_imp. apply monotone_SimulationF.
+  intros. apply/SimulationF_O_imp. 2:eauto. eauto. 
 Qed.
 
 (*Lemma iNI_add_L : forall I V O (p : Proc (Times V I) O) VRel IRel ORel,
@@ -1503,7 +1719,7 @@ Definition InputRel : myrel ([TInput]).
 Defined.  
 (*Definition InputRelPublic : myrel ([TInput]) := publicRel TInput.*)
 
-Example hl_lp_NI : @NI TInput (Times (Option_swi TOutput) (Option_swi TOutput))
+Example hl_lp_NI : @NI TInput (Times (Option TOutput) (Option TOutput))
                      InputRel (*InputRel*)
                      (eqpair (eqmaybe_swi (publicRel TOutput)) (eqmaybe_swi (publicRel TOutput))) (*OutputRel*)
                      (scheduler process_pool).
@@ -1557,10 +1773,10 @@ Definition handler := @map _ (Sum _ _) (Sum _ (Times Bool Unit)) THandlerOutput
 
 Definition process_pool := par_swiI3 0 (maybe low_p) (maybe high_p) (maybe handler). (*we end up with a double maybe because par_swiI3 also wraps maybe around the processes. We want this. The outer maybe discards irrelevant input while the latter maybe allows us to write default values in our traces, such as (None,(Some i),None) for input to high process*)
 
-(* Scheduler *) Print Option_maybe.
-Definition InputType := (Times (Option_maybe TInput) (Times (Option_maybe THandlerOutput) (Option_maybe TInterrupt))).
+(* Scheduler *) Print Option.
+Definition InputType := (Times (Option TInput) (Times (Option THandlerOutput) (Option TInterrupt))).
 Definition NInputType := Times Nat InputType.
-Definition OutputType :=  (Times (Option_swi TPublicOutput) (Times (Option_swi TTypeSyscall) (Option_swi THandlerOutput))).
+Definition OutputType :=  (Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Option THandlerOutput))).
 Definition IOType := Sum InputType OutputType.
 
 
@@ -1570,7 +1786,7 @@ Definition route_aux (state_type : Ty) (x : [IOType]) :=
                           match x with
                           | inl i' => i' (*inl = input*)
                           | inr (None,(None,Some h)) => (None,(Some h,None)) (*inr = output from handler rerouted as input to high process *)
-                          | inr _ => (None,(None,None)) (*inr = output that is discarded, but n is used to ac*)
+                          | inr _ => (None,(None,None)) (*inr = output that is discarded*)
                           end.
 
 Definition route (state_type : Ty) (to_schedule : [state_type] -> nat) (x : [Times state_type IOType]) :=
@@ -1734,6 +1950,13 @@ Qed.
 Example simple_trace : trace ex3b_stream (bad_scheduler process_pool).
 Proof.
   pcofix CIH.
+(*  Print bundle.
+  Print bundle.
+  pfold. rewr. appTrace.
+  reduce_once. rewrite /outf. instantiate (1 := inr (Some GetRequest,(None,None))). done.
+  reduce_once. reduce_once.
+  2: { reduce_once. econ. reduce_once. econ. reduce_once. reduce_once. econ.
+  *)     
   bundle. left.  (*1 Get*)
   bundle. left.  (*1 Get*)
   bundle. left.  (*2 Sys*)
@@ -1885,7 +2108,7 @@ Definition mitigator := @scheduler state_type2 (fun _ v => v) (fun _ v => inc_st
 
 Ltac rewr ::=  (try rewrite ex3_stream_eq); rewrite /par_swiI /bad_scheduler /process_pool /low_p  /ex3_streamF /bad_scheduler /process_pool /par_swiI3 /high_p /handler /sta_swi /scheduler /mitigator.
 
-Hint Resolve InputTypeRel OutputTypeRel eqsum : rels.
+Hint Resolve InputTypeRel OutputTypeRel eqsum_LR : rels.
 
 (*Lemma to_rel_eq (A : Ty) l x y  : rel (# A) l x y -> x = y.
 Proof. ulock.
@@ -1968,24 +2191,26 @@ Proof.
   ssa.
 Qed.
 
+(*swi_NI shows (swi b p) is NI (eqpair_LR VRel IRel) ORel
+  Sometimes we need the stronger property (eqpair_R VRel IRel), or do we?? *)
 Lemma swi_NI'
      : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I (Times Bool O)) (b : bool),
        NI I (Times Bool O) IRel (eqpair_LR (privateRel Bool) ORel) p ->
        (forall l : Order.TBLattice.sort level, aware (privateRel Bool) true l \/ oblivious (eqpair_R (privateRel Bool) ORel) p l) ->
-       NI (Times Bool I) (Option_swi O) (eqpair_R (privateRel Bool) IRel) (eqmaybe_swi ORel) (swi b p).
+       NI (Times Bool I) (Option O) (eqpair_R (privateRel Bool) IRel) (eqmaybe_swi ORel) (swi b p).
 Proof.
   intros.
-  apply/simulation_I_imp. 3: { apply/swi_NI. eauto. eauto. }
-                        ssa. ssa.
-  con. ssa. ssa. de H1.
+  apply/NI_I_imp. 3: { apply/swi_NI. eauto. eauto. }
+                ssa. ssa.
+  de H1.
 Qed.
 
 Definition InputRel3 := eqmaybe (semiprivateRel TInterrupt).
-Definition InputRel2 := eqpair_OR (eqmaybe (semiprivateRel THandlerOutput)) InputRel3.
-Definition InputRel : myrel [InputType] := eqpair_R (eqmaybe (publicRel TInput)) InputRel2.
+Definition InputRel2 := eqpair_LR (eqmaybe (semiprivateRel THandlerOutput)) InputRel3.
+Definition InputRel : myrel [InputType] := eqpair_L (eqmaybe_top (publicRel TInput)) InputRel2.
 
-Definition OutputRel : myrel [OutputType] := eqpair_R (eqmaybe_swi (publicRel TPublicOutput))
-                                               (eqpair_OR (eqmaybe_swi (semiprivateRel TTypeSyscall)) (eqmaybe_swi (semiprivateRel THandlerOutput))).
+Definition OutputRel : myrel [OutputType] := eqpair_L (eqmaybe_top (publicRel TPublicOutput))
+                                               (eqpair_LR (eqmaybe_swi (semiprivateRel TTypeSyscall)) (eqmaybe_swi (semiprivateRel THandlerOutput))).
 
 Ltac mrw := rewrite /f_NI /f_PU /fv_NI /f_EP.
 
@@ -1994,6 +2219,12 @@ Check f_NI.
 (*Lemma f_NI_inl : forall (A B : Ty) ARel BRel, f_NI (eqpair ARel BRel) ARel inl.*)
 
 Lemma rel_eqpair : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, 
+    rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2 -> rel (eqpair ARel BRel) l a b.
 Proof.
   ssa.
 Qed.
@@ -2008,7 +2239,22 @@ Proof.
   ssa.
 Qed.*)
 
-Lemma rel_eqpair_R2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 b1 /\ rel BRel l a2 b2 -> rel (eqpair_R ARel BRel) l (a1,a2) (b1,b2).
+Lemma rel_eqpair_R2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 a2 /\ rel BRel l b1 b2 \/ dis BRel l b1 /\ dis BRel l b2 -> rel (eqpair_R ARel BRel) l (a1,b1) (a2,b2).
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_R2' : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2, rel (eqpair_R ARel BRel) l (a1,a2) (b1,b2) -> rel ARel l a1 b1 /\ rel BRel l a2 b2  \/ dis BRel l a2 /\ dis BRel l b2.
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_L2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 a2 /\ rel BRel l b1 b2 \/ dis ARel l a1 /\ dis ARel l a2 -> rel (eqpair_L ARel BRel) l (a1,b1) (a2,b2).
+Proof.
+  ssa.
+Qed.
+
+Lemma rel_eqpair_L2' : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2, rel (eqpair_L ARel BRel) l (a1,b1) (a2,b2) -> rel ARel l a1 a2 /\ rel BRel l b1 b2  \/ dis ARel l a1 /\ dis ARel l a2.
 Proof.
   ssa.
 Qed.
@@ -2028,6 +2274,35 @@ Proof.
   ssa. de H. de H. de H0.
 Qed.*)
 
+Lemma dis_eqpair_R : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis (eqpair_R ARel BRel) l (a,b) -> dis BRel l b.
+Proof.  
+  intros. ssa.
+Qed.
+
+Lemma dis_eqpair_R2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis BRel l b -> dis (eqpair_R ARel BRel) l (a,b).
+Proof.  
+  intros. ssa.
+Qed.
+
+Lemma dis_eqpair_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis (eqpair_L ARel BRel) l (a,b) -> dis ARel l a.
+Proof.  
+  intros. ssa.
+Qed.
+
+Lemma dis_eqpair_L2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis ARel l a -> dis (eqpair_L ARel BRel) l (a,b).
+Proof.  
+  intros. ssa.
+Qed.
+
+Lemma dis_eqpair_LR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis (eqpair_LR ARel BRel) l (a,b) -> dis ARel l a /\ dis BRel l b.
+Proof.  
+  intros. ssa.
+Qed.
+
+Lemma dis_eqpair_LR2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis ARel l a /\ dis BRel l b -> dis (eqpair_LR ARel BRel) l (a,b).
+Proof.  
+  intros. ssa.
+  Qed.
 
 
 Lemma f_NI_snd_eqpair : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair ARel BRel) BRel snd. 
@@ -2057,6 +2332,30 @@ Qed.*)
 
 Hint Resolve f_NI_snd_eqpair (*f_NI_snd_eqpair_L f_NI_snd_eqpair_R*) f_NI_snd_eqpair_LR (*f_NI_snd_eqpair_OR*) : tempdb.
 
+Lemma rel_eqsum_LR : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum_LR ARel BRel) l (inl a1) (inl a2). 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_LR2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel BRel l b1 b2 -> rel (eqsum_LR ARel BRel) l (inr b1) (inr b2). 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_LR' : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,rel (eqsum_LR ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_LR2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel (eqsum_LR ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Proof. ssa.
+Qed.
+
+Lemma dis_eqsum_LR : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis ARel l a -> dis (eqsum_LR ARel BRel) l (inl a). 
+Proof. ssa.
+Qed.
+
+Lemma dis_eqsum_LR' : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,  dis (eqsum_LR ARel BRel) l (inl a) -> dis ARel l a. 
+Proof. ssa.
+Qed.
+
 Lemma rel_eqsum : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum ARel BRel) l (inl a1) (inl a2). 
 Proof. ssa.
 Qed.
@@ -2065,16 +2364,69 @@ Lemma rel_eqsum2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : my
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis ARel l a -> dis (eqsum ARel BRel) l (inl a). 
+Lemma rel_eqsum' : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,rel (eqsum ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
 Proof. ssa.
 Qed.
 
-Example dis_test : dis InputRel \bot (None, (None, Some DiskInterrupt)).
+Lemma rel_eqsum2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel (eqsum ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_L : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum_L ARel BRel) l (inl a1) (inl a2). 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_L2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel BRel l b1 b2 -> rel (eqsum_L ARel BRel) l (inr b1) (inr b2). 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_L' : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,rel (eqsum_L ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_L2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel (eqsum_L ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Proof. ssa.
+Qed.
+
+Lemma dis_eqsum_L : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis ARel l a -> dis (eqsum_L ARel BRel) l (inl a). 
+Proof. ssa.
+Qed.
+
+Lemma dis_eqsum_L2 : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis (eqsum_L ARel BRel) l (inl a) -> dis ARel l a. 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_R : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum_R ARel BRel) l (inl a1) (inl a2). 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_R2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel BRel l b1 b2 -> rel (eqsum_R ARel BRel) l (inr b1) (inr b2). 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_R' : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,rel (eqsum_R ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
+Proof. ssa.
+Qed.
+
+Lemma rel_eqsum_R2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel (eqsum_R ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Proof. ssa.
+Qed.
+
+Lemma dis_eqsum_R : forall (A B : Ty) (b : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis BRel l b -> dis (eqsum_R ARel BRel) l (inr b). 
+Proof. ssa.
+Qed.
+
+Lemma dis_eqsum_R2 : forall (A B : Ty) (b : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis (eqsum_L ARel BRel) l (inr b) -> dis BRel l b. 
+Proof. ssa.
+Qed.
+
+
+(*Example dis_test : dis InputRel \bot (None, (None, Some DiskInterrupt)).
 ssa. 
-Defined.
+Defined.*)
 
 
-Definition streamTypeb := Stream ([InputType] + [OutputType]). Print OutputType. Print HandlerOutput.
+Definition streamTypeb := Stream ([InputType] + [OutputType]). 
 Definition newtraceFb (s : streamTypeb) := Cons (inr (Some GetRequest,(None,None)))
                                              (Cons (inr (Some GetRequest, (None,None)))
                                              (Cons (inr (None, (None, Some Nothing)))
@@ -2120,24 +2472,456 @@ Proof.
   apply/NS4. intros. match_dd;ssa.
 Qed.*)
 
+
+
+(*Ltac instantiate_eqsum_LR := match goal with
+                          | |- f_NI ?IRel (?ORel : ?T) inl => evar (e : T) ; idtac "hello";unify ORel (@eqsum_LR _ _ IRel e)
+                          | |- f_NI ?IRel ?ORel inr => unify ORel (@eqsum_LR I O  _ ORel);shelve                                                 end.*)
+Lemma rel_eqpair_to_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l x y, rel (eqpair ARel BRel) l x y -> rel (eqpair_L ARel BRel) l x y.
+Proof.
+  ssa.
+Qed.
+
+Lemma simp_pair1 : forall (A B: Type) (a : A) (b : B), (a,b).1 = a.
+Proof. done.
+Qed.
+Lemma simp_pair2 : forall (A B: Type) (a : A) (b : B), (a,b).2 = b.
+Proof. done.
+Qed.
+
+Definition pair_rewr := (simp_pair1,simp_pair2).
+
+Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
+Proof.
+  rewr. rewrite /scheduler.
+  apply/map_NI.
+
+
+
+  apply/loop_NI.
+
+(*    2: { rewrite /InputRel. mrw. intros.
+       instantiate (1:= eqsum_LR _ _). apply/rel_eqsum_LR. eauto. } *)
+  3: { mrw. intros. apply dis_eqsum_LR. eauto. }
+  2: { instantiate (1:= OutputRel). mrw. intros.
+       apply/rel_eqsum_LR. done. }
+  2: { mrw. intros. rewrite /outf. 
+       destruct i. destruct i'. done. 
+       have : dis InputRel l i /\ dis OutputRel l i0. ssa. clear H=> H.
+       destruct H.
+       suff: dis OutputRel l (None,(None,None)). eauto.
+       ssa. intro. subst. destruct i0. destruct o. simpl in H0. done.
+       simpl in H0. done.
+       destruct i'.
+       have : dis InputRel l i0 /\ dis OutputRel l i. ssa. clear H=> H.
+       destruct H.
+       suff: dis OutputRel l (None,(None,None)). eauto.
+       ssa. destruct i0. destruct o. simpl in H. done.
+       ssa.
+       apply rel_eqsum_LR2' in H. done. }
+
+  Check sta_NI.
+
+  apply/map_NI.
+ 
+  2: by apply:f_NI_id.
+  2: by apply:f_PU_id.  
+  2: { instantiate (1:= eqpair _ _). (*applying sta_NI in a moment will instantiate it to this*) mrw. intros.
+       apply rel_eqpair in H. destruct H. eauto. } 
+
+  apply/sta_NI.
+  3: {  mrw. intros. eauto. }
+  instantiate (1:= publicRel _).
+  2: { mrw. intros. simpl in H0. subst. ssa. }
+  2: { mrw. intros. done. } 
+(*  5: { rewrite /f_NI. move=> l i i' /rel_eqpair. case. eauto. }*)
+
+  apply/map_NI.
+  2: { mrw. intros. destruct i. destruct i'.
+       instantiate (1:= eqpair_R (publicRel _) InputRel).
+
+       apply rel_eqpair_R2' in H.
+       apply/rel_eqpair_R2.
+       destruct H. left. destruct H. con. simpl.
+       simpl in H. subst. done. simpl in H. subst.
+       rewrite /route_aux. admit.
+       destruct H. right. con. clear H0. ssa.
+       destruct i0. de p.  de p. de o. de p. de o. de o0.
+
+       clear H. ssa. de i2.
+       de p. de o. de p. de o. de o0. }
+
+  2: { mrw. intros.
+       destruct i.
+       rewrite /route.
+       apply dis_eqpair_R in H.
+       apply/dis_eqpair_R2.
+       rewrite /route_aux. destruct i0.
+       apply dis_eqsum_LR' in H. eauto.
+       destruct i0. destruct i1.
+       ssa. de i0. de i1. de i2. }
+
+  2: { mrw. intros. apply/rel_eqsum_LR2. eauto. }
+
+  apply/NI_O_imp.
+  instantiate (1:= eqpair _ _).
+  intros. mrw. rewrite /OutputRel. apply/rel_eqpair_to_L. eauto. 
+  apply/par_NI.
+
+  2: shelve.
+
+  apply/map_NI. (*process 1*) 
+
+  2: { instantiate (1:= eqpair_R _ _). (*sta_NI will instantiate it like this anyway...*) mrw. intros.
+       apply rel_eqpair_R2' in H.
+       apply/rel_eqpair_R2.
+       destruct H. left. con. destruct H.
+       clear H0. have: i.1 = i'.1.  ssa. move=>->. instantiate (1:= publicRel _). done.
+       destruct H. destruct i. destruct i'. destruct i0. destruct i2. rewrite !pair_rewr.
+       rewrite !pair_rewr in H,H0.
+       Search _ (rel (eqpair_L  _ _)).
+       apply rel_eqpair_L2' in H0.
+       destruct H0. destruct H0. eauto.
+       destruct H0. eauto.
+       destruct H. right. con.
+       destruct i. destruct i0. rewrite !pair_rewr.
+       rewrite !pair_rewr in H.
+       Search _ (dis (eqpair_L _ _)).
+       apply dis_eqpair_L in H.
+       rewrihave: rel InputRel l i.2 i'.2. eauto.
+       intros. have: i.2 = i'.2. 
+       
+       apply rel_eqpair_L in H0.
+  apply/sta_NI.
+  apply/simulation_I_imp. (*we use the swap lemma directly instead of swi_NI'*) shelve. shelve.
+  apply/swi_NI.
+  apply/map_NI.
+  apply/maybe_NI.
+  apply/maybe_NI.
+  apply/public_NI.
+
+
+  4: { mrw. intros. apply/rel_eqpair_LR2. con. 2:eauto. shelve. }
+  4: { intros. instantiate (2:= publicRel _). (*not sure???*)
+       left. rewrite /aware. intros. ssa. }
+  9: { mrw. intros. apply rel_eqpair in H. destruct H. eauto. } 
+  shelve. shelve. shelve.
+  shelve. shelve. shelve. shelve. shelve.
+
+  (*process 2*)
+  apply/par_NI.
+  apply/map_NI.
+  apply/sta_NI.
+  apply/simulation_I_imp. shelve. shelve.
+  apply/swi_NI.
+  apply/map_NI.
+  apply/maybe_NI.
+  apply/maybe_NI.
+  instantiate (1:= semiprivateRel _).
+  instantiate (1:= semiprivateRel _).
+  apply/out_NI. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve.
+
+  (*process 3*)
+  apply/map_NI.
+  apply/sta_NI.
+  apply/simulation_I_imp. shelve. shelve.
+  apply/swi_NI.
+  apply/map_NI.
+  apply/maybe_NI.
+  apply/maybe_NI.
+  instantiate (1:= semiprivateRel _).
+  instantiate (1:= semiprivateRel _).
+  (*handler specific*)
+  apply/map_NI.
+  apply/loop_NI.
+  apply/map_NI.
+  apply/sta_NI.
+  apply/out_NI.
+
+
+(*return to this for a lot of progress on proof with many holes*)
 Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
 Proof.
   rewr. rewrite /scheduler.
   apply/map_NI.
   apply/loop_NI.
   apply/map_NI.
-(*  all: try solve [apply:f_NI_id | apply:f_PU_id ].*)
   apply/sta_NI.
 (*  5: { rewrite /f_NI. move=> l i i' /rel_eqpair. case. eauto. }*)
 
   apply/map_NI.
-  apply/par_NI. 2:apply/par_NI.
-  * apply/map_NI. (*process 1*)
-    apply/sta_NI.
-    apply/swi_NI'.
-    apply/map_NI.
-    apply/public_NI. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve.
-  * apply/
+  apply/par_NI.
+  apply/map_NI. (*process 1*)
+  apply/sta_NI.
+  apply/simulation_I_imp. (*we use the swap lemma directly instead of swi_NI'*) shelve. shelve.
+  apply/swi_NI.
+  apply/map_NI.
+  apply/maybe_NI.
+  apply/maybe_NI.
+  apply/public_NI.
+
+
+  4: { mrw. intros. apply/rel_eqpair_LR2. con. 2:eauto. shelve. }
+  4: { intros. instantiate (2:= publicRel _). (*not sure???*)
+       left. rewrite /aware. intros. ssa. }
+  9: { mrw. intros. apply rel_eqpair in H. destruct H. eauto. } 
+  shelve. shelve. shelve.
+  shelve. shelve. shelve. shelve. shelve.
+
+  (*process 2*)
+  apply/par_NI.
+  apply/map_NI.
+  apply/sta_NI.
+  apply/simulation_I_imp. shelve. shelve.
+  apply/swi_NI.
+  apply/map_NI.
+  apply/maybe_NI.
+  apply/maybe_NI.
+  instantiate (1:= semiprivateRel _).
+  instantiate (1:= semiprivateRel _).
+  apply/out_NI. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve.
+
+  (*process 3*)
+  apply/map_NI.
+  apply/sta_NI.
+  apply/simulation_I_imp. shelve. shelve.
+  apply/swi_NI.
+  apply/map_NI.
+  apply/maybe_NI.
+  apply/maybe_NI.
+  instantiate (1:= semiprivateRel _).
+  instantiate (1:= semiprivateRel _).
+  (*handler specific*)
+  apply/map_NI.
+  apply/loop_NI.
+  apply/map_NI.
+  apply/sta_NI.
+  apply/out_NI.
+
+  (*side conditions left*)
+  Unshelve.
+  all: try solve [apply:f_NI_id | apply:f_PU_id  ].
+
+  shelve.
+  shelve.
+  shelve.
+  instantiate (1:= eqsum_L _ _). (*trying eqsum instead of eqsum_LR, only occurence of eqsum in working part of the proof so this is a safe bet*)
+  intro. intros. apply/rel_eqsum_L2. eauto.
+  mrw. intros.  eapply rel_eqsum_L2. eauto.
+  mrw. intros. Check dis_eqsum_L. apply/dis_eqsum_L. done.
+  shelve.
+  shelve.
+  shelve.
+  mrw. intros. apply/rel_eqpair2. con. 2:eauto. simpl. shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  mrw. intros. apply rel_eqpair in H. destruct H. eauto.
+  shelve.
+  shelve.
+  mrw. intros. apply rel_eqsum_L2. eauto.
+  shelve.
+  shelve.
+  shelve.
+  mrw. intros. apply rel_eqpair in H. destruct H. eauto.
+  mrw. intros. apply/rel_eqsum_L. eauto.
+  mrw. intros. apply/dis_eqsum_L. auto.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  done.
+  shelve. (*this should probably just be publicRel *)
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  mrw. intros. apply/rel_eqpair2. con. simpl. shelve. eauto.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  mrw. intros. apply rel_eqpair in H. destruct H. eauto.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+  shelve.
+
+
+
+
+  (*This was first pass*)
+  Unshelve.
+(*  mrw. intros. eauto.*)
+(*  16: { instantiate (2:= publicRel _). shelve. }
+  38: { instantiate (2:= publicRel _). shelve. }
+  9: { instantiate (1:= publicRel _);shelve. }
+  instantiate (1:= publicRel _);shelve.
+  instantiate (1:= publicRel _);shelve.
+  22: { instantiate (3:= publicRel _);shelve. }
+  33: { instantiate (2:= publicRel _);shelve. }
+  8: { instantiate (1:= publicRel _);shelve. }*)
+
+  mrw. intros. ssa.
+  3: shelve.
+  20: shelve.
+  20: shelve.
+  20: shelve.
+  20: shelve.
+  22: shelve.
+  22: shelve.
+  30: shelve.
+  30: shelve.
+  32: shelve.
+  32: shelve.
+  41: shelve.
+  41: shelve.
+  43: shelve.
+  43: shelve.
+  43: shelve.
+  43: shelve.
+  3: shelve.
+  21: { instantiate (1:= publicRel _). simpl. done. (*??*) }
+  3: { mrw. intros. destruct i.
+       destruct i';ssa. destruct i'. ssa.
+       apply rel_eqsum_L2' in H. destruct i. destruct i0.
+       apply rel_eqpair in H. destruct H. simpl in H,H0. shelve. }
+  all: rewrite /route. all: ssa.
+  13: { mrw. intros. rewrite /outf.
+        destruct i. destruct i'. 2:ssa.
+        apply rel_eqsum_L' in H. done.
+        destruct i'. ssa.
+        apply rel_eqsum_L2' in H. ssa. }
+  10: { mrw. intros. destruct i. destruct i'.
+        apply rel_eqpair_R2' in H. shelve. } Print f_EP.
+  (*  9: { mrw. intros. destruct i. simpl. apply dis_eqpair_LR in H. destruct H.*)
+
+  12: { Print InputType. move: H. instantiate (1:= publicRel _). ssa. }
+  13: { simpl. con. intros. left. move: H.
+        instantiate (1:= publicRel _).
+        instantiate (1:= publicRel _).
+        simpl.
+        done.
+        case. done. ssa. }
+  12: done.
+  29: eauto.
+  19: eauto.
+
+
+  (*big choice, make bool public, arriving in left disjunct aware*)
+  5: { instantiate (1:= publicRel _). left. rewrite /aware. ssa. }
+  11: { mrw. intros. ssa. subst. de i'. }
+  11: { mrw. intros. ssa. }
+  12: { mrw. intros. ssa. }
+  11: { mrw. intros. ssa. subst. done. }
+  (*big choice, again public*)
+  3: { instantiate (1:= publicRel _). mrw. intros. ssa. subst. de i'. }
+  3: { mrw. ssa. }
+  (*minor choice, it's a consequence of the rest*)
+  21: { simpl. instantiate (1:= publicRel _). con. ssa.
+        ssa. de H. de H. }
+  3: { mrw. ssa. subst. done. }
+  3: { mrw. intros. ssa. }
+  11: { instantiate (1:= publicRel _). mrw. ssa. subst. de i'. }
+  10: { simpl. con. intros. left. destruct H. con. eauto. done.
+        case. auto. case. intros. destruct a. }
+  16: { ssa. } 
+  10: { mrw. ssa. } 
+  9: { simpl in H. destruct H. }
+  11: { mrw. intros. simpl in H. destruct H. }
+  5: { mrw. intros. destruct i. simpl. apply dis_eqpair_R in H. destruct i0. 2:done. apply dis_eqsum_L2 in H. shelve. }
+  6: { mrw. intros. 
+  8: { mrw. intros. simpl. move: H.
+       (*also a public choice*)
+       instantiate (1:= publicRel _). done. }
+  10: { mrw. ssa. subst. done. }
+  10: { mrw. intros. ssa. }
+  3: { mrw. intros. ssa. subst. done. }
+  3: { mrw. ssa. }
+  5: {  mrw. intros. ssa. subst. done. }
+  3: { (*there is a problem here. We must replace eqsum_LR with something where distinguish relation is empty. Or maybe it depends on left, right. Let me check, we only need left to be excluded from distinguishability*)
+    mrw. intros. destruct i.
+    apply dis_eqpair_R in H. simpl.
+    destruct i0. 2:done. apply dis_eqsum_L2 in H. destruct i0.
+    apply dis_eqpair_R in H. destruct i1.
+    ssa. de i0. de p. de o0. destruct H. admit. de o1. admit. de H. de o1. admit. } de s. de p0. de p0. de o0. de H.
+  Unshelve.
+  14: {  ssa.
+   32: { mrw. intros.
+
+        2: {  simpl. destruct H. rewrite /route_aux.
+              rewrite /to_schedule2.
+              simpl in H.
+  3: { mrw. intros. simpl.
+        Check rel_eqsum_LR'. apply rel_eqsum_LR' in H. ssa. de i'.
+       apply rel_eqsum_LR
+       Search _ (rel (eqsum_LR _ _)).
+
+  
+  2: { mrw. intros. simpl in H.
+  Unshelve.
+  6: { mrw. intros. simpl. auto.
+
+  
+  mrw. intros. apply H0. (*Maybe wrong*)
+  5
+  
+  
+  25: instantiate (1:= eqsum_LR InputRel _);shelve.
+    instantiate_eqsum_LR.
+    Set Printing All. instantiate (1:= eqsum_LR InputRel _).
+        mrw. instantiate_eqsum_LR.   mrw. intros.
+          
+
+  
+
+  25: { (*instantiate (1:= eqsum_LR InputRel _);shelve.*)
+
+      
+test.
+
+
+
+  
+  apply/out_NI. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve. shelve.
+
+
+
+
+
+
+      
+      
+
+    
+  * 
   apply/sta_NI. 
   apply/swi_NI'.
   apply/map_NI.
@@ -2209,7 +2993,7 @@ Proof.
 7: eauto.
 7: eauto.
 57: eauto.
-56:eauto.
+56:eauto
 30: apply:to_rel.
 30: apply:to_rel.
 31: apply:to_rel.
@@ -2226,9 +3010,9 @@ Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
 Proof.
   rewr. rewrite /scheduler.
   apply/map_NI.
-  2: { instantiate (1:= eqsum InputRel OutputRel). mrw. intros. apply/rel_eqsum. eauto. }
-  2: { mrw. intros. apply/dis_eqsum. eauto. }
-  2: { mrw. instantiate (1:= eqsum InputRel OutputRel). ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. } 
+  2: { instantiate (1:= eqsum_LR InputRel OutputRel). mrw. intros. apply/rel_eqsum_LR. eauto. }
+  2: { mrw. intros. apply/dis_eqsum_LR. eauto. }
+  2: { mrw. instantiate (1:= eqsum_LR InputRel OutputRel). ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. } 
 
   apply/loop_NI.
   apply/map_NI.
@@ -2264,10 +3048,10 @@ Proof.
                                              Maybe it is possible to change to semiprivateRel but it does not seem worth pursuing right now. *) }
          done.
          all: shelve. }
-    4: { Unshelve. 4: eapply eqsum. all:shelve. }
+    4: { Unshelve. 4: eapply eqsum_LR. all:shelve. }
     7: { mrw. move=> l i i' /rel_eqpair. case. eauto. }
-    7: { mrw. intros. apply/rel_eqsum. eauto. }
-    7: { mrw. intros. apply/dis_eqsum. done. }
+    7: { mrw. intros. apply/rel_eqsum_LR. eauto. }
+    7: { mrw. intros. apply/dis_eqsum_LR. done. }
     7: { mrw. instantiate (1:= OutputRel). ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
     (*at this point we still have not chosen a privacy level for the state (currently named ?m), nor the routed messsage (currently named ?Goal2).
      The routed message should be an eqpair of a nat and InputRel. But I am not sure between eqpair_LR and eqpair_R. I guess eqpair_R but only because that is what we use to join the state to the IOType (Input + Output
@@ -2280,7 +3064,7 @@ Proof.
          have: i.2 = i'.2. ssa. de i. de s. de i'. de s. de p0. de p0. de p2. de p0. subst. done. de i'.
          de s. de p0. de p2. de p0. de p2. subst. done.
          move=>->. ssa.
-         mrw. intros. apply/rel_eqsum2. eauto. Print OutputRel.
+         mrw. intros. apply/rel_eqsum_LR2. eauto. Print OutputRel.
  
 
 Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
@@ -2315,10 +3099,10 @@ Proof.
                                              Maybe it is possible to change to semiprivateRel but it does not seem worth pursuing right now. *) }
          done.
          all: shelve. }
-    4: { Unshelve. 4: eapply eqsum. all:shelve. }
+    4: { Unshelve. 4: eapply eqsum_LR. all:shelve. }
     7: { mrw. move=> l i i' /rel_eqpair. case. eauto. }
-    7: { mrw. intros. apply/rel_eqsum. eauto. }
-    7: { mrw. intros. apply/dis_eqsum. done. }
+    7: { mrw. intros. apply/rel_eqsum_LR. eauto. }
+    7: { mrw. intros. apply/dis_eqsum_LR. done. }
     7: { mrw. instantiate (1:= OutputRel). ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
     (*at this point we still have not chosen a privacy level for the state (currently named ?m), nor the routed messsage (currently named ?Goal2).
      The routed message should be an eqpair of a nat and InputRel. But I am not sure between eqpair_LR and eqpair_R. I guess eqpair_R but only because that is what we use to join the state to the IOType (Input + Output
@@ -2331,16 +3115,16 @@ Proof.
          have: i.2 = i'.2. ssa. de i. de s. de i'. de s. de p0. de p0. de p2. de p0. subst. done. de i'.
          de s. de p0. de p2. de p0. de p2. subst. done.
          move=>->. ssa.
-         mrw. intros. apply/rel_eqsum2. eauto. Print OutputRel.
+         mrw. intros. apply/rel_eqsum_LR2. eauto. Print OutputRel.
          
     } 
          
          Print clean_rel.
     3: { mrw.
-         Search _ (rel (eqsum _ _)).
+         Search _ (rel (eqsum_LR _ _)).
 
     8: { mrw.  move=> l i i' /rel_eqpair []. eauto. }
-    8: { instantiate (1 := eqsum InputRel OutputRel). done. }
+    8: { instantiate (1 := eqsum_LR InputRel OutputRel). done. }
     8: done.
     8: { mrw. ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
 
@@ -2385,9 +3169,9 @@ Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
 Proof.
   rewr. rewrite /scheduler.
   apply/map_NI.
-  2: instantiate (1:= eqsum InputRel OutputRel);ssa.
+  2: instantiate (1:= eqsum_LR InputRel OutputRel);ssa.
   2: ssa.
-  2: { instantiate (1:=eqsum InputRel OutputRel). mrw. ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
+  2: { instantiate (1:=eqsum_LR InputRel OutputRel). mrw. ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. }
   apply/loop_NI.
   apply/map_NI.
   all: try solve [apply:f_NI_id | apply:f_PU_id ].
@@ -2411,7 +3195,7 @@ Proof.
   
   apply/par_NI.
 
-  5: { rewrite /f_NI. intros. instantiate (1:= eqsum _ (eqpair _ _)).
+  5: { rewrite /f_NI. intros. instantiate (1:= eqsum_LR _ (eqpair _ _)).
        unify ?Goal14 ?IRel0.
        apply rel_eqpair in H.
 
@@ -2500,9 +3284,9 @@ Proof.
 
 
     
-  * apply/map_NI2. mrw. intros. instantiate (1:= eqsum _ _). simpl. eauto.
+  * apply/map_NI2. mrw. intros. instantiate (1:= eqsum_LR _ _). simpl. eauto.
   * mrw. intros. simpl. eauto.
-  * mrw. intros. move: H. instantiate (1:= eqsum InputRel OutputRel). simpl. de i. de i'. de i'. de i'. de i'. de i'. de i'.
+  * mrw. intros. move: H. instantiate (1:= eqsum_LR InputRel OutputRel). simpl. de i. de i'. de i'. de i'. de i'. de i'. de i'.
 
 
     apply/loop_NI.
@@ -2512,7 +3296,7 @@ Proof.
     3: { mrw. eauto. }
     apply/map_NI.
     * mrw. intros. 
-    de i. instantiate (1:= eqsum _ _). rewrite /outf.
+    de i. instantiate (1:= eqsum_LR _ _). rewrite /outf.
   
   NI_tac.
   NI_tac.
@@ -2530,7 +3314,7 @@ Proof.
 
 
   rewrite /process_pool. 
-(*  have: to_rel OutputType = eqpair_LR (Option_swi TPublicOutput) (Times (Option_swi TTypeSyscall) (Option_swi THandlerOutput)) by ssa.*)
+(*  have: to_rel OutputType = eqpair_LR (Option TPublicOutput) (Times (Option TTypeSyscall) (Option THandlerOutput)) by ssa.*)
 (*  move=>->.*)
   apply/NI_add_L/NI_add_R.
   apply:par_NI.
@@ -2615,8 +3399,8 @@ Proof.
                                                simpl.
                                                NI_tac.*)
   NI_tac.
-have:  (to_rel (Option_swi TPublicOutput)) =  (to_rel (Option_swi TPublicOutput)). simpl.
-  have: # (Times Bool (Option_swi TPublicOutput)) = eqpair_LR Bool (Option_swi TPublicOutput). ssa. move=>->.
+have:  (to_rel (Option TPublicOutput)) =  (to_rel (Option TPublicOutput)). simpl.
+  have: # (Times Bool (Option TPublicOutput)) = eqpair_LR Bool (Option TPublicOutput). ssa. move=>->.
 (*  apply/NI_add_L/NI_add_R.*)
   NI_tac.
 
@@ -2670,7 +3454,7 @@ have:  (to_rel (Option_swi TPublicOutput)) =  (to_rel (Option_swi TPublicOutput)
   con. eauto with rels.
   rewrite /f_NI. Print f_NI.
   eauto with rels. eauto with rels.
-  all:ssa. 2: { rewrite /f_NI. intros. have: (eqsum InputType OutputType InputTypeRel OutputTypeRel)
+  all:ssa. 2: { rewrite /f_NI. intros. have: (eqsum_LR InputType OutputType InputTypeRel OutputTypeRel)
                 eauto. apply rel_eq. ssa. de i. de i'. de i'. de i. de i'. de i'. de i. de i'. de i'. } 
 
   unshelve NI_tac.
@@ -2698,8 +3482,8 @@ Check sta_NI.
   Ltac mytest := rewrite /IOType;eauto with rels.
   mytest. mytest.
   un
-  apply eqsum; eauto with rels.
-  NI_tac. instantiate (2:=eqsum _ _ _ _);simpl. 
+  apply eqsum_LR; eauto with rels.
+  NI_tac. instantiate (2:=eqsum_LR _ _ _ _);simpl. 
 2: { Set Printing Implicit. rewrite /f_NI.
 2: { rewrite /f_NI. intros.
 do 2 (try NI_tac).
