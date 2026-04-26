@@ -1,0 +1,5 @@
+-Q . NonInterference
+-arg -w -arg all
+
+### List your files here (one per line)
+model.v

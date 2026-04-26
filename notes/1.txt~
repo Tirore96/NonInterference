@@ -1,0 +1,10 @@
+awareness: Distinguishability should not be included here, agree?
+
+
+swi_NI has multiple use of bool structure and it is not clear what the distinguishability is
+
+In conclusion, input structure is eqpair_LR for bool * I. If no disinguishability for bool, eqpair_LR corresponds to eqpair
+
+
+
+handler signal er fint hvis det er højt, bliver nemlig ikke brugt til scheduling
