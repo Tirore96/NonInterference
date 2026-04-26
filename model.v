@@ -2262,12 +2262,12 @@ Proof.
   de H1.
 Qed.
 
-Definition InputRel3 := eqmaybe (semiprivateRel TInterrupt).
-Definition InputRel2 := eqpair_LR (eqmaybe (semiprivateRel THandlerOutput)) InputRel3.
-Definition InputRel : myrel [InputType] := eqpair_L (eqmaybe_top (publicRel TInput)) InputRel2.
+Definition InputRel3 := eqmaybe_false (semiprivateRel TInterrupt).
+Definition InputRel2 := eqpair_LR (eqmaybe_false (semiprivateRel THandlerOutput)) InputRel3.
+Definition InputRel : myrel [InputType] := eqpair_LR (eqmaybe_top (publicRel TInput)) InputRel2.
 
-Definition OutputRel : myrel [OutputType] := eqpair_L (eqmaybe_top (publicRel TPublicOutput))
-                                               (eqpair_LR (eqmaybe_swi (semiprivateRel TTypeSyscall)) (eqmaybe_swi (semiprivateRel THandlerOutput))).
+Definition OutputRel : myrel [OutputType] := eqpair_LR (eqmaybe_top (publicRel TPublicOutput))
+                                               (eqpair_LR (eqmaybe_false (semiprivateRel TTypeSyscall)) (eqmaybe_false (semiprivateRel THandlerOutput))).
 
 Ltac mrw := rewrite /f_NI /f_PU /fv_NI /f_EP.
 
