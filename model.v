@@ -2565,9 +2565,13 @@ Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
  *)
 (*mitigator process_pool does not work so I will work on new example from now on*)
 
-Definition InputRel' := eqpair_LR (eqmaybe_top (publicRel TPublicInput)) (eqmaybe_false (semiprivateRel THandlerOutput)).
-                                             
-Definition OutputRel' := eqpair_LR (eqmaybe_top (publicRel TPublicOutput))
+Definition Input' := Sum TPublicInput TInterrupt.
+Definition Inter := Sum TPublicInput THandlerOutput.
+Definition Output' := Times (Option TPublicOutput) (Option TTypeSyscall).
+Print Input'. 
+Definition InputRel' : myrel [Input'] := eqsum_R (publicRel _) (semiprivateRel _).
+Print Output'.                                             
+Definition OutputRel' : myrel [Output'] := eqpair_LR (eqmaybe_top (publicRel TPublicOutput))
                            (eqmaybe_false (semiprivateRel TTypeSyscall)).
 
 Definition inl_some {A B : Set} (x : A + B) := if x is inl x' then Some x' else None.
@@ -2586,9 +2590,7 @@ Definition map_sum {A B C D :Set} (f : A -> C) (g : B -> D) := fun (x: A + B) =>
 Definition my_handler (x : [TInterrupt]) : [THandlerOutput]  :=
   if x is DiskInterrupt then Notify else Nothing.
 
-Definition Input' := Sum TPublicInput TInterrupt.
-Definition Inter := Sum TPublicInput THandlerOutput.
-Definition Output' := Times (Option TPublicOutput) (Option TTypeSyscall).
+
 Definition LoopType := Sum Inter Output'.
 Definition collapse_in_out (x : [LoopType]) :=
   match x with
@@ -2679,5 +2681,7 @@ Proof.
   bundle;right.  
   swi_instans. eauto.
 Qed.
+
+Lemma NI_main : @NI _ _ InputRel' OutputRel' (mitigator2 process_pool2).
 
 End Example3.
