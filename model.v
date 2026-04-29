@@ -2654,15 +2654,15 @@ Definition mitigator2 (p : Proc (Times Nat (Option (Sum TPublicInput (Sum THandl
                              (@map _ _ (Times _ _) _
                                 id snd
                                 (@sta _ _ Nat (fun i v => v) (fun o v => (v+1)%%8) 0
-                             (@map (Times Nat (Sum (Sum _ (Sum _ _)) (Times _ (Times _ (Option _))))) (Option (Times Nat (Option (Sum _ (Sum _ _)))))
+                             (@map (Times Nat (Sum (Sum _ (Sum _ _)) (Times _ (Times _ (Option _))))) ((Times Nat (Option (Sum _ (Sum _ _)))))
                                 _ (Sum _ _)
-                                (fun i  => let n := steps_to_proc (fst i) in
+                                (fun i  =>
                                    match snd i with
-                                   | inl i' => Some ((2,Some i')) (*use 2 to make everything false*)
-                                   | inr o  => let o' := if o is (_,(_,Some h)) then Some (inr (inl h)) else None
-                                               in if (fst i)%%2 == 0 then Some (n,o') else Some (2,o')
+                                   | inl i' => ((2,Some i')) (*use 2 to make everything false*)
+                                   | inr o  => let n' := if (fst i)%%2 == 0 then steps_to_proc (fst i) else 2 in (*time for context switch then compute number that supply the correct bools to each of the three processes, else 2 which they all compute as false*)
+                                               if o is (_,(_,Some h)) then (n',(Some (inr (inl h)))) else (n',None) (*if value from handler then route as input to high process otherwise filter the output. n' is responsible for whether this input should result in a context switch*)
                                    end) inr
-                                (maybe p))))).
+                                p)))).
 
 
 
