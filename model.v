@@ -18,6 +18,11 @@ Open Scope order_scope.
 
 Parameter (level : tbLatticeType (Order.Disp tt tt)).
 
+(*Definition unit_indDef := [indDef for option_rect].
+Canonical unit_indType := IndType unit unit_indDef.
+Definition unit_hasDecEq := [derive hasDecEq for unit].
+HB.instance Definition _ := unit_hasDecEq.*)
+
 Ltac con := constructor.
 Ltac econ := econstructor.
 Ltac inv H := inversion H;subst.
@@ -27,8 +32,7 @@ Ltac split_ando :=
   intros;
    repeat
     match goal with
-    | H:is_true (_ && _) |- _ => destruct (andP H); clear H
-    | H:_ && _ = true |- _ => destruct (andP H); clear H
+    | H:is_true (_ && _) |- _ => destruct (andP H); clear H    | H:_ && _ = true |- _ => destruct (andP H); clear H
     | H:_ /\ _ |- _ => destruct H
     | |- _ /\ _ => con
     | |- is_true (_ && _) => apply /andP ; con
@@ -256,6 +260,29 @@ Definition MapRel (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p := ex
 
 (*Lemma MapSP : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p, trace s (map f g p) -> exists s', MapS f g s' s /\ trace s' p.
 Proof.*)
+
+Definition boolRel : myrel ([Bool]).
+  refine (@MyRel _
+            (fun l (b : [Bool]) => b \/ l = \bot)
+            (fun l b1 b2 => b1 = b2 \/  (b1 \/ l = \bot) /\ (b2 \/ l = \bot))
+            _
+            _
+            _
+            _).
+intros.
+con. intro. intros. auto. intro. intros. de H. intro. intros. de H. subst. de H0. de H0. subst. de H.
+intros. de H0. de H0. de H1. subst.
+rewrite /order in H.
+rewrite lex0 in H. rewrite (eqP H). de a0.
+subst.
+rewrite /order in H.
+rewrite lex0 in H. rewrite (eqP H). de a0.
+intros. de H0. subst.
+rewrite /order in H.
+rewrite lex0 in H. right. apply/eqP. done.
+intros. con. intros. de H. de H.
+de H0. de a0.
+Defined.
 
 Definition publicRel (A : Ty) : myrel ([A]).
   refine (@MyRel _
@@ -985,23 +1012,23 @@ Defined.
 
 Definition aware (V : Ty) (VRel : myrel [V]) (v : [V]) : levelPred
   := fun l => (forall v', rel VRel l v v' -> v = v' /\ ~ dis VRel l v').
-Definition boolRel : myrel ([Bool]) := semiprivateRel Bool. (*publicRel Bool.*)
+(*Definition boolRel : myrel ([Bool]) := semiprivateRel Bool.*) (*publicRel Bool.*)
 
 (*Definition Option_presP : presP (fun l => @aware Bool (publicRel Bool) true l).
   rewrite /presP. eauto.
 Defined.*)
 
-Definition eqmaybe_swi {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
+(*Definition eqmaybe_swi {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply: Option_presP.
-Defined.
+Defined.*)
 
 (*Definition Option_presP : presP (fun _ => False).
   rewrite /presP. eauto.
 Qed.*)
 
-Definition eqmaybe_maybe {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
+(*Definition eqmaybe_maybe {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply:Option_presP.
-Defined.
+Defined.*)
 
 Definition eqmaybe_false {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply:Option_presP_false.
@@ -1220,8 +1247,8 @@ Ltac reduce_once_v :=
     | |- reduceI (@swi _ _ _ _) _ _ => apply: reduce_swiI
     | |- reduceI (par _ _) _ _ => apply: reduce_parI
     | |- reduceI (@loop _ _) _ _ => apply: reduce_loopI                                                  
-    | |- reduceI (@maybe _ _ _) None _ => apply: reduce_maybeI
-    | |- reduceI (@maybe _ _ _) (Some _) _ => apply: reduce_maybeI2
+    | |- reduceI (@maybe _ _ _) None _ => idtac "maybe none"; apply: reduce_maybeI
+    | |- reduceI (@maybe _ _ _) (Some _) _ => idtac "maybe some"; apply: reduce_maybeI2
 
     | |- reduceO (@out _ _ _) _ _ => apply: reduce_outO
     | |- reduceO (@map _ _ _ _ _ _ _) ?o _ => idtac "map_out" o;apply: reduce_mapO
@@ -1308,29 +1335,32 @@ Qed.
 
 
 Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O] -> [O']) (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']),
-    NI IRel' ORel p -> 
     f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
+    NI IRel' ORel p ->     
     NI IRel ORel' (map f g p).
 Proof.
 Admitted. 
 
 Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
-    NI (eqpair_R VRel IRel) ORel p -> fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f -> NI IRel (eqpair VRel ORel) (sta f g v p).
+    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
+    NI (eqpair_R VRel IRel) ORel p ->
+    NI IRel (eqpair VRel ORel) (sta f g v p).
 Admitted.
 
  (*fixed typo in paper: In conclusion, replaced I with Bool * I  *) 
-Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (BRel : myrel [Bool]) p b, NI IRel (eqpair_LR BRel ORel) p ->
-(forall l, aware BRel true l \/  oblivious (eqpair_R BRel ORel) p l ) ->                                                                              
-NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel) (swi b p).
+Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (BRel : myrel [Bool]) p b,
+(forall l, aware BRel true l \/  oblivious (eqpair_R BRel ORel) p l ) ->                                                  NI IRel (eqpair_LR BRel ORel) p ->                                
+NI (eqpair_LR BRel IRel) (eqmaybe ORel) (swi b p).
  Admitted.
 
-Theorem maybe_NI : forall (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p -> NI (eqmaybe_maybe IRel) ORel (maybe p).
+Theorem maybe_NI : forall (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p -> NI (eqmaybe_false IRel) ORel (maybe p).
 Admitted.
 
 Theorem loop_NI : forall (I : Ty) (IRel : myrel [I]) p, NI IRel IRel p -> NI IRel IRel (loop p).
 Admitted.
 
-Theorem par_NI : forall (I O1 O2 : Ty) (IRel : myrel [I]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]) p1 p2, NI IRel ORel1 p1 -> NI IRel ORel2 p2 -> NI IRel (eqpair ORel1 ORel2) (par p1 p2).
+Theorem par_NI : forall (I O1 O2 : Ty) (IRel : myrel [I]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]) p1 p2,
+    NI IRel ORel1 p1 -> NI IRel ORel2 p2 -> NI IRel (eqpair ORel1 ORel2) (par p1 p2).
 Admitted.
 
 
@@ -2262,7 +2292,7 @@ Lemma swi_NI'
      : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I (Times Bool O)) (b : bool),
        NI I (Times Bool O) IRel (eqpair_LR (privateRel Bool) ORel) p ->
        (forall l : Order.TBLattice.sort level, aware (privateRel Bool) true l \/ oblivious (eqpair_R (privateRel Bool) ORel) p l) ->
-       NI (Times Bool I) (Option O) (eqpair_R (privateRel Bool) IRel) (eqmaybe_swi ORel) (swi b p).
+       NI (Times Bool I) (Option O) (eqpair_R (privateRel Bool) IRel) (eqmaybe ORel) (swi b p).
 Proof.
   intros.
   apply/NI_I_imp. 3: { apply/swi_NI. eauto. eauto. }
@@ -2272,9 +2302,9 @@ Qed.
 
 Definition InputRel3 := eqmaybe_false (semiprivateRel TInterrupt).
 Definition InputRel2 := eqpair_LR (eqmaybe_false (semiprivateRel THandlerOutput)) InputRel3.
-Definition InputRel : myrel [InputType] := eqpair_LR (eqmaybe_top (publicRel TInput)) InputRel2.
+Definition InputRel : myrel [InputType] := eqpair_LR (eqmaybe_false (publicRel TInput)) InputRel2.
 
-Definition OutputRel : myrel [OutputType] := eqpair_LR (eqmaybe_top (publicRel TPublicOutput))
+Definition OutputRel : myrel [OutputType] := eqpair_LR (eqmaybe_false (publicRel TPublicOutput))
                                                (eqpair_LR (eqmaybe_false (semiprivateRel TTypeSyscall)) (eqmaybe_false (semiprivateRel THandlerOutput))).
 
 Ltac mrw := rewrite /f_NI /f_PU /fv_NI /f_EP.
@@ -2564,45 +2594,84 @@ Definition pair_rewr := (simp_pair1,simp_pair2).
 Theorem mitigator_NI : NI _ _ InputRel OutputRel (mitigator process_pool).
  *)
 (*mitigator process_pool does not work so I will work on new example from now on*)
+Print high_p.
+Definition Input' := Sum TPublicInput (Sum THandlerOutput TInterrupt).
+(*Definition Inter := Sum TPublicInput (Sum THandlerOutput Unit).*)
+Definition Output' := Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Option THandlerOutput)).
 
-Definition Input' := Sum TPublicInput TInterrupt.
-Definition Inter := Sum TPublicInput THandlerOutput.
-Definition Output' := Times (Option TPublicOutput) (Option TTypeSyscall).
-Print Input'. 
-Definition InputRel' : myrel [Input'] := eqsum_R (publicRel _) (semiprivateRel _).
-Print Output'.                                             
-Definition OutputRel' : myrel [Output'] := eqpair_LR (eqmaybe_top (publicRel TPublicOutput))
-                           (eqmaybe_false (semiprivateRel TTypeSyscall)).
+Definition InputRel' : myrel [Input'] := eqsum_LR (publicRel _) (eqsum_LR (semiprivateRel _ ) (semiprivateRel _)).
+(*Definition InterRel : myrel [Inter] := eqsum_R (publicRel _) (semiprivateRel _).*)
+Definition OutputRel' : myrel [Output'] := eqpair_LR (eqmaybe (publicRel _))
+                           (eqpair_LR (semiprivateRel _) (semiprivateRel _)).
 
 Definition inl_some {A B : Set} (x : A + B) := if x is inl x' then Some x' else None.
 Definition inr_some {A B : Set} (x : A + B) := if x is inr x' then Some x' else None.
 
-Definition par_swi {I1 I2 O1 O2 : Ty} (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) : Proc (Option (Sum (Option I1) I2)) (Times (Option O1) (Option O2)) :=
-    @map (Option _) (Times Bool (Option _)) _ _ (fun i => if i is Some i' then (false, Some i') else (true,None)) id
-  (par (swi b (maybe (@map (Sum (Option _) _) (Option _) _ (Times Bool _) (fun i => if i is inl (Some x) then Some x else None) (fun o => (false,o)) (maybe p1))))
-       (swi (negb b) (maybe (@map (Sum _ _) (Option _) _ (Times Bool _) inr_some (fun o => (false,o)) (maybe p2))))).
+Definition inr_inl_some {A B C : Set} (x : A + (B + C)) := if x is inr (inl x') then Some x' else None.
+Definition inr_inr_some {A B C : Set} (x : A + (B + C)) := if x is inr (inr x') then Some x' else None.
+
+Definition is_none (A : Set) (x : option A) := if x is None then true else false.
+
+Definition par_swi {I1 I2 I3 O1 O2 O3 : Ty} (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3) :
+  Proc (Times Nat (Option (Sum I1 (Sum I2 I3)))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
+  (par (@map (Times Nat _) (Times Bool _) _ _ (fun n => ((fst n) == 1,snd n)) id (swi b (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inl_some (fun o => (false,o)) (maybe p1)))))
+       (par (@map (Times Nat _) (Times Bool _) _ _ (fun n => (fst n == 0, snd n)) id (swi (negb b) (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inr_inl_some (fun o => (false,o)) (maybe p2)))))
+       (@map (Times Nat _) (Times Bool _) _ _ (fun n => (fst n != 2, snd n)) id (swi (negb b) (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inr_inr_some (fun o => (false,o)) (maybe p3))))))).
 
 Definition map_sum {A B C D :Set} (f : A -> C) (g : B -> D) := fun (x: A + B) => match x with
                                                                                 | inl x' => inl (f x')
                                                                                 | inr x' => inr (g x')
                                                                                  end.
-
+Definition map_pair {A B C D :Set} (f : A -> C) (g : B -> D) := fun (x: A * B) => match x with
+                                                                                | (x0,x1) => (f x0, g x1)
+                                                                                 end.
 Definition my_handler (x : [TInterrupt]) : [THandlerOutput]  :=
   if x is DiskInterrupt then Notify else Nothing.
 
-
-Definition LoopType := Sum Inter Output'.
+Definition LoopType := Sum Input' Output'.
+Definition LoopTypeRel := eqsum_LR Input' OutputRel'.
 Definition collapse_in_out (x : [LoopType]) :=
   match x with
-  | inl _ => (None,None)
+  | inl _ => (None,(None,None))
   | inr x' => x'
   end.
 
+Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
+
 (*small detail, we need to allow interrupt to pass through even though p1 is scheduled, otherwise we block the handler*)
-Definition mitigator2 (p : Proc (Option (Sum (Option TPublicInput) THandlerOutput)) (Times (Option TPublicOutput) (Option TTypeSyscall))) : Proc Input' Output' :=
+Definition steps_to_proc (n : nat) := (*if n < 2 then n else if n < 4 then 2 + n else n - 2.*)
+  match n with
+  | 0 => 1
+  | 2 => 1
+  | 4 => 0
+  | 6 => 0
+  | _ => 0
+  end.         
+
+Definition mitigator2 (p : Proc (Times Nat (Option (Sum TPublicInput (Sum THandlerOutput TInterrupt)))) (Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Option THandlerOutput)))) : Proc Input' Output' :=
+  @map Input' LoopType LoopType Output' inl collapse_in_out
+                          (@loop LoopType
+                             (@map _ _ (Times _ _) _
+                                id snd
+                                (@sta _ _ Nat (fun i v => v) (fun o v => (v+1)%%8) 0
+                             (@map (Times Nat (Sum (Sum _ (Sum _ _)) (Times _ (Times _ (Option _))))) (Option (Times Nat (Option (Sum _ (Sum _ _)))))
+                                _ (Sum _ _)
+                                (fun i  => let n := steps_to_proc (fst i) in
+                                   match snd i with
+                                   | inl i' => Some ((2,Some i')) (*use 2 to make everything false*)
+                                   | inr o  => let o' := if o is (_,(_,Some h)) then Some (inr (inl h)) else None
+                                               in if (fst i)%%2 == 0 then Some (n,o') else Some (2,o')
+                                   end) inr
+                                (maybe p))))).
+
+
+
+(*small detail, we need to allow interrupt to pass through even though p1 is scheduled, otherwise we block the handler*)
+(*Definition mitigator2 (p : Proc (Option (Sum (Option TPublicInput) THandlerOutput)) (Times (Option TPublicOutput) (Option TTypeSyscall))) : Proc Input' Output' :=
   @map Input' LoopType LoopType Output' (inl \o map_sum id my_handler) collapse_in_out
                           (@loop LoopType
-                           (@map LoopType (Sum (Sum TPublicInput THandlerOutput) Unit) (Times _ _) _ (map_sum id (fun _ => tt)) snd
+                             (@map LoopType (Sum (Sum TPublicInput THandlerOutput) Unit) (Times _ _) _
+                                (map_sum id (fun _ => tt)) snd
                           (@sta _ _ Nat (fun i v => v) (fun o v => (v+1)%%4) 0
                              (@map (Times Nat (Sum (Sum _ _) _)) (Option (Option (Sum (Option _) _)))
                                 _ (Sum _ _)
@@ -2611,42 +2680,40 @@ Definition mitigator2 (p : Proc (Option (Sum (Option TPublicInput) THandlerOutpu
                                    | inl i' => Some (Some (map_sum (fun x => if (fst i) < 2 then Some x else None) id i'))
                                    | inr _  => if (fst i)%%2 == 0 then Some None else None
                                    end) inr
-                                (maybe p))))).
+                                (maybe p))))).*)
 
 (*I think alternate_generic found above is incorrect*)
-Definition alternate_generic2 (A B : Ty) (x y : [B]) :=
+Definition alternate_generic2 (A B : Ty) (x y : [B]) (pred : [A] -> bool) :=
   @map _ (Sum _ _) (Sum _ (Times Bool Unit)) B 
                         inl
                         (fun o => if o is inr (true,tt) then x else y)
                         (@loop (Sum A (Times Bool Unit))
                         (@map (Sum A _) _ _ (Sum _ _) id (fun o => inr o)
                         ((@sta (Sum _ _) _ Bool
-                           (fun i v => if i is inl _ then true else false)
+                           (fun i v => match i with | inl i' => v || pred i' | _ => false end)
                            (fun o v => v)
                            false
                            (@out (Times Bool _ ) Unit tt)
                         )))).
-Definition low_p2 := @alternate_generic2 TPublicInput TPublicOutput GetRequest Public_NOP.
-Definition high_p2 := @alternate_generic2 THandlerOutput TTypeSyscall Syscall NOP.
+Definition low_p2 := @alternate_generic2 TPublicInput TPublicOutput GetRequest Public_NOP (fun _ => true).
+Definition high_p2 := @alternate_generic2 THandlerOutput TTypeSyscall Syscall NOP (fun i => i == Notify).
 
-Definition process_pool2 := par_swi true low_p2 high_p2.
+Definition process_pool2 := par_swi true low_p2 high_p2 handler.
 
 (*We include state change for public process to show that it cannot receive input when it is not scheduled. If we try to consume the output trace that assumes that input has been received then we fail*)
-Definition streamTypec := Stream ([Input'] + [Output']).  Print Input. Print PublicInput.
+Definition streamTypec := Stream ([Input'] + [Output']).  
 Definition newtraceFc (s : streamTypec) :=
-                                           Cons (inl (inl PublicIn)) (*input*)  
-                                          (Cons (inl (inr DiskInterrupt)) (*input*)
-                                          (Cons (inr (Some GetRequest,None)) (*first out*)
-                                          (Cons (inr (Some Public_NOP, None)) (*state change*)
-                                            (Cons (inr (None, Some Syscall)) (*first out*)
-                                            (Cons (inl (inl PublicIn)) (*Should have no effect*) (*(1)*)
-                                            (Cons (inr (None, Some NOP))(*state change*)                                                  
-                                              (Cons (inr (Some Public_NOP,None)) (*Change to GetRequest and see not derivable due to (1)*)
-                                              (Cons (inl (inr DiskInterrupt)) (*interrupt*)
-                                              (Cons (inr (Some Public_NOP,None)) (*low process finishes*)
-                                                (Cons (inr (None,(Some Syscall))) (*it received the input*)
-                                                (Cons (inr (None,(Some NOP))) (*state change*)
-                                                  s))))))))))).         
+                                           Cons (inl (inl PublicIn)) (*input public proc*)  
+                                          (Cons (inl (inr (inr DiskInterrupt))) (*input input private proc*)
+                                          (Cons (inr (Some GetRequest,(None,None))) (*first out*)
+                                          (Cons (inr (Some Public_NOP, (None,None))) (*state change*)
+                                            (Cons (inr (None,(None,Some Notify)))
+                                            (Cons (inr (None,(None,Some Nothing)))
+                                              (Cons (inr (None, (Some Syscall,None))) (*first out*)
+                                              (Cons (inr (None, (Some NOP,None))) (*state change*)
+                                                (Cons (inr (None,(None,Some Nothing)))
+                                                (Cons (inr (None,(None,Some Nothing)))                                                          
+                                                  s))))))))).
 
 CoFixpoint newtracec := newtraceFc newtracec.                                             
 
@@ -2660,7 +2727,7 @@ do ? f_equal.
 Qed.
 
 (*Trace derivation*)
-Ltac rewr ::=  (try rewrite newtracec_eq); rewrite /mitigator /par_swiI3 /sta_swi /low_p /newtraceFb /process_pool /par_swiI /scheduler /handler /high_p /mitigator2 /process_pool2 /par_swi /high_p2 /alternate_generic2 /low_p2. 
+Ltac rewr ::=  (try rewrite newtracec_eq); rewrite /mitigator /par_swiI3 /sta_swi /low_p /newtraceFb /process_pool /par_swiI /scheduler /handler /high_p /mitigator2 /process_pool2 /par_swi /high_p2 /alternate_generic /alternate_generic2 /low_p2. 
 
 Check (mitigator2 process_pool2).
 Lemma newtracec_trace : trace newtracec (mitigator2 process_pool2).
@@ -2675,13 +2742,245 @@ Proof.
   bundle;left.
   bundle;left.
   bundle;left.
-  bundle;left.
-  bundle;left.
-  bundle;left.
-  bundle;right.  
+  bundle;left.  
+  bundle;right.
   swi_instans. eauto.
 Qed.
 
-Lemma NI_main : @NI _ _ InputRel' OutputRel' (mitigator2 process_pool2).
+(*Lemma rel_inl : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), rel (eqsum_L ARel BRel) ((inl \o f) ) ()*)
+(*Lemma eqsum_R2 : forall (A B B' : Ty) l (x y : [A] + [B]) (f : [B] -> [B']) (ARel : myrel [A]) (BRel : myrel [B]) (BRel' : myrel [B']),
+    f_NI BRel BRel' f -> rel (eqsum_R ARel BRel) l x y -> rel (eqsum_R ARel BRel') l x (f y).*)
+Lemma rel_eqsum_LR3 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l x y, rel (eqsum_LR ARel BRel) l x y -> (exists x' y', x = inl x' /\ y = inl y' /\ rel ARel l x' y') \/ (exists x' y', x = inr x' /\ y = inr y' /\ rel BRel l x' y') \/ (exists x' y', x = inl x' /\ y = inr y' /\ dis ARel l x' /\ dis BRel l y') \/  (exists x' y', x = inr x' /\ y = inl y' /\ dis BRel l x' /\ dis ARel l y').
+Proof.
+  intros. destruct x. destruct y. left. exists i. exists i0. con. auto. con. auto.
+  apply rel_eqsum_LR' in H. done.
+  right. right. left. exists i. exists i0. con. auto. con. auto.
+  ssa.
+  destruct y. right. right. right.
+  exists i. exists i0. con. auto. con. auto. ssa.
+  right. left. exists i. exists i0. con. auto. con. auto.
+  apply rel_eqsum_LR2' in H. done.
+Qed.
 
+Lemma interp_eq : (fix interp (t : Ty) : Set :=
+       match t with
+       | Nat => nat
+       | Times t0 t1 => (interp t0 * interp t1)%type
+       | Bool => bool
+       | Option t' => option (interp t')
+       | Sum t0 t1 => (interp t0 + interp t1)%type
+       | TInput => Input
+       | TOutput => Output
+       | TTypeSyscall => TypeSyscall
+       | Unit => unit
+       | TInterrupt => Interrupt
+       | THandlerOutput => HandlerOutput
+       | TPublicOutput => PublicOutput
+       | TPublicInput => PublicInput
+       end) = interp.
+  done.
+Qed.
+
+Lemma rel_top_false : forall (A : Ty) (ARel : myrel [A])l x y, rel (eqmaybe_top ARel) l x y -> rel (eqmaybe_false ARel) l x y.
+Proof.
+  intros. ssa. de x. de H. de y. de H. de y.
+Qed.  
+
+  
+Lemma NI_main : @NI _ _ InputRel' OutputRel' (mitigator2 process_pool2).
+Proof.  
+  rewr. 
+  eapply (@map_NI _ _ _ _ _ _ _ _ LoopTypeRel LoopTypeRel). 
+  
+  mrw. intros. rewrite /comp. apply rel_eqsum_LR. 
+  de i. de i'. de i'. de H. subst. auto.
+
+  mrw. ssa. de i.
+
+  mrw. intros. rewrite /collapse_in_out.
+  de i. de i'. de i. de p. de o. de i'. de i'. de i. de o. de i'.
+  
+  apply loop_NI.
+
+  eapply map_NI.
+
+  mrw. intros.
+  instantiate (1:= eqsum_LR InterRel (semiprivateRel _)).
+  de i. de i'. de i'.
+
+  mrw. intros. de i.
+
+  instantiate (1:= eqpair _ _). mrw. intros.
+  destruct i,i'.
+  rewrite !pair_rewr.
+  apply rel_eqpair in H. destruct H.
+  eauto.
+  
+  eapply sta_NI.
+
+  mrw. intros.
+  instantiate (1:= publicRel _). ssa. (*public rel for state*)
+
+  mrw. intros. done.
+
+  mrw. intros. done.
+
+  eapply map_NI.
+
+  instantiate (1:= eqmaybe_false (eqmaybe_false InterRel)).
+  mrw. intros. destruct i,i'.
+  rewrite !pair_rewr.
+  apply rel_eqpair_R2' in H.
+  destruct H. destruct H.
+
+  apply rel_eqsum_LR3 in H0.
+  destruct H0. destruct H0. destruct H0.
+  destruct H0. destruct H1. subst.
+  have: i = i1. ssa. move=>->.
+  have: is_inr x = is_inr x0. de x. de x0. de x0.
+  move=>->.
+  case_if.
+  apply/rel_eqmaybe.
+  apply/rel_eqmaybe.
+  done.
+  ssa.
+  destruct H0.
+  destruct H0. destruct H0. destruct H0. destruct H1.
+  subst.
+  have: i = i1. ssa. move=>->.
+  case_if. apply/rel_eqmaybe. ssa. ssa.
+
+  destruct H0. destruct H0. destruct H0. destruct H0. destruct H1.
+  destruct H2. subst.
+  have: i = i1. ssa. move=>->.
+  apply/dis_dis_rel. case_if. ssa. ssa.
+  case_if. ssa. ssa.
+  destruct H0. destruct H0. destruct H0. destruct H1. destruct H2.
+  subst.
+  apply/dis_dis_rel. case_if. done. done.
+  case_if. done. done.
+  destruct H.
+  destruct i0. destruct i2.
+  destruct i0. ssa.
+  destruct i2. ssa.
+  rewrite /is_inr orbC. rewrite /orb.
+  case_if. apply dis_dis_rel. done. done. 
+  move: H1. case_if. done. done.
+  destruct i0. ssa. rewrite /is_inr orbC /orb.
+  apply dis_dis_rel. done. case_if. done. done.
+  destruct i2. destruct i2. ssa.
+  rewrite /is_inr orbC /orb. case_if.
+  apply dis_dis_rel. done. done.
+  apply dis_dis_rel. done. ssa.
+  apply dis_dis_rel.
+  case_if. done. done.
+  case_if. done. done.
+
+  mrw. intros. destruct i. rewrite pair_rewr.
+  apply dis_eqpair_R in H.
+  destruct i0. destruct i0. ssa. rewrite !pair_rewr.
+  rewrite /is_inr orbC /orb. ssa.
+  destruct i0. rewrite pair_rewr.
+  case_if. ssa. ssa.
+
+  instantiate (1:= OutputRel').
+  mrw. intros. auto.
+
+(*  eapply NI_I_imp.
+  instantiate (1:= eqmaybe_false (eqmaybe_false InterRel)). ssa.
+  de x.
+  intros. apply rel_top_false. done.*)
+
+  apply maybe_NI.
+
+  eapply map_NI.
+
+  instantiate (1:= eqpair_LR boolRel (eqmaybe_false InterRel)).
+  mrw. intros.
+
+  de i. de i'. de H. de i. de H. de i'. de i'. de s.
+
+  mrw. intros. de i. de i.
+
+  
+
+(*  Check par_NI.
+  
+  apply swi_NI. shelve.
+
+  apply maybe_NI.
+
+  2: { apply swi_NI. shelve. apply maybe_NI. shelve. }
+
+  Unshelve.
+
+  2: { mrw. intros.
+       instantiate (1:= InterRel).
+       instantiate (1:= privateRel _). ssa. } 
+
+
+  instantiate (1:= eqpair_LR (publicRel _) (eqmaybe_top InterRel)). (*None maps to true, so we make the whole bool private to preserve from None*) (*problem in oblivious/output case, now trying publicRel*)
+  mrw. intros.
+  destruct i. destruct i'.
+  apply rel_eqpair_LR2. con. ssa. done.
+  ssa. de H. de i. (*Something interesting happened here, worried this would not be true*)
+  destruct i'.
+  ssa. de H. de i. ssa.
+
+  mrw. intros. de i. de i. de (eqVneq l \bot). exfalso. apply/H.
+  apply/eqP. done.*)
+
+  apply f_NI_id.
+
+  eapply NI_O_imp.
+  instantiate (1:= eqpair _ _).
+  intros. apply rel_eqpair in H. destruct H.
+  destruct x. destruct y.
+(*  Search _ (rel (eqpair_R _ _)).*)
+  apply rel_eqpair_LR2. (*Since switch to *_LR. MAYBE WRONG*)
+  rewrite !pair_rewr in H H0.
+  con. eauto. eauto.
+
+  apply par_NI.
+
+  apply swi_NI.
+
+  intros.
+  right.
+
+  left. rewrite /aware. intros. simpl in H. de H. subst.
+  intro.
+  de (eqVneq l \bot). subst. right.
+
+  pcofix CIH.
+  pfold. con. 
+  intros;match_dd_once;eauto.
+  match_dd_once. match_dd_once.
+  right. eauto. rewrite /inl_some in x. de i0.
+  match_dd. left. pcofix CIH2. pfold. con.
+  intros.
+  match_dd_once. eauto.
+  match_dd_once. match_dd_once.
+  right. eauto.
+  match_dd. right. eauto.
+  
+  intros.
+  match_dd. con. admit. simpl.
+  
+  move: CIH. rewrite /alternate_generic2.
+  left. pfold. con. intros. match_dd_once.
+  admit. 
+  right. eauto.
+  intros;match_dd_once;eauto;left;pfold;con.  
+  match_dd_once. left.
+  pfold. con. intros.
+  match_dd_once. left.
+  pfold. con. intros.
+  match_dd_once. left.
+  pfold. con. intros.
+  match_dd_once.
+  left. rewrite /aware. intros. simpl in H. destruct H. ssa.
+  intro. apply/negP. apply i. apply/eqP. done. move/eqP : H.
+  move/negbTE : i. move=>->. done.
+  
 End Example3.
