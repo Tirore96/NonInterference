@@ -1853,7 +1853,7 @@ Definition high_p := @out THandlerOutput TTypeSyscall Syscall.
 in sta, the state cannot be inspected in the making of the output, resetting the state therefore removes the information we would need to distinguish states.
 Using the loop construct we can turn "on" the Notify output by receiving an input. Sending the Notify output will due to the loop construct, create a new input, tagged with inr, which resets the state
  *)
-Definition alternate_generic (A B : Ty) (x y : [B]) := @map _ (Sum _ _) (Sum _ (Times Bool Unit)) B 
+Definition alternate_generic (A B: Ty) (x y : [B]) := @map _ (Sum _ _) (Sum _ (Times Bool Unit)) B 
                         inl
                         (fun o => if o is inr (true,tt) then x else y)
                         (@loop (Sum A (Times Bool Unit))
@@ -2601,7 +2601,7 @@ Definition Output' := Times (Option TPublicOutput) (Times (Option TTypeSyscall) 
 
 Definition InputRel' : myrel [Input'] := eqsum_LR (publicRel _) (eqsum_LR (semiprivateRel _ ) (semiprivateRel _)).
 (*Definition InterRel : myrel [Inter] := eqsum_R (publicRel _) (semiprivateRel _).*)
-Definition OutputRel' : myrel [Output'] := eqpair_LR (eqmaybe (publicRel _))
+Definition OutputRel' : myrel [Output'] := eqpair_LR (publicRel _) (*also consider eqmaybe publicRel*)
                            (eqpair_LR (semiprivateRel _) (semiprivateRel _)).
 
 Definition inl_some {A B : Set} (x : A + B) := if x is inl x' then Some x' else None.
@@ -2612,32 +2612,185 @@ Definition inr_inr_some {A B C : Set} (x : A + (B + C)) := if x is inr (inr x') 
 
 Definition is_none (A : Set) (x : option A) := if x is None then true else false.
 
-Definition par_swi {I1 I2 I3 O1 O2 O3 : Ty} (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3) :
-  Proc (Times Nat (Option (Sum I1 (Sum I2 I3)))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
-  (par (@map (Times Nat _) (Times Bool _) _ _ (fun n => ((fst n) == 1,snd n)) id (swi b (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inl_some (fun o => (false,o)) (maybe p1)))))
-       (par (@map (Times Nat _) (Times Bool _) _ _ (fun n => (fst n == 0, snd n)) id (swi (negb b) (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inr_inl_some (fun o => (false,o)) (maybe p2)))))
-       (@map (Times Nat _) (Times Bool _) _ _ (fun n => (fst n != 2, snd n)) id (swi (negb b) (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inr_inr_some (fun o => (false,o)) (maybe p3))))))).
+(*the new goal is to make par_swi_N*)
+(*idea is that par_swi p0 p1 : proc V V and p0,p1 : proc V V.
+ This works for input but for output we get par_swi p0 p1 : proc V (V*V)
+ *)
+(*f 0 i = initial configuration for i
+  f 1 i = delta to reached desired next configuration*)
+Fixpoint sum_N n (f : nat -> Ty) : Ty :=
+  let t := f n in
+  match n with
+  | 0 => t
+  | S n' => Sum t (sum_N n' f)
+  end.
 
+Fixpoint times_N n (f : nat -> Ty) : Ty :=
+  let t := f n in
+  match n with
+  | 0 => t
+  | S n' => Times t (times_N n' f)
+  end.
+
+Definition map_option (A B : Set) (f : A -> B) (x : option A) : option B := if x is Some x' then Some (f x') else None.
 Definition map_sum {A B C D :Set} (f : A -> C) (g : B -> D) := fun (x: A + B) => match x with
                                                                                 | inl x' => inl (f x')
                                                                                 | inr x' => inr (g x')
                                                                                  end.
 Definition map_pair {A B C D :Set} (f : A -> C) (g : B -> D) := fun (x: A * B) => match x with
                                                                                 | (x0,x1) => (f x0, g x1)
-                                                                                 end.
-Definition my_handler (x : [TInterrupt]) : [THandlerOutput]  :=
-  if x is DiskInterrupt then Notify else Nothing.
+                                                                                  end.
+Definition Input_n (n : nat) (f_I : nat -> Ty) := sum_N n f_I.
+Definition Output_n (n : nat) (f_O : nat -> Ty) := times_N n (Option \o f_O).
+      
+Definition par_swi_n (n : nat) (f_I f_O : nat -> Ty) (f : nat -> nat -> bool) (f_proc : forall n, Proc (f_I n) (f_O n)) : Proc (Times Nat (Option (Input_n n f_I))) (Output_n n f_O).
+  elim: n.
+  - simpl.
+    eapply map.
+      instantiate (1:= Times Bool (Option (f_I 0))). exact (fun n => (f (fst n) 0,snd n)).
+      exact id. 
+    eapply swi. exact (f 1 0).
+    eapply maybe. 
+    eapply map.
+      eapply id. 
+      exact (fun o => (false,o)).
+    exact (f_proc 0).
 
-Definition LoopType := Sum Input' Output'.
-Definition LoopTypeRel := eqsum_LR Input' OutputRel'.
-Definition collapse_in_out (x : [LoopType]) :=
+  - intros. simpl.
+    eapply par.
+    * eapply map.
+        instantiate (1:= Times Bool (Option (Sum (f_I n.+1) (sum_N n f_I)))). exact (fun x => (f (fst x) (n.+1),snd x)).
+        exact id. 
+      eapply swi.
+        exact (f 1 n.+1).
+      eapply maybe.
+      eapply map.
+        instantiate (1:= Option (f_I n.+1)). exact inl_some. (*sum mapping*)
+        exact (fun o => (false,o)).
+      eapply maybe.
+      exact (f_proc n.+1).
+    * eapply map. 3: apply H.
+        exact (map_pair id (fun x => match x with | Some (inl _) => None | Some (inr x') => Some x' | None => None end )).
+        exact id. 
+Defined.
+
+Definition LoopType_n (n : nat) (f_I f_O : nat -> Ty) := Sum (Input_n n f_I) (Output_n n f_O).
+
+Definition None_N (n : nat) (f_O : nat -> Ty) : [(Output_n n f_O)].
+elim: n. simpl. exact None.
+intros. simpl. eapply pair. exact None. exact H.
+Defined.
+
+Definition collapse_in_out (n : nat) (f_I f_O : nat -> Ty) (x : [LoopType_n n f_I f_O]) : [Output_n n f_O]  :=
   match x with
-  | inl _ => (None,(None,None))
+  | inl _ => None_N n f_O
   | inr x' => x'
   end.
+(*(LoopType_n n f_I f_O)*)
 
-Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
+Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x' else def.
 
+Definition mitigator3
+  (T_in T_in' T_out T_out' : Ty)   
+  (f_in : [T_in] -> [T_in'])
+  (f_out : [T_out'] -> [T_out])
+  (f_route : [T_out'] -> [Option T_in'])
+  (def : [T_out'])
+  (p : Proc (Times Nat (Option T_in')) T_out')
+  : Proc T_in T_out :=
+  @map T_in T_in' T_out' T_out f_in f_out
+  (@map T_in' (Sum T_in' T_out') (Sum T_in' T_out') T_out' inl (inr_or_def def)
+                          (@loop (Sum T_in' T_out')
+                             (@map _ _ (Times _ _) _
+                                id snd
+                                (@sta _ _ Nat (fun i v => v) (fun o v => (v+1)%%8) 0
+                                   (@map (Times Nat (Sum T_in' T_out'))
+                                      (Times Nat (Option T_in'))
+                                _ (Sum _ _)
+                                (fun i  =>
+                                   match snd i with
+                                   | inl i' => ((0,Some i'))
+                                   | inr o  => map_pair id f_route (fst i,o)
+                                   end) inr
+                                p))))).
+
+(*Definition mitigator3
+  (n : nat) (**)
+  (f : nat -> nat -> bool)
+  (T_in T_out : Ty)   
+  (f_I f_O : nat -> Ty)
+  (f_in : [T_in] -> [Input_n n f_I]) (f_out : [Output_n n f_O] -> [T_out])
+  (f_route : [(Output_n n f_O)] -> [Option (Input_n n f_I)])
+  (p : Proc (Times Nat (Option (Input_n n f_I))) (Output_n n f_O))
+  : Proc T_in T_out :=
+  @map T_in (Input_n n f_I) (Output_n n f_O) T_out f_in f_out
+  (@map (Input_n n f_I) (LoopType_n n f_I f_O) (LoopType_n n f_I f_O) (Output_n n f_O) inl (@collapse_in_out n f_I f_O)
+                          (@loop (LoopType_n n f_I f_O)
+                             (@map _ _ (Times _ _) _
+                                id snd
+                                (@sta _ _ Nat (fun i v => v) (fun o v => (v+1)%%8) 0
+                                   (@map (Times Nat (LoopType_n n f_I f_O))
+                                      (Times Nat (Option (Input_n n f_I)))
+                                _ (Sum _ _)
+                                (fun i  =>
+                                   match snd i with
+                                   | inl i' => ((0,Some i'))
+                                   | inr o  => map_pair id f_route (fst i,o)
+                                   end) inr
+                                p))))).*)
+
+Definition alternate_generic2 (A B : Ty) (x y : [B]) (pred : [A] -> bool) :=
+  @map _ (Sum _ _) (Sum _ (Times Bool Unit)) B 
+                        inl
+                        (fun o => if o is inr (true,tt) then x else y)
+                        (@loop (Sum A (Times Bool Unit))
+                        (@map (Sum A _) _ _ (Sum _ _) id (fun o => inr o)
+                        ((@sta (Sum _ _) _ Bool
+                           (fun i v => match i with | inl i' => v || pred i' | _ => false end)
+                           (fun o v => v)
+                           false
+                           (@out (Times Bool _ ) Unit tt)
+                        )))).
+Definition high_p2 := @alternate_generic2 THandlerOutput TTypeSyscall Syscall NOP (fun i => i == Notify).
+
+Definition my_T_in := TInterrupt.
+Definition my_T_out := Option (Sum TPublicOutput TTypeSyscall).
+
+Definition my_f (n0 n1 : nat) := true.
+
+Definition my_f_I := fun (n : nat) => match n with
+                                      | 0 => TInterrupt
+                                      | 1 => THandlerOutput
+                                      | 2 => TInput
+                                      | _ => Unit
+                                      end.    
+
+Definition my_f_O := fun (n : nat) => match n with
+                                      | 0 => THandlerOutput
+                                      | 1 => TTypeSyscall
+                                      | 2 => TPublicOutput
+                                      | _ => Unit
+                                      end.
+
+Definition my_Input_n := Input_n 2 my_f_I.
+Definition my_Output_n := Output_n 2 my_f_O.
+
+Definition my_f_in (t : [my_T_in]) : [my_Input_n] := inr (inr t).
+Definition my_f_out (t : [my_Output_n]) := match t with
+                                              |(Some publ,(Some prv,handl)) => None
+                                              |(Some publ,(None ,handl)) => Some (inl publ)
+                                              |(None,(Some prv,handl)) => Some (inr prv)
+                                              |_ => None
+                                           end.
+
+Definition my_f_route (t : [my_Output_n]) : [Option my_Input_n] :=
+  match t with
+  | (_,(_,(Some Notify))) => Some (inr (inl Notify))
+  | _ => None
+  end.
+
+
+(*
 (*small detail, we need to allow interrupt to pass through even though p1 is scheduled, otherwise we block the handler*)
 Definition steps_to_proc (n : nat) := (*if n < 2 then n else if n < 4 then 2 + n else n - 2.*)
   match n with
@@ -2648,19 +2801,43 @@ Definition steps_to_proc (n : nat) := (*if n < 2 then n else if n < 4 then 2 + n
   | _ => 0
   end.         
 
+*)
+
+Definition par_swi {I1 I2 O1 O2: Ty} (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (f : nat -> nat -> bool) :
+  Proc (Times Nat (Option (Sum I1 I2))) (Times (Option O1) (Option O2)) :=
+  (par (@map (Times Nat _) (Times Bool _) _ _ (fun n => (f 0 (fst n),snd n)) id (swi b (maybe (@map (Sum _ _) (Option _) _ (Times Bool _) inl_some (fun o => (false,o)) (maybe p1)))))
+       (@map (Times Nat _) (Times Bool _) _ _ (fun n => (f 1 (fst n), snd n)) id (swi (negb b) (maybe (@map (Sum _ _) (Option _) _ (Times Bool _) inr_some (fun o => (false,o)) (maybe p2)))))).
+
+
+Definition par_swi {I1 I2 I3 O1 O2 O3 : Ty} (b : bool) (p1 : Proc I1 O1) (p2 : Proc I2 O2) (p3 : Proc I3 O3) :
+  Proc (Times Nat (Option (Sum I1 (Sum I2 I3)))) (Times (Option O1) (Times (Option O2) (Option O3))) :=
+  (par (@map (Times Nat _) (Times Bool _) _ _ (fun n => ((fst n) == 1,snd n)) id (swi b (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inl_some (fun o => (false,o)) (maybe p1)))))
+       (par (@map (Times Nat _) (Times Bool _) _ _ (fun n => (fst n == 0, snd n)) id (swi (negb b) (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inr_inl_some (fun o => (false,o)) (maybe p2)))))
+       (@map (Times Nat _) (Times Bool _) _ _ (fun n => (fst n != 2, snd n)) id (swi (negb b) (maybe (@map (Sum _ (Sum _ _)) (Option _) _ (Times Bool _) inr_inr_some (fun o => (false,o)) (maybe p3))))))).
+
+
+Definition my_handler (x : [TInterrupt]) : [THandlerOutput]  :=
+  if x is DiskInterrupt then Notify else Nothing.
+
+Definition LoopType := Sum Input' Output'.
+Definition LoopTypeRel := eqsum_LR InputRel' OutputRel'.
+
+Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
+
+Print HandlerOutput.
 Definition mitigator2 (p : Proc (Times Nat (Option (Sum TPublicInput (Sum THandlerOutput TInterrupt)))) (Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Option THandlerOutput)))) : Proc Input' Output' :=
   @map Input' LoopType LoopType Output' inl collapse_in_out
                           (@loop LoopType
                              (@map _ _ (Times _ _) _
                                 id snd
                                 (@sta _ _ Nat (fun i v => v) (fun o v => (v+1)%%8) 0
-                             (@map (Times Nat (Sum (Sum _ (Sum _ _)) (Times _ (Times _ (Option _))))) ((Times Nat (Option (Sum _ (Sum _ _)))))
+                             (@map (Times Nat (Sum (Sum _ (Sum THandlerOutput _)) (Times _ (Times _ (Option THandlerOutput))))) ((Times Nat (Option (Sum _ (Sum THandlerOutput _)))))
                                 _ (Sum _ _)
                                 (fun i  =>
                                    match snd i with
                                    | inl i' => ((2,Some i')) (*use 2 to make everything false*)
                                    | inr o  => let n' := if (fst i)%%2 == 0 then steps_to_proc (fst i) else 2 in (*time for context switch then compute number that supply the correct bools to each of the three processes, else 2 which they all compute as false*)
-                                               if o is (_,(_,Some h)) then (n',(Some (inr (inl h)))) else (n',None) (*if value from handler then route as input to high process otherwise filter the output. n' is responsible for whether this input should result in a context switch*)
+                                               if o is (_,(_,Some Notify)) then (n',(Some (inr (inl Notify)))) else (n',None) (*if value from handler then route as input to high process otherwise filter the output. n' is responsible for whether this input should result in a context switch*)
                                    end) inr
                                 p)))).
 
@@ -2683,20 +2860,7 @@ Definition mitigator2 (p : Proc (Times Nat (Option (Sum TPublicInput (Sum THandl
                                 (maybe p))))).*)
 
 (*I think alternate_generic found above is incorrect*)
-Definition alternate_generic2 (A B : Ty) (x y : [B]) (pred : [A] -> bool) :=
-  @map _ (Sum _ _) (Sum _ (Times Bool Unit)) B 
-                        inl
-                        (fun o => if o is inr (true,tt) then x else y)
-                        (@loop (Sum A (Times Bool Unit))
-                        (@map (Sum A _) _ _ (Sum _ _) id (fun o => inr o)
-                        ((@sta (Sum _ _) _ Bool
-                           (fun i v => match i with | inl i' => v || pred i' | _ => false end)
-                           (fun o v => v)
-                           false
-                           (@out (Times Bool _ ) Unit tt)
-                        )))).
-Definition low_p2 := @alternate_generic2 TPublicInput TPublicOutput GetRequest Public_NOP (fun _ => true).
-Definition high_p2 := @alternate_generic2 THandlerOutput TTypeSyscall Syscall NOP (fun i => i == Notify).
+
 
 Definition process_pool2 := par_swi true low_p2 high_p2 handler.
 
