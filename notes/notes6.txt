@@ -1,0 +1,22 @@
+Thoughts about map of output type
+
+We need to show x0,x1,x2 y0,y1,2 being related implies that f (...) (f...) is also related
+
+A problem from trying to minimise private tuples by using eqpair_LR combined with eqmaybe_top and eqmaybe to force all three components to "contribute" to deriving the tuple being distinguished.
+
+Issue, for example private output needs to distinguish Some. Explanation halting, I got confused, will return...
+Okay issue is that Some x and None can be related so long that l <> \bot. 
+
+I tried keeping a tight my_f_out with exotic terms mapping to their own thing but I don't think I can prove the initial map out theorem.
+
+Okay thought some more, and we allow attacker to distinguish between none and some handler output and private output. This is because what we need, considering the NI definition, is to be able to relate outputs that may differ depending on secret input that is injected into a trace. Interrupt being injected changes the value of the handler and private proc output but it does not change the schedule, hence the optionality remains the same.
+
+This idea is based on Willards remark earlier today that distinguishability is not relevant for output because presence of output is known by assumption because output is timed.
+
+
+
+Latest meeting with Willard
+
+- Have two wrappings of model. First with option option, and second that squashes the nones.
+- Agreed that we can keep the output relation tight (not relating different processes being executed because round robin enforces)
+- public nat should map to bool where false is distinguished

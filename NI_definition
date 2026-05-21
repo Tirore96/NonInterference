@@ -1,0 +1,29 @@
+
+Definition (trace simulation):
+
+  p ∈ (Proc I O) l-(Rₒ)-simulates t ( p --t->Rₒ,l ) is defined inductively as follows.
+
+   0) p ---ε->Rₒ,l
+   1) p --it->Rₒ,l if ∃ p' . p --i-> p' ∧ p' --t->Rₒ,l
+   2) p --ot->Rₒ,l if ∃ p', o' . p --o'-> p' ∧ o' Rₒ,ₗ o ∧ p' --t->Rₒ,l
+
+End
+
+Definition (NI):
+
+  p ∈ (Proc I O) is l-(Rᵢ)-(Rₒ)-noninterfering ( p ∈ NI(l,Rᵢ,Rₒ) ), iff
+
+   0) ∀ t, t', i, i' . i Rᵢ,ₗ i' ⇒  p --tit'->Rₒ,l  ⇒  p --ti't'->Rₒ,l
+   1) ∀ t, t', i,    . i Rᵢ,ₗ ●  ⇒  p --tit'->Rₒ,l  ⇒  p --tt'--->Rₒ,l
+   2) ∀ t, t', i,    . i Rᵢ,ₗ ●  ⇒  p --tt'-->Rₒ,l  ⇒  p --tit'-->Rₒ,l
+   
+  p is (Rᵢ)-(Rₒ)-noninterfering ( p ∈ NI(Rᵢ,Rₒ) ), iff
+
+    ∀ l . p ∈ NI(l,Rᵢ,Rₒ)
+
+End
+
+
+
+
+This definition has the same problems, we need to restrict what R can be dependent on distinguishability.
