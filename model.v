@@ -51,7 +51,7 @@ Ltac split_and :=
     | |- _ /\ _ => con
     | |- is_true (_ && _) => apply /andP ; con
     | H : ex _ |- _ => destruct H
-    end; auto.
+    end; auto;subst.
 
 
 Ltac ssa' := rewrite ?inE;simpl in *; split_and;try done.
@@ -171,15 +171,15 @@ Notation "[ i ]" := (interp i).
 
 
 
-Record Inv (I I' : Ty) := mkInv {
+(*Record Inv (I I' : Ty) := mkInv {
   inv_fn :> [I] -> [I'];
   inv_pf : forall o : [I'], exists i : [I], inv_fn i = o
-}.
+}.*)
 
 (** Process type **)
 Inductive Proc : Ty -> Ty -> Type :=
 | out  : forall {I O : Ty}, interp O -> Proc I O  
-| map   : forall {I I' O O' : Ty}, (interp I -> interp I') -> Inv O O' -> Proc I' O -> Proc I O'
+| map   : forall {I I' O O' : Ty}, (interp I -> interp I') -> (interp O -> interp O') -> Proc I' O -> Proc I O'
 | sta   : forall {I O V :Ty}, (interp I -> interp V -> interp V) -> (interp O -> interp V -> interp V) -> interp V -> Proc (Times V I) O -> Proc I (Times V O)
 | swi   : forall {I O : Ty},  bool -> Proc I (Times Bool O)%type -> Proc ((Times Bool I)) (Option O)
 | par   : forall {I O1 O2: Ty}, Proc I O1 -> Proc I O2 -> Proc I (Times O1 O2)
@@ -194,7 +194,7 @@ Definition xor (b1 b2 : bool) := (Datatypes.negb (b1 == b2)).
 
 Inductive reduceI : forall (I O : Ty), Proc I O -> interp I -> Proc I O -> Prop :=
 | reduce_outI I O i (o : [O]) : reduceI ( @out I _ o) i ( @out I _ o)
-| reduce_mapI (I I' O O' : Ty) p p' i i' (f : [I] -> [I']) (g : Inv O O') : f i = i' -> reduceI p i' p' -> reduceI (map f g p) i (map f g p')
+| reduce_mapI (I I' O O' : Ty) p p' i i' (f : [I] -> [I']) (g : [O] -> [O']) : f i = i' -> reduceI p i' p' -> reduceI (map f g p) i (map f g p')
 | reduce_staI (V I O : Ty) v v' (p : Proc (Times V I) O) p' i (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) : f i v = v' -> reduceI p (v', i) p' -> reduceI (sta f g v p) i (sta f g v' p')
 | reduce_swiI (I O : Ty) b b' b'' (p : Proc I (Times Bool O)) p' (i : [I]) : b'' = xor b b' -> reduceI p i p' -> reduceI (swi b p) (b', i) (swi b'' p')
 | reduce_maybeI (I O : Ty) (p : Proc I O) : reduceI (maybe p) None (maybe p)
@@ -209,7 +209,7 @@ Hint Resolve reduce_mapI reduce_staI reduce_swiI reduce_maybeI reduce_maybeI2 re
 
 Inductive reduceO : forall (I O : Ty), Proc I O -> [O] -> Proc I O -> Prop :=
 | reduce_outO (I O : Ty) (o : [O]) : reduceO ( @out I _ o) o ( @out I _ o)
-| reduce_mapO (I I' O O' : Ty) p p' o o' (f : [I] -> [I']) (g : Inv O O') : g o = o' -> reduceO p o p' -> reduceO (map f g p) o' (map f g p')
+| reduce_mapO (I I' O O' : Ty) p p' o o' (f : [I] -> [I']) (g : [O] ->  [O']) : g o = o' -> reduceO p o p' -> reduceO (map f g p) o' (map f g p')
 | reduce_staO (V I O : Ty) v v' p p' o (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) : g o v = v' -> reduceO p o p' -> reduceO (sta f g v p) (v', o) (sta f g v' p')
 | reduce_swiO (I O : Ty) (p : Proc I (Times Bool O)): reduceO (swi false p) None (swi false p)
 | reduce_swiO2 (I O : Ty) b b' (p : Proc I (Times Bool O)) p' (o : [O]) : b' = xor true b -> reduceO p (b, o) p' -> reduceO (swi true p) (Some o) (swi b' p')
@@ -250,19 +250,19 @@ Hint Resolve monotone_TraceF : paco.
 
 Definition trace (I O : Ty) eff p := paco2 (@TraceF I O) bot2 eff p.
 
-Variant MapSF (I I' O O' : Ty) (f : [I] -> [I']) (g : Inv O O') (R : Stream ([I'] + [O]) -> Stream ([I] + [O']) -> Prop) : Stream ([I'] + [O]) -> Stream ([I] + [O']) -> Prop :=
+Variant MapSF (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (R : Stream ([I'] + [O]) -> Stream ([I] + [O']) -> Prop) : Stream ([I'] + [O]) -> Stream ([I] + [O']) -> Prop :=
   | MapI i i' s s' : R s' s -> f i = i' -> MapSF f g R (Cons (inl i') s') (Cons (inl i) s)
   | MapO o o' s s' : R s' s -> g o = o' -> MapSF f g R (Cons (inr o) s') (Cons (inr o') s).
 
-Lemma MapSF_monotone2 : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : Inv O O'), monotone2 (@MapSF I I' O O' f g).
+Lemma MapSF_monotone2 : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']), monotone2 (@MapSF I I' O O' f g).
 Proof.
   intros. intro. ssa. inv IN; eauto. all: econstructor; eauto.
 Qed.
 Hint Resolve MapSF_monotone2 : paco.
 
-Definition MapS  (I I' O O' : Ty) (f : [I] -> [I']) (g : Inv O O') s s' := paco2 (@MapSF I I' O O' f g) bot2 s s'.
+Definition MapS  (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s s' := paco2 (@MapSF I I' O O' f g) bot2 s s'.
 
-Definition MapRel (I I' O O' : Ty) (f : [I] -> [I']) (g : Inv O O') s p := exists s', MapS f g s' s /\ trace s' p.
+Definition MapRel (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p := exists s', MapS f g s' s /\ trace s' p.
 
 
 
@@ -994,6 +994,16 @@ Definition Option_presP : presP (fun _ => True).
   rewrite /presP. eauto.
 Qed.
 
+Definition aware (V : Ty) (VRel : myrel [V]) (v : [V]) : levelPred
+  := fun l => (forall v', rel VRel l v v' -> v = v' /\ ~ dis VRel l v').
+
+Definition Option_presP_swi (BRel : myrel [Bool]) : presP (fun l => aware BRel true l).
+  rewrite /presP. intros. destruct BRel. move: H0. rewrite /aware. ssa.
+  have: rel0 x0 true v'. eauto. move/H0. ssa.
+  have: rel0 x0 true v'. eauto. move/H0. ssa. eauto.
+Qed.
+
+
 Definition Option_presP_false : presP (fun _ => False).
   rewrite /presP. eauto.
 Qed.
@@ -1008,11 +1018,14 @@ Defined.
 
 Definition eqmaybe_top {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply: Option_presP_top.
+Defined.
+
+Definition eqmaybe_swi {V : Ty} (VRel : myrel [V]) (BRel : myrel [Bool]) : myrel ([Option V]).
+  apply:eqmaybe_aux. apply VRel. apply: Option_presP_swi. apply BRel.
 Defined. 
 
 
-Definition aware (V : Ty) (VRel : myrel [V]) (v : [V]) : levelPred
-  := fun l => (forall v', rel VRel l v v' -> v = v' /\ ~ dis VRel l v').
+
 (*Definition boolRel : myrel ([Bool]) := semiprivateRel Bool.*) (*publicRel Bool.*)
 
 (*Definition Option_presP : presP (fun l => @aware Bool (publicRel Bool) true l).
@@ -1354,61 +1367,51 @@ Definition mapTrace (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (IRel :
 Lemma to_mapTrace : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']) (p : Proc I' O),
     trace s' (map f g p) -> ex*)
 
-Lemma MapSP : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : Inv O O') s (p : Proc I' O),
-    trace s (map f g p) -> exists s', MapS f g s' s /\ trace s' p.
-Proof.
-Admitted.
+Variant forall_gen {A : Type} (P : A -> Set)  (R : Stream A -> Prop)  : Stream A -> Prop :=
+| FEE_cons x s : P x -> R s -> forall_gen P R (Cons x s).
 
-Lemma sim_map : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : Inv O O')
-    (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']),
-    f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
-    forall l s s' (p : Proc I' O),
-    MapS f g s' s -> simulation IRel' ORel l s' p ->
-    simulation IRel ORel' l s (map f g p).
-Proof.
-  intros I I' O O' f g IRel IRel' ORel ORel' Hfni Hfpu Hgni l.
-  pcofix CIH. intros s s' p HMapS Hsim.
-  punfold HMapS. inv HMapS. pc.
-  - punfold Hsim. inv Hsim. pc.
-    pfold. con. rc.
-    + intros i0 s0 Heq Hdis. inv Heq.
-      apply Hfpu in Hdis. move: (HC1 _ _ Logic.eq_refl Hdis). intro HR. pc.
-      right. apply CIH; eauto. pfold. econstructor; eauto.
-    + intros j Hdis.
-      apply Hfpu in Hdis. move: (HC2 _ Hdis). ssa. pc.
-      exists (map f g x). split. apply reduce_mapI; eauto.
-      right. apply CIH; eauto. pfold. econstructor; eauto.
-    + intros i0 s0 Heq j Hrel. inv Heq.
-      apply Hfni in Hrel. move: (HC3 _ _ Logic.eq_refl _ Hrel). ssa. pc.
-      exists (map f g x). split. apply reduce_mapI; eauto.
-      right. apply CIH; eauto.
-    + intros o s0 Heq. inv Heq.
-  - punfold Hsim. inv Hsim. pc.
-    pfold. con. rc.
-    + intros i0 s0 Heq. inv Heq.
-    + intros j Hdis.
-      apply Hfpu in Hdis. move: (HC2 _ Hdis). ssa. pc.
-      exists (map f g x). split. apply reduce_mapI; eauto.
-      right. apply CIH; eauto. pfold. econstructor; eauto.
-    + intros i0 s0 Heq. inv Heq.
-    + intros o' s0 Heq. inv Heq.
-      move: (HC4 _ _ Logic.eq_refl). ssa. pc.
-      exists (g x). split. apply Hgni; eauto.
-      exists (map f g x0). split. apply reduce_mapO; eauto.
-      right. apply CIH; eauto.
+Lemma forall_gen_mon (A : Type) (P : A -> Set)  : monotone1 (forall_gen P). 
+Proof. 
+move => x. intros. induction IN. constructor; auto.
+Qed. 
+
+Hint Resolve forall_gen_mon : paco. 
+Definition ForallC {A : Type} (P : A -> Set) s := paco1 (forall_gen P) bot1 s.
+
+Definition map_pred {I I' O O' : Ty} (g : [O] -> [O']) (o' : [I] + [O']) := { o : ([I] + [O]) &  match o',o with | inr oo',inr oo => g oo = oo' | _,_ => True end}.
+
+Lemma trace_map : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (s : Stream ([I] + [O'])) s (p : Proc I' O), trace s (map f g p) ->
+                                                                                                                           ForallC (@map_pred I I' O O' g) s.
+  move=>  I I' O O' f g s. pcofix CIH.
+  intros.
+  punfold H0. inv H0;match_dd;pc. pfold. con. ssa. con. eauto. con. eauto.
+  pfold. con. rewrite /map_pred. exists (inr o). done. eauto.
 Qed.
 
-Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : Inv O O') (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']),
+(*Lemma trace_map_cons : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) o' (s : Stream ([I] + [O'])) (p : Proc I' O), trace (Cons (inr o') s) (map f g p) -> {o | g o = o'}.
+Proof.
+  intros. 
+
+       apply trace_map in H. 2: apply s.
+       punfold H. inv H.*)
+
+
+(*Definition map_co  (I I' O O' : Ty)  (f : [I] -> [I']) (g : [O] -> [O']) (s : Stream ([I] + [O'])) : Stream ([I'] + [O]) :=
+  match s with
+  | Cons (inl i) s' => Cons (inl (f i)) (map_co f g s')
+  | Cons (inr o) s' => @map_pred I I' O O' g ( 
+Lemma MapSP : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s (p : Proc I' O),
+    trace s (map f g p) -> exists s', MapS f g s' s /\ trace s' p.
+Proof.
+  intros. ex
+Admitted.*)
+
+Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O] -> [O']) (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']),
     f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
     NI IRel' ORel p ->     
     NI IRel ORel' (map f g p).
 Proof.
-  intros I I' O O' p f g IRel IRel' ORel ORel' Hfni Hfpu Hgni HNI.
-  rewrite /NI. intros l s Htrace.
-  destruct (MapSP f g s p Htrace) as [s' [HMapS Htrace']].
-  apply (sim_map Hfni Hfpu Hgni HMapS).
-  apply HNI. exact Htrace'.
-Qed. 
+Admitted.
 
 Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
     fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
@@ -1417,13 +1420,14 @@ Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel 
 Admitted.
 
 
-Variant swiTraceF : 
-
- (*fixed typo in paper: In conclusion, replaced I with Bool * I  *) 
+ (*fixed typo in paper: In conclusion, replaced I with Bool * I  *)  
 Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (BRel : myrel [Bool]) p b,
 (forall l, aware BRel true l \/  oblivious (eqpair_R BRel ORel) p l ) -> NI IRel (eqpair_LR BRel ORel) p ->                                
-NI (eqpair_LR BRel IRel) (eqmaybe ORel) (swi b p).
- Admitted.
+NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p).
+Admitted.
+
+
+
 
 Theorem maybe_NI : forall (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p -> NI (eqmaybe_false IRel) ORel (maybe p).
 Admitted.
@@ -2360,7 +2364,7 @@ Qed.
 
 (*swi_NI shows (swi b p) is NI (eqpair_LR VRel IRel) ORel
   Sometimes we need the stronger property (eqpair_R VRel IRel), or do we?? *)
-Lemma swi_NI'
+(*Lemma swi_NI'
      : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I (Times Bool O)) (b : bool),
        NI I (Times Bool O) IRel (eqpair_LR (privateRel Bool) ORel) p ->
        (forall l : Order.TBLattice.sort level, aware (privateRel Bool) true l \/ oblivious (eqpair_R (privateRel Bool) ORel) p l) ->
@@ -2370,7 +2374,7 @@ Proof.
   apply/NI_I_imp. 3: { apply/swi_NI. eauto. eauto. }
                 ssa. ssa.
   de H1.
-Qed.
+Qed.*)
 
 Definition InputRel3 := eqmaybe_false (semiprivateRel TInterrupt).
 Definition InputRel2 := eqpair_LR (eqmaybe_false (semiprivateRel THandlerOutput)) InputRel3.
@@ -2716,17 +2720,29 @@ Definition map_sum {A B C D :Set} (f : A -> C) (g : B -> D) := fun (x: A + B) =>
 Definition map_pair {A B C D :Set} (f : A -> C) (g : B -> D) := fun (x: A * B) => match x with
                                                                                 | (x0,x1) => (f x0, g x1)
                                                                                   end.
-Definition Input_n (n : nat) (f_I : nat -> Ty) := sum_N n f_I.
-Definition Output_n (n : nat) (f_O : nat -> Ty) := times_N n (Option \o f_O).
+(*Definition Input_n (n : nat) (f_I : nat -> Ty) := sum_N n f_I.*)
+Definition times_Option_n (n : nat) (f : nat -> Ty) := times_N n (Option \o f).
 
-(*Definition scheduled_process_pool
+(*Definition wrap_maybe
+  (n : nat)
+  (f_I f_O : nat -> Ty)
+  (f_proc : forall n, Proc (f_I n) (f_O n)) : forall n, Proc (f_I n) (f_O n).
+  elim.
+  - destruct (eqVneq (f_I 0) Unit). rewrite e.
+    eapply map. instantiate (1:= Option (Times Nat (Option Unit))).
+    exact (fun n => Some (fst n,Some tt)). exact id.*)
+    
+
+Definition scheduled_process_pool
   (n : nat)
   (f_I f_O : nat -> Ty)
   (f_sch : nat -> forall n, [Option (f_I n)] -> bool)
-  (f_proc : forall n, Proc (f_I n) (f_O n)) : Proc (Times Nat (Option (Input_n n f_I))) (Output_n n f_O).
+  (f_proc : forall n, Proc (f_I n) (f_O n)) : Proc (Times Nat ((times_Option_n n f_I))) (times_Option_n n f_O).
   elim: n.
   - simpl.
-    eapply map.
+(*    destruct (eqVneq (f_I 0) Unit). rewrite e.
+    eapply map. instantiate (1:= Option (Times Nat (Option Unit))). exact (fun n => *)
+    eapply map. simpl.
       instantiate (1:= Times Bool (Option (f_I 0))). exact (fun n => ((@f_sch (fst n) 0 (snd n) ,snd n))).
       exact id. 
     eapply swi. exact (@f_sch 1 0 None).
@@ -2739,8 +2755,8 @@ Definition Output_n (n : nat) (f_O : nat -> Ty) := times_N n (Option \o f_O).
   - intros. simpl.
     eapply par.
     * eapply map.
-      instantiate (1:= Times Bool (Option (f_I n.+1))).
-      exact (fun x => ((@f_sch (fst x) (n.+1) (some_inl (snd x))), option_inl_some (snd x))).
+      instantiate (1:= Times Bool (Option (f_I n.+1))). simpl.
+      exact (fun x => ((@f_sch (fst x) (n.+1) (fst (snd x))), fst (snd x))).
         exact id. 
       eapply swi.
         exact (@f_sch 1 n.+1 None). 
@@ -2750,14 +2766,14 @@ Definition Output_n (n : nat) (f_O : nat -> Ty) := times_N n (Option \o f_O).
         exact (fun o => (false,o)).
       (*eapply maybe.*) (*not necessary anymore*)
       exact (f_proc n.+1).
-    * eapply map. 3: apply H.
-        exact (map_pair id (fun x => match x with | Some (inl _) => None | Some (inr x') => Some x' | None => None end )).
-        exact id. 
-Defined.*)
+    * eapply map. 3: apply H. simpl. 
+      exact (map_pair id snd).
+      exact id. 
+Defined.
 
 
 (*original process pool definition with two maybes because we discard input with first maybe by schedule without message and second maybe with projection of some type*)
-Definition scheduled_process_pool
+(*Definition scheduled_process_pool
   (n : nat)
   (f_I f_O : nat -> Ty)
   (f_sch : nat -> forall n, [Option (f_I n)] -> bool)
@@ -2790,7 +2806,7 @@ Definition scheduled_process_pool
     * eapply map. 3: apply H.
         exact (map_pair id (fun x => match x with | Some (inl _) => None | Some (inr x') => Some x' | None => None end )).
         exact id. 
-Defined.
+Defined.*)
 
 Definition alternate_generic2 (A B : Ty) (x y : [B]) (pred : [A] -> bool) :=
   @map _ (Sum _ _) (Sum _ (Times Bool Unit)) B 
@@ -2864,14 +2880,14 @@ Defined.
 
 Definition process_pool3 := @scheduled_process_pool 2 my_f_I my_f_O (@my_f_sch my_f_I) my_procs.
 
-Definition LoopType_n (n : nat) (f_I f_O : nat -> Ty) := Sum (Input_n n f_I) (Output_n n f_O).
+Definition LoopType_n (n : nat) (f_I f_O : nat -> Ty) := Sum (times_Option_n n f_I) (times_Option_n n f_O).
 
-Definition None_N (n : nat) (f_O : nat -> Ty) : [(Output_n n f_O)].
+Definition None_N (n : nat) (f_O : nat -> Ty) : [(times_Option_n n f_O)].
 elim: n. simpl. exact None.
 intros. simpl. eapply pair. exact None. exact H.
 Defined.
 
-Definition collapse_in_out (n : nat) (f_I f_O : nat -> Ty) (x : [LoopType_n n f_I f_O]) : [Output_n n f_O]  :=
+Definition collapse_in_out (n : nat) (f_I f_O : nat -> Ty) (x : [LoopType_n n f_I f_O]) : [times_Option_n n f_O]  :=
   match x with
   | inl _ => None_N n f_O
   | inr x' => x'
@@ -2907,9 +2923,9 @@ Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x'
 Definition loop_and_count
   (n_state : nat)           
   (T_in' T_out' : Ty)   
-  (f_route : [T_out'] -> [Option T_in'])
+  (f_route : [T_out'] -> [T_in'])
   (def : [T_out'])
-  (p : Proc (Times Nat (Option T_in')) T_out')
+  (p : Proc (Times Nat T_in') T_out')
   : Proc T_in' T_out' :=
   (@map T_in' (Sum T_in' T_out') (Sum T_in' T_out') T_out' inl (inr_or_def def)
                           (@loop (Sum T_in' T_out')
@@ -2917,22 +2933,22 @@ Definition loop_and_count
                                 id snd
                                 (@sta _ _ Nat (fun i v => v) (fun o v => (v+1)) n_state
                                    (@map (Times Nat (Sum T_in' T_out'))
-                                      (Times Nat (Option T_in'))
+                                      (Times Nat T_in')
                                 _ (Sum _ _)
                                 (fun i  =>
                                    match snd i with
-                                   | inl i' => ((0,Some i'))
-                                   | inr o  => map_pair id f_route (fst i,o)
+                                   | inl i' => ((0,i'))
+                                   | inr o  => map_pair id f_route (fst i,o) (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
                                    end) inr
                                 p))))).
 
-Definition my_T_in := Sum Unit TInterrupt.
+Definition my_T_in := Sum Unit TInterrupt. (*We need Unit input to be able to differentiate trace, otherwise we only have interrupts in the trace*)
 Definition my_T_out := Option (Option (Sum TPublicOutput TTypeSyscall)).
 
-Definition my_T_in' := Input_n 2 my_f_I.
-Definition my_T_out' := Output_n 2 my_f_O.
+Definition my_T_in' := times_Option_n 2 my_f_I.
+Definition my_T_out' := times_Option_n 2 my_f_O.
 
-Definition my_f_in (t : [my_T_in]) : [my_T_in'] := match t with | inl tt => inl tt | inr t => inr (inr t) end.
+Definition my_f_in (t : [my_T_in]) : [my_T_in'] := match t with | inl tt => (Some tt,(None,None)) | inr t => (None,(None,Some t)) end.
 Definition my_f_out (t : [my_T_out']) := match t with
                                          | (Some p,(None,None)) => Some (Some (inl p))
                                          | (None,(Some h,None)) => Some (Some (inr h))
@@ -2940,11 +2956,11 @@ Definition my_f_out (t : [my_T_out']) := match t with
                                          | _ => None                               
                                          end.
 
-  Definition f_out_dis (v : [my_T_out]) := match v with | Some (Some (inl _)) | None => False | Some (Some (inr _)) | Some None  => True end.
+  Definition f_out_dis (v : [my_T_out]) := match v with | Some (Some (inl _)) | None => False | _  => True end.
   Definition my_f_out_rel : myrel ([my_T_out]).
   refine (@MyRel _
             (fun l (v : [my_T_out]) => l = \bot /\ f_out_dis v )
-            (fun l v1 v2 => v1 = v2 \/ f_out_dis v1 /\ f_out_dis v2)
+            (fun l v1 v2 => v1 = v2 \/ (l = \bot /\ f_out_dis v1 /\ f_out_dis v2))
             _
             _
             _
@@ -2953,8 +2969,10 @@ Definition my_f_out (t : [my_T_out']) := match t with
   intro. intros. de H. de H0. left. subst. auto. subst. eauto.
   de H0. subst. eauto.
   intros. de H0.
-  intros. ssa. subst. apply order_bot in H. done.
-  intros. ssa. subst. con. case. intros. eauto.
+  intros. ssa. subst. apply order_bot in H. subst. ssa.
+  intros. ssa. subst. rewrite /order in H.  rewrite lex0 in H. by apply/eqP.
+  ssa.
+  con. case. intros. eauto.
   case. intros. subst. eauto.
   ssa.
   Defined.
@@ -2965,10 +2983,10 @@ Definition my_f_out (t : [my_T_out']) := match t with
                                               |_ => None
                                            end.*)
 
-Definition my_f_route (t : [my_T_out']) : [Option my_T_in'] :=
+Definition my_f_route (t : [my_T_out']) : [my_T_in'] :=
   match t with
-  | (_,(_,(Some h))) => Some (inr (inl h))
-  | _ => None
+  | (_,(_,(Some h))) => (None,(Some h,None))
+  | _ => (None,(None,None))
   end.
 
 Definition my_def := None_N 2 my_f_O.
@@ -3034,12 +3052,15 @@ Definition wrap_trace s :=
 (*We include state change for public process to show that it cannot receive input when it is not scheduled. If we try to consume the output trace that assumes that input has been received then we fail*)
 Definition streamTypec := Stream ([my_T_in'] + [my_T_out']).
 
+Definition in1 x : [my_T_in'] := (Some x,(None,None)).
+Definition in2 x : [my_T_in'] := (None,(Some x,None)).
+Definition in3 x : [my_T_in'] := (None,(None,Some x)).
+
 Definition out1 x : [my_T_out'] := (Some x,(None,None)).
 Definition out2 x : [my_T_out'] := (None,(Some x,None)).
 Definition out3 x : [my_T_out'] := (None,(None,Some x)).
 
-Definition newtraceFc (s : streamTypec) :=
-                                          Cons (inl (inr (inr DiskInterrupt)))
+Definition newtraceFc (s : streamTypec) := Cons (inl (in3 DiskInterrupt))
                                           (Cons (inr (out1 GetRequest))(*public*)
                                           (Cons (inr (out1 GetRequest))(*public*)
                                             (Cons (inr (out3 Notify))(*handler*)
@@ -3162,6 +3183,15 @@ Check rel_eqmaybe.
     de y.
   Qed.
 
+  Lemma rel_eqmaybe_swi2 : forall (A : Ty) (ARel : myrel [A]) (BRel : myrel [Bool]) l x y, rel (eqmaybe_swi ARel BRel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+                                                                                               (x = None /\ y = None) \/ (eqmaybe_dis (aware BRel true) ARel l x /\ eqmaybe_dis (aware BRel true) ARel l y).
+  Proof.
+    intros.
+    de x. de y.
+    left. eauto.
+    de y.
+  Qed.
+
   Lemma dis_eqmaybe : forall (A : Ty) (ARel : myrel [A]) l v, dis (eqmaybe ARel) l v -> exists v', v = Some v' /\ dis ARel l v'.
   Proof.
     intros. ssa. de v. econ. eauto.
@@ -3177,8 +3207,9 @@ Check rel_eqmaybe.
     intros. ssa. 
   Qed.    
 
-  Definition intermediate_outputRel := eqpair ((eqmaybe (publicRel TPublicOutput))) (eqpair (eqmaybe (semiprivateRel (TTypeSyscall))) (eqmaybe (semiprivateRel (THandlerOutput)))).
+  Definition intermediate_outputRel := eqpair ((eqmaybe_swi (publicRel TPublicOutput) (publicRel Bool))) (eqpair (eqmaybe_swi (semiprivateRel (TTypeSyscall)) (publicRel Bool)) (eqmaybe_swi (semiprivateRel (THandlerOutput)) (publicRel Bool))).
 
+(*  Definition intermediate_outputRel := intermediate_outputRel_aux (publicRel Bool).*)
 
   Definition is_inl (A B : Set) (x : A + B) := if x is inl _ then true else false.
   Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
@@ -3201,16 +3232,21 @@ Check rel_eqmaybe.
     move/H0. ssa.
 *)    
     
-
-(*consider using the simplified scheduled process_pool once proof has been fixed*)  
+  Lemma aware_public : aware (publicRel Bool) true \bot.
+  Proof. rewrite /aware. ssa.
+  Qed.
+Hint Resolve aware_public.
+  
+  (*consider using the simplified scheduled process_pool once proof has been fixed*)
+  (*TODO: wrap this in output rel with only one None*)
 Lemma main_NI : @NI _ _ (eqsum_R (publicRel _ ) (semiprivateRel _))
                   my_f_out_rel
                   (@map _ _ _ (Option (Option (Sum TPublicOutput TTypeSyscall))) my_f_in my_f_out
                      (my_loop_and_count
                         (@scheduled_process_pool 2 my_f_I my_f_O (@my_f_sch my_f_I) my_procs))).
 Proof.
-  eapply map_NI. 
-  instantiate (1:= eqsum_R (publicRel Unit) (eqsum_LR (semiprivateRel THandlerOutput) (semiprivateRel TInterrupt))).
+  eapply map_NI.  
+  instantiate (1:= eqpair_R (eqmaybe (publicRel _)) (eqpair_LR (eqmaybe (semiprivateRel THandlerOutput)) (eqmaybe (semiprivateRel TInterrupt)))).
 
   mrw. intros.
   have: is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'. de i. de i'. de i'.
@@ -3231,22 +3267,30 @@ Proof.
   apply rel_eqpair in H. destruct H.
   apply rel_eqpair in H0. destruct H0.
   rewrite !pair_rewr in H,H0,H1.
-  apply rel_eqmaybe2 in H,H0,H1.
+  apply rel_eqmaybe_swi2 in H,H0,H1.
   destruct H. split_and;subst.
   destruct H0. split_and;subst.
-  destruct H1. split_and;subst.
-  split_and;subst.
-  split_and;subst.
+  destruct H1. split_and;subst. split_and;subst.
+  destruct H. split_and;subst.
   destruct H1. split_and;subst. ssa.
-  split_and;subst. ssa. subst. ssa.
-  split_and;subst.
-  destruct H0. split_and;subst.
-  destruct H1. split_and;subst. ssa.
-  split_and;subst. ssa.
-  split_and;subst.
-  destruct H1. split_and;subst. ssa.
-  split_and;subst. ssa.
-
+  destruct H. split_and;subst. ssa. subst. ssa.
+  split_and;subst. 
+  de i3. de i4.
+  split_and. de i0. de i2.
+  destruct H. split_and.
+  destruct H0. split_and.
+  destruct H1. split_and. ssa.
+  destruct H. split_and. ssa. de H2. subst. auto.
+  split_and. de i3. de i4.
+  destruct H. split_and.
+  destruct H1. split_and. ssa.
+  destruct H. split_and. ssa.
+  split_and. de i3. subst. de i4.
+  split_and. de i0. de i2.
+  destruct H1. split_and. de H3. subst. destruct H1. split_and. ssa.
+  split_and. de i3. de i4.
+  split_and. de i.
+  
   apply/map_NI.
   4: apply/loop_NI.
   mrw. intros. apply rel_eqsum_L. (*R = output, not distinguished*) eapply H.
@@ -3303,10 +3347,11 @@ Proof.
   apply rel_eqmaybe.
   apply rel_eqsum_R2.
   apply rel_eqsum_LR.
-  apply rel_eqmaybe2 in H6. destruct H6. split_and. inversion H6. inversion H7. subst. done.
-  split_and. rewrite H6 in H3. ssa.
-  apply rel_eqpair_R2. left. con. eauto. destruct i4. done. destruct i6. done. ssa.
+  apply rel_eqmaybe_swi2 in H6. destruct H6. split_and. inversion H6. inversion H7. subst. done.
+  destruct H6. split_and. ssa. split_and.
+  destruct i4. ssa. destruct i6. ssa. simpl. left. con. eauto. done.
   split_and.
+
   apply rel_eqpair_R2. right. con.
   ssa. ssa.
 
@@ -3348,32 +3393,34 @@ Proof.
   apply rel_eqpair_R2' in H.
   apply rel_eqpair_R2.
   destruct H. split_and. simpl in H.
-  left. con. rewrite /my_f_sch. instantiate (1:= semiprivateRel _). rewrite H. apply rel_refl.
+  left. con. rewrite /my_f_sch. instantiate (1:= publicRel _). rewrite H. apply rel_refl.
   destruct i. destruct i'. rewrite /option_inl_some !pair_rewr. rewrite !pair_rewr in H0.
-  apply rel_eqmaybe2 in H0. destruct H0. split_and. subst. rewrite !pair_rewr in H.
-  apply rel_eqmaybe. eauto. simpl in H. split_and. subst. apply rel_refl.
-  split_and.
+  apply rel_eqmaybe2 in H0. destruct H0. split_and. subst. rewrite !pair_rewr in H. subst.
+  
+  instantiate (1:= (eqmaybe_top (publicRel Unit))). ssa. de x. de x0. de x0.
+  
+  rewrite !pair_rewr in H. split_and.
+  split_and. right.
 (*  destruct x. destruct x0. instantiate (1:= eqmaybe _). apply rel_eqmaybe.
   apply rel_eqsum_R' in H2.
   apply rel_
   split_and.*)
-  mrw. intros. ssa.
-  apply f_NI_id.
+  mrw. intros. de i. de i0. de s. de s. de i0. de s. de s. de i'. de o. de s. de i'. de o. de s.
+  mrw. intros. ssa. de i. de o. de s. de s.
+  apply f_NI_id. Check maybe_NI.
 
-  eapply NI_I_imp.
-  instantiate (1:= (eqpair_LR (semiprivateRel Bool)
+  eapply NI_I_imp. instantiate (1:= eqpair_R (publicRel Bool) (eqmaybe (publicRel Unit))).
+  simpl. intros. de x. de o.
+  instantiate (1:= (eqpair_LR (publicRel Bool)
                       (eqmaybe (eqsum_R (publicRel Unit) (eqsum_LR (semiprivateRel THandlerOutput) (semiprivateRel TInterrupt)))))).
   intros.
   ssa. de x. de o. de s. de s.
   intros. ssa. de H. de x. de o. de s. de s. de H. de x. de o. de s. de s. de y. de o. subst.
   de s. de s. subst. de y. de o. de s. de s.
 
-  1: { admit.
+  1: { 
 
-    
-
-
-(*  apply swi_NI. Check sta_NI. Check swi_NI.
+  apply swi_NI. Check swi_NI. 
   intros.
   destruct (eqVneq l \bot). subst.
   right.

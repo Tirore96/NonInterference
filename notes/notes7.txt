@@ -41,3 +41,8 @@ This does not work because we cannot project and then get a rel that is fully pu
 
 
 Interesting. The fact that we arrive at a proof state where we need eqpair_R boolrel _, is sus. It means that we may be varying the switch
+
+
+Resolving the R vs _LR problem
+
+It seems that the input type to the process pool needs to be a product rather than a sum. This avoids leaking information, since projecting discards info where as destructing a summation reveals something when mapping to None.
