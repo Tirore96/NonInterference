@@ -46,3 +46,5 @@ Interesting. The fact that we arrive at a proof state where we need eqpair_R boo
 Resolving the R vs _LR problem
 
 It seems that the input type to the process pool needs to be a product rather than a sum. This avoids leaking information, since projecting discards info where as destructing a summation reveals something when mapping to None.
+
+We needed a new structure eqpair_REQ to fix the public left component when eqpair_R would otherwise have the disjunct.

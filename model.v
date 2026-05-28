@@ -659,6 +659,54 @@ Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
     case. ssa.
 Defined.
 
+Definition eqpair_REQ {I O : Ty} (def : [I]) (ORel : myrel [O]) : myrel ([Times I O]).
+  refine (@MyRel _ 
+            (fun (l : level) io => fst io = def /\ dis ORel l (snd io))
+            (fun l io1 io2 => rel (publicRel _) l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ fst io1 = fst io2 /\ dis ORel l (snd io1) /\ dis ORel l (snd io2))
+            _
+            _
+            _
+            _).
+  - move=> l. 
+    con.  destruct ORel. simpl. con.
+    move: (equiv0 l). case. eauto.
+  - rewrite /Symmetric. intros. destruct H. destruct ORel. simpl.
+    ssa. left.
+    move: (equiv0 l). case.
+    move => _ Hsym _. con.  symmetry. done.
+    eauto.
+    ssa. 
+
+  - destruct ORel. simpl. intro. intros.
+
+    de H. de H0. left. ssa.
+    move: (equiv0 l). case. move=> _ _ Htrans. rewrite H H0. done.
+    move: (equiv0 l). case. move=> Hrefl0 _ Htrans0. eauto.
+    move: (equiv0 l). case. move=> Hrefl0 _ Htrans0. eauto.    
+    left. con. rewrite H H0. done. apply/Htrans0. eauto.
+    apply i. done. done.
+    destruct H0. ssa. left. con.
+    move: (equiv0 l). case. move=> Hrefl _ Htrans. by rewrite H H0.
+
+    move: (equiv0 l). case. move=> Hrefl0 _ Htrans0. 
+    apply/Htrans0. 2:eauto.
+    apply i. done. done. ssa.
+    rewrite H H0. ssa.
+
+  - intros. de H0.
+    left. ssa.
+    de ORel;eauto. 
+    left. ssa. de ORel. eapply r.
+     eauto. apply i. done. done.
+  - intros. de ORel;eauto. de ORel;eauto.
+
+  - intros. 
+    intros. con. ssa. left. ssa. rewrite H -H1. done. apply i. done. done.
+    ssa. destruct H1. ssa. rewrite -H1 H. done. ssa. rewrite -H1 H. done.
+    destruct H1. ssa. apply/i. 2:eauto. done.
+    ssa.
+Defined.
+
 Lemma dis_rel_dis : forall (I : Ty) (IRel : myrel [I]) l x y, dis IRel l x -> rel IRel l x y -> dis IRel l y.
 Proof.
   intros. de IRel. apply/i;eauto.
@@ -3245,16 +3293,16 @@ Lemma main_NI : @NI _ _ (eqsum_R (publicRel _ ) (semiprivateRel _))
                      (my_loop_and_count
                         (@scheduled_process_pool 2 my_f_I my_f_O (@my_f_sch my_f_I) my_procs))).
 Proof.
-  eapply map_NI.  
-  instantiate (1:= eqpair_R (eqmaybe (publicRel _)) (eqpair_LR (eqmaybe (semiprivateRel THandlerOutput)) (eqmaybe (semiprivateRel TInterrupt)))).
+  eapply map_NI. 
+  instantiate (1:= @eqpair_REQ (Option _) _ None (eqpair_LR (eqmaybe_top (semiprivateRel THandlerOutput)) (eqmaybe_top (semiprivateRel TInterrupt)))).
 
   mrw. intros.
   have: is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'. de i. de i'. de i'.
   case;split_and. de i. de i'. subst. de u.
   de i. de i'.
   mrw. intros.
-  destruct i. rewrite /my_f_in. destruct i.
-  ssa. ssa.
+  destruct i. rewrite /my_f_in. destruct i. ssa. simpl. simpl in H.
+  ssa. 
 
   mrw. intros. move: H. instantiate (1:= intermediate_outputRel ). (*replaced eqpair_OR with eqpair_LR because we need enough information about distinguishability so that we don't do None vs Some case distinction in i1 and i2 when relating (x,i1,y) and (x',i2,y) *)
   (*we needed eqpair_OR because we used eqmaybe in secret processes*)
@@ -3321,31 +3369,58 @@ Proof.
   mrw;ssa.
   mrw;ssa.*)
 
-  eapply map_NI. 
-
-  instantiate (1:= eqpair_R _ (eqmaybe (eqsum_R (publicRel Unit) (eqsum_LR (semiprivateRel THandlerOutput) (semiprivateRel TInterrupt))))). (*eqmaybe is correct?*)
+  eapply map_NI.
+  
+  instantiate (1:= @eqpair_REQ Nat _ 0 (@eqpair_REQ (Option _) _ None (eqpair_LR (eqmaybe_top (semiprivateRel THandlerOutput)) (eqmaybe_top (semiprivateRel TInterrupt))))). (*eqmaybe is correct?*)
   mrw. intros.
   destruct i. destruct i'. rewrite !pair_rewr.
-  have: is_inl i0 /\ is_inl i2 \/ is_inr i0 /\ is_inr i2. ssa. de H. subst. de i0. de i2. de i2. de i0. de s. de s. subst. de i2. de i2.
+  have: is_inl i0 /\ is_inl i2 \/ is_inr i0 /\ is_inr i2. ssa. de H. subst. de i0. de i2. de i2. de i0. de i2.
   case;split_and. destruct i0. destruct i2.
-  apply rel_eqpair_R2.  
-  apply rel_eqpair_R2' in H. destruct H. split_and. split_and. ssa. ssa.
+  ssa. destruct H. ssa. ssa.
+  right. ssa. ssa. ssa. destruct i0. ssa. destruct i2. ssa. ssa.
+  destruct H. ssa. left. ssa.
+  move: H. instantiate (1:= publicRel _). ssa. ssa. subst. ssa.
+  de i0. de o. de i2. de o. subst. de p. de o.
+  de p1. de o. destruct H3. ssa. subst. de o0. de o1. de o1.
+  subst. de o0. de o1. de o1. de p1. de o. de o0. de o1. de o1.
+  de i2. de o. de p. de o. de p0. de o. destruct H3. ssa. subst.
+  de o0. de o1. de o1. subst. de o0. de o1. de o1. de p0. de o. de o0.
+  de o1. de o1. ssa.
+(*  apply rel_eqpair_R2.   
+  apply rel_eqpair_R2' in H. destruct H. left. split_and. right.
+  split_and. ssa. ssa. destruct i0. ssa. destruct i2. ssa.
+  apply rel_eqpair_R2' in H.
+  apply rel_eqpair_R2. destruct H. left. split_and. eauto.
+  apply rel_eqsum_L2' in H2.
+  
+(*  apply rel_eqsum_L' in H2.
 
   destruct i0. ssa.
-  destruct i2. ssa.
-  apply rel_eqpair_R2' in H. destruct H. split_and.
-  apply rel_eqsum_L2' in H2.
+  destruct i2. ssa. destruct H2. ssa. subst. left. con. eauto.
+  de i3. de o0. de p. de o0. de o1. de o2. destruct H3. ssa. subst. destruct H4. split_and. de o.
+  subst. ssa. destruct H4. subst. ssa. de o. subst. destruct H3. ssa. de o. de o2. subst.
+  de o. de o. de o1. de o2. de o. subst. de o. de o2. subst. de o. de o. de p. de o0. de o1. de o2.
+  de o. de o. de o2. de o. de o. de o1. de o2. de o. de o. de o. left. con. eauto.
+  ssa. subst. de 
+  apply rel_eqpair_R2' in H.
+
+  destruct H. split_and.
+  apply rel_eqsum_L2' in H2. con.*)
   destruct i0,i3,i2,i5.
+
   rewrite /map_pair /my_f_route.
   have: is_some i4 /\ is_some i6 \/ is_none i4 /\ is_none i6. de i4. de i6. de i6.
+
   case;split_and. destruct i4. 2:ssa. destruct i6. 2:ssa.
   rewrite /intermediate_outputRel in H2.
   apply rel_eqpair in H2. split_and.
   apply rel_eqpair in H5. split_and.
-  rewrite !pair_rewr in H2 H5 H6.
-  apply rel_eqpair_R2. left. con. eauto.
-  apply rel_eqmaybe.
-  apply rel_eqsum_R2.
+  rewrite !pair_rewr in H2 H5 H6. ssa.
+
+  destruct i4. ssa. destruct i6. ssa.
+  ssa.
+
+(*  apply rel_eqsum_R2.
   apply rel_eqsum_LR.
   apply rel_eqmaybe_swi2 in H6. destruct H6. split_and. inversion H6. inversion H7. subst. done.
   destruct H6. split_and. ssa. split_and.
@@ -3353,17 +3428,55 @@ Proof.
   split_and.
 
   apply rel_eqpair_R2. right. con.
-  ssa. ssa.
+  ssa. ssa.*)
+
+  right. split_and. ssa. ssa.*)
+
+  (*rewrite /map_pair /my_f_route. de i0. destruct i0. ssa. destruct i2. ssa.
+  apply rel_eqpair_R2' in H. destruct H.
+  apply rel_eqpair_R2. left. split_and. eauto.
+  rewrite /my_f_route. destruct i0. destruct i3. destruct i2. destruct i5.
+  apply rel_eqsum_R2' in H2. rewrite /intermediate_outputRel in H2.
+  apply rel_eqpair in H2. split_and.
+  rewrite !pair_rewr in H2 H3.
+  apply rel_eqpair in H3. split_and. rewrite !pair_rewr in H3 H4.
+  apply rel_eqmaybe_swi2 in H4. destruct H4. split_and. ssa.
+  destruct H4. split_and. ssa.
+  split_and. de i4. destruct i0. destruct i2. subst. de i3. de i5. ssa.
+  de i6. de i5. de i6. de i3. de i2. de i3. de i5. de i6. de i6.de i6. de i6.
+
+  split_and.
+
+  rewrite /map_pair /my_f_route. destruct i0. destruct i3. destruct i2. destruct i5.
+  ssa.*)
+  
+  (*case;split_and. destruct i4. 2:ssa. destruct i6. 2:ssa.
+  rewrite /intermediate_outputRel in H2.
+  apply rel_eqpair in H2. split_and.
+  apply rel_eqpair in H5. split_and.
+  rewrite !pair_rewr in H2 H5 H6.
+  apply rel_eqpair_R2. left. con. eauto. ssa.
+  destruct i4. ssa. destruct i6. ssa.
+  apply rel_eqpair_R2. con. con. eauto. ssa. ssa.*)
+(*  apply rel_eqsum_R2.
+  apply rel_eqsum_LR.
+  apply rel_eqmaybe_swi2 in H6. destruct H6. split_and. inversion H6. inversion H7. subst. done.
+  destruct H6. split_and. ssa. split_and.
+  destruct i4. ssa. destruct i6. ssa. simpl. left. con. eauto. done.
+  split_and.
+
+  apply rel_eqpair_R2. right. con.
+  ssa. ssa.*)
 
   mrw. intros. destruct i. rewrite !pair_rewr.
   apply dis_eqpair_R in H.
   destruct i0. 2: ssa.
   apply dis_eqsum_L2 in H.
   destruct i0. ssa.
-  apply dis_eqsum_R2 in H.
+(*  apply dis_eqsum_R2 in H.
   apply dis_eqpair_R2.
   apply dis_eqmaybe2.
-  apply dis_eqsum_R. done.
+  apply dis_eqsum_R. done.*)
 
   mrw. intros.
   apply rel_eqsum_L2. eauto.
@@ -3382,41 +3495,72 @@ Proof.
   mrw. intros.
   apply rel_eqsum_L2. eauto.*)
 
-  instantiate (1:= (publicRel _)).
   rewrite /scheduled_process_pool.
   rewrite /nat_rec. rewrite /nat_rect.
 
   eapply par_NI.
   eapply map_NI.
-  instantiate (1:= eqpair_R _ _).
+  instantiate (1:= eqpair_R (publicRel _) (publicRel _)). 
   mrw. intros.
-  apply rel_eqpair_R2' in H.
+  ssa. left. destruct H. split_and. rewrite H. destruct H0. split_and.
+  ssa. destruct H0. ssa. ssa. ssa. rewrite H H0 H1. done. rewrite H0 H1. done.
+  
+(*  destruct H. left. split_and. ssa. destruct H0. ssa. rewrite H H0 //.
+  ssa. rewrite H H0 //. ssa. destruct H0. ssa. ssa.
+  right. ssa.
+  simpl in H. rewrite H. ssa. de i. de i'. subst. de p. de o. de p0. de o. de H0. de H0. de H0.
+  split_and. ssa. left. rewrite H H0. ssa.
+  de o. split_and.
+  apply rel_eqpair_R2. right. 
+  ssa. de i. de p. de o. de i'. de p0. de o.
+  destruct H1. ssa. subst. auto. de p0. de o. de o0. de o1.
+  destruct H2. ssa. subst. ssa. de o1. simpl.
+  (*  apply rel_eqpair_R2. left. con. apply rel_refl.*)
+
+(*  destruct H0. split_and. clear H1.
   apply rel_eqpair_R2.
+  left. simpl. ssa. de i. de i'. subst. de p. de o. de p0. de o. subst.*)
+  destruct (eqVneq l \bot). auto. left. ssa. left.
+  ssa. intro. subst. rewrite eqxx in i. done.
+  de p0. de o. de p. de o. de p0. de o. destruct H1. ssa. subst. de o0.
+  de p0. de o. de o0. de o1. destruct H2. ssa. subst. auto.
+  de o1. 
+  destruct (eqVneq l \bot). auto. left. ssa. left. ssa. intro. subst. rewrite eqxx in i. done.
+
+  split_and.
+  ssa. de i. de p. de o. (*Yes! Here it worked because we used eqmaybe_top in public input structure*)*)
+
+(*  done. de p0. de o.
+  rewrite -H.
+  
+  instantiate (1:= (eqmaybe_top (publicRel Unit))).
+
   destruct H. split_and. simpl in H.
+
+  
   left. con. rewrite /my_f_sch. instantiate (1:= publicRel _). rewrite H. apply rel_refl.
   destruct i. destruct i'. rewrite /option_inl_some !pair_rewr. rewrite !pair_rewr in H0.
-  apply rel_eqmaybe2 in H0. destruct H0. split_and. subst. rewrite !pair_rewr in H. subst.
+  rewrite !pair_rewr in H. subst.
+  apply rel_eqpair_R2' in H0.
+  destruct H0. split_and. 
   
-  instantiate (1:= (eqmaybe_top (publicRel Unit))). ssa. de x. de x0. de x0.
-  
-  rewrite !pair_rewr in H. split_and.
-  split_and. right.
+
+  split_and. apply dis_dis_rel. destruct i0. ssa.*)
 (*  destruct x. destruct x0. instantiate (1:= eqmaybe _). apply rel_eqmaybe.
   apply rel_eqsum_R' in H2.
   apply rel_
   split_and.*)
-  mrw. intros. de i. de i0. de s. de s. de i0. de s. de s. de i'. de o. de s. de i'. de o. de s.
-  mrw. intros. ssa. de i. de o. de s. de s.
-  apply f_NI_id. Check maybe_NI.
+  mrw. intros. de i. de i0. de p. de o0. de o1. subst.
+  apply f_NI_id. 
 
-  eapply NI_I_imp. instantiate (1:= eqpair_R (publicRel Bool) (eqmaybe (publicRel Unit))).
+  eapply NI_I_imp. instantiate (1:= eqpair_LR (publicRel Bool) (eqmaybe (publicRel Unit))).
   simpl. intros. de x. de o.
   instantiate (1:= (eqpair_LR (publicRel Bool)
                       (eqmaybe (eqsum_R (publicRel Unit) (eqsum_LR (semiprivateRel THandlerOutput) (semiprivateRel TInterrupt)))))).
   intros.
   ssa. de x. de o. de s. de s.
   intros. ssa. de H. de x. de o. de s. de s. de H. de x. de o. de s. de s. de y. de o. subst.
-  de s. de s. subst. de y. de o. de s. de s.
+  de s. de s. subst. de y. de o. de s. de s.*)
 
   1: { 
 
