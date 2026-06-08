@@ -2990,6 +2990,28 @@ Definition loop_and_count
                                    end) inr
                                 p))))).
 
+Definition only_loop
+  (T_in' T_out' : Ty)   
+  (f_route : [T_out'] -> [T_in'])
+  (def : [T_out'])
+  (p : Proc T_in' T_out')
+  : Proc T_in' T_out' :=
+  (@map T_in' (Sum T_in' T_out') (Sum T_in' T_out') T_out' inl (inr_or_def def)
+                          (@loop (Sum T_in' T_out')
+                             (@map (Sum T_in' T_out')
+                                    T_in'
+                                    _
+                                    (Sum _ _)
+                                (fun i  =>
+                                   match i with
+                                   | inl i' => i'
+                                   | inr o  => f_route o (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
+                                   end) inr
+                                p))).
+
+
+
+
 Definition my_T_in := Sum Unit TInterrupt. (*We need Unit input to be able to differentiate trace, otherwise we only have interrupts in the trace*)
 Definition my_T_out := Option (Option (Sum TPublicOutput TTypeSyscall)).
 
