@@ -95,7 +95,7 @@ Hint Mode myrel +.*)
 (* Types *)
 
 (*Example 3*)
-Inductive Interrupt := DiskInterrupt.
+Inductive Interrupt := DiskInterrupt | TimerInterrupt.
 Inductive HandlerOutput := Nothing | Notify.
 Inductive TypeSyscall := Syscall | NOP.
 Inductive PublicOutput := GetRequest | Public_NOP.
@@ -141,7 +141,7 @@ Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
 Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool
-                 | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | TInterrupt | THandlerOutput |  TPublicOutput | TPublicInput. 
+                 | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | Unit1 | Unit2 |  TInterrupt | THandlerOutput |  TPublicOutput | TPublicInput. 
 
 Derive NoConfusion for Ty.
 Derive EqDec for Ty.
@@ -161,7 +161,7 @@ Fixpoint interp (t : Ty) : Set :=
   | TOutput => Output
   | Sum t0 t1 => (interp t0) + (interp t1)            
   | TTypeSyscall => TypeSyscall
-  | Unit => unit                     
+  | Unit | Unit1 | Unit2 => unit                     
   | TInterrupt => Interrupt
   | THandlerOutput => HandlerOutput
   | TPublicOutput => PublicOutput
@@ -1305,7 +1305,7 @@ Ltac reduce_once_v :=
     match goal with
     | |- reduceI (@out _ _ _) _ _ => apply: reduce_outI
     | |- reduceI (@map _ _ _ _ _ _ _) ?i _ => idtac "map_in" i;apply: reduce_mapI
-    | |- reduceI (@sta _ _ _ _ _ ?v _) _ _ => idtac "state" v;apply: reduce_staI
+    | |- reduceI (@sta _ ?O _ _ _ ?v ?p) ?i _ => idtac "state" v;idtac "state input" i;idtac "continuation" p;idtac "output type" O;apply: reduce_staI
     | |- reduceI (@swi _ _ _ _) _ _ => apply: reduce_swiI
     | |- reduceI (par _ _) _ _ => apply: reduce_parI
     | |- reduceI (@loop _ _) _ _ => apply: reduce_loopI                                                  
@@ -1977,18 +1977,18 @@ Definition high_p := @out THandlerOutput TTypeSyscall Syscall.
 in sta, the state cannot be inspected in the making of the output, resetting the state therefore removes the information we would need to distinguish states.
 Using the loop construct we can turn "on" the Notify output by receiving an input. Sending the Notify output will due to the loop construct, create a new input, tagged with inr, which resets the state
  *)
-Definition alternate_generic (A B: Ty) (x y : [B]) := @map _ (Sum _ _) (Sum _ (Times Bool Unit)) B 
+Definition alternate_generic (A B C: Ty) (x y : [B]) (z : [C]) := @map _ (Sum _ _) (Sum _ (Times Bool C)) B 
                         inl
-                        (fun o => if o is inr (true,tt) then x else y)
-                        (@loop (Sum A (Times Bool Unit))
+                        (fun o => if o is inr (true,z) then x else y)
+                        (@loop (Sum A (Times Bool C))
                         (@map (Sum A _) _ _ (Sum _ _) id (fun o => inr o)
                         ((@sta (Sum _ _) _ Bool
                            (fun i v => if i is inl _ then true else false)
                            (fun o v => v)
                            false
-                           (@out (Times Bool _ ) Unit tt)
+                           (@out (Times Bool _ ) C z)
                         )))).
-Definition handler := @alternate_generic TInterrupt THandlerOutput Notify Nothing.
+Definition handler := @alternate_generic TInterrupt THandlerOutput Unit2 Notify Nothing tt.
 
 Definition process_pool := par_swiI3 0 (maybe low_p) (maybe high_p) (maybe handler). (*we end up with a double maybe because par_swiI3 also wraps maybe around the processes. We want this. The outer maybe discards irrelevant input while the latter maybe allows us to write default values in our traces, such as (None,(Some i),None) for input to high process*)
 
@@ -2781,7 +2781,7 @@ Definition times_Option_n (n : nat) (f : nat -> Ty) := times_N n (Option \o f).
     exact (fun n => Some (fst n,Some tt)). exact id.*)
     
 
-Definition scheduled_process_pool
+(*Definition scheduled_process_pool
   (n : nat)
   (f_I f_O : nat -> Ty)
   (f_sch : nat -> forall n, [Option (f_I n)] -> bool)
@@ -2817,8 +2817,45 @@ Definition scheduled_process_pool
     * eapply map. 3: apply H. simpl. 
       exact (map_pair id snd).
       exact id. 
-Defined.
+Defined.*)
 
+(*processes are 1-indexed, 0 used for no update*)
+Definition scheduled_process_pool
+  (n : nat)
+  (f_coopt : nat -> bool)
+  (f_initial : nat -> bool)
+  (f_I f_O : nat -> Ty)
+  (f_proc : forall n, Proc (f_I n) (f_O n)) : Proc (Times (Times Nat Nat) ((times_Option_n n f_I))) (times_Option_n n f_O).
+  elim: n.
+  - simpl.
+    eapply map. simpl.
+      instantiate (1:= Times Bool (Option (f_I 0))). exact (fun n => ((0.+1 \in [:: fst (fst n); snd (fst n)],snd n))).
+      exact id. 
+    eapply swi. exact (f_initial 0.+1). 
+    eapply maybe. 
+    eapply map.
+      eapply id. 
+      exact (fun o => (f_coopt 0.+1,o)).
+    exact (f_proc 0).
+
+  - intros. simpl.
+    eapply par.
+    * eapply map.
+      instantiate (1:= Times Bool (Option (f_I n.+1))). simpl.
+      exact (fun x => ((n.+2) \in [:: fst (fst x); snd (fst x)], fst (snd x))).
+        exact id. 
+      eapply swi.
+        exact (f_initial n.+2). 
+      eapply maybe.
+      eapply map.
+        exact id.     
+        exact (fun o => (f_coopt n.+2,o)).
+      (*eapply maybe.*) (*not necessary anymore*)
+      exact (f_proc n.+1).
+    * eapply map. 3: apply H. simpl. 
+      exact (map_pair id snd).
+      exact id. 
+Defined.
 
 (*original process pool definition with two maybes because we discard input with first maybe by schedule without message and second maybe with projection of some type*)
 (*Definition scheduled_process_pool
@@ -2856,30 +2893,34 @@ Defined.
         exact id. 
 Defined.*)
 
-Definition alternate_generic2 (A B : Ty) (x y : [B]) (pred : [A] -> bool) :=
-  @map _ (Sum _ _) (Sum _ (Times Bool Unit)) B 
+Definition alternate_generic2 (A B C : Ty) (x y : [B]) (z : [C]) (pred : [A] -> bool) :=
+  @map _ (Sum _ _) (Sum _ (Times Bool C)) B 
                         inl
-                        (fun o => if o is inr (true,tt) then x else y)
-                        (@loop (Sum A (Times Bool Unit))
+                        (fun o => if o is inr (true,z) then x else y)
+                        (@loop (Sum A (Times Bool C))
                         (@map (Sum A _) _ _ (Sum _ _) id (fun o => inr o)
                         ((@sta (Sum _ _) _ Bool
                            (fun i v => match i with | inl i' => v || pred i' | _ => false end)
                            (fun o v => v)
                            false
-                           (@out (Times Bool _ ) Unit tt)
+                           (@out (Times Bool _ ) C z)
                         )))).
-Definition high_p2 := @alternate_generic2 THandlerOutput TTypeSyscall Syscall NOP (fun i => i == Notify).
+Definition high_p2 := @alternate_generic2 THandlerOutput TTypeSyscall Unit1 Syscall NOP tt (fun i => i == Notify).
 
 
 Definition my_f_I := fun (n : nat) => match n with
-                                      | 0 => TInterrupt
-                                      | 1 => THandlerOutput
+                                      | 0 => TInterrupt (*handler*)
+                                      | 1 => THandlerOutput (*private*)
+                                      | 2 => Unit (*public*)
+                                      | 3 => Sum TInterrupt THandlerOutput (*scheduler*)
                                       | _ => Unit
                                       end.
+
 Definition my_f_O := fun (n : nat) => match n with
                                       | 0 => THandlerOutput
                                       | 1 => TTypeSyscall
                                       | 2 => TPublicOutput
+                                      | 3 => Times Nat Nat
                                       | _ => Unit
                                       end.
 
@@ -2918,15 +2959,42 @@ Definition my_f_sch (f_I : nat -> Ty) : nat -> forall n, [Option (f_I n)] -> boo
 
 Definition unit_p : Proc Unit Unit := @out Unit Unit tt.
 
-Definition my_procs : forall n, Proc (my_f_I n) (my_f_O n).
+Definition nat_strategy n := match n with 0 => 3 | 1 => 1 | 2 => 2 | 3 => 1 | _ => 0 end.
+
+Definition good_schedulerp :  Proc (Sum TInterrupt THandlerOutput) (Times Nat Nat). 
+  eapply map. apply id. instantiate (1:= Times (Times Nat Nat) _). exact (fun o => (nat_strategy (fst (fst o)),nat_strategy (snd (fst o)))). 
+  eapply (@sta _ _ _). exact (fun ih n => if ih is inl TimerInterrupt then (snd n,(snd n).+1%%4) else n). exact (fun _ n => n). exact (2,3).
+  eapply out. instantiate (1:= Unit2). con.
+Defined.
+
+Definition bad_schedulerp :  Proc (Sum TInterrupt THandlerOutput) Nat. 
+  eapply map. apply id. instantiate (1:= Times Nat _). exact fst.
+  eapply (@sta _ _ _). exact (fun ih n => if ih is inl _ then n.+1%%2 else n). exact (fun _ n => n). exact 0.
+  eapply out. instantiate (1:= Unit). con.
+Defined.
+
+Definition my_procs_good : forall n, Proc (my_f_I n) (my_f_O n).
   case. apply handler.
   case. apply high_p2.
   case. apply low_p.
+  case. simpl. apply good_schedulerp.
   elim. apply unit_p.
   intros. apply unit_p.
 Defined.
 
-Definition process_pool3 := @scheduled_process_pool 2 my_f_I my_f_O (@my_f_sch my_f_I) my_procs.
+(*Definition my_procs_bad : forall n, Proc (my_f_I n) (my_f_O n).
+  case. apply handler.
+  case. apply high_p2.
+  case. apply low_p.
+  case. simpl. apply bad_schedulerp.
+  elim. apply unit_p.
+  intros. apply unit_p.
+Defined.*)
+
+Definition my_f_coopt n := n == 4.
+Definition my_f_initial n := n == 1.
+Definition process_pool_good := @scheduled_process_pool 3 my_f_coopt my_f_initial my_f_I my_f_O my_procs_good.
+(*Definition process_pool_bad := @scheduled_process_pool 3 my_f_I my_f_O my_procs_bad.*)
 
 Definition LoopType_n (n : nat) (f_I f_O : nat -> Ty) := Sum (times_Option_n n f_I) (times_Option_n n f_O).
 
@@ -2968,27 +3036,29 @@ Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x'
                                    end) inr
                                 p))))).*)
 
-Definition loop_and_count
+(*Definition state_loop
   (n_state : nat)           
   (T_in' T_out' : Ty)   
   (f_route : [T_out'] -> [T_in'])
   (def : [T_out'])
   (p : Proc (Times Nat T_in') T_out')
+  (fv_I fv_O : [Sum T_in' T_out'] -> nat -> nat)
+  (f_sch : [T_in'] -> nat)
   : Proc T_in' T_out' :=
   (@map T_in' (Sum T_in' T_out') (Sum T_in' T_out') T_out' inl (inr_or_def def)
                           (@loop (Sum T_in' T_out')
                              (@map _ _ (Times _ _) _
                                 id snd
-                                (@sta _ _ Nat (fun i v => v) (fun o v => (v+1)) n_state
+                                (@sta _ _ Nat fv_I fv_O n_state
                                    (@map (Times Nat (Sum T_in' T_out'))
                                       (Times Nat T_in')
                                 _ (Sum _ _)
                                 (fun i  =>
                                    match snd i with
-                                   | inl i' => ((0,i'))
+                                   | inl i' => ((f_sch i',i'))
                                    | inr o  => map_pair id f_route (fst i,o) (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
                                    end) inr
-                                p))))).
+                                p))))).*)
 
 Definition only_loop
   (T_in' T_out' : Ty)   
@@ -3010,23 +3080,32 @@ Definition only_loop
                                 p))).
 
 
-
-
 Definition my_T_in := Sum Unit TInterrupt. (*We need Unit input to be able to differentiate trace, otherwise we only have interrupts in the trace*)
 Definition my_T_out := Option (Option (Sum TPublicOutput TTypeSyscall)).
 
-Definition my_T_in' := times_Option_n 2 my_f_I.
-Definition my_T_out' := times_Option_n 2 my_f_O.
+Definition my_T_in' := Times (Times Nat Nat) (times_Option_n 3 my_f_I).
+Definition my_T_out' := times_Option_n 3 my_f_O. 
 
-Definition my_f_in (t : [my_T_in]) : [my_T_in'] := match t with | inl tt => (Some tt,(None,None)) | inr t => (None,(None,Some t)) end.
+(*Definition my_f_sch (t : [my_T_in]) : [Nat] := match t with | inl  => (None,(Some tt,(None,None))) | inr t => (None,(None,(None,Some t))) end*)
+
+Definition my_f_in_sch (t : [my_T_in]) : [Times Nat Nat] := match t with | inl tt | inr DiskInterrupt => (0,0) | inr TimerInterrupt => (0,4) end.
+
+Definition my_f_in_t (t : [my_T_in]) : [ (times_Option_n 3 my_f_I) ] := match t with
+                                                                        | inl tt => (None,(Some tt,(None,None)))
+                                                                        | inr TimerInterrupt => (Some (inl TimerInterrupt),(None,(None,None)))
+                                                                        | inr DiskInterrupt => (None,(None,(None,Some DiskInterrupt))) end.
+
+Definition my_f_in (t : [my_T_in]) : [my_T_in'] := (my_f_in_sch t, my_f_in_t t).
+
 Definition my_f_out (t : [my_T_out']) := match t with
-                                         | (Some p,(None,None)) => Some (Some (inl p))
-                                         | (None,(Some h,None)) => Some (Some (inr h))
-                                         | (None,(None,Some h)) => Some None
-                                         | _ => None                               
+                                         | (None,(Some p,(None,None))) => Some (Some (inl p))
+                                         | (None,(None,(Some sys,None))) => Some (Some (inr sys))
+                                         | (None,(None,(None,Some h))) => Some None                                                                              
+                                         | _ => None
                                          end.
 
-  Definition f_out_dis (v : [my_T_out]) := match v with | Some (Some (inl _)) | None => False | _  => True end.
+Definition f_out_dis (v : [my_T_out]) := match v with | Some (Some (inl _)) | None => False | _  => True end.
+
   Definition my_f_out_rel : myrel ([my_T_out]).
   refine (@MyRel _
             (fun l (v : [my_T_out]) => l = \bot /\ f_out_dis v )
@@ -3046,25 +3125,23 @@ Definition my_f_out (t : [my_T_out']) := match t with
   case. intros. subst. eauto.
   ssa.
   Defined.
-  
-(*Definition my_f_out (t : [my_T_out']) := match t with
-                                              |(Some publ,(None,None)) => Some (inl publ)
-                                              |(None,(Some prv,None)) => Some (inr prv)
-                                              |_ => None
-                                           end.*)
 
+
+Definition none4 : [ (times_Option_n 3 my_f_I) ]  := (None,(None,(None,None))).
+  
 Definition my_f_route (t : [my_T_out']) : [my_T_in'] :=
   match t with
-  | (_,(_,(Some h))) => (None,(Some h,None))
-  | _ => (None,(None,None))
+  | (Some sch,_) => (sch,none4)
+  | (None,(Some publ, _)) => ((0,0),none4)
+  | (None,(None,(Some prv,_))) => ((0,0),none4)
+  | (None,(None,(None,Some handl))) => ((0,0),(None,(None,(Some handl,None))))
+  | _ => ((0,0),none4)    
   end.
 
-Definition my_def := None_N 2 my_f_O.
-
-
-
+Definition my_def := None_N 3 my_f_O.
+Check only_loop.
 (*Definition my_mitigator3 := @mitigator3 my_T_in my_T_in' my_T_out my_T_out' my_f_in my_f_out my_f_route my_def.*)
-Definition my_loop_and_count := @loop_and_count 1 my_T_in' my_T_out' my_f_route my_def.
+Definition my_only_loop := @only_loop my_T_in' my_T_out' my_f_route my_def.
 
 (*
 (*small detail, we need to allow interrupt to pass through even though p1 is scheduled, otherwise we block the handler*)
@@ -3122,24 +3199,33 @@ Definition wrap_trace s :=
 (*We include state change for public process to show that it cannot receive input when it is not scheduled. If we try to consume the output trace that assumes that input has been received then we fail*)
 Definition streamTypec := Stream ([my_T_in'] + [my_T_out']).
 
-Definition in1 x : [my_T_in'] := (Some x,(None,None)).
+(*Definition in1 x : [my_T_in'] := (Some x,(None,(None,None))).
 Definition in2 x : [my_T_in'] := (None,(Some x,None)).
-Definition in3 x : [my_T_in'] := (None,(None,Some x)).
+Definition in3 x : [my_T_in'] := (None,(None,Some x)).*)
 
-Definition out1 x : [my_T_out'] := (Some x,(None,None)).
-Definition out2 x : [my_T_out'] := (None,(Some x,None)).
-Definition out3 x : [my_T_out'] := (None,(None,Some x)).
+Definition out0 x : [my_T_out'] := (Some x,(None,(None,None))).
+Definition out1 x : [my_T_out'] := (None,(Some x,(None,None))).
+Definition out2 x : [my_T_out'] := (None,(None,(Some x,None))).
+Definition out3 x : [my_T_out'] := (None,(None,(None, Some x))).
 
-Definition newtraceFc (s : streamTypec) := Cons (inl (in3 DiskInterrupt))
+Definition newtraceFc (s : streamTypec) := Cons (inl (my_f_in (inr TimerInterrupt)))
+                                          (Cons (inr ((Some (1,3),(None,(None,Some Nothing)))))    
+                                          (Cons (inl (my_f_in (inr DiskInterrupt))) (*disk interrupt should not initiate context switch*)
                                           (Cons (inr (out1 GetRequest))(*public*)
-                                          (Cons (inr (out1 GetRequest))(*public*)
-                                            (Cons (inr (out3 Notify))(*handler*)
-                                            (Cons (inr (out3 Nothing))(*handler*)
-                                              (Cons (inr (out2 Syscall)) (*private*)
-                                              (Cons (inr (out2 NOP)) (*private*)
-                                                (Cons (inr (out3 Nothing))(*handler*)
-                                                (Cons (inr (out3 Nothing))(*handler*)                                                 
-                                                  s)))))))).
+                                          (Cons (inr (out1 GetRequest))
+                                          (Cons (inl (my_f_in (inr TimerInterrupt)))
+                                          (Cons (inr (Some (3, 1), (Some GetRequest, (None, None))))
+                                          (Cons (inr (out3 Notify))(*handler*)
+                                          (Cons (inr (out3 Nothing))
+                                          (Cons (inl (my_f_in (inr TimerInterrupt)))
+                                          (Cons (inr (Some (1, 2), (None, (None, Some Nothing))))
+                                          (Cons (inr (out2 Syscall))(*private*)
+                                          (Cons (inr (out2 NOP))
+                                          (Cons (inl (my_f_in (inr TimerInterrupt)))
+                                          (Cons (inr (Some (2, 1), (None, (Some NOP, None))))
+                                          (Cons (inr (out3 Nothing))(*handler*)
+                                          (Cons (inr (out3 Nothing))                                                   
+                                                  s)))))))))))))))).
 
 CoFixpoint newtracec := newtraceFc newtracec.                                             
 
@@ -3153,28 +3239,37 @@ do ? f_equal.
 Qed.
 
 (*Trace derivation*)
-Ltac rewr ::=  (try rewrite newtracec_eq); rewrite /mitigator /par_swiI3 /sta_swi /low_p /newtraceFb /process_pool /par_swiI /scheduler /handler /high_p (*/my_mitigator3*) /loop_and_count /my_loop_and_count (*/mitigator3*) /process_pool3 /scheduled_process_pool /high_p2 /alternate_generic /alternate_generic2 /low_p /loop_and_count.
+Ltac rewr ::=  (try rewrite newtracec_eq); rewrite /mitigator /par_swiI3 /sta_swi /low_p /newtraceFb /process_pool /par_swiI /scheduler /handler /high_p (*/my_mitigator3*) /only_loop /my_only_loop /process_pool_good /good_schedulerp /my_f_coopt (*/mitigator3*) /scheduled_process_pool /high_p2 /alternate_generic /alternate_generic2 /low_p.
 
 
 
 
 (*Need a stronger coinduction hypothesis which makes reasoning on state natural number becomes symbolic, so then extra theorems must be shown. We skip this for now*)
-Lemma newtracec_trace : trace newtracec (my_loop_and_count process_pool3).
+Lemma newtracec_trace : trace newtracec (my_only_loop process_pool_good).
 Proof.
   pcofix CIH.
-  bundle;left.
-  bundle;left.
-  bundle;left.
-  bundle;left.
   bundle;left. 
   bundle;left.
   bundle;left.
   bundle;left.
-  bundle;right.  
-  swi_instans.
-  have: 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 = 1. admit.
-  move=>->. eauto.
-Admitted.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.  
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;right.
+  swi_instans. simpl. eauto.
+Qed.
+
+
+
 Check rel_eqmaybe.
 (*Lemma rel_eqmaybe : forall (A : Ty) (ARel : myrel [A]) x y l, rel ARel l x y -> rel (eqmaybe ARel) l (Some x) (Some y).*)
 
