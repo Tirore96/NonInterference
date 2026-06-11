@@ -2912,7 +2912,7 @@ Definition my_f_I := fun (n : nat) => match n with
                                       | 0 => TInterrupt (*handler*)
                                       | 1 => THandlerOutput (*private*)
                                       | 2 => Unit (*public*)
-                                      | 3 => Sum TInterrupt THandlerOutput (*scheduler*)
+                                      | 3 => TInterrupt (*scheduler*)
                                       | _ => Unit
                                       end.
 
@@ -2959,20 +2959,22 @@ Definition my_f_sch (f_I : nat -> Ty) : nat -> forall n, [Option (f_I n)] -> boo
 
 Definition unit_p : Proc Unit Unit := @out Unit Unit tt.
 
-Definition nat_strategy n := match n with 0 => 3 | 1 => 1 | 2 => 2 | 3 => 1 | _ => 0 end.
 
-Definition good_schedulerp :  Proc (Sum TInterrupt THandlerOutput) (Times Nat Nat). 
-  eapply map. apply id. instantiate (1:= Times (Times Nat Nat) _). exact (fun o => (nat_strategy (fst (fst o)),nat_strategy (snd (fst o)))). 
-  eapply (@sta _ _ _). exact (fun ih n => if ih is inl TimerInterrupt then (snd n,(snd n).+1%%4) else n). exact (fun _ n => n). exact (2,3).
+
+
+
+
+Definition nat_strategy_good n := match n with 0 => 3 | 1 => 1 | 2 => 2 | 3 => 1 | _ => 0 end.
+
+Definition good_schedulerp :  Proc TInterrupt (Times Nat Nat). 
+  eapply map. apply id. instantiate (1:= Times (Times Nat Nat) _). exact (fun o => (nat_strategy_good (fst (fst o)),nat_strategy_good (snd (fst o)))). 
+  eapply (@sta _ _ _). exact (fun ih n => if ih is TimerInterrupt then (snd n,(snd n).+1%%4) else n). exact (fun _ n => n). exact (2,3).
   eapply out. instantiate (1:= Unit2). con.
 Defined.
 
-Definition bad_schedulerp :  Proc (Sum TInterrupt THandlerOutput) Nat. 
-  eapply map. apply id. instantiate (1:= Times Nat _). exact fst.
-  eapply (@sta _ _ _). exact (fun ih n => if ih is inl _ then n.+1%%2 else n). exact (fun _ n => n). exact 0.
-  eapply out. instantiate (1:= Unit). con.
-Defined.
 
+Definition my_f_coopt_good n := n == 4.
+Definition my_f_initial_good n := n == 2.
 Definition my_procs_good : forall n, Proc (my_f_I n) (my_f_O n).
   case. apply handler.
   case. apply high_p2.
@@ -2981,20 +2983,48 @@ Definition my_procs_good : forall n, Proc (my_f_I n) (my_f_O n).
   elim. apply unit_p.
   intros. apply unit_p.
 Defined.
+Definition process_pool_good := @scheduled_process_pool 3 my_f_coopt_good my_f_initial_good my_f_I my_f_O my_procs_good.
 
-(*Definition my_procs_bad : forall n, Proc (my_f_I n) (my_f_O n).
+
+
+
+
+
+
+
+
+
+
+
+Definition my_procs_bad : forall n, Proc (my_f_I n) (my_f_O n).
   case. apply handler.
   case. apply high_p2.
   case. apply low_p.
   case. simpl. apply bad_schedulerp.
   elim. apply unit_p.
   intros. apply unit_p.
-Defined.*)
+Defined.
 
-Definition my_f_coopt n := n == 4.
-Definition my_f_initial n := n == 1.
-Definition process_pool_good := @scheduled_process_pool 3 my_f_coopt my_f_initial my_f_I my_f_O my_procs_good.
-(*Definition process_pool_bad := @scheduled_process_pool 3 my_f_I my_f_O my_procs_bad.*)
+Definition nat_strategy_bad n := match n with 0 => 3 | 1 => 2 | _ => 0 end.
+
+Definition bad_schedulerp :  Proc TInterrupt (Times Nat Nat).
+  eapply map. apply id. instantiate (1:= Times (Times Nat Nat) _). exact (fun o => (nat_strategy_bad (fst (fst o)),nat_strategy_bad (snd (fst o)))). 
+  eapply (@sta _ _ _). exact (fun ih n => if ih is TimerInterrupt then (snd n,(snd n).+1%%2) else n). exact (fun _ n => n). exact (0,1).
+  eapply out. instantiate (1:= Unit2). con.
+Defined.
+
+
+
+
+(*An alternative to f_coopt, is to include the index you want to turn off in the output of the scheduler
+ This should work for turning off the scheduler, simply include 4
+ Messy for the handler because it means the handler has similar control as the scheduler in sending out indices for processes to shut off
+ Works, but for modelling the handler cooperatively descheduling itself, it is more accurate to use f_coopt*)
+(*Actually no it does not, since it is hardcoded and not dependent on handler state*)
+(*TODO, remove f_coopt*)
+Definition my_f_coopt_bad n := n \in [::1 ; 4].
+Definition my_f_initial_bad n := n == 2.
+Definition process_pool_bad :=  @scheduled_process_pool 3 my_f_coopt_bad my_f_initial_bad my_f_I my_f_O my_procs_bad.
 
 Definition LoopType_n (n : nat) (f_I f_O : nat -> Ty) := Sum (times_Option_n n f_I) (times_Option_n n f_O).
 
@@ -3088,14 +3118,16 @@ Definition my_T_out' := times_Option_n 3 my_f_O.
 
 (*Definition my_f_sch (t : [my_T_in]) : [Nat] := match t with | inl  => (None,(Some tt,(None,None))) | inr t => (None,(None,(None,Some t))) end*)
 
-Definition my_f_in_sch (t : [my_T_in]) : [Times Nat Nat] := match t with | inl tt | inr DiskInterrupt => (0,0) | inr TimerInterrupt => (0,4) end.
+Definition my_f_in_sch_good (t : [my_T_in]) : [Times Nat Nat] := match t with | inl tt | inr DiskInterrupt => (0,0) | inr TimerInterrupt => (0,4) end.
+Definition my_f_in_sch_bad  (t : [my_T_in]) : [Times Nat Nat] := match t with | inl tt | inr DiskInterrupt => (1,4) | inr TimerInterrupt => (0,4) end.
 
 Definition my_f_in_t (t : [my_T_in]) : [ (times_Option_n 3 my_f_I) ] := match t with
                                                                         | inl tt => (None,(Some tt,(None,None)))
-                                                                        | inr TimerInterrupt => (Some (inl TimerInterrupt),(None,(None,None)))
+                                                                        | inr TimerInterrupt => (Some (TimerInterrupt),(None,(None,None)))
                                                                         | inr DiskInterrupt => (None,(None,(None,Some DiskInterrupt))) end.
 
-Definition my_f_in (t : [my_T_in]) : [my_T_in'] := (my_f_in_sch t, my_f_in_t t).
+Definition my_f_in_good (t : [my_T_in]) : [my_T_in'] := (my_f_in_sch_good t, my_f_in_t t).
+Definition my_f_in_bad (t : [my_T_in]) : [my_T_in'] := (my_f_in_sch_bad t, my_f_in_t t).
 
 Definition my_f_out (t : [my_T_out']) := match t with
                                          | (None,(Some p,(None,None))) => Some (Some (inl p))
@@ -3129,7 +3161,7 @@ Definition f_out_dis (v : [my_T_out]) := match v with | Some (Some (inl _)) | No
 
 Definition none4 : [ (times_Option_n 3 my_f_I) ]  := (None,(None,(None,None))).
   
-Definition my_f_route (t : [my_T_out']) : [my_T_in'] :=
+Definition my_f_route_good (t : [my_T_out']) : [my_T_in'] :=
   match t with
   | (Some sch,_) => (sch,none4)
   | (None,(Some publ, _)) => ((0,0),none4)
@@ -3141,7 +3173,19 @@ Definition my_f_route (t : [my_T_out']) : [my_T_in'] :=
 Definition my_def := None_N 3 my_f_O.
 Check only_loop.
 (*Definition my_mitigator3 := @mitigator3 my_T_in my_T_in' my_T_out my_T_out' my_f_in my_f_out my_f_route my_def.*)
-Definition my_only_loop := @only_loop my_T_in' my_T_out' my_f_route my_def.
+Definition my_only_loop_good := @only_loop my_T_in' my_T_out' my_f_route_good my_def.
+
+Definition my_f_route_bad (t : [my_T_out']) : [my_T_in'] :=
+  match t with
+  | (Some sch,_) => (sch,none4)
+  | (None,(Some publ, _)) => ((0,0),none4)
+  | (None,(None,(Some prv,_))) => ((0,0),none4)
+  | (None,(None,(None,Some handl))) => ((0,4),(None,(None,(Some handl,None)))) (*(0,4) to turn on scheduler*)
+  | _ => ((0,0),none4)    
+  end.
+
+Definition my_only_loop_bad := @only_loop my_T_in' my_T_out' my_f_route_bad my_def.
+
 
 (*
 (*small detail, we need to allow interrupt to pass through even though p1 is scheduled, otherwise we block the handler*)
@@ -3208,24 +3252,61 @@ Definition out1 x : [my_T_out'] := (None,(Some x,(None,None))).
 Definition out2 x : [my_T_out'] := (None,(None,(Some x,None))).
 Definition out3 x : [my_T_out'] := (None,(None,(None, Some x))).
 
-Definition newtraceFc (s : streamTypec) := Cons (inl (my_f_in (inr TimerInterrupt)))
+(*Spec for good scheduler*)
+(*Add diskinterrupt*) 
+Definition newtraceFc (s : streamTypec) := Cons (inl (my_f_in_good (inr TimerInterrupt))) (*jump to scheduler*)
+                                             (Cons (inr ((Some (2,1)),(None,(Some NOP,None)))) (*private process does nothing, scheduler points to handler*)
+                                             (Cons (inr (out3 Nothing)) (*handler finishes, returns control to scheduler*)
+                                             (Cons (inr (out0 (4,3))) (*scheduler points to public*)
+                                             (Cons (inr (out1 GetRequest)) (*public output*)
+                                             (Cons (inl (my_f_in_good (inr DiskInterrupt)))(*disk interrupt, should NOT jump to handler*)
+                                             (Cons (inl (my_f_in_good (inr TimerInterrupt))) (*jump to scheduler*)
+                                             (Cons (inr (Some (3,1),(Some GetRequest,(None,None)))) (*public process finishes, scheduler points to handler*)
+                                             (Cons (inr (out3 Notify)) (*handler signal informs diskinterrupt was received*)
+                                             (Cons (inr (out0 (4,2))) (*scheduler points to private*)
+                                             (Cons (inr (None,(None,(Some Syscall,None)))) s)))))))))) (*private output received notification from handler, outputs new syscall*).
+
+(*                                             (Cons (inl (my_f_in_good (inr TimerInterrupt)))
+                                             (Cons (inr (Some (2,1),(None,(Some NOP,None))))
+                                             (Cons (inr (out3 Nothing))
+                                             (Cons (inr (out0 (4,2))) s))))))))))))).                                             
+
                                           (Cons (inr ((Some (1,3),(None,(None,Some Nothing)))))    
-                                          (Cons (inl (my_f_in (inr DiskInterrupt))) (*disk interrupt should not initiate context switch*)
+                                          (Cons (inl (my_f_in_good (inr DiskInterrupt))) (*disk interrupt should not initiate context switch*)
                                           (Cons (inr (out1 GetRequest))(*public*)
                                           (Cons (inr (out1 GetRequest))
-                                          (Cons (inl (my_f_in (inr TimerInterrupt)))
+                                          (Cons (inl (my_f_in_good (inr TimerInterrupt)))
                                           (Cons (inr (Some (3, 1), (Some GetRequest, (None, None))))
                                           (Cons (inr (out3 Notify))(*handler*)
                                           (Cons (inr (out3 Nothing))
-                                          (Cons (inl (my_f_in (inr TimerInterrupt)))
+                                          (Cons (inl (my_f_in_good (inr TimerInterrupt)))
                                           (Cons (inr (Some (1, 2), (None, (None, Some Nothing))))
                                           (Cons (inr (out2 Syscall))(*private*)
                                           (Cons (inr (out2 NOP))
-                                          (Cons (inl (my_f_in (inr TimerInterrupt)))
+                                          (Cons (inl (my_f_in_good (inr TimerInterrupt)))
                                           (Cons (inr (Some (2, 1), (None, (Some NOP, None))))
                                           (Cons (inr (out3 Nothing))(*handler*)
                                           (Cons (inr (out3 Nothing))                                                   
-                                                  s)))))))))))))))).
+                                                  s)))))))))))))))).*)
+
+(*Definition newtraceFc (s : streamTypec) := Cons (inl (my_f_in_good (inr TimerInterrupt)))
+                                          (Cons (inr ((Some (1,3),(None,(None,Some Nothing)))))    
+                                          (Cons (inl (my_f_in_good (inr DiskInterrupt))) (*disk interrupt should not initiate context switch*)
+                                          (Cons (inr (out1 GetRequest))(*public*)
+                                          (Cons (inr (out1 GetRequest))
+                                          (Cons (inl (my_f_in_good (inr TimerInterrupt)))
+                                          (Cons (inr (Some (3, 1), (Some GetRequest, (None, None))))
+                                          (Cons (inr (out3 Notify))(*handler*)
+                                          (Cons (inr (out3 Nothing))
+                                          (Cons (inl (my_f_in_good (inr TimerInterrupt)))
+                                          (Cons (inr (Some (1, 2), (None, (None, Some Nothing))))
+                                          (Cons (inr (out2 Syscall))(*private*)
+                                          (Cons (inr (out2 NOP))
+                                          (Cons (inl (my_f_in_good (inr TimerInterrupt)))
+                                          (Cons (inr (Some (2, 1), (None, (Some NOP, None))))
+                                          (Cons (inr (out3 Nothing))(*handler*)
+                                          (Cons (inr (out3 Nothing))                                                   
+                                                  s)))))))))))))))).*)
 
 CoFixpoint newtracec := newtraceFc newtracec.                                             
 
@@ -3238,18 +3319,72 @@ rewrite /newtraceFc.
 do ? f_equal.
 Qed.
 
+
+
+
+Definition newtraceFd (s : streamTypec) := Cons (inl (my_f_in_bad (inr TimerInterrupt)))
+                                          (Cons (inr ((Some (2,3),(None,(Some NOP,None)))))    
+                                          (Cons (inr (out1 GetRequest))(*public*)
+                                          (Cons (inl (my_f_in_bad (inr DiskInterrupt))) (*disk interrupt should not initiate context switch*)                                                                               (Cons (inr (Some (3,1), (Some GetRequest,(None,None))))(*handler*)          
+                                          (Cons (inr (Some (1,3), (None, (None, Some Notify))))
+                                          (Cons (inl (my_f_in_bad (inr TimerInterrupt)))
+                                          (Cons (inr (Some (3, 1), (Some GetRequest, (None, None))))
+
+                                          (Cons (inr (out3 Nothing))
+                                          (Cons (inl (my_f_in_bad (inr TimerInterrupt)))
+                                          (Cons (inr (Some (1, 2), (None, (None, Some Nothing))))
+                                          (Cons (inr (out2 Syscall))(*private*)
+                                          (Cons (inr (out2 NOP))
+                                          (Cons (inl (my_f_in_bad (inr TimerInterrupt)))
+                                          (Cons (inr (Some (2, 1), (None, (Some NOP, None))))
+                                          (Cons (inr (out3 Nothing))(*handler*)
+                                          (Cons (inr (out3 Nothing))                                                   
+                                                  s)))))))))))))))).
+
+CoFixpoint newtraced := newtraceFd newtraced.                                             
+
+Lemma newtraced_eq : newtraced = newtraceFd newtraced.
+Proof.
+rewrite {1}/newtraced. 
+rewrite {1}(coseq_match (cofix newtraced : streamTypec := newtraceFd newtraced)).
+simpl.
+rewrite /newtraceFd.
+do ? f_equal.
+Qed.
+
+(*Our scheduler also handles the jump to the handler even though this is implemented in hardware on a cpu*)
+Definition newtraceFe (s : streamTypec) := Cons (inl (my_f_in_bad (inr TimerInterrupt)))
+                                          (Cons (inr ((Some (2,3),(None,(Some NOP,None)))))
+                                          (Cons (inr (out1 GetRequest))(*public*)
+                                          (Cons (inl (my_f_in_bad (inr TimerInterrupt)))                                                   
+                                          (Cons (inr ((Some (3,2)),(Some GetRequest,(None,None))))
+                                          (Cons (inr (out2 NOP))                                                   
+                                                  s))))).
+
+CoFixpoint newtracee := newtraceFe newtracee.
+
+Lemma newtracee_eq : newtracee = newtraceFe newtracee.
+Proof.
+rewrite {1}/newtracee. 
+rewrite {1}(coseq_match (cofix newtracee : streamTypec := newtraceFe newtracee)).
+simpl.
+rewrite /newtraceFe.
+do ? f_equal.
+Qed.
+
+
 (*Trace derivation*)
-Ltac rewr ::=  (try rewrite newtracec_eq); rewrite /mitigator /par_swiI3 /sta_swi /low_p /newtraceFb /process_pool /par_swiI /scheduler /handler /high_p (*/my_mitigator3*) /only_loop /my_only_loop /process_pool_good /good_schedulerp /my_f_coopt (*/mitigator3*) /scheduled_process_pool /high_p2 /alternate_generic /alternate_generic2 /low_p.
+Ltac rewr ::=  (try rewrite newtracec_eq); (try rewrite newtracee_eq); rewrite /mitigator /par_swiI3 /sta_swi /low_p /newtraceFb /process_pool /par_swiI /scheduler /handler /high_p (*/my_mitigator3*) /only_loop /my_only_loop_good /my_only_loop_bad /process_pool_good /good_schedulerp /my_f_coopt_good (*/mitigator3*) /scheduled_process_pool /high_p2 /alternate_generic /alternate_generic2 /low_p /process_pool_bad /bad_schedulerp /nat_strategy_bad.
 
 
 
 
-(*Need a stronger coinduction hypothesis which makes reasoning on state natural number becomes symbolic, so then extra theorems must be shown. We skip this for now*)
-Lemma newtracec_trace : trace newtracec (my_only_loop process_pool_good).
+(*spec for good scheduler*)
+Lemma newtracec_trace : trace newtracec (my_only_loop_good process_pool_good).
 Proof.
   pcofix CIH.
   bundle;left. 
-  bundle;left.
+  bundle.
   bundle;left.
   bundle;left.
   bundle;left.
@@ -3267,6 +3402,41 @@ Proof.
   bundle;right.
   swi_instans. simpl. eauto.
 Qed.
+
+
+(*TODO*)
+Lemma newtraced_trace : trace newtraced (my_only_loop_bad process_pool_bad).
+Proof. Admitted.
+
+
+
+(*We use this for deriving contradiction*)
+Lemma newtracee_trace : trace newtracee (my_only_loop_bad process_pool_bad).
+Proof.
+  pcofix CIH.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;right. swi_instans. eauto.
+Qed.
+
+
+
+Lemma counterexampleb : NotSim \bot InputRel OutputRel newtraceb (mitigator process_pool).
+Proof.
+  rewr.
+  apply/NS4.
+  intros. match_dd. ssa.
+  apply/NS4.
+  intros. match_dd;ssa.
+  apply/NS2. apply/dis_test.
+  intros. match_dd.
+  apply/NS4. intros. match_dd;ssa.
+Qed.
+
+
 
 
 

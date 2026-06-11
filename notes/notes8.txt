@@ -1,0 +1,21 @@
+TODOs:
+
+- Write newtraceFd: It will be the spec for the bad process
+
+- (done) Write a simple trace for bad process: It will be used later for deriving counter example
+
+- Should trace for counter example be the exposed trace or what the world sees?
+
+- Derive counter example for bad process
+
+- Prove NI for good process
+
+
+
+
+
+Notes:
+The good scheduler
+(*Our scheduler also handles the jump to the handler even though this is implemented in hardware on a cpu*)
+
+We need to allow multiple outputs in tuple because state it localised to scheduler. Other processes, say public process, does not know when to turn off.
