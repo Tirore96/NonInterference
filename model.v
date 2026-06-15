@@ -236,7 +236,39 @@ Ltac match_dd_o :=
 (*Hint Resolve reduce_mapO reduce_staO reduce_swiO reduce_swiO2 reduce_maybeO reduce_parO reduce_loopO : omitdb.*)
 
 
-Variant TraceF {I O : Ty} (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O -> Prop :=
+Inductive Trace (I O : Ty) (ORel : myrel [O]) (l : level) : list ([I] + [O]) -> Proc I O -> Prop :=
+| TR0 p : Trace ORel l nil p
+| TR1 p i p' t : reduceI p i p' -> Trace ORel l t p' -> Trace ORel l (inl i::t) p
+| TR2 p o' o p' t : reduceO p o' p' -> rel ORel l o' o -> Trace ORel l t p' -> Trace ORel l (inr o::t) p.
+
+
+Fixpoint insert (A : Set) (n : nat) (a : A) (l : seq A) :=
+  match n with
+  | 0 => a::l
+  | n'.+1 => if l is a::l' then a::(insert n' a l') else nil
+  end.
+
+Fixpoint remove (A : Set) (n : nat) (l : seq A) :=
+  match n with
+  | 0 => if l is a::l' then l' else nil
+  | n'.+1 => if l is a::l' then a::(insert n' a l') else nil
+  end.
+
+(*Fixpoint swap (A : Set) (n : nat) (a : A) (l : seq A) :=
+  match n with
+  | 0 => if l is a'::l' then a::l' else nil
+  | n'.+1 => if l is a'::l' then a'::(swap n' a l') else nil
+end.*)    
+
+Definition NI_l (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (l : level) (p : Proc I O) : Prop :=
+  (forall t i i' n, rel IRel l i i' -> Trace ORel l (insert n (inl i) t) p -> Trace ORel l (insert n (inl i') t) p) /\
+  (forall t i n, dis IRel l i -> Trace ORel l t p -> Trace ORel l (insert n (inl i) t) p) /\
+  (forall t i n, dis IRel l i -> Trace ORel l t p <-> Trace ORel l (remove n t) p).
+
+Definition NI (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I O) := forall l, NI_l IRel ORel l p.
+            
+
+(*Variant TraceF {I O : Ty} (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O -> Prop :=
   | traceI : forall p p' i effs, reduceI p i p' -> R effs p'  -> TraceF R (Cons (inl i) effs) p
   | traceO : forall p p' o effs, reduceO p o p' -> R effs p'  -> TraceF R (Cons (inr o) effs) p.
 Hint Constructors TraceF.
@@ -262,7 +294,7 @@ Hint Resolve MapSF_monotone2 : paco.
 
 Definition MapS  (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s s' := paco2 (@MapSF I I' O O' f g) bot2 s s'.
 
-Definition MapRel (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p := exists s', MapS f g s' s /\ trace s' p.
+Definition MapRel (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p := exists s', MapS f g s' s /\ trace s' p.*)
 
 
 
@@ -382,7 +414,7 @@ Definition semiprivateRel (A : Ty) : myrel ([A]).
 Defined.
 
 
-Definition Clause1 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
+(*Definition Clause1 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
   forall i s', s = (Cons (inl i) s') -> dis IRel l i -> R s' p.
 
 Definition Clause2 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
@@ -439,10 +471,10 @@ eapply monotone_Clause4. eauto. eauto.
 Qed.
 Hint Resolve monotone_SimulationF : paco.
 
-Definition simulation {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) l s p := paco2 (@SimulationF I O l IRel ORel) bot2 s p.
-Definition NI (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O])  (p : Proc I O) := forall l s, trace s p -> simulation IRel ORel l s p.
+Definition simulation {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) l s p := paco2 (@SimulationF I O l IRel ORel) bot2 s p.*)
+(*Definition NI (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O])  (p : Proc I O) := forall l s, trace s p -> simulation IRel ORel l s p.*)
 
-Check paco2.
+(*Check paco2.
 
 Lemma paco2_imp : forall A B (a : A) (b : B) F F' R, monotone2 F -> (forall a b R, F R a b -> F' R a b) -> paco2 F R a b -> paco2 F' R a b.
 Proof.
@@ -456,9 +488,9 @@ Proof.
   intros. split;apply/paco2_imp;eauto.
   intros. apply/H1. eauto.
   intros. apply/H1. eauto.
-Qed.  
+Qed.  *)
 
-Lemma SimulationF_imp : forall I O l (IRel : myrel [I]) (ORel : myrel [O]) R s p, SimulationF l IRel ORel R s p -> SimulationF l IRel (toPublicRel ORel) R s p.
+(*Lemma SimulationF_imp : forall I O l (IRel : myrel [I]) (ORel : myrel [O]) R s p, SimulationF l IRel ORel R s p -> SimulationF l IRel (toPublicRel ORel) R s p.
 Proof.
   intros. inv H. con;eauto.
 Qed.
@@ -466,14 +498,22 @@ Qed.
 Lemma SimulationF_imp2 : forall I O l (IRel : myrel [I]) (ORel : myrel [O]) R s p, SimulationF l IRel (toPublicRel ORel) R s p -> SimulationF l IRel ORel R s p.
 Proof.
   intros. inv H. con;eauto.
-Qed.
+Qed.*)
 
 
 
 Lemma simulation_equiv : forall I O (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p <-> NI IRel (toPublicRel ORel) p.
 Proof.
   intros. split.
-  intros. rewrite /NI. intros. eapply H in H0.
+  intros. move: H. rewrite /NI /NI_l. intros.
+  move: (H l). ssa. clear H H1 H2.
+  intros.
+
+  elim : t n H1. case. ssa. econ. eauto
+  
+  intros.
+  ssa.
+  eapply H in H0.
   move: H0. instantiate (1:=l).
   apply:paco2_imp. apply monotone_SimulationF.
   intros. apply/SimulationF_imp. done.
@@ -1284,12 +1324,38 @@ Lemma trace_map : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (s
   pfold. con. rewrite /map_pred. exists (inr o). done. eauto.
 Qed.
 
+Definition trace_test (A B : Ty) (p : Proc A B) : { Stream ([A] + [B]). 
+  elim: p.
+  intros. cofix CIH. apply Cons. apply (inr i). apply CIH.
+  admit. (*if the rest work, we come back here and add invertible condition on function in map constructor*)
+  intros. move: H. cofix CIH. case.
+  case. simpl. case. intros. apply Cons.
+  left. apply b. apply CIH. apply s.
+  intros. apply Cons. right. simpl. con. auto. auto. apply CIH. apply s.
+  intros. move: H. cofix CIH. case. simpl. case.
+  intros. apply Cons. left. con. apply b. apply a.
+  apply CIH. simpl. apply s.
+  case. intros. apply Cons. right. 
+  apply CIH. app
+
+
+  
+Lemma trace_inhabited : forall (A B : Ty) (p : Proc A B), exists s, s p.
+
+Lemma reduceI_trace : forall (A B : Ty) (p : Proc A B) (i : [A]) p', reduceI p i p' -> exists s, trace (Cons (inl i) s) p.
+Proof.
 Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O] -> [O']) (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']),
     f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
     NI IRel' ORel p ->     
     NI IRel ORel' (map f g p).
 Proof.
-Admitted.
+  intros.
+  move: p H2. rewrite /NI. intros. move: p H2 H3. pcofix CIH.
+  intros. punfold H4. inv H4.
+  - pc. match_dd.
+
+
+    
 
 Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
     fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
@@ -1774,7 +1840,7 @@ Definition my_f_I := fun (n : nat) => match n with
                                       | 0 => TInterrupt (*handler*)
                                       | 1 => THandlerOutput (*private*)
                                       | 2 => Unit (*public*)
-                                      | 3 => TInterrupt (*scheduler*)
+                                      | 3 => Sum TInterrupt THandlerOutput (*scheduler*)
                                       | _ => Unit
                                       end.
 
@@ -1880,13 +1946,76 @@ Definition low_p := @out Unit TPublicOutput GetRequest.
 Definition handler := @alternate_generic TInterrupt THandlerOutput Unit2 Notify Nothing tt.
 Definition high_p := @alternate_generic2 THandlerOutput TTypeSyscall Unit1 Syscall NOP tt (fun i => i == Notify).
 
+(*
+From:
 
-Definition nat_strategy_good n := match n with 0 => 3 | 1 => 1 | 2 => 2 | 3 => 1 | _ => 0 end.
-Definition good_schedulerp :  Proc TInterrupt (Times Nat Nat). 
-  eapply map. apply id. instantiate (1:= Times (Times Nat Nat) _). exact (fun o => (nat_strategy_good (fst (fst o)),nat_strategy_good (snd (fst o)))). 
-  eapply (@sta _ _ _). exact (fun ih n => if ih is TimerInterrupt then (snd n,(snd n).+1%%4) else n). exact (fun _ n => n). exact (2,3).
-  eapply out. instantiate (1:= Unit2). con.
+private on ->(?timerinterrupt)
+private on, scheduler on ->(!(handler_index,private_out))
+handler on ->(!handler_out)
+scheduler on ->(!public_index)
+public on ->(?timerinterrupt)
+public on, scheduler on ->(!(handler_index,public_out))
+handler on ->(!handler_out)
+scheduler on ->(!private_index)
+...
+
+
+To:
+
+private on ->(?timerinterrupt)
+private on ->(!private_out)
+scheduler on ->(!handler_index)
+handler on ->(!handler_out)
+scheduler on ->(!public_index)
+public on ->(?timerinterrupt)
+public on ->(!public_out)
+scheduler on ->(!handler_index)
+handler on ->(!handler_out)
+scheduler on ->(!private_index)
+...
+ *)
+Definition good_schedulerp :  Proc (Sum TInterrupt THandlerOutput) (Times Nat Nat). (*handlerflag, processflag*) Check sta_NI. Check swi_NI. 
+  eapply map. apply id. instantiate (1:= Times (Times Bool Bool) Unit).
+  exact (fun o => match fst o with | (true,false) => (3,1) | (true,true) => (2,1) | (false,true) => (3,3) | (false,false) => (2,2) end ).
+  eapply (@sta _ _ _). exact (fun ih bb => match ih with | inl TimerInterrupt => (true,~~ (snd bb))
+                                                         | inr _ => (false,snd bb)
+                                                         | _ => bb          
+                                           end).
+  exact (fun _ bb => bb).
+  exact (false,false).
+  eapply out. con.
 Defined.
+
+Definition sstream := Stream ([(Sum TInterrupt THandlerOutput)] + [(Times Nat Nat)]).
+
+Definition my_sstreamF (s : sstream) := Cons (inl (inl TimerInterrupt)) (Cons (inr (2,1)) (Cons (inl (inr Nothing)) (Cons (inr (3,3))
+                                                                                                                      (Cons (inl (inl TimerInterrupt)) (Cons (inr (3,1)) (Cons (inl (inr Nothing)) (Cons (inr (2,2)) s))))))).
+
+CoFixpoint my_sstream := my_sstreamF my_sstream.
+
+Lemma my_sstream_eq : my_sstream = my_sstreamF my_sstream.
+Proof.
+rewrite {1}/my_sstream.
+rewrite {1}(coseq_match (cofix my_sstream : sstream := my_sstreamF my_sstream)).
+simpl.
+rewrite /my_sstreamF.
+do ? f_equal.
+Qed.
+
+Lemma schedulerp_trace : trace my_sstream good_schedulerp.
+Proof.
+  pcofix CIH.
+  rewrite my_sstream_eq /my_sstreamF /good_schedulerp.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;right.
+Qed.
+
 
 Definition unit_p : Proc Unit Unit := @out Unit Unit tt.
 
@@ -1901,9 +2030,9 @@ Defined.
 
 
 
-Definition my_f_coopt_good n := n == 4.
-Definition my_f_initial_good n := n == 2.
-Definition process_pool_good := @scheduled_process_pool 3 my_f_coopt_good my_f_initial_good my_f_I my_f_O my_procs_good.
+Definition my_f_coopt n := n == 4.
+Definition my_f_initial n := n == 2.
+Definition process_pool_good := @scheduled_process_pool 3 my_f_coopt my_f_initial my_f_I my_f_O my_procs_good.
 
 
 Definition LoopType_n (n : nat) (f_I f_O : nat -> Ty) := Sum (times_Option_n n f_I) (times_Option_n n f_O).
@@ -1921,21 +2050,21 @@ Definition none4 : [ (times_Option_n 3 my_f_I) ]  := (None,(None,(None,None))).
 Definition my_f_route_good (t : [my_T_out']) : [my_T_in'] :=
   match t with
   | (Some sch,_) => (sch,none4)
-  | (None,(Some publ, _)) => ((0,0),none4)
-  | (None,(None,(Some prv,_))) => ((0,0),none4)
-  | (None,(None,(None,Some handl))) => ((0,0),(None,(None,(Some handl,None))))
+  | (_ ,(Some publ, _)) => ((0,0),none4)
+  | (_ ,(None,(Some prv,_))) => ((0,0),none4)
+  | (_ ,(None,(None,Some handl))) => ((1,4),(Some (inr handl),(None,(Some handl,None)))) (*(1,4) = turn off yourself, turn on scheduler*)
   | _ => ((0,0),none4)    
   end.
 
 Definition my_f_in_sch_good (t : [my_T_in]) : [Times Nat Nat] := match t with | inl tt | inr DiskInterrupt => (0,0) | inr TimerInterrupt => (0,4) end.
 Definition my_f_in_t (t : [my_T_in]) : [ (times_Option_n 3 my_f_I) ] := match t with
                                                                         | inl tt => (None,(Some tt,(None,None)))
-                                                                        | inr TimerInterrupt => (Some (TimerInterrupt),(None,(None,None)))
+                                                                        | inr TimerInterrupt => (Some (inl TimerInterrupt),(None,(None,None)))
                                                                         | inr DiskInterrupt => (None,(None,(None,Some DiskInterrupt))) end.
 Definition my_f_in_good (t : [my_T_in]) : [my_T_in'] := (my_f_in_sch_good t, my_f_in_t t).
 Definition my_f_out (t : [my_T_out']) := match t with
-                                         | (None,(Some p,(None,None))) => Some (inl p)
-                                         | (None,(None,(Some sys,None))) => Some (inr sys)
+                                         | (_,(Some p,(None,None))) => Some (inl p)
+                                         | (_,(None,(Some sys,None))) => Some (inr sys)
                                          | _ => None
                                          end.
 
@@ -1980,13 +2109,13 @@ Definition streamType' := Stream ([my_T_in'] + [my_T_out']).
 Definition newtrace'F (s : streamType') := Cons (inl (my_f_in_good (inr TimerInterrupt))) (*jump to scheduler*)
                                              (Cons (inr ((Some (2,1)),(None,(Some NOP,None)))) (*private process does nothing, scheduler points to handler*)
                                              (Cons (inr (out3 Nothing)) (*handler finishes, returns control to scheduler*)
-                                             (Cons (inr (out0 (4,3))) (*scheduler points to public*)
+                                             (Cons (inr (out0 (3,3))) (*scheduler points to public*)
                                              (Cons (inr (out1 GetRequest)) (*public output*)
                                              (Cons (inl (my_f_in_good (inr DiskInterrupt)))(*disk interrupt, should NOT jump to handler*)
                                              (Cons (inl (my_f_in_good (inr TimerInterrupt))) (*jump to scheduler*)
                                              (Cons (inr (Some (3,1),(Some GetRequest,(None,None)))) (*public process finishes, scheduler points to handler*)
                                              (Cons (inr (out3 Notify)) (*handler signal informs diskinterrupt was received*)
-                                             (Cons (inr (out0 (4,2))) (*scheduler points to private*)
+                                             (Cons (inr (out0 (2,2))) (*scheduler points to private*)
                                              (Cons (inr (None,(None,(Some Syscall,None)))) s)))))))))) (*private output received notification from handler, outputs new syscall*).
 
 CoFixpoint newtrace' := newtrace'F newtrace'.
@@ -2028,19 +2157,32 @@ do ? f_equal.
 Qed.
 
 
-Ltac rewr ::=  (try rewrite newtrace'_eq); (try rewrite newtrace_eq); rewrite /low_p /handler /high_p /only_loop /my_only_loop_good' /my_only_loop_good /process_pool_good /good_schedulerp /my_f_coopt_good /scheduled_process_pool /high_p /alternate_generic /alternate_generic2 /low_p.
+Ltac rewr ::=  (try rewrite newtrace'_eq); (try rewrite newtrace_eq); rewrite /low_p /handler /high_p /only_loop /my_only_loop_good' /my_only_loop_good /process_pool_good /good_schedulerp /my_f_coopt /scheduled_process_pool /high_p /alternate_generic /alternate_generic2 /low_p.
 
 (*spec for good scheduler*)
 Lemma newtrace'_trace : trace newtrace' my_only_loop_good'.
 Proof.
-  pcofix CIH. rewr.
-  bundle;left. Admitted.
-(*  bundle;left.
+  pcofix CIH. 
   bundle;left.
   bundle;left.
   bundle;left.
   bundle;left.
   bundle;left.
+  bundle;left.
+  bundle;left.
+  instantiate (1:= 0). instantiate (1:= 0). instantiate (1:= 0). simpl.
+  bundle;left.
+  bundle;left.
+  bundle;left.
+  bundle;right.
+  swi_instans. simpl. eauto.
+Qed.
+
+
+(*spec for good scheduler (what the world sees)*)
+Lemma newtrace_trace : trace newtrace my_only_loop_good.
+Proof.
+  pcofix CIH.
   bundle;left.
   bundle;left.
   bundle;left.
@@ -2048,17 +2190,55 @@ Proof.
   bundle;left.
   bundle;left.  
   bundle;left.
+  bundle.
+  instantiate (2:= None). simpl.
+  instantiate (1:= None). simpl. done.
+  instantiate (3:=0). simpl. reduce_once. econ.
+  reduce_tac.
+  instantiate (2:= 0). simpl.
+  reduce_once.
+  instantiate (2:= 0). simpl.
+  reduce_once.
+  simpl. reduce_once. econ.
+  reduce_tac.
+  reduce_tac.
+  reduce_tac.
+  reduce_tac.
+  left.
+  
   bundle;left.
-  bundle;left.
+  bundle;left.  
   bundle;right.
-  swi_instans. simpl. eauto.
-Qed.*)
+  swi_instans.
+  eauto.
+Qed.
 
 
-(*spec for good scheduler (what the world sees)*)
-Lemma newtrace_trace : trace newtrace my_only_loop_good.
-Proof.
-  pcofix CIH.
-  bundle;left. Admitted.
 
-(*Now fix the model so it satisfies these traces*)
+
+
+(*Now the bad process*)
+
+
+(*
+private on ->(?tI)
+private on, scheduler on ->(!public)
+public on ->(?dI)
+public on, handler on -> !(public,notification)
+public on ->(?tI)
+scheduler on, public on ->(!handler)
+handler on ->(!notification)
+scheduler on ->(!private)
+...
+ *)
+Definition good_schedulerp :  Proc (Sum TInterrupt THandlerOutput) (Times Nat Nat). (*handlerflag, processflag*)
+  eapply map. apply id. instantiate (1:= Times (Times Bool Bool) Unit).
+  exact (fun o => match fst o with | (true,false) => (3,1) | (true,true) => (2,1) | (false,true) => (3,3) | (false,false) => (2,2) end ).
+  eapply (@sta _ _ _). exact (fun ih bb => match ih with | inl TimerInterrupt => (true,~~ (snd bb))
+                                                         | inr _ => (false,snd bb)
+                                                         | _ => bb          
+                                           end).
+  exact (fun _ bb => bb).
+  exact (false,false).
+  eapply out. con.
+Defined.
