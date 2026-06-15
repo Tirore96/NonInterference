@@ -235,24 +235,31 @@ Ltac match_dd_o :=
    repeat (match_dd_once;eauto).
 (*Hint Resolve reduce_mapO reduce_staO reduce_swiO reduce_swiO2 reduce_maybeO reduce_parO reduce_loopO : omitdb.*)
 
+(*Inductive Trace (I O : Ty) (ORel : myrel [O]) (l : level) : list ([I] + [O]) -> Proc I O -> Prop :=
+| TR0 p : Trace ORel l nil p
+| TR1 p a t : Trace ORel l t p -> Trace ORel l (a::t) p
+| TR1 p a t i i' : rel  -> Trace ORel (inl i) t p -> Trace ORel l ((inl i')::t) p                                                        
+| TR1 p i p' t : reduceI p i p' -> Trace ORel l t p' -> Trace ORel l (inl i::t) p
+| TR2 p o' o p' t : reduceO p o' p' -> rel ORel l o' o -> Trace ORel l t p' -> Trace ORel l (inr o::t) p.
+Hint Constructors Trace.*)
 
 Inductive Trace (I O : Ty) (ORel : myrel [O]) (l : level) : list ([I] + [O]) -> Proc I O -> Prop :=
 | TR0 p : Trace ORel l nil p
 | TR1 p i p' t : reduceI p i p' -> Trace ORel l t p' -> Trace ORel l (inl i::t) p
 | TR2 p o' o p' t : reduceO p o' p' -> rel ORel l o' o -> Trace ORel l t p' -> Trace ORel l (inr o::t) p.
-
+Hint Constructors Trace.
 
 Fixpoint insert (A : Set) (n : nat) (a : A) (l : seq A) :=
   match n with
   | 0 => a::l
-  | n'.+1 => if l is a::l' then a::(insert n' a l') else nil
+  | n'.+1 => if l is a'::l' then a'::(insert n' a l') else nil
   end.
 
-Fixpoint remove (A : Set) (n : nat) (l : seq A) :=
+(*Fixpoint remove (A : Set) (n : nat) (l : seq A) :=
   match n with
   | 0 => if l is a::l' then l' else nil
   | n'.+1 => if l is a::l' then a::(insert n' a l') else nil
-  end.
+  end.*)
 
 (*Fixpoint swap (A : Set) (n : nat) (a : A) (l : seq A) :=
   match n with
@@ -262,8 +269,8 @@ end.*)
 
 Definition NI_l (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (l : level) (p : Proc I O) : Prop :=
   (forall t i i' n, rel IRel l i i' -> Trace ORel l (insert n (inl i) t) p -> Trace ORel l (insert n (inl i') t) p) /\
-  (forall t i n, dis IRel l i -> Trace ORel l t p -> Trace ORel l (insert n (inl i) t) p) /\
-  (forall t i n, dis IRel l i -> Trace ORel l t p <-> Trace ORel l (remove n t) p).
+  (forall t i n, dis IRel l i -> Trace ORel l t p <-> Trace ORel l (insert n (inl i) t) p).
+(*  (forall t i n, dis IRel l i -> Trace ORel l t p -> Trace ORel l (remove n t) p).*)
 
 Definition NI (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I O) := forall l, NI_l IRel ORel l p.
             
@@ -506,12 +513,8 @@ Lemma simulation_equiv : forall I O (IRel : myrel [I]) (ORel : myrel [O]) p, NI 
 Proof.
   intros. split.
   intros. move: H. rewrite /NI /NI_l. intros.
-  move: (H l). ssa. clear H H1 H2.
-  intros.
-
-  elim : t n H1. case. ssa. econ. eauto
-  
-  intros.
+  Admitted.
+(*  intros.
   ssa.
   eapply H in H0.
   move: H0. instantiate (1:=l).
@@ -522,7 +525,7 @@ Proof.
   move: H0. instantiate (1:=l).
   apply:paco2_imp. apply monotone_SimulationF.
   intros. apply/SimulationF_imp2. eauto.
-Qed.  
+Qed.  *)
 
 
 Definition eqpair {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
@@ -1132,10 +1135,9 @@ Proof.
 Qed.
 Hint Resolve rel_eq.
 
-Ltac rc_in H := move: H;rc=>H.
 
 
-  Lemma toNotSim : forall {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) s (p : Proc I O), NotSim l IRel ORel s p -> ~simulation IRel ORel l s p.
+(*  Lemma toNotSim : forall {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) s (p : Proc I O), NotSim l IRel ORel s p -> ~simulation IRel ORel l s p.
   Proof.
   move=> I O l IRel ORel s p H Hsim.
   elim: H Hsim;intros.
@@ -1155,7 +1157,7 @@ Ltac rc_in H := move: H;rc=>H.
     apply rel_sym in H1. 
     
     eapply H0. eauto. eauto. pc. done.
-Qed.
+Qed.*)
 
   Variant ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) (R : Proc I O -> Prop) : Proc I O -> Prop :=
   OF1 p : (forall i p', reduceI p i p' -> R p') -> (forall o p', reduceO p o p' -> R p' /\ dis ORel l o) ->  ObliviousF ORel l R p.
@@ -1257,10 +1259,10 @@ Ltac reduce_tac_v :=
   (try rewr);(rewrite ?eqxx /= /xor /= );
    repeat first [reduce_once_v;first try econ | swi_instans].
 
-Ltac appTrace := apply: traceI || apply: traceO.
+(*Ltac appTrace := apply: traceI || apply: traceO.*)
 
 
-Ltac bundle :=
+(*Ltac bundle :=
   (pfold;
   first [ appTrace | rewr;appTrace ];
    first (do ? reduce_tac));controlled_eauto;simpl.
@@ -1268,7 +1270,7 @@ Ltac bundle :=
 Ltac bundle_v :=
   (pfold;
   first [ appTrace | rewr;appTrace ];
-  first (do ? reduce_tac_v));simpl;try econ.
+  first (do ? reduce_tac_v));simpl;try econ.*)
 
 
 
@@ -1282,26 +1284,40 @@ Definition f_EP (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f : [I] -> [V] 
 Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), @NI I O IRel ORel (out o).
 Proof.
   intros. rewrite /NI.
-  move=>l. pcofix CIH.
-  ssa. punfold H0. inv H0.
-  - pc. match_dd.
-    pfold. con.
-    * rc. intros. inv H. right. apply CIH. done.
-    * rc. intros. exists (@out _ _ o). con. eauto;con. right. apply CIH.
-      pfold. done.
-    * rc. intros. exists (@out _ _ o). con. eauto.
-      right. inv H. eauto.
-    * rc. intros. inv H.
-  - pc. match_dd.
-    pfold. con.
-    * rc. intros. inv H.
-    * rc. intros. exists (@out _ _ o). con. eauto. right. apply CIH.
-      pfold. done.
-    * rc. intros. exists (@out _ _ o). con. eauto.
-      right. inv H. eauto.
-    * rc. intros. inv H.
-      exists o0. ssa. exists (@out _ _ o0). con. eauto. eauto.
-Qed.
+  move=>l. rewrite /NI_l. ssa.
+  ssa.
+  
+  elim : t n H0.
+  ssa. de n. econ. econ. econ.
+  ssa. de n. econ. econ. inv H1. match_dd. done.
+  inv H1. econ. econ. match_dd. eauto.
+  econ. econ. match_dd.  done.
+  match_dd. eauto.
+
+
+  ssa. con. clear H. intros.
+  elim: t n H. ssa. de n. econ. econ. done.
+  ssa. inv H0. match_dd. de n. econ. econ. done.
+  econ. econ. eauto.
+  de n. econ. econ. done.
+  econ. econ. match_dd. done. match_dd. eauto.
+
+  ssa. clear H. elim: t n H0.
+  auto.
+  ssa. de n. inv H0. match_dd. done.
+  de n. inv H0. econ. econ. match_dd.
+  inv H5. match_dd. done.
+  match_dd. econ. econ. done.
+  inv H6. match_dd. done.
+  de l0.
+  
+  inv H0. econ. econ. match_dd.
+  eapply H. instantiate (1:= S _). simpl. eauto.
+  match_dd.
+
+  econ. econ. done. eapply H.
+  instantiate (1:= S _). simpl. eauto.
+Qed.  
 
 Variant forall_gen {A : Type} (P : A -> Set)  (R : Stream A -> Prop)  : Stream A -> Prop :=
 | FEE_cons x s : P x -> R s -> forall_gen P R (Cons x s).
