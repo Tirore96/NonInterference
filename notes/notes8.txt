@@ -77,3 +77,8 @@ prove one of the admitted NI theorems as warm up
 prove the new relaxed NI theorem for sta
 Write the good and bad models along with their traces
 Show bad model interfers and good model does not.
+
+
+
+Started implementation. Some decisions:
+Keep output relation as a myrel, it's too inconvenient to change it. We also want to reuse the myrel builders defined for input relations. 

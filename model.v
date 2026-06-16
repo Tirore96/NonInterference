@@ -243,6 +243,7 @@ Ltac match_dd_o :=
 | TR2 p o' o p' t : reduceO p o' p' -> rel ORel l o' o -> Trace ORel l t p' -> Trace ORel l (inr o::t) p.
 Hint Constructors Trace.*)
 
+
 Inductive Trace (I O : Ty) (ORel : myrel [O]) (l : level) : list ([I] + [O]) -> Proc I O -> Prop :=
 | TR0 p : Trace ORel l nil p
 | TR1 p i p' t : reduceI p i p' -> Trace ORel l t p' -> Trace ORel l (inl i::t) p
@@ -255,11 +256,11 @@ Fixpoint insert (A : Set) (n : nat) (a : A) (l : seq A) :=
   | n'.+1 => if l is a'::l' then a'::(insert n' a l') else nil
   end.
 
-(*Fixpoint remove (A : Set) (n : nat) (l : seq A) :=
+Fixpoint remove (A : Set) (n : nat) (l : seq A) :=
   match n with
   | 0 => if l is a::l' then l' else nil
-  | n'.+1 => if l is a::l' then a::(insert n' a l') else nil
-  end.*)
+  | n'.+1 => if l is a::l' then a::(remove n' l') else nil
+  end.
 
 (*Fixpoint swap (A : Set) (n : nat) (a : A) (l : seq A) :=
   match n with
@@ -269,11 +270,11 @@ end.*)
 
 Definition NI_l (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (l : level) (p : Proc I O) : Prop :=
   (forall t i i' n, rel IRel l i i' -> Trace ORel l (insert n (inl i) t) p -> Trace ORel l (insert n (inl i') t) p) /\
-  (forall t i n, dis IRel l i -> Trace ORel l t p <-> Trace ORel l (insert n (inl i) t) p).
-(*  (forall t i n, dis IRel l i -> Trace ORel l t p -> Trace ORel l (remove n t) p).*)
+  (forall t i n, dis IRel l i -> Trace ORel l t p -> Trace ORel l (insert n (inl i) t) p) /\
+  (forall t i n, dis IRel l i -> Trace ORel l t p -> Trace ORel l (remove n t) p).
+
 
 Definition NI (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I O) := forall l, NI_l IRel ORel l p.
-            
 
 (*Variant TraceF {I O : Ty} (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O -> Prop :=
   | traceI : forall p p' i effs, reduceI p i p' -> R effs p'  -> TraceF R (Cons (inl i) effs) p
@@ -509,11 +510,11 @@ Qed.*)
 
 
 
-Lemma simulation_equiv : forall I O (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p <-> NI IRel (toPublicRel ORel) p.
+(*Lemma simulation_equiv : forall I O (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p <-> NI IRel (toPublicRel ORel) p.
 Proof.
   intros. split.
   intros. move: H. rewrite /NI /NI_l. intros.
-  Admitted.
+  Admitted.*)
 (*  intros.
   ssa.
   eapply H in H0.
@@ -1281,7 +1282,7 @@ Definition f_NI_PU {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> 
 Definition fv_NI (I O V: Ty) (IRel : myrel [I]) (ORel : myrel [O]) (VRel : myrel [V])  (f : [I] -> [V] -> [O]) := forall l (i i' : [I]), rel IRel l i i' -> forall (v v' : [V]), rel VRel l v v' -> rel ORel l (f i v) (f i' v').
 Definition f_EP (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f : [I] -> [V] -> [V]) := forall l i, dis IRel l i -> forall v, rel VRel l (f i v) v. (*equivalence preserving*)
 
-Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), @NI I O IRel ORel (out o).
+Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), NI IRel ORel (out o).
 Proof.
   intros. rewrite /NI.
   move=>l. rewrite /NI_l. ssa.
@@ -1295,31 +1296,22 @@ Proof.
   match_dd. eauto.
 
 
-  ssa. con. clear H. intros.
-  elim: t n H. ssa. de n. econ. econ. done.
-  ssa. inv H0. match_dd. de n. econ. econ. done.
+  ssa. elim: t n H0. ssa. de n. econ. econ. done.
+  ssa. inv H1. match_dd. de n. econ. econ. done.
   econ. econ. eauto.
   de n. econ. econ. done.
   econ. econ. match_dd. done. match_dd. eauto.
 
   ssa. clear H. elim: t n H0.
   auto.
-  ssa. de n. inv H0. match_dd. done.
-  de n. inv H0. econ. econ. match_dd.
-  inv H5. match_dd. done.
-  match_dd. econ. econ. done.
-  inv H6. match_dd. done.
-  de l0.
-  
-  inv H0. econ. econ. match_dd.
-  eapply H. instantiate (1:= S _). simpl. eauto.
-  match_dd.
+  ssa. de n.
 
-  econ. econ. done. eapply H.
-  instantiate (1:= S _). simpl. eauto.
+  ssa. de n. inv H0. match_dd. done. match_dd. done.
+  inv H0. econ. eauto. match_dd. eauto.
+  econ. eauto. done. match_dd. eauto.
 Qed.  
 
-Variant forall_gen {A : Type} (P : A -> Set)  (R : Stream A -> Prop)  : Stream A -> Prop :=
+(*Variant forall_gen {A : Type} (P : A -> Set)  (R : Stream A -> Prop)  : Stream A -> Prop :=
 | FEE_cons x s : P x -> R s -> forall_gen P R (Cons x s).
 
 Lemma forall_gen_mon (A : Type) (P : A -> Set)  : monotone1 (forall_gen P). 
@@ -1359,17 +1351,208 @@ Definition trace_test (A B : Ty) (p : Proc A B) : { Stream ([A] + [B]).
 Lemma trace_inhabited : forall (A B : Ty) (p : Proc A B), exists s, s p.
 
 Lemma reduceI_trace : forall (A B : Ty) (p : Proc A B) (i : [A]) p', reduceI p i p' -> exists s, trace (Cons (inl i) s) p.
+Proof.*)
+
+Definition myrel_out (A B : Ty) (f : [A] -> [B]) (BRel : myrel [B]) : myrel [A].
+  destruct BRel.
+  refine (@MyRel _
+            (fun l b => ((dis0 l) \o f) b)
+            (fun l v1 v2 => rel0 l (f v1) (f v2))
+            _
+            _
+            _
+            _).
+  ssa. destruct (equiv0 l). con. ssa. ssa.
+  intro. intros. eauto.
+  eauto.
+  ssa. eauto.
+  eauto.
+Defined.
+
+Inductive MapTrace (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (ORel : myrel [O']) (l : level) : seq ([I] + [O']) -> seq ([I'] + [O]) -> Prop  :=
+| MT0 : MapTrace f g ORel l nil nil
+| MT1 i t t' : (*reduceI p (f i) p' -> *) MapTrace f g ORel l t t' -> MapTrace f g ORel l ((inl i)::t) ((inl (f i))::t')
+| MT2 o o' t t' : rel ORel l (g o) o' -> MapTrace f g ORel l t t' -> MapTrace f g ORel l ((inr o')::t) ((inr o)::t').
+
+(*Lemma MapTraceP1 (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (ORel : myrel [O']) (l : level) (p : Proc I' O) t t':
+  MapTrace f g ORel l t t' -> Trace ORel l t (map f g p).
 Proof.
+  elim. ssa. ssa. econ. eauto. eauto.
+  ssa. econ. eauto. done. done.
+Qed.
+
+Lemma MapTraceP2 (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (ORel : myrel [O']) (l : level) (p : Proc I' O) t t':
+  MapTrace f g ORel l p t t' -> Trace (publicRel _) l t' p.
+Proof.
+  elim. ssa. ssa. econ. eauto. eauto.
+  ssa. econ. eauto. done. done.
+Qed.
+
+Lemma MapTraceP (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (ORel : myrel [O']) (l : level) (p : Proc I' O) t t':
+   MapTrace f g ORel l p t t' -> Trace ORel l t (map f g p) /\ Trace (publicRel _) l t' p.
+Proof.
+  intros. apply MapTraceP1 in H as H'. apply MapTraceP2 in H. ssa.
+Qed.*)
+  
+(*Lemma map_trace : forall (I I' O O' : Ty) (p : Proc I' O) (ORel : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t,
+    Trace ORel l t (map f g p) -> exists t', forall ORel', Trace ORel' l t' p /\ MapTrace f g ORel l p t t'.
+Proof.
+  intros. elim: t p H. ssa. exists nil. ssa. con.
+  ssa. inv H0. match_dd. eapply H in H5. ssa.
+  econ. intros.
+  move: (H1 ORel'). clear H1. intros. con. destruct H1. 
+  instantiate (1:= (inl (f i))::_). econ. eauto. eauto. econ. eauto. ssa.
+
+  match_dd.
+  apply H in H6. ssa.
+  econ. intros.
+  move: (H1 ORel'). case. intros. con.
+  instantiate (1:= cons (inr _) _). econ. eauto.
+  inv H0.
+  apply H1 in H2 as H2'. destruct H2'.
+  con. 2: {  econ. eauto. eauto. eauto. }  econ. eauto. done. done.
+Qed. *)
+
+Lemma trace_ORel : forall (I O : Ty) (p : Proc I O) (ORel ORel' : myrel [O]) t l, (forall x y, rel ORel l x y -> rel ORel' l x y) -> Trace ORel l t p ->  Trace ORel' l t p.
+Proof.
+  intros. elim: H0. ssa. ssa. econ. eauto. eauto.
+  ssa. econ. eauto. eauto. done.
+Qed.
+
+Lemma map_trace : forall (I I' O O' : Ty) (p : Proc I' O) (ORel : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t,
+    Trace ORel l t (map f g p) -> exists t', forall ORel', Trace ORel' l t' p /\ MapTrace f g ORel l t t'.
+Proof.
+  intros. elim: t p H. ssa. exists nil. ssa. con.
+  ssa. inv H0. match_dd. eapply H in H5. ssa.
+  econ. intros.
+  move: (H1 ORel'). case. intros. con.
+  instantiate (1:= (inl (f i))::_). econ. eauto. eauto. econ. eauto. 
+
+  match_dd.
+  apply H in H6. ssa.
+  econ. intros.
+  move: (H1 ORel'). case. intros.
+  con. 2: {  econ. eauto. eauto. }
+     econ. eauto. done. done.
+Qed.  
+
+Lemma map_trace_insert : forall (I I' O O' : Ty) (ORel' : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t t' n i,
+    MapTrace f g ORel' l (insert n (inl i) t) t' -> exists t'', t' = insert n (inl (f i)) t''.
+Proof.
+  ssa.
+  elim: t n t' H. ssa.
+  de n. ssa. inv H. econ. econ.
+  inv H. exists nil. done.
+  ssa. de n. inv H0. econ. econ.
+  inv H0.
+  apply H in H4. ssa. rewrite H1.
+  econ. instantiate (1:= cons _ _). simpl. econ.
+  apply H in H5. ssa. rewrite H1.
+  econ. instantiate (1:= cons _ _). simpl. econ.
+Qed.
+
+Lemma map_trace_cons : forall (I I' O O' : Ty) (ORel' : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t t' x y,
+    MapTrace f g ORel' l (x::t) (y::t') -> MapTrace f g ORel' l t t'.
+Proof.
+  intros. elim : t t' H;ssa. inv H. inv H1. done. inv H5. done.
+  inv H0. inv H2. econ. eauto. econ. done. done.
+  inv H6. econ. done. econ. done. done.
+Qed.
+
+Lemma map_trace_insert2 : forall (I I' O O' : Ty) (ORel' : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t t' n x y,
+    MapTrace f g ORel' l (insert n x t) (insert n y t') -> MapTrace f g ORel' l t t'.
+Proof.
+  intros. elim : t n t' H.
+  case. ssa. inv H. inv H1. done. inv H5. done.
+  ssa. de t'. inv H.
+
+  ssa. de n. inv H0. inv H2.
+  con. done.
+  con. done. done. inv H6. con. done. con. done. done.
+  de t'. inv H0. inv H0.
+  econ. eauto.
+  econ. done. eauto.
+Qed.
+
+Lemma map_trace_insert3 : forall (I I' O O' : Ty) (ORel' : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t t' n i,
+    MapTrace f g ORel' l t t' ->  MapTrace f g ORel' l (insert n (inl i) t) (insert n (inl (f i)) t').
+Proof.
+  intros. elim : t n t' H.
+  case. ssa. inv H. econ. done.
+  ssa. de t'. inv H.
+
+  ssa. inv H0. de n.  econ. econ. done.
+  econ. eauto. de n. econ. econ. done. done.
+  econ. done. eauto.
+Qed.
+
+Lemma map_trace_remove3 : forall (I I' O O' : Ty) (ORel' : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t t' n,
+    MapTrace f g ORel' l t t' ->  MapTrace f g ORel' l (remove n t) (remove n t').
+Proof.
+  intros. elim : t n t' H.
+  case. ssa. inv H. econ. 
+  ssa. de t'. inv H.
+
+  ssa. inv H0. de n.  
+  econ. eauto. de n. econ. done. eauto.
+Qed.
+
+Lemma map_trace_insert4 : forall (I I' O O' : Ty) (ORel' : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t t' n (i i' : [I]),
+    MapTrace f g ORel' l (insert n (inl i) t) (insert n (inl (f i)) t') ->  MapTrace f g ORel' l (insert n (inl i') t) (insert n (inl (f i')) t').
+Proof.
+  intros. apply map_trace_insert3. eapply map_trace_insert2. eauto.
+Qed.
+
+
 Lemma map_NI : forall (I I' O O' : Ty) (p : Proc I' O) (f : [I] -> [I']) (g : [O] -> [O']) (IRel : myrel [I]) (IRel' : myrel [I']) (ORel : myrel [O]) (ORel' : myrel [O']),
     f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
     NI IRel' ORel p ->     
     NI IRel ORel' (map f g p).
 Proof.
   intros.
-  move: p H2. rewrite /NI. intros. move: p H2 H3. pcofix CIH.
-  intros. punfold H4. inv H4.
-  - pc. match_dd.
+  move: p H2. rewrite /NI /NI_l.
+  ssa. move: (H2 l). ssa. clear H2 H6.
+  eapply map_trace in H5. ssa.
+  move: (H2 ORel). case. intros.
 
+  apply map_trace_insert in b as b'. ssa. subst. clear H2.
+  eapply H3 in a. 2: apply H. 2:apply H4.
+  eapply map_trace_insert4 in b.
+  move: b. instantiate (1:= i'). move=>aa. clear H3 H7. move: aa p a.
+  elim. done.
+  ssa. inv a. econ. econ. eauto. eauto. eauto.
+
+  ssa. inv a. econ. econ. econ. eauto. eauto. eauto.
+
+  move: (H2 l). case. move=>_. case. intros. clear H2 b.
+  have: dis IRel' l (f i). rewrite /f_PU in H0. apply H0. done.
+  intros.
+  apply map_trace in H4. ssa.
+  move: (H4 ORel).   ssa.
+  eapply a in H2. 2:eauto.
+  move: H2. instantiate (1:= n).
+  clear H4. clear a.
+  clear H5. move: H6 p.
+  move/map_trace_insert3.
+  move/(_ n i). elim. ssa.
+  ssa. inv H5. econ. econ. eauto. eauto. eauto.
+  ssa. inv H6. econ. econ. eauto. eauto. eauto. eauto.
+
+
+  move: (H2 l). case=>_ [] _ HH. clear H2.
+  intros.
+  apply map_trace in H3. ssa.
+  move: (H3 ORel).  ssa.
+  eapply H0 in H2.
+  eapply HH in H2. 2:eauto.
+  move: H2. instantiate (1:= n).
+  clear H4. clear HH H3.
+  move: H5 p.
+  move/map_trace_remove3.
+  move/(_ n). elim. ssa.
+  ssa. inv H4. econ. econ. eauto. eauto. eauto. 
+  ssa. inv H5. econ. econ. eauto. eauto. eauto. eauto.
+Qed.
 
     
 
