@@ -276,38 +276,6 @@ Definition NI_l (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (l : level) (p 
 
 Definition NI (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I O) := forall l, NI_l IRel ORel l p.
 
-(*Variant TraceF {I O : Ty} (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O -> Prop :=
-  | traceI : forall p p' i effs, reduceI p i p' -> R effs p'  -> TraceF R (Cons (inl i) effs) p
-  | traceO : forall p p' o effs, reduceO p o p' -> R effs p'  -> TraceF R (Cons (inr o) effs) p.
-Hint Constructors TraceF.
-
-Lemma monotone_TraceF {I O : Ty} : monotone2 (@TraceF I O).
-Proof.
-intro.  ssa.
-inv IN; eauto.
-Qed.
-Hint Resolve monotone_TraceF : paco.
-
-Definition trace (I O : Ty) eff p := paco2 (@TraceF I O) bot2 eff p.
-
-Variant MapSF (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) (R : Stream ([I'] + [O]) -> Stream ([I] + [O']) -> Prop) : Stream ([I'] + [O]) -> Stream ([I] + [O']) -> Prop :=
-  | MapI i i' s s' : R s' s -> f i = i' -> MapSF f g R (Cons (inl i') s') (Cons (inl i) s)
-  | MapO o o' s s' : R s' s -> g o = o' -> MapSF f g R (Cons (inr o) s') (Cons (inr o') s).
-
-Lemma MapSF_monotone2 : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']), monotone2 (@MapSF I I' O O' f g).
-Proof.
-  intros. intro. ssa. inv IN; eauto. all: econstructor; eauto.
-Qed.
-Hint Resolve MapSF_monotone2 : paco.
-
-Definition MapS  (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s s' := paco2 (@MapSF I I' O O' f g) bot2 s s'.
-
-Definition MapRel (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p := exists s', MapS f g s' s /\ trace s' p.*)
-
-
-
-(*Lemma MapSP : forall (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) s p, trace s (map f g p) -> exists s', MapS f g s' s /\ trace s' p.
-Proof.*)
 
 Definition boolRel : myrel ([Bool]).
   refine (@MyRel _
@@ -420,113 +388,6 @@ Definition semiprivateRel (A : Ty) : myrel ([A]).
       intros. subst. apply order_bot in H. subst. done.
       intros. subst. con. auto. auto.
 Defined.
-
-
-(*Definition Clause1 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
-  forall i s', s = (Cons (inl i) s') -> dis IRel l i -> R s' p.
-
-Definition Clause2 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
-  (forall i, dis IRel l i -> exists p', reduceI p i p' /\ R s p').
-
-Definition Clause3 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
-  forall i s', s = (Cons (inl i) s') -> (forall i', rel IRel l i' i -> exists p', reduceI p i' p' /\ R s' p').
-
-Definition Clause4 (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) s p : Prop :=
-  forall o s', s = (Cons (inr o) s') -> exists o', rel ORel l o' o /\ exists p', reduceO p o' p' /\ R s' p'.
-
-Variant SimulationF (I O : Ty) (l : level) (IRel : myrel [I]) (ORel : myrel [O]) (R : Stream ([I] + [O]) -> Proc I O -> Prop) : Stream ([I] + [O]) -> Proc I O  -> Prop :=
-  | SI s p  : Clause1 l IRel ORel R s p ->
-              Clause2 l IRel ORel R s p ->
-              Clause3 l IRel ORel R s p ->
-              Clause4 l IRel ORel R s p ->
-              SimulationF l IRel ORel R s p.
-
-Ltac rc := rewrite /Clause1 /Clause2 /Clause3 /Clause4.
-Lemma monotone_Clause1 {I O : Ty}  l IRel ORel :  monotone2 (@Clause1 I O l  IRel ORel ).
-Proof.
-intro. ssa. rc. eauto.
-Qed.
-
-Lemma monotone_Clause2 {I O : Ty}  l  IRel ORel  :  monotone2 (@Clause2 I O l  IRel ORel ).
-Proof.
-  intro. rc. ssa. 
-  move: (IN _ H). ssa. eauto.
-Qed.
-
-Lemma monotone_Clause3 {I O : Ty}  l  IRel ORel  :  monotone2 (@Clause3 I O l  IRel ORel ).
-Proof.
-  intro. rc. ssa. subst.
-  move: (IN _ _ Logic.eq_refl _ H0). ssa. eauto.
-Qed.
-
-Lemma monotone_Clause4 {I O : Ty}  l  IRel ORel  :  monotone2 (@Clause4 I O l  IRel ORel ).
-Proof.
-  intro. rc. ssa. subst.
-  move: (IN _ _ Logic.eq_refl). ssa. eauto.
-  exists x. ssa. eauto.
-Qed.
-
-
-Lemma monotone_SimulationF {I O : Ty} IRel ORel l:  monotone2 (@SimulationF I O l IRel ORel).
-Proof.
-rewrite /monotone2. ssa.
-inv IN.
-eapply SI.
-eapply monotone_Clause1. eauto. eauto.
-eapply monotone_Clause2. eauto. eauto.
-eapply monotone_Clause3. eauto. eauto.
-eapply monotone_Clause4. eauto. eauto.
-Qed.
-Hint Resolve monotone_SimulationF : paco.
-
-Definition simulation {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) l s p := paco2 (@SimulationF I O l IRel ORel) bot2 s p.*)
-(*Definition NI (I O :Ty) (IRel : myrel [I]) (ORel : myrel [O])  (p : Proc I O) := forall l s, trace s p -> simulation IRel ORel l s p.*)
-
-(*Check paco2.
-
-Lemma paco2_imp : forall A B (a : A) (b : B) F F' R, monotone2 F -> (forall a b R, F R a b -> F' R a b) -> paco2 F R a b -> paco2 F' R a b.
-Proof.
-  intros. move: a b H1. pcofix CIH. intros. pfold. apply H0.
-  punfold H2. eapply H. apply:H2.
-  intros. inv PR. right. apply CIH. done. right. eauto.
-Qed.
-
-Lemma paco2_iff : forall A B (a : A) (b : B) F F' R, monotone2 F -> monotone2 F' -> (forall a b R, F R a b <-> F' R a b) -> paco2 F R a b <-> paco2 F' R a b.
-Proof.
-  intros. split;apply/paco2_imp;eauto.
-  intros. apply/H1. eauto.
-  intros. apply/H1. eauto.
-Qed.  *)
-
-(*Lemma SimulationF_imp : forall I O l (IRel : myrel [I]) (ORel : myrel [O]) R s p, SimulationF l IRel ORel R s p -> SimulationF l IRel (toPublicRel ORel) R s p.
-Proof.
-  intros. inv H. con;eauto.
-Qed.
-
-Lemma SimulationF_imp2 : forall I O l (IRel : myrel [I]) (ORel : myrel [O]) R s p, SimulationF l IRel (toPublicRel ORel) R s p -> SimulationF l IRel ORel R s p.
-Proof.
-  intros. inv H. con;eauto.
-Qed.*)
-
-
-
-(*Lemma simulation_equiv : forall I O (IRel : myrel [I]) (ORel : myrel [O]) p, NI IRel ORel p <-> NI IRel (toPublicRel ORel) p.
-Proof.
-  intros. split.
-  intros. move: H. rewrite /NI /NI_l. intros.
-  Admitted.*)
-(*  intros.
-  ssa.
-  eapply H in H0.
-  move: H0. instantiate (1:=l).
-  apply:paco2_imp. apply monotone_SimulationF.
-  intros. apply/SimulationF_imp. done.
-
-  intros. rewrite /NI. intros. eapply H in H0.
-  move: H0. instantiate (1:=l).
-  apply:paco2_imp. apply monotone_SimulationF.
-  intros. apply/SimulationF_imp2. eauto.
-Qed.  *)
 
 
 Definition eqpair {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
@@ -1349,14 +1210,6 @@ Proof.
   econ. instantiate (1:= cons _ _). simpl. econ.
 Qed.
 
-(*Lemma map_trace_cons : forall (I I' O O' : Ty) (ORel' : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t t' x y,
-    MapTrace f g ORel' l (x::t) (y::t') -> MapTrace f g ORel' l t t'.
-Proof.
-  intros. elim : t t' H;ssa. inv H. inv H1. done. inv H5. done.
-  inv H0. inv H2. econ. eauto. econ. done. done.
-  inv H6. econ. done. econ. done. done.
-Qed.*)
-
 Lemma map_trace_insert2 : forall (I I' O O' : Ty) (ORel' : myrel [O']) (f : [I] -> [I']) (g : [O] -> [O']) l t t' n x y,
     MapTrace f g ORel' l (insert n x t) (insert n y t') -> MapTrace f g ORel' l t t'.
 Proof.
@@ -1453,276 +1306,6 @@ Proof.
 Qed.
 
 (* ============================================================== *)
-(* OLD APPROACH (StaTrace + rebuild) -- commented out.            *)
-(* ============================================================== *)
-(*
-Inductive StaTrace (I O V : Ty) (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) (VRel : myrel [V]) (ORel : myrel [O])  (l : level) : [V] -> seq ([I] + [Times V O]) -> seq ([Times V I] + [O]) -> Prop  :=
-| ST0 v : StaTrace f g VRel ORel l v nil nil
-| ST1 i t t' v : StaTrace f g VRel ORel l (f i v) t t' -> StaTrace f g VRel ORel l v ((inl i)::t) ((inl (f i v,i))::t')
-| ST2 o o' v v' t t' : rel (eqpair VRel ORel) l (v', o') (v,o)  -> StaTrace f g VRel ORel l (g o v) t t' -> StaTrace f g VRel ORel l v ((inr (g o' v',o'))::t) ((inr o)::t').
-
-(* ------------------------------------------------------------------ *)
-(* sta_NI skeleton.                                                    *)
-(*                                                                     *)
-(* Unlike map, the V-component of sta's output goes through eqpair,    *)
-(* whose `rel` only forces it to be VRel-related to the computed state *)
-(* g o v (its `dis` is False), whereas StaTrace's ST2 pins it to the   *)
-(* exact term g o v. So the literal map_trace analog does NOT apply to *)
-(* an arbitrary observed trace: it must first be canonicalised. The    *)
-(* extra ingredient is `trace_reobs`, which closes Trace under         *)
-(* re-observing outputs by rel-related values (obseq).                 *)
-(*                                                                     *)
-(* Proven below: obseq, trace_reobs, obseq_refl, obseq_trans.          *)
-(* Admitted (the real remaining work):                                 *)
-(*   - sta_trace_fwd : forward decomposition into a canonical          *)
-(*       StaTrace + a p-trace, with obseq linking the original trace   *)
-(*       to the canonical one (analog of map_trace).                   *)
-(*   - sta_rebuild  : reverse direction, rebuild the sta-trace from a  *)
-(*       StaTrace + p-trace (analog of the `elim` over MapTrace).      *)
-(*   - sta_NI_rel / sta_NI_ins / sta_NI_rem : the three NI clauses.    *)
-(*       Intended method per clause (mirrors map_NI): sta_trace_fwd,   *)
-(*       then transform the StaTrace / p-trace by the state thread     *)
-(*       (using fv_NI g for outputs, p's NI + fv_NI f / f_EP for the   *)
-(*       state-component of inputs across the whole suffix), then      *)
-(*       sta_rebuild, then trace_reobs to recover the required         *)
-(*       observations.                                                 *)
-(* ------------------------------------------------------------------ *)
-
-Inductive obseq (I O : Ty) (ORel : myrel [O]) (l : level) : seq ([I] + [O]) -> seq ([I] + [O]) -> Prop :=
-| oe_nil : obseq ORel l nil nil
-| oe_in i t1 t2 : obseq ORel l t1 t2 -> obseq ORel l (inl i::t1) (inl i::t2)
-| oe_out o1 o2 t1 t2 : rel ORel l o1 o2 -> obseq ORel l t1 t2 -> obseq ORel l (inr o1::t1) (inr o2::t2).
-
-Lemma trace_reobs : forall (I O : Ty) (ORel : myrel [O]) l (P : Proc I O) t1 t2,
-    Trace ORel l t1 P -> obseq ORel l t1 t2 -> Trace ORel l t2 P.
-Proof.
-  intros I O ORel l P t1 t2 H. move: t2. elim: H; intros.
-  - inv H. con.
-  - inv H2. econ. eauto. eauto.
-  - inv H3. econ. eauto. 2: eauto. eapply rel_trans; eauto.
-Qed.
-
-Lemma obseq_refl : forall I O (ORel : myrel [O]) l (t : seq ([I] + [O])), obseq ORel l t t.
-Proof. intros. elim: t. con. ssa. de a. con. done. con. apply rel_refl. done. Qed.
-
-Lemma obseq_trans : forall I O (ORel : myrel [O]) l (t1 t2 t3 : seq ([I] + [O])),
-    obseq ORel l t1 t2 -> obseq ORel l t2 t3 -> obseq ORel l t1 t3.
-Proof.
-  intros I O ORel l t1 t2 t3 H. move: t3. elim: H; intros.
-  - inv H. con.
-  - inv H1. con. eauto.
-  - inv H2. con. 2: eauto. eapply rel_trans; eauto.
-Qed.
-
-Lemma obseq_sym : forall I O (ORel : myrel [O]) l (t1 t2 : seq ([I] + [O])), obseq ORel l t1 t2 -> obseq ORel l t2 t1.
-Proof. intros. elim: H. con. ssa. con. done. ssa. con. apply rel_sym. done. done. Qed.
-
-Lemma obseq_insert_cong : forall I O (ORel : myrel [O]) l (t1 t2 : seq ([I] + [O])) n i,
-    obseq ORel l t1 t2 -> obseq ORel l (insert n (inl i) t1) (insert n (inl i) t2).
-Proof.
-  intros. move: n. elim: H; intros; destruct n; simpl; eauto 6 using oe_nil, oe_in, oe_out.
-Qed.
-
-Lemma obseq_insert : forall I O (ORel : myrel [O]) l (t1 tc : seq ([I] + [O])) n i,
-    obseq ORel l (insert n (inl i) t1) tc -> exists tcr, tc = insert n (inl i) tcr /\ obseq ORel l t1 tcr.
-Proof.
-  intros I O ORel l t1. elim: t1.
-  - intros tc n i H. de n.
-    + ssa. inv H. exists t2. split. done. done.
-    + ssa. inv H. exists nil. split. done. con.
-  - intros a t1 IH tc n i H. de n.
-    + ssa. inv H. exists t2. split. done. done.
-    + ssa. inv H.
-      * apply IH in H3. ssa. subst. exists (inl i0 :: x). split. done. con. done.
-      * apply IH in H4. ssa. subst. exists (inr o2 :: x). split. done. con. done. done.
-Qed.
-
-Lemma insert_cat : forall (A : Set) (pre r : seq A) x, insert (size pre) x (pre ++ r) = pre ++ x :: r.
-Proof. intros A pre. elim: pre. ssa. ssa. f_equal. eauto. Qed.
-
-Lemma remove_cat : forall (A : Set) (pre r : seq A) a, remove (size pre) (pre ++ a :: r) = pre ++ r.
-Proof. intros A pre. elim: pre. ssa. ssa. f_equal. eauto. Qed.
-
-(* Swap input state-components on a p-trace, justified one position at a   *)
-(* time by p's NI rel-clause (the prefix avoids reasoning about reducts).  *)
-Inductive pswap (V I O : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (l : level) : seq ([Times V I] + [O]) -> seq ([Times V I] + [O]) -> Prop :=
-| pw_nil : pswap VRel IRel l nil nil
-| pw_in x x' r1 r2 : rel (eqpair_R VRel IRel) l x x' -> pswap VRel IRel l r1 r2 -> pswap VRel IRel l (inl x::r1) (inl x'::r2)
-| pw_out o r1 r2 : pswap VRel IRel l r1 r2 -> pswap VRel IRel l (inr o::r1) (inr o::r2).
-
-Lemma trace_swap_pre : forall (V I O : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) l (p : Proc (Times V I) O) r1 r2,
-    NI (eqpair_R VRel IRel) ORel p -> pswap VRel IRel l r1 r2 ->
-    forall pre, Trace ORel l (pre ++ r1) p -> Trace ORel l (pre ++ r2) p.
-Proof.
-  intros V I O VRel IRel ORel l p r1 r2 HNI Hsw. elim: Hsw.
-  - intros pre Htr. apply Htr.
-  - intros x x' r0 r3 Hx Hpw IH pre Htr.
-    move: (HNI l) => [] Hrel _.
-    rewrite -insert_cat in Htr. eapply Hrel in Htr. 2: apply Hx. rewrite insert_cat in Htr.
-    move: (IH (pre ++ [:: inl x'])). rewrite -!catA /=. move=> HH. apply HH. apply Htr.
-  - intros o r0 r3 Hpw IH pre Htr.
-    move: (IH (pre ++ [:: inr o])). rewrite -!catA /=. move=> HH. apply HH. apply Htr.
-Qed.
-
-(* State-perturbation: running StaTrace from a VRel-related state yields a  *)
-(* VRel-related composite trace and a pswap-related p-trace.               *)
-Lemma sta_sim : forall (I O V : Ty) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) l tc1 t' v1,
-    StaTrace f g ORel l v1 tc1 t' -> fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f ->
-    forall v2, rel VRel l v1 v2 ->
-    exists tc2 t2', StaTrace f g ORel l v2 tc2 t2' /\ obseq (eqpair VRel ORel) l tc1 tc2 /\ pswap VRel IRel l t' t2'.
-Proof.
-  intros I O V f g VRel IRel ORel l tc1 t' v1 Hst Hg Hf. elim: Hst.
-  - intros v v2 Hr. exists nil, nil. ssa. con. con. con.
-  - intros i t tt v Hpre IH v2 Hr.
-    have Hfv : rel VRel l (f i v) (f i v2). eapply Hf. apply rel_refl. apply Hr.
-    move: (IH _ Hfv) => [tc2] [t2'] [Hst2] [Hoe] Hsw.
-    exists (inl i :: tc2), (inl (f i v2, i) :: t2'). ssa.
-    + con. apply Hst2.
-    + con. apply Hoe.
-    + con. 2: apply Hsw. left. split. apply Hfv. apply rel_refl.
-  - intros o o' v t tt Hrel Hst2 IH v2 Hr.
-    have Hgv : rel VRel l (g o v) (g o v2). eapply Hg. apply rel_refl. apply Hr.
-    move: (IH _ Hgv) => [tc2] [t2'] [Hst3] [Hoe] Hsw.
-    exists (inr (g o v2, o') :: tc2), (inr o :: t2'). ssa.
-    + con. apply Hrel. apply Hst3.
-    + con. 2: apply Hoe. split. apply Hgv. apply rel_refl.
-    + con. apply Hsw.
-Qed.
-
-(* reduceI is deterministic (reduceO is NOT: map's output g o discards o). *)
-Lemma reduceI_det : forall I O (p : Proc I O) i p1, reduceI p i p1 -> forall p2, reduceI p i p2 -> p1 = p2.
-Proof.
-  intros I O p i p1 H. elim: H; intros; match_dd; subst; f_equal; eauto.
-Qed.
-
-(* NI is preserved under INPUT-reduction (reduceI is deterministic).         *)
-Lemma NI_reduceI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (p p' : Proc I O) i,
-    NI IRel ORel p -> reduceI p i p' -> NI IRel ORel p'.
-Proof.
-  intros I O IRel ORel p p' i HNI Hred l.
-  move: (HNI l) => [Hrel [Hins Hrem]]. split;[|split].
-  - intros t a a' n Hr HT.
-    have HTp2: Trace ORel l (insert n.+1 (inl a) (inl i :: t)) p. econ. apply Hred. apply HT.
-    apply (Hrel (inl i :: t) a a' n.+1 Hr) in HTp2.
-    simpl in HTp2. inv HTp2. eapply reduceI_det in Hred. 2: apply H1. subst. apply H3.
-  - intros t a n Hd HT.
-    have HTp: Trace ORel l (inl i :: t) p. econ. apply Hred. apply HT.
-    apply (Hins (inl i :: t) a n.+1 Hd) in HTp.
-    simpl in HTp. inv HTp. eapply reduceI_det in Hred. 2: apply H1. subst. apply H3.
-  - intros t a n Hd HT.
-    have HTp: Trace ORel l (insert n.+1 (inl a) (inl i :: t)) p. simpl. econ. apply Hred. apply HT.
-    apply (Hrem (inl i :: t) a n.+1 Hd) in HTp.
-    simpl in HTp. inv HTp. eapply reduceI_det in Hred. 2: apply H1. subst. apply H3.
-Qed.
-
-(* NI is NOT preserved under OUTPUT-reduction.  Attempting the same proof     *)
-(* (prepend the output, apply NI of p, invert) leaves, in the rel clause:     *)
-(*    H1 : reduceO p o' p'0      H2 : rel ORel l o' o                         *)
-(*    H4 : Trace ORel l (insert n (inl a') t) p'0                             *)
-(*    Hred : reduceO p o p'                                                   *)
-(*    |- Trace ORel l (insert n (inl a') t) p'                               *)
-(* We have the property for the reduct p'0 obtained by inversion, but need it *)
-(* for the given reduct p'.  reduceO does NOT determine its reduct from the   *)
-(* observed output (reduce_mapO emits g o and discards o; reduceO_det is      *)
-(* provably false), so p'0 and p' cannot be identified.  Hence NI_reduceO is  *)
-(* not provable for the inductive (trace) NI -- this is the precise reason    *)
-(* sta_rebuild (which must re-thread state past an output step, i.e. needs NI *)
-(* of a reduceO-reduct) is left Admitted below.                              *)
-
-(* Forward decomposition: analog of map_trace, but canonicalising the  *)
-(* observed V-components (obseq links the original trace t to tc).      *)
-Lemma sta_trace_fwd : forall (I O V : Ty) (p : Proc (Times V I) O) (ORel : myrel [O]) (VRel : myrel [V]) (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) l t v,
-    Trace (eqpair VRel ORel) l t (sta f g v p) ->
-    exists tc t', obseq (eqpair VRel ORel) l t tc /\ Trace ORel l t' p /\ StaTrace f g ORel l v tc t'.
-Proof.
-  intros I O V p ORel VRel f g l t. move: p. elim: t.
-  - intros p v HT. exists nil, nil. ssa. con. con.
-  - intros a t IH p v HT. inv HT.
-    + match_dd. move: (IH _ _ H3) => [tc][t'][Hoe][Htp] Hst.
-      exists (inl i :: tc), (inl (f i v, i) :: t'). ssa.
-      * con. apply Hoe.
-      * econ. eauto. apply Htp.
-      * con. apply Hst.
-    + match_dd. destruct o as [ov oo].
-      move: H2 => /= [HV HO].
-      move: (IH _ _ H4) => [tc][t'][Hoe][Htp] Hst.
-      exists (inr (g o0 v, oo) :: tc), (inr o0 :: t'). ssa.
-      * con. 2: apply Hoe. split. apply rel_sym. apply HV. apply rel_refl.
-      * econ. eauto. apply rel_refl. apply Htp.
-      * con. apply HO. apply Hst.
-Qed.
-
-(* Reverse direction: rebuild the sta-trace from a StaTrace + p-trace        *)
-(* (analog of the `elim` over MapTrace inside map_NI).                       *)
-(*                                                                           *)
-(* OBSTACLE (left Admitted).  Unlike map_NI, sta carries state, so editing   *)
-(* one input re-threads the state through the whole suffix.  The clause       *)
-(* proofs therefore feed `sta_rebuild` a p-trace produced by                 *)
-(* `trace_swap_pre`, i.e. a *loose* Trace whose recorded outputs are only     *)
-(* rel-related to p's actual outputs.  In the ST2 step the actual p-output    *)
-(* o'' differs from the recorded o, so the sta reduct sits at state (g o'' v) *)
-(* while the StaTrace recursion is at (g o v).  Reconciling needs p's NI on   *)
-(* the suffix, i.e. NI of the reduct p'' -- and p'' is a reduceO-reduct.      *)
-(*                                                                           *)
-(* But NI is NOT preserved under reduceO with the inductive (trace) NI:       *)
-(* reduceO is non-deterministic.  reduce_mapO emits (g o) and discards o, so  *)
-(* for non-injective g two subprocess outputs o0<>o1 with g o0 = g o1 give    *)
-(* the SAME observed output but DIFFERENT reducts (reduceO_det is provably    *)
-(* false; reduceI_det holds).  Hence the lifting "prepend the output, apply   *)
-(* NI of p, invert" recovers a trace of *some* reduct p'2, not of the given   *)
-(* p''.  Every route I tried (rebuild from loose; rebuild from exact;         *)
-(* exact-extraction + fresh StaTrace; sta_sim-threading) reduces to needing   *)
-(* NI of a reduceO-reduct, which the inductive NI does not supply.            *)
-(*                                                                           *)
-(* So within the inductive NI, finishing these four needs either:            *)
-(*  (a) reduce_mapO to retain o (so reduceO is deterministic and NI_reduceO   *)
-(*      follows), or                                                          *)
-(*  (b) NI_reduceO proved by structural induction on the process via the      *)
-(*      per-construct *_NI lemmas (mutually recursive with sta_NI; needs a    *)
-(*      stratification of the *_NI family).                                   *)
-(* map_NI sidesteps all this only because map is stateless (no g o v term,    *)
-(* so no output-observation gap to reconcile).                                *)
-Lemma sta_rebuild : forall (I O V : Ty) (p : Proc (Times V I) O) (ORel : myrel [O]) (VRel : myrel [V]) (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) l tc t' v,
-    StaTrace f g ORel l v tc t' -> Trace ORel l t' p -> Trace (eqpair VRel ORel) l tc (sta f g v p).
-Admitted.
-
-(* The three NI clauses for sta (the genuine remaining work). *)
-Lemma sta_NI_rel : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
-    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
-    NI (eqpair_R VRel IRel) ORel p ->
-    forall l t i i' n, rel IRel l i i' ->
-      Trace (eqpair VRel ORel) l (insert n (inl i) t) (sta f g v p) ->
-      Trace (eqpair VRel ORel) l (insert n (inl i') t) (sta f g v p).
-Admitted.
-
-Lemma sta_NI_ins : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
-    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
-    NI (eqpair_R VRel IRel) ORel p ->
-    forall l t i n, dis IRel l i ->
-      Trace (eqpair VRel ORel) l t (sta f g v p) ->
-      Trace (eqpair VRel ORel) l (insert n (inl i) t) (sta f g v p).
-Admitted.
-
-Lemma sta_NI_rem : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
-    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
-    NI (eqpair_R VRel IRel) ORel p ->
-    forall l t i n, dis IRel l i ->
-      Trace (eqpair VRel ORel) l t (sta f g v p) ->
-      Trace (eqpair VRel ORel) l (remove n t) (sta f g v p).
-Admitted.
-
-Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
-    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
-    NI (eqpair_R VRel IRel) ORel p ->
-    NI IRel (eqpair VRel ORel) (sta f g v p).
-Proof.
-  intros. rewrite /NI /NI_l. intros l. ssa.
-  - eapply sta_NI_rel; eauto.
-  - eapply sta_NI_ins; eauto.
-  - eapply sta_NI_rem; eauto.
-Qed.
-*)
-(* ============================================================== *)
 (* NEW APPROACH: one state-threaded list, two projections.        *)
 (*                                                                *)
 (* An element of the threaded list carries the state on whichever *)
@@ -1810,10 +1393,7 @@ Fixpoint threaded (V I O : Ty) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) (v : [V])
 (* This is the SAME obstacle as before (NI not closed under reduceO): the       *)
 (* forward projection yields a *loose* list, the converse needs an *exactly*    *)
 (* threaded one, and bridging them needs NI of a reduceO-reduct.                *)
-Lemma sta_unproj : forall (I O V : Ty) (p : Proc (Times V I) O) (VRel : myrel [V]) (ORel : myrel [O]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) l t v,
-    fv_NI ORel VRel VRel g ->
-    Trace ORel l (projOl t) p -> threaded f g v t -> Trace (eqpair VRel ORel) l (projIl t) (sta f g v p).
-Admitted.
+
 
 (* ---- NI is closed under reduction (both reduceI and reduceO). ----          *)
 (* CORRECTION: reduceO IS deterministic (the earlier "non-determinism" was an   *)
@@ -1877,17 +1457,45 @@ Proof.
 Qed.
 
 (* Structural helpers for the NI proof (both straightforward, left Admitted). *)
-Lemma projIl_insert_inv : forall (V I O : Ty) (T : seq ([Times V I] + [Times V O])) n i t,
+Lemma projIl_insert_inv : forall (V I O : Ty) (v : [V]) (T : seq ([Times V I] + [Times V O])) n i t,
     projIl T = insert n (inl i) t -> exists w T'', T = insert n (inl (w, i)) T'' /\ projIl T'' = t.
-Admitted.
+Proof.
+  intros V I O v T. elim: T => [| a T' IH] n i t H.
+  - simpl in H. destruct n; simpl in H.
+    + discriminate.
+    + destruct t; try discriminate.
+      exists v, nil. split; done.
+  - destruct n.
+    + simpl in H. inversion H. subst.
+      destruct a as [[w i0] | vo].
+      * simpl in H1. inversion H1. subst.
+        exists w, T'. split; done.
+      * simpl in H1. discriminate.
+    + destruct t as [| s t']; simpl in H.
+      * discriminate.
+      * inversion H. subst.
+        have Haux := IH n i t' H2.
+        destruct Haux as [w Haux2].
+        destruct Haux2 as [T'' Haux3].
+        destruct Haux3 as [HT'' Hproj].
+        subst T'. exists w, (a :: T'' ). split.
+        -- simpl. done.
+        -- simpl. rewrite Hproj. done.
+Qed.
 
 Lemma projOl_insert : forall (V I O : Ty) n (x : [Times V I] + [Times V O]) (T : seq ([Times V I] + [Times V O])),
     projOl (insert n x T) = insert n (projO x) (projOl T).
-Admitted.
+Proof.
+  intros. elim: n T => [| n IH] T; destruct T; simpl; eauto.
+  by rewrite IH.
+Qed.
 
 Lemma projIl_insert : forall (V I O : Ty) n (x : [Times V I] + [Times V O]) (T : seq ([Times V I] + [Times V O])),
     projIl (insert n x T) = insert n (projI x) (projIl T).
-Admitted.
+Proof.
+  intros. elim: n T => [| n IH] T; destruct T; simpl; eauto.
+  by rewrite IH.
+Qed.
 
 (* ---- The converse machinery (uses NI_reduceI / NI_reduceO). ----            *)
 (* lthread v L : the stored states in L are rel-related to the f/g state-thread *)
@@ -2032,7 +1640,7 @@ Proof.
     intros t i i' n Hii HT.
     eapply sta_proj_lthread in HT. 2: apply Hf. 2: apply Hg.
     move: HT => [T] [Heq] [Htp] Hlt.
-    symmetry in Heq. move/projIl_insert_inv : Heq => [w] [T''] [HT'] Ht''.
+    symmetry in Heq. move/(projIl_insert_inv v) : Heq => [w] [T''] [HT' Ht''].
     subst T. subst t.
     rewrite projOl_insert in Htp. simpl in Htp.
     move: (Hp l) => [Hrel _].
@@ -2058,7 +1666,7 @@ Proof.
     intros t i n Hdi HT.
     eapply sta_proj_lthread in HT. 2: apply Hf. 2: apply Hg.
     move: HT => [T] [Heq [Htp Hlt]].
-    symmetry in Heq. move/projIl_insert_inv : Heq => [w] [T''] [HT' Ht''].
+    symmetry in Heq. move/(projIl_insert_inv v) : Heq => [w] [T''] [HT' Ht''].
     subst T. subst t.
     have Hl' : lthread VRel f g l v T''.
     { eapply lthread_remove_dis; eauto. }
@@ -2066,6 +1674,75 @@ Proof.
     rewrite projOl_insert in Htp. simpl in Htp.
     move: (Hp l) => [_ [_ Hrem]]. eapply Hrem; [|apply Htp].
     simpl. apply Hdi.
+Qed.
+
+Inductive SwiTrace (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) (l : level) : bool -> seq ([Times Bool I] + [Option O]) -> seq ([I] + [Times Bool O]) -> Prop :=
+| ST0 b : SwiTrace ORel BRel l b nil nil
+| ST1 b b' i t_swi t_p : SwiTrace ORel BRel l (xor b b') t_swi t_p -> SwiTrace ORel BRel l b (inl (b', i) :: t_swi) (inl i :: t_p)
+| ST2_false o t_swi t_p : rel (eqmaybe_swi ORel BRel) l None o -> SwiTrace ORel BRel l false t_swi t_p -> SwiTrace ORel BRel l false (inr o :: t_swi) t_p
+| ST2_true b_out o o_obs t_swi t_p : rel (eqmaybe_swi ORel BRel) l (Some o) o_obs -> SwiTrace ORel BRel l (negb b_out) t_swi t_p -> SwiTrace ORel BRel l true (inr o_obs :: t_swi) (inr (b_out, o) :: t_p).
+
+Lemma swi_trace : forall (I O : Ty) (p : Proc I (Times Bool O)) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t,
+    Trace (eqmaybe_swi ORel BRel) l t (swi b p) ->
+    exists t', Trace (eqpair_LR BRel ORel) l t' p /\ SwiTrace ORel BRel l b t t'.
+Proof.
+  intros I O p ORel BRel l b t HT.
+  move: p b HT.
+  elim: t => [| a t IH] p b HT.
+  - exists nil. split.
+    + con.
+    + con.
+  - inv HT.
+    + destruct i as [b' i_in]. dependent destruction H1.
+      edestruct (IH p'0 (xor b b') H3) as [t' [Htrace Hswi]].
+      exists (inl i_in :: t'). split.
+      * econstructor; eauto.
+      * econstructor; eauto.
+    + dependent destruction H1.
+      * edestruct (IH p false H4) as [t' [Htrace Hswi]].
+        exists t'. split.
+        { exact Htrace. }
+        { eapply ST2_false; eauto. }
+      * edestruct (IH p'0 (negb b0) H4) as [t' [Htrace Hswi]].
+        exists (inr (b0, o0) :: t'). split.
+        { econstructor. exact H1. apply rel_refl. exact Htrace. }
+        { eapply ST2_true; eauto. }
+Qed.
+
+Lemma swi_trace_insert : forall (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t t' n (i : bool * [I]),
+    SwiTrace ORel BRel l b (insert n (inl i) t) t' -> exists n' t'', t' = insert n' (inl i.2) t''.
+Proof.
+  intros I O ORel BRel l b t t' n i H.
+  elim: t b t' n H => [| a t IH] b t' n H.
+  - ssa. destruct n; simpl in H.
+    + inv H. exists 0, t_p. done.
+    + inv H. exists 1, nil. done.
+  - ssa. destruct n; simpl in H.
+    + inv H. exists 0, t_p. done.
+    + inv H.
+      * ssa. match goal with | Hswi : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi) as [n' [t'' ->]] end.
+        exists n'.+1, (inl i0 :: t''). done.
+      * ssa. match goal with | Hswi : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi) as [n' [t'' ->]] end.
+        exists n', t''. done.
+      * ssa. match goal with | Hswi : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi) as [n' [t'' ->]] end.
+        exists n'.+1, (inr (b_out, o) :: t''). done.
+Qed.
+
+Lemma swi_conv : forall (I O : Ty) (p : Proc I (Times Bool O)) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t t_p,
+    Trace (eqpair_LR BRel ORel) l t_p p -> SwiTrace ORel BRel l b t t_p -> Trace (eqmaybe_swi ORel BRel) l t (swi b p).
+Proof.
+  intros I O p ORel BRel l b t t_p HT Hswi.
+  move: p HT.
+  elim: Hswi.
+  - intros b' p HT. simpl. con.
+  - intros b' b'' i t_swi t_p' Hswi IH p HT.
+    inv HT.
+    econstructor; [eapply reduce_swiI; eauto | apply rel_refl | eapply IH; exact H3].
+  - intros o t_swi t_p' Hrel Hswi IH p HT.
+    econstructor; [eapply reduce_swiO; eauto | exact Hrel | eapply IH; exact HT].
+  - intros b_out o o_obs t_swi t_p' Hrel Hswi IH p HT.
+    inv HT.
+    econstructor; [eapply reduce_swiO2; eauto | exact Hrel | eapply IH; exact H4].
 Qed.
 
  (*fixed typo in paper: In conclusion, replaced I with Bool * I  *)
@@ -2086,113 +1763,6 @@ Admitted.
 Theorem par_NI : forall (I O1 O2 : Ty) (IRel : myrel [I]) (ORel1 : myrel [O1]) (ORel2 : myrel [O2]) p1 p2,
     NI IRel ORel1 p1 -> NI IRel ORel2 p2 -> NI IRel (eqpair ORel1 ORel2) (par p1 p2).
 Admitted.
-
-(*
-Lemma SimulationF_I_imp : forall I O l (IRel IRel' : myrel [I]) (ORel : myrel [O]) R s p,
-    (forall l x, dis IRel' l x -> dis IRel l x) ->
-    (forall l x y, rel IRel' l x y -> rel IRel l x y) ->
-    SimulationF l IRel ORel R s p ->
-    SimulationF l IRel' ORel R s p.
-Proof.
-  intros. inv H1. con;eauto.
-  move: H2. rewrite /Clause1. intros.
-  apply/H2. eauto. eauto.
-  move: H3. rewrite /Clause2. intros.
-  apply H in H6. apply H3 in H6. ssa.
-  econ. con. eauto. done.
-  move: H4.
-  rewrite /Clause3. intros.
-  eapply H4 in H6. ssa. econ. eauto. eauto.
-Qed.
-
-Lemma NI_I_imp : forall I O (IRel IRel' : myrel [I]) (ORel : myrel [O]) R,
-    (forall l x, dis IRel' l x -> dis IRel l x) ->
-    (forall l x y, rel IRel' l x y -> rel IRel l x y) ->
-    @NI _ _ IRel ORel R ->
-    @NI _ _ IRel' ORel R.
-Proof.
-  intros. 
-  intros. rewrite /NI. intros. eapply H1 in H2.
-  move: H2. instantiate (1:=l).
-  apply:paco2_imp. apply monotone_SimulationF.
-  intros. apply/SimulationF_I_imp. 3:eauto. eauto. eauto.
-Qed.
-
-
-Lemma SimulationF_O_imp : forall I O l (IRel : myrel [I]) (ORel ORel' : myrel [O]) R s p,
-    (forall l x y, rel ORel l x y -> rel ORel' l x y) ->
-    SimulationF l IRel ORel R s p ->
-    SimulationF l IRel ORel' R s p.
-Proof.
-  intros. inv H0. con;eauto.
-  move: H4.
-  rewrite /Clause4. intros. apply H4 in H5. ssa.
-  econ. con. apply/H. apply:H5. econ. con. eauto. done.
-Qed.
-
-Lemma NI_O_imp : forall I O (IRel : myrel [I]) (ORel ORel' : myrel [O]) R,
-    (forall l x y, rel ORel l x y -> rel ORel' l x y) ->
-    @NI _ _ IRel ORel R ->
-    @NI _ _ IRel ORel' R.
-Proof.
-  intros. 
-  intros. rewrite /NI. intros. eapply H0 in H1.
-  move: H1. instantiate (1:=l).
-  apply:paco2_imp. apply monotone_SimulationF.
-  intros. apply/SimulationF_O_imp. 2:eauto. eauto. 
-Qed.
-*)
-
-
-
-
-
-(*
-Lemma reduceI_trace: forall (A B : Ty) (p : Proc A B) i p' s R, reduceI p i p' -> R s p' -> paco2 TraceF R (Cons (inl i) s) p.
-Proof. move=> A B p i p' s R.
-       intros. induction H; try solve [ pfold; econ; eauto ].
-Qed.
-
-(*Lemma reduceI_trace': forall (A B : Ty) (p : Proc A B) i p' s R, reduceI p i p' -> paco2 TraceF R (Cons (inl i) s) p -> R s p'.
-Proof. move=> A B p i p' s R.
-       intros. induction H. punfold H0. inv H0. de H4. try solve [ pfold; econ; eauto ].
-Qed.*)
-
-Lemma reduceO_trace: forall (A B : Ty) (p : Proc A B) o p' s R, reduceO p o p' -> R s p' -> paco2 TraceF R (Cons (inr o) s) p.
-Proof. move=> A B p i p' s R.
-       intros. induction H; try solve [ pfold; econ; eauto ].
-Qed.
-
-Lemma public_sim : forall (A B : Ty) (p : Proc A B) BRel s l, simulation (publicRel _) BRel l s p -> (forall x y l, rel BRel l x y -> x = y) -> trace s p.
-Proof.
-  move=> A B. pcofix CIH.
-  intros. move: H1 => Hassum. punfold H0. inv H0.
-  de s. de s.
-  rewrite /Clause3 in H2. edestruct H2. eauto. simpl. eauto. ssa. pc.
-  apply/reduceI_trace; eauto.
-
-  rewrite /Clause4 in H3. edestruct H3. eauto. simpl. eauto. ssa. pc.
-  apply/reduceO_trace. eauto. apply Hassum in H4. subst. eauto. eauto.
-Qed.
-
-Lemma public_sim2 : forall (A B : Ty) (p : Proc A B) BRel s l,  trace s p -> (forall x y l, rel BRel l x y -> x = y) -> simulation (publicRel _) BRel l s p.
-Proof.
-  move=> A B + BRel + l. pcofix CIH.
-  intros. move: H1 => Hassum. punfold H0. inv H0.
-  pfold. econ. done. done. rewrite /Clause3. ssa. inv H2. econ. con. eauto. right.
-  apply/CIH. pc. eauto. eauto.
-  
-  rewrite /Clause4. ssa.
-  pfold. econ. done. done. done. rewrite /Clause4. ssa. inv H2. econ. con. eauto.
-  econ. con. eauto. right. apply/CIH. pc. eauto. done.
-Qed.
-
-Lemma public_NI : forall (A B : Ty) (p : Proc A B) BRel, (forall x y l, rel BRel l x y -> x = y) -> @NI _ _ (publicRel _) BRel p.
-Proof.
-  intros. rewrite /NI. intros. apply/public_sim2;eauto.
-Qed.
-*)
-
 
 
 Lemma f_NI_id (A : Ty) B : @f_NI A A B B id.
@@ -2682,7 +2252,7 @@ handler on ->(!handler_out)
 scheduler on ->(!private_index)
 ...
  *)
-Definition good_schedulerp :  Proc (Sum TInterrupt THandlerOutput) (Times Nat Nat). (*handlerflag, processflag*) Check sta_NI. Check swi_NI. 
+Definition good_schedulerp :  Proc (Sum TInterrupt THandlerOutput) (Times Nat Nat). (*handlerflag, processflag*) Print Assumptions sta_NI. Check swi_NI. 
   eapply map. apply id. instantiate (1:= Times (Times Bool Bool) Unit).
   exact (fun o => match fst o with | (true,false) => (3,1) | (true,true) => (2,1) | (false,true) => (3,3) | (false,false) => (2,2) end ).
   eapply (@sta _ _ _). exact (fun ih bb => match ih with | inl TimerInterrupt => (true,~~ (snd bb))
