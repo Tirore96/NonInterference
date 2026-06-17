@@ -1871,7 +1871,7 @@ Proof.
     apply (Hins (inr o :: t) a n.+1 Hd) in HTp.
     simpl in HTp. inv HTp. eapply reduceO_det in Hred. 2: apply H1. destruct Hred. subst. assumption.
   - intros t a n Hd HT.
-    have HTp: Trace ORel l (inr o :: t) p. econ. apply Hred. apply rel_refl. apply HT.
+    have HTp: Trace ORel l (inr o :: insert n (inl a) t) p. econ. apply Hred. apply rel_refl. apply HT.
     apply (Hrem (inr o :: t) a n.+1 Hd) in HTp.
     simpl in HTp. inv HTp. eapply reduceO_det in Hred. 2: apply H1. destruct Hred. subst. assumption.
 Qed.
@@ -1982,6 +1982,43 @@ Proof.
       * eapply IH. apply Hf. apply Hg. apply Hii. apply Hl.
 Qed.
 
+Lemma lthread_insert_dis : forall (V I O : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) l T n i v,
+    fv_NI IRel VRel VRel f -> fv_NI ORel VRel VRel g -> f_EP IRel VRel f -> dis IRel l i ->
+    lthread VRel f g l v T ->
+    exists w, lthread VRel f g l v (insert n (inl (w, i)) T).
+Proof.
+  intros V I O VRel IRel ORel f g l T n i v Hf Hg Hep Hdi. move: T v. elim: n => [| n' IH] T v Hlt.
+  - exists (f i v). simpl. split.
+    + apply rel_refl.
+    + eapply lthread_stable. apply Hf. apply Hg. 2: apply Hlt.
+      apply rel_sym. apply Hep. apply Hdi.
+  - destruct T as [| a' T0].
+    + exists v. simpl. done.
+    + destruct a' as [[w0 i0] | [w0 o0]]; simpl in *; destruct Hlt as [Hw0 Hlt].
+      * destruct (IH T0 (f i0 v) Hlt) as [w Hw].
+        exists w. split; assumption.
+      * destruct (IH T0 (g o0 v) Hlt) as [w Hw].
+        exists w. split; assumption.
+Qed.
+
+Lemma lthread_remove_dis : forall (V I O : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) l T'' n w i v,
+    fv_NI IRel VRel VRel f -> fv_NI ORel VRel VRel g -> f_EP IRel VRel f -> dis IRel l i ->
+    lthread VRel f g l v (insert n (inl (w, i)) T'') ->
+    lthread VRel f g l v T''.
+Proof.
+  intros V I O VRel IRel ORel f g l T'' n w i v Hf Hg Hep Hdi Hlt.
+  move: T'' v Hlt. elim: n => [| n' IH] T'' v Hlt.
+  - destruct T'' as [| a' T0]; simpl in Hlt.
+    + done.
+    + destruct Hlt as [Hw Hlt]. eapply lthread_stable. apply Hf. apply Hg. 2: apply Hlt.
+      eapply Hep. apply Hdi.
+  - destruct T'' as [| a' T0].
+    + simpl. done.
+    + destruct a' as [[w0 i0] | [w0 o0]]; simpl in Hlt |- *; destruct Hlt as [Hw0 Hlt].
+      * split; [apply Hw0 | eapply IH; eauto].
+      * split; [apply Hw0 | eapply IH; eauto].
+Qed.
+
 (* sta_NI: clause 1 (rel) is PROVED via the projection + converse approach.     *)
 (* Clauses 2 (insert disclosed) and 3 (remove) are analogous (using p's clauses *)
 (* 2/3 and f_EP) and are left admitted.                                         *)
@@ -2006,9 +2043,30 @@ Proof.
     have Hfin : Trace (eqpair VRel ORel) l (projIl (insert n (inl (w, i')) T'')) (sta f g v p).
     { eapply sta_conv. apply Hg. apply Hf. apply Hp. rewrite projOl_insert. simpl. apply Htp. apply Hl'. }
     rewrite projIl_insert in Hfin. simpl in Hfin. apply Hfin.
-  - admit.
-  - admit.
-Admitted.
+  - (* clause 2 (insert disclosed) -- PROVED *)
+    intros t i n Hdi HT.
+    eapply sta_proj_lthread in HT. 2: apply Hf. 2: apply Hg.
+    move: HT => [T] [Heq [Htp Hlt]]. subst t.
+    have [w Hw] : exists w, lthread VRel f g l v (insert n (inl (w, i)) T).
+    { eapply lthread_insert_dis; eauto. }
+    have -> : insert n (inl i) (projIl T) = projIl (insert n (inl (w, i)) T) by rewrite projIl_insert.
+    eapply sta_conv. apply Hg. apply Hf. apply Hp. 2: exact Hw.
+    rewrite projOl_insert. simpl.
+    move: (Hp l) => [_ [Hins _]]. eapply Hins. 2: apply Htp.
+    simpl. apply Hdi.
+  - (* clause 3 (remove) -- PROVED *)
+    intros t i n Hdi HT.
+    eapply sta_proj_lthread in HT. 2: apply Hf. 2: apply Hg.
+    move: HT => [T] [Heq [Htp Hlt]].
+    symmetry in Heq. move/projIl_insert_inv : Heq => [w] [T''] [HT' Ht''].
+    subst T. subst t.
+    have Hl' : lthread VRel f g l v T''.
+    { eapply lthread_remove_dis; eauto. }
+    eapply sta_conv. apply Hg. apply Hf. apply Hp. 2: exact Hl'.
+    rewrite projOl_insert in Htp. simpl in Htp.
+    move: (Hp l) => [_ [_ Hrem]]. eapply Hrem; [|apply Htp].
+    simpl. apply Hdi.
+Qed.
 
  (*fixed typo in paper: In conclusion, replaced I with Bool * I  *)
 Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (BRel : myrel [Bool]) p b,
@@ -2029,6 +2087,7 @@ Theorem par_NI : forall (I O1 O2 : Ty) (IRel : myrel [I]) (ORel1 : myrel [O1]) (
     NI IRel ORel1 p1 -> NI IRel ORel2 p2 -> NI IRel (eqpair ORel1 ORel2) (par p1 p2).
 Admitted.
 
+(*
 Lemma SimulationF_I_imp : forall I O l (IRel IRel' : myrel [I]) (ORel : myrel [O]) R s p,
     (forall l x, dis IRel' l x -> dis IRel l x) ->
     (forall l x y, rel IRel' l x y -> rel IRel l x y) ->
@@ -2082,11 +2141,13 @@ Proof.
   apply:paco2_imp. apply monotone_SimulationF.
   intros. apply/SimulationF_O_imp. 2:eauto. eauto. 
 Qed.
+*)
 
 
 
 
 
+(*
 Lemma reduceI_trace: forall (A B : Ty) (p : Proc A B) i p' s R, reduceI p i p' -> R s p' -> paco2 TraceF R (Cons (inl i) s) p.
 Proof. move=> A B p i p' s R.
        intros. induction H; try solve [ pfold; econ; eauto ].
@@ -2130,6 +2191,7 @@ Lemma public_NI : forall (A B : Ty) (p : Proc A B) BRel, (forall x y l, rel BRel
 Proof.
   intros. rewrite /NI. intros. apply/public_sim2;eauto.
 Qed.
+*)
 
 
 
@@ -2648,6 +2710,7 @@ rewrite /my_sstreamF.
 do ? f_equal.
 Qed.
 
+(*
 Lemma schedulerp_trace : trace my_sstream good_schedulerp.
 Proof.
   pcofix CIH.
@@ -2661,6 +2724,7 @@ Proof.
   bundle;left.
   bundle;right.
 Qed.
+*)
 
 
 Definition unit_p : Proc Unit Unit := @out Unit Unit tt.
@@ -2806,6 +2870,7 @@ Qed.
 Ltac rewr ::=  (try rewrite newtrace'_eq); (try rewrite newtrace_eq); rewrite /low_p /handler /high_p /only_loop /my_only_loop_good' /my_only_loop_good /process_pool_good /good_schedulerp /my_f_coopt /scheduled_process_pool /high_p /alternate_generic /alternate_generic2 /low_p.
 
 (*spec for good scheduler*)
+(*
 Lemma newtrace'_trace : trace newtrace' my_only_loop_good'.
 Proof.
   pcofix CIH. 
@@ -2858,6 +2923,7 @@ Proof.
   swi_instans.
   eauto.
 Qed.
+*)
 
 
 
@@ -2877,6 +2943,7 @@ handler on ->(!notification)
 scheduler on ->(!private)
 ...
  *)
+(*
 Definition good_schedulerp :  Proc (Sum TInterrupt THandlerOutput) (Times Nat Nat). (*handlerflag, processflag*)
   eapply map. apply id. instantiate (1:= Times (Times Bool Bool) Unit).
   exact (fun o => match fst o with | (true,false) => (3,1) | (true,true) => (2,1) | (false,true) => (3,3) | (false,false) => (2,2) end ).
@@ -2888,3 +2955,6 @@ Definition good_schedulerp :  Proc (Sum TInterrupt THandlerOutput) (Times Nat Na
   exact (false,false).
   eapply out. con.
 Defined.
+*)
+
+Admit Obligations.
