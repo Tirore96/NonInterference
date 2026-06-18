@@ -82,3 +82,7 @@ Show bad model interfers and good model does not.
 
 Started implementation. Some decisions:
 Keep output relation as a myrel, it's too inconvenient to change it. We also want to reuse the myrel builders defined for input relations. 
+
+
+Removed:
+NotSim and tactics for deriving traces

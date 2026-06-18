@@ -1,5 +1,6 @@
 -Q . NonInterference
+-I ..
 -arg -w -arg all
 
-### List your files here (one per line)
-model.v
+llmwork/model.v
+llmwork/instructivetheorems.v

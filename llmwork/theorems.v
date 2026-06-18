@@ -1,0 +1,572 @@
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
+Require Import RelationClasses.
+From Paco Require Import paco.
+From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import order.
+Require Import Streams.
+From HB Require Import structures.
+From deriving Require Import deriving.
+Require Import Stdlib.Program.Equality.
+From Equations Require Import Equations.
+Require Import Stdlib.Classes.DecidableClass.
+
+Import Order.TTheory.
+Open Scope order_scope.
+
+Require Export NonInterference.llmwork.instructivetheorems.
+
+(* ============================================================== *)
+(* NEW APPROACH: one state-threaded list, two projections.        *)
+(*                                                                *)
+(* An element of the threaded list carries the state on whichever *)
+(* side needs it:                                                 *)
+(*   inl (w,i) : an input step  -- w is the post-input state      *)
+(*               (= f i v), i the input.                          *)
+(*   inr (w,o) : an output step -- w is the post-output state     *)
+(*               (= g o v), o the (observed) output.              *)
+(*                                                                *)
+(*   projI drops the state from INPUTS  -> the sta-trace          *)
+(*         (over [I] + [Times V O]).                              *)
+(*   projO drops the state from OUTPUTS -> the p-trace            *)
+(*         (over [Times V I] + [O]).                              *)
+(* ============================================================== *)
+
+Definition projI (V I O : Ty) (x : [Times V I] + [Times V O]) : [I] + [Times V O] :=
+  match x with
+  | inl vi => inl (snd vi)
+  | inr vo => inr vo
+  end.
+
+Definition projO (V I O : Ty) (x : [Times V I] + [Times V O]) : [Times V I] + [O] :=
+  match x with
+  | inl vi => inl vi
+  | inr vo => inr (snd vo)
+  end.
+
+(* list-level projections (avoid the name clash with the Proc constructor map) *)
+Fixpoint projIl (V I O : Ty) (t : seq ([Times V I] + [Times V O])) : seq ([I] + [Times V O]) :=
+  match t with
+  | nil => nil
+  | x :: t' => projI x :: projIl t'
+  end.
+
+Fixpoint projOl (V I O : Ty) (t : seq ([Times V I] + [Times V O])) : seq ([Times V I] + [O]) :=
+  match t with
+  | nil => nil
+  | x :: t' => projO x :: projOl t'
+  end.
+
+(* Forward: any trace of (sta f g v p) is the projIl-image of a threaded      *)
+(* list whose projOl-image is a trace of p.                                   *)
+Lemma sta_proj : forall (I O V : Ty) (p : Proc (Times V I) O) (VRel : myrel [V]) (ORel : myrel [O]) (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) l v ts,
+    Trace (eqpair VRel ORel) l ts (sta f g v p) ->
+    exists t, ts = projIl t /\ Trace ORel l (projOl t) p.
+Proof.
+  intros I O V p VRel ORel f g l v ts. move: p v. elim: ts.
+  - intros p v HT. exists nil. ssa.
+  - intros a ts IH p v HT. inv HT.
+    + match_dd. move: (IH _ _ H3) => [t] [Hpi] Hpo.
+      exists (inl (f i v, i) :: t). split.
+      * simpl. rewrite Hpi. done.
+      * simpl. econ. eauto. apply Hpo.
+    + match_dd. move: (IH _ _ H4) => [t] [Hpi] Hpo.
+      exists (inr o :: t). split.
+      * simpl. rewrite Hpi. done.
+      * simpl. econ. eauto. 2: apply Hpo. move: H2 => [_ HO]. apply HO.
+Qed.
+
+(* Specialisation to the NI call-site: the composite trace insert n (inl i) t  *)
+(* is EXACTLY projIl T, and projOl T is a trace of p, for one shared list T.    *)
+Lemma sta_proj_insert : forall (I O V : Ty) (p : Proc (Times V I) O) (VRel : myrel [V]) (ORel : myrel [O]) (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) l v n i t,
+    Trace (eqpair VRel ORel) l (insert n (inl i) t) (sta f g v p) ->
+    exists T, insert n (inl i) t = projIl T /\ Trace ORel l (projOl T) p.
+Proof. intros. eapply sta_proj. apply H. Qed.
+
+(* A list is "threaded" from v when each stored state is the f/g-update of    *)
+(* the previous one, using the recorded input/output in that element.         *)
+Fixpoint threaded (V I O : Ty) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) (v : [V]) (t : seq ([Times V I] + [Times V O])) : Prop :=
+  match t with
+  | nil => True
+  | inl wi :: t' => fst wi = f (snd wi) v /\ threaded f g (f (snd wi) v) t'
+  | inr wo :: t' => fst wo = g (snd wo) v /\ threaded f g (g (snd wo) v) t'
+  end.
+
+(* Converse direction.  The INPUT case goes through (reduceI is exact-enough).  *)
+(* The OUTPUT case does NOT: rebuilding the sta-step uses p's ACTUAL output o', *)
+(* so the continuation is (sta f g (g o' v) p'), but `threaded` only provides   *)
+(* the suffix threaded from (g w2 v) where w2 is the RECORDED output, and       *)
+(* o' <> w2 (only rel ORel o' w2, since Trace records outputs up to rel).  The  *)
+(* concrete stuck goal:                                                         *)
+(*   H2  : rel ORel l o' w2                                                     *)
+(*   Hth : threaded f g (g w2 v) t                                             *)
+(*   |-  Trace (eqpair VRel ORel) l (projIl t) (sta f g (g o' v) p')           *)
+(* This is the SAME obstacle as before (NI not closed under reduceO): the       *)
+(* forward projection yields a *loose* list, the converse needs an *exactly*    *)
+(* threaded one, and bridging them needs NI of a reduceO-reduct.                *)
+
+
+(* ---- NI is closed under reduction (both reduceI and reduceO). ----          *)
+(* CORRECTION: reduceO IS deterministic (the earlier "non-determinism" was an   *)
+(* artifact of stating determinism with the output fixed; the full statement    *)
+(* below holds, and the map case closes because the subprocess has a unique     *)
+(* output).  Hence NI_reduceO holds, which is exactly what the rebuild needs.   *)
+Lemma reduceI_det : forall I O (p : Proc I O) i p1, reduceI p i p1 -> forall p2, reduceI p i p2 -> p1 = p2.
+Proof.
+  intros I O p i p1 H. elim: H; intros; match_dd; subst; f_equal; eauto.
+Qed.
+
+Lemma reduceO_det : forall I O (p : Proc I O) o1 p1, reduceO p o1 p1 -> forall o2 p2, reduceO p o2 p2 -> o1 = o2 /\ p1 = p2.
+Proof.
+  intros I O p o1 p1 H. elim: H; intros; match_dd;
+  repeat (match goal with
+          | [ IH : forall o2 p2, reduceO ?q o2 p2 -> _, HH : reduceO ?q _ _ |- _ ] =>
+              apply IH in HH; destruct HH
+          | [ E : (_, _) = (_, _) |- _ ] => inversion E; clear E
+          | [ H1 : reduceI ?q ?i ?a, H2 : reduceI ?q ?i ?b |- _ ] =>
+              assert (a = b) by (eapply reduceI_det; eassumption); clear H2
+          end; subst);
+  split; reflexivity.
+Qed.
+
+Lemma NI_reduceI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (p p' : Proc I O) i,
+    NI IRel ORel p -> reduceI p i p' -> NI IRel ORel p'.
+Proof.
+  intros I O IRel ORel p p' i HNI Hred l.
+  move: (HNI l) => [Hrel [Hins Hrem]]. split;[|split].
+  - intros t a a' n Hr HT.
+    have HTp2: Trace ORel l (insert n.+1 (inl a) (inl i :: t)) p. econ. apply Hred. apply HT.
+    apply (Hrel (inl i :: t) a a' n.+1 Hr) in HTp2.
+    simpl in HTp2. inv HTp2. eapply reduceI_det in Hred. 2: apply H1. subst. apply H3.
+  - intros t a n Hd HT.
+    have HTp: Trace ORel l (inl i :: t) p. econ. apply Hred. apply HT.
+    apply (Hins (inl i :: t) a n.+1 Hd) in HTp.
+    simpl in HTp. inv HTp. eapply reduceI_det in Hred. 2: apply H1. subst. apply H3.
+  - intros t a n Hd HT.
+    have HTp: Trace ORel l (insert n.+1 (inl a) (inl i :: t)) p. simpl. econ. apply Hred. apply HT.
+    apply (Hrem (inl i :: t) a n.+1 Hd) in HTp.
+    simpl in HTp. inv HTp. eapply reduceI_det in Hred. 2: apply H1. subst. apply H3.
+Qed.
+
+Lemma NI_reduceO : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (p p' : Proc I O) o,
+    NI IRel ORel p -> reduceO p o p' -> NI IRel ORel p'.
+Proof.
+  intros I O IRel ORel p p' o HNI Hred l.
+  move: (HNI l) => [Hrel [Hins Hrem]]. split;[|split].
+  - intros t a a' n Hr HT.
+    have HTp: Trace ORel l (inr o :: insert n (inl a) t) p. econ. apply Hred. apply rel_refl. apply HT.
+    apply (Hrel (inr o :: t) a a' n.+1 Hr) in HTp.
+    simpl in HTp. inv HTp. eapply reduceO_det in Hred. 2: apply H1. destruct Hred. subst. assumption.
+  - intros t a n Hd HT.
+    have HTp: Trace ORel l (inr o :: t) p. econ. apply Hred. apply rel_refl. apply HT.
+    apply (Hins (inr o :: t) a n.+1 Hd) in HTp.
+    simpl in HTp. inv HTp. eapply reduceO_det in Hred. 2: apply H1. destruct Hred. subst. assumption.
+  - intros t a n Hd HT.
+    have HTp: Trace ORel l (inr o :: insert n (inl a) t) p. econ. apply Hred. apply rel_refl. apply HT.
+    apply (Hrem (inr o :: t) a n.+1 Hd) in HTp.
+    simpl in HTp. inv HTp. eapply reduceO_det in Hred. 2: apply H1. destruct Hred. subst. assumption.
+Qed.
+
+(* Structural helpers for the NI proof (both straightforward, left Admitted). *)
+Lemma projIl_insert_inv : forall (V I O : Ty) (v : [V]) (T : seq ([Times V I] + [Times V O])) n i t,
+    projIl T = insert n (inl i) t -> exists w T'', T = insert n (inl (w, i)) T'' /\ projIl T'' = t.
+Proof.
+  intros V I O v T. elim: T => [| a T' IH] n i t H.
+  - simpl in H. destruct n; simpl in H.
+    + discriminate.
+    + destruct t; try discriminate.
+      exists v, nil. split; done.
+  - destruct n.
+    + simpl in H. inversion H. subst.
+      destruct a as [[w i0] | vo].
+      * simpl in H1. inversion H1. subst.
+        exists w, T'. split; done.
+      * simpl in H1. discriminate.
+    + destruct t as [| s t']; simpl in H.
+      * discriminate.
+      * inversion H. subst.
+        have Haux := IH n i t' H2.
+        destruct Haux as [w Haux2].
+        destruct Haux2 as [T'' Haux3].
+        destruct Haux3 as [HT'' Hproj].
+        subst T'. exists w, (a :: T'' ). split.
+        -- simpl. done.
+        -- simpl. rewrite Hproj. done.
+Qed.
+
+Lemma projOl_insert : forall (V I O : Ty) n (x : [Times V I] + [Times V O]) (T : seq ([Times V I] + [Times V O])),
+    projOl (insert n x T) = insert n (projO x) (projOl T).
+Proof.
+  intros. elim: n T => [| n IH] T; destruct T; simpl; eauto.
+  by rewrite IH.
+Qed.
+
+Lemma projIl_insert : forall (V I O : Ty) n (x : [Times V I] + [Times V O]) (T : seq ([Times V I] + [Times V O])),
+    projIl (insert n x T) = insert n (projI x) (projIl T).
+Proof.
+  intros. elim: n T => [| n IH] T; destruct T; simpl; eauto.
+  by rewrite IH.
+Qed.
+
+(* ---- The converse machinery (uses NI_reduceI / NI_reduceO). ----            *)
+(* lthread v L : the stored states in L are rel-related to the f/g state-thread *)
+(* from v (a "loose" threading, which is all a real observed trace gives).      *)
+Fixpoint lthread (V I O : Ty) (VRel : myrel [V]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) (l : level) (v : [V]) (L : seq ([Times V I] + [Times V O])) : Prop :=
+  match L with
+  | nil => True
+  | inl wi :: L' => rel VRel l (fst wi) (f (snd wi) v) /\ lthread VRel f g l (f (snd wi) v) L'
+  | inr wo :: L' => rel VRel l (fst wo) (g (snd wo) v) /\ lthread VRel f g l (g (snd wo) v) L'
+  end.
+
+Lemma lthread_stable : forall (V I O : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) l L v v',
+    fv_NI IRel VRel VRel f -> fv_NI ORel VRel VRel g ->
+    rel VRel l v v' -> lthread VRel f g l v L -> lthread VRel f g l v' L.
+Proof.
+  intros V I O VRel IRel ORel f g l L. elim: L => [|a L' IH] v v' Hf Hg Hvv' Hl; first done.
+  destruct a as [[w x]|[w x]]; simpl in *; destruct Hl as [Hw Hl]; split.
+  - eapply rel_trans. apply Hw. eapply Hf. apply rel_refl. apply Hvv'.
+  - eapply IH. apply Hf. apply Hg. 2: apply Hl. eapply Hf. apply rel_refl. apply Hvv'.
+  - eapply rel_trans. apply Hw. eapply Hg. apply rel_refl. apply Hvv'.
+  - eapply IH. apply Hf. apply Hg. 2: apply Hl. eapply Hg. apply rel_refl. apply Hvv'.
+Qed.
+
+(* The converse: a p-trace (projOl L) lifts to an sta-trace (projIl L).  At an  *)
+(* input it re-aligns p's state-component via p's clause 1 + NI_reduceI; at an  *)
+(* output it observes p's actual output and continues via NI_reduceO.           *)
+Lemma sta_conv : forall (I O V : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) l L (p : Proc (Times V I) O) v,
+    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f ->
+    NI (eqpair_R VRel IRel) ORel p ->
+    Trace ORel l (projOl L) p -> lthread VRel f g l v L ->
+    Trace (eqpair VRel ORel) l (projIl L) (sta f g v p).
+Proof.
+  intros I O V VRel IRel ORel f g l L. elim: L => [|a L' IH] p v Hg Hf HNI HT Hl.
+  - simpl. con.
+  - destruct a as [[w x]|[w x]]; simpl in *; destruct Hl as [Hw Hl].
+    + move: (HNI l) => [Hrel _].
+      have Hsw : rel (eqpair_R VRel IRel) l (w,x) (f x v, x) by (left; split; [apply Hw | apply rel_refl]).
+      apply (Hrel (projOl L') (w,x) (f x v, x) 0 Hsw) in HT.
+      simpl in HT. inv HT.
+      econ. econ. reflexivity. apply H1.
+      eapply IH. apply Hg. apply Hf. eapply NI_reduceI. apply HNI. apply H1. apply H3. apply Hl.
+    + inv HT.
+      econ. econ. reflexivity. apply H1.
+      split. eapply rel_trans. eapply Hg. apply H2. apply rel_refl. apply rel_sym. apply Hw. apply H2.
+      eapply IH. apply Hg. apply Hf. eapply NI_reduceO. apply HNI. apply H1. apply H4.
+      eapply lthread_stable. apply Hf. apply Hg. 2: apply Hl. eapply Hg. apply rel_sym. apply H2. apply rel_refl.
+Qed.
+
+(* Forward decomposition with the lthread invariant. *)
+Lemma sta_proj_lthread : forall (I O V : Ty) (p : Proc (Times V I) O) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) l v ts,
+    fv_NI IRel VRel VRel f -> fv_NI ORel VRel VRel g ->
+    Trace (eqpair VRel ORel) l ts (sta f g v p) ->
+    exists T, ts = projIl T /\ Trace ORel l (projOl T) p /\ lthread VRel f g l v T.
+Proof.
+  intros I O V p VRel IRel ORel f g l v ts. move: p v. elim: ts.
+  - intros p v Hf Hg HT. exists nil. ssa.
+  - intros a ts IH p v Hf Hg HT. inv HT.
+    + match_dd. move: (IH _ _ Hf Hg H3) => [T] [Hpi] [Hpo] Hlt.
+      exists (inl (f i v, i) :: T). split; [|split].
+      * simpl. rewrite Hpi. done.
+      * simpl. econ. eauto. apply Hpo.
+      * simpl. split. apply rel_refl. apply Hlt.
+    + match_dd. destruct o as [vobs oobs].
+      move: H2 => /= [HV HO].
+      move: (IH _ _ Hf Hg H4) => [T] [Hpi] [Hpo] Hlt.
+      exists (inr (vobs, oobs) :: T). split; [|split].
+      * simpl. rewrite Hpi. done.
+      * simpl. econ. eauto. apply HO. apply Hpo.
+      * simpl. split.
+        eapply rel_trans. apply rel_sym. apply HV. eapply Hg. apply HO. apply rel_refl.
+        eapply lthread_stable. apply Hf. apply Hg. 2: apply Hlt. eapply Hg. apply HO. apply rel_refl.
+Qed.
+
+(* Swapping the i-component of one input preserves lthread. *)
+Lemma lthread_swap : forall (V I O : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) l T'' n w i i' v,
+    fv_NI IRel VRel VRel f -> fv_NI ORel VRel VRel g -> rel IRel l i i' ->
+    lthread VRel f g l v (insert n (inl (w, i)) T'') ->
+    lthread VRel f g l v (insert n (inl (w, i')) T'').
+Proof.
+  intros V I O VRel IRel ORel f g l T''. elim: T'' => [|a T0 IH] n w i i' v Hf Hg Hii Hl.
+  - destruct n; simpl in *.
+    + destruct Hl as [Hw _]. split. eapply rel_trans. apply Hw. eapply Hf. apply Hii. apply rel_refl. done.
+    + done.
+  - destruct n.
+    + destruct Hl as [Hw Hl]. split.
+      * eapply rel_trans. apply Hw. eapply Hf. apply Hii. apply rel_refl.
+      * eapply lthread_stable. apply Hf. apply Hg. 2: apply Hl. eapply Hf. apply Hii. apply rel_refl.
+    + simpl in Hl |- *. destruct a as [[w2 x2]|[w2 x2]]; destruct Hl as [Hw2 Hl]; split.
+      * apply Hw2.
+      * eapply IH. apply Hf. apply Hg. apply Hii. apply Hl.
+      * apply Hw2.
+      * eapply IH. apply Hf. apply Hg. apply Hii. apply Hl.
+Qed.
+
+Lemma lthread_insert_dis : forall (V I O : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) l T n i v,
+    fv_NI IRel VRel VRel f -> fv_NI ORel VRel VRel g -> f_EP IRel VRel f -> dis IRel l i ->
+    lthread VRel f g l v T ->
+    exists w, lthread VRel f g l v (insert n (inl (w, i)) T).
+Proof.
+  intros V I O VRel IRel ORel f g l T n i v Hf Hg Hep Hdi. move: T v. elim: n => [| n' IH] T v Hlt.
+  - exists (f i v). simpl. split.
+    + apply rel_refl.
+    + eapply lthread_stable. apply Hf. apply Hg. 2: apply Hlt.
+      apply rel_sym. apply Hep. apply Hdi.
+  - destruct T as [| a' T0].
+    + exists v. simpl. done.
+    + destruct a' as [[w0 i0] | [w0 o0]]; simpl in *; destruct Hlt as [Hw0 Hlt].
+      * destruct (IH T0 (f i0 v) Hlt) as [w Hw].
+        exists w. split; assumption.
+      * destruct (IH T0 (g o0 v) Hlt) as [w Hw].
+        exists w. split; assumption.
+Qed.
+
+Lemma lthread_remove_dis : forall (V I O : Ty) (VRel : myrel [V]) (IRel : myrel [I]) (ORel : myrel [O]) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) l T'' n w i v,
+    fv_NI IRel VRel VRel f -> fv_NI ORel VRel VRel g -> f_EP IRel VRel f -> dis IRel l i ->
+    lthread VRel f g l v (insert n (inl (w, i)) T'') ->
+    lthread VRel f g l v T''.
+Proof.
+  intros V I O VRel IRel ORel f g l T'' n w i v Hf Hg Hep Hdi Hlt.
+  move: T'' v Hlt. elim: n => [| n' IH] T'' v Hlt.
+  - destruct T'' as [| a' T0]; simpl in Hlt.
+    + done.
+    + destruct Hlt as [Hw Hlt]. eapply lthread_stable. apply Hf. apply Hg. 2: apply Hlt.
+      eapply Hep. apply Hdi.
+  - destruct T'' as [| a' T0].
+    + simpl. done.
+    + destruct a' as [[w0 i0] | [w0 o0]]; simpl in Hlt |- *; destruct Hlt as [Hw0 Hlt].
+      * split; [apply Hw0 | eapply IH; eauto].
+      * split; [apply Hw0 | eapply IH; eauto].
+Qed.
+
+(* sta_NI: clause 1 (rel) is PROVED via the projection + converse approach.     *)
+(* Clauses 2 (insert disclosed) and 3 (remove) are analogous (using p's clauses *)
+(* 2/3 and f_EP) and are left admitted.                                         *)
+Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
+    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
+    NI (eqpair_R VRel IRel) ORel p ->
+    NI IRel (eqpair VRel ORel) (sta f g v p).
+Proof.
+  intros I O V p f g v IRel VRel ORel Hg Hf Hep Hp. rewrite /NI /NI_l. intros l. ssa.
+  - (* clause 1 (rel) -- PROVED *)
+    intros t i i' n Hii HT.
+    eapply sta_proj_lthread in HT. 2: apply Hf. 2: apply Hg.
+    move: HT => [T] [Heq] [Htp] Hlt.
+    symmetry in Heq. move/(projIl_insert_inv v) : Heq => [w] [T''] [HT' Ht''].
+    subst T. subst t.
+    rewrite projOl_insert in Htp. simpl in Htp.
+    move: (Hp l) => [Hrel _].
+    eapply (Hrel (projOl T'') (w,i) (w,i') n) in Htp;
+      last by (left; split; [apply rel_refl | apply Hii]).
+    have Hl' : lthread VRel f g l v (insert n (inl (w, i')) T'').
+    { eapply lthread_swap. apply Hf. apply Hg. apply Hii. apply Hlt. }
+    have Hfin : Trace (eqpair VRel ORel) l (projIl (insert n (inl (w, i')) T'')) (sta f g v p).
+    { eapply sta_conv. apply Hg. apply Hf. apply Hp. rewrite projOl_insert. simpl. apply Htp. apply Hl'. }
+    rewrite projIl_insert in Hfin. simpl in Hfin. apply Hfin.
+  - (* clause 2 (insert disclosed) -- PROVED *)
+    intros t i n Hdi HT.
+    eapply sta_proj_lthread in HT. 2: apply Hf. 2: apply Hg.
+    move: HT => [T] [Heq [Htp Hlt]]. subst t.
+    have [w Hw] : exists w, lthread VRel f g l v (insert n (inl (w, i)) T).
+    { eapply lthread_insert_dis; eauto. }
+    have -> : insert n (inl i) (projIl T) = projIl (insert n (inl (w, i)) T) by rewrite projIl_insert.
+    eapply sta_conv. apply Hg. apply Hf. apply Hp. 2: exact Hw.
+    rewrite projOl_insert. simpl.
+    move: (Hp l) => [_ [Hins _]]. eapply Hins. 2: apply Htp.
+    simpl. apply Hdi.
+  - (* clause 3 (remove) -- PROVED *)
+    intros t i n Hdi HT.
+    eapply sta_proj_lthread in HT. 2: apply Hf. 2: apply Hg.
+    move: HT => [T] [Heq [Htp Hlt]].
+    symmetry in Heq. move/(projIl_insert_inv v) : Heq => [w] [T''] [HT' Ht''].
+    subst T. subst t.
+    have Hl' : lthread VRel f g l v T''.
+    { eapply lthread_remove_dis; eauto. }
+    eapply sta_conv. apply Hg. apply Hf. apply Hp. 2: exact Hl'.
+    rewrite projOl_insert in Htp. simpl in Htp.
+    move: (Hp l) => [_ [_ Hrem]]. eapply Hrem; [|apply Htp].
+    simpl. apply Hdi.
+Qed.
+
+Inductive SwiTrace (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) (l : level) : bool -> seq ([Times Bool I] + [Option O]) -> seq ([I] + [Times Bool O]) -> Prop :=
+| ST0 b : SwiTrace ORel BRel l b nil nil
+| ST1 b b' i t_swi t_p : SwiTrace ORel BRel l (xor b b') t_swi t_p -> SwiTrace ORel BRel l b (inl (b', i) :: t_swi) (inl i :: t_p)
+| ST2_false o t_swi t_p : rel (eqmaybe_swi ORel BRel) l None o -> SwiTrace ORel BRel l false t_swi t_p -> SwiTrace ORel BRel l false (inr o :: t_swi) t_p
+| ST2_true b_out o o_obs t_swi t_p : rel (eqmaybe_swi ORel BRel) l (Some o) o_obs -> SwiTrace ORel BRel l (negb b_out) t_swi t_p -> SwiTrace ORel BRel l true (inr o_obs :: t_swi) (inr (b_out, o) :: t_p).
+
+Lemma swi_trace : forall (I O : Ty) (p : Proc I (Times Bool O)) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t,
+    Trace (eqmaybe_swi ORel BRel) l t (swi b p) ->
+    exists t', Trace (eqpair_LR BRel ORel) l t' p /\ SwiTrace ORel BRel l b t t'.
+Proof.
+  intros I O p ORel BRel l b t HT.
+  move: p b HT.
+  elim: t => [| a t IH] p b HT.
+  - exists nil. split.
+    + con.
+    + con.
+  - inv HT.
+    + destruct i as [b' i_in]. dependent destruction H1.
+      edestruct (IH p'0 (xor b b') H3) as [t' [Htrace Hswi]].
+      exists (inl i_in :: t'). split.
+      * econstructor; eauto.
+      * econstructor; eauto.
+    + dependent destruction H1.
+      * edestruct (IH p false H4) as [t' [Htrace Hswi]].
+        exists t'. split.
+        { exact Htrace. }
+        { eapply ST2_false; eauto. }
+      * edestruct (IH p'0 (negb b0) H4) as [t' [Htrace Hswi]].
+        exists (inr (b0, o0) :: t'). split.
+        { econstructor. exact H1. apply rel_refl. exact Htrace. }
+        { eapply ST2_true; eauto. }
+Qed.
+
+Lemma swi_trace_insert : forall (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t t' n (i : bool * [I]),
+    i.1 = false ->
+    SwiTrace ORel BRel l b (insert n (inl i) t) t' ->
+    exists n' t'', t' = insert n' (inl i.2) t'' /\ SwiTrace ORel BRel l b t t''.
+Proof.
+  intros I O ORel BRel l b t t' n i Hi1 H.
+  elim: t b t' n H => [| a t IH] b t' n H.
+  - ssa. destruct n; simpl in H.
+    + inv H. match goal with | Hswi : SwiTrace _ _ _ _ _ _ |- _ => inversion Hswi; subst end.
+      exists 0, nil. split; [done | constructor].
+    + inv H. exists 1, nil. split; [done | constructor].
+  - ssa. destruct n; simpl in H.
+    + inv H. exists 0, t_p. split; [done |].
+      simpl in Hi1. rewrite Hi1 xorFalse in H4. exact H4.
+    + inv H.
+      * ssa. match goal with | Hswi : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi) as [n' [t'' [-> Hswi2]]] end.
+        exists n'.+1, (inl i0 :: t''). split; [done |].
+        constructor. exact Hswi2.
+      * ssa. match goal with | Hswi : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi) as [n' [t'' [-> Hswi2]]] end.
+        exists n', t''. split; [done |].
+        eapply ST2_false; eauto.
+      * ssa. match goal with | Hswi : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi) as [n' [t'' [-> Hswi2]]] end.
+        exists n'.+1, (inr (b_out, o) :: t''). split; [done |].
+        eapply ST2_true; eauto.
+Qed.
+
+Lemma swi_trace_insert_conv : forall (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t t_p n (i : bool * [I]),
+    aware BRel true l ->
+    dis BRel l i.1 ->
+    SwiTrace ORel BRel l b t t_p ->
+    exists n', SwiTrace ORel BRel l b (insert n (inl i) t) (insert n' (inl i.2) t_p).
+Proof.
+  intros I O ORel BRel l b t t_p n [b_in i_in] Haware Hdis Hswi.
+  have Hb_in : b_in = false.
+  { destruct b_in; [| done].
+    have Hrefl : rel BRel l true true by apply: rel_refl.
+    have [_ Hnd] := Haware true Hrefl.
+    contradiction. }
+  rewrite Hb_in.
+  elim: t b t_p n Hswi => [| a t IH] b t_p n Hswi.
+  - inv Hswi. destruct n; simpl.
+    + exists 0. repeat constructor.
+    + exists 1. constructor.
+  - inv Hswi.
+    + destruct n; simpl.
+      * exists 0. apply ST1. apply ST1. rewrite xorFalse.
+        match goal with | H : SwiTrace _ _ _ _ t _ |- _ => exact H end.
+      * ssa. match goal with | H : SwiTrace _ _ _ _ t _ |- _ => destruct (IH _ _ n H) as [n' Hswi_ih] end.
+        exists n'.+1. constructor. exact Hswi_ih.
+    + destruct n; simpl.
+      * exists 0. repeat constructor; eauto.
+      * ssa. match goal with | H : SwiTrace _ _ _ _ t _ |- _ => destruct (IH _ _ n H) as [n' Hswi_ih] end.
+        exists n'. eapply ST2_false; eauto.
+    + destruct n; simpl.
+      * exists 0. repeat constructor; eauto.
+      * ssa. match goal with | H : SwiTrace _ _ _ _ t _ |- _ => destruct (IH _ _ n H) as [n' Hswi_ih] end.
+        exists n'.+1. eapply ST2_true; eauto.
+Qed.
+
+Lemma swi_trace_swap : forall (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t t_p n (i i' : bool * [I]),
+    i.1 = i'.1 ->
+    SwiTrace ORel BRel l b (insert n (inl i) t) t_p ->
+    exists n' t_p', t_p = insert n' (inl i.2) t_p' /\ SwiTrace ORel BRel l b (insert n (inl i') t) (insert n' (inl i'.2) t_p').
+Proof.
+  intros I O ORel BRel l b t t_p n [b_in i_in] [b_in' i_in'] Heq Hswi.
+  simpl in Heq.
+  elim: t b t_p n Hswi => [| a t IH] b t_p n Hswi.
+  - ssa. destruct n; simpl in Hswi.
+    + inv Hswi. match goal with | Hswi' : SwiTrace _ _ _ _ _ _ |- _ => inversion Hswi'; subst end.
+      exists 0, nil. split; [done |].
+      try rewrite Heq. repeat constructor.
+    + inv Hswi. exists 1, nil. split; [done | constructor].
+  - ssa. destruct n; simpl in Hswi.
+    + inv Hswi. exists 0, t_p0. split; [done |].
+      try rewrite Heq. repeat constructor. exact H4.
+    + inv Hswi.
+      * ssa. match goal with | Hswi' : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi') as [n' [t_p' [-> Hswi2]]] end.
+        exists n'.+1, (inl i :: t_p'). split; [done |].
+        constructor. exact Hswi2.
+      * ssa. match goal with | Hswi' : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi') as [n' [t_p' [-> Hswi2]]] end.
+        exists n', t_p'. split; [done |].
+        eapply ST2_false; eauto.
+      * ssa. match goal with | Hswi' : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi') as [n' [t_p' [-> Hswi2]]] end.
+        exists n'.+1, (inr (b_out, o) :: t_p'). split; [done |].
+        eapply ST2_true; eauto.
+Qed.
+
+Lemma swi_trace_remove : forall (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t t_p n (i : bool * [I]),
+    aware BRel true l ->
+    dis BRel l i.1 ->
+    SwiTrace ORel BRel l b (insert n (inl i) t) t_p ->
+    exists n' t_p', t_p = insert n' (inl i.2) t_p' /\ SwiTrace ORel BRel l b t t_p'.
+Proof.
+  intros I O ORel BRel l b t t_p n [b_in i_in] Haware Hdis Hswi.
+  have Hb_in : b_in = false.
+  { destruct b_in; [| done].
+    have Hrefl : rel BRel l true true by apply: rel_refl.
+    have [_ Hnd] := Haware true Hrefl.
+    contradiction. }
+  rewrite Hb_in in Hswi.
+  elim: t b t_p n Hswi => [| a t IH] b t_p n Hswi.
+  - ssa. destruct n; simpl in Hswi.
+    + inv Hswi. match goal with | Hswi' : SwiTrace _ _ _ _ _ _ |- _ => inversion Hswi'; subst end.
+      exists 0, nil. split; [done | constructor].
+    + inv Hswi. exists 1, nil. split; [done | constructor].
+  - ssa. destruct n; simpl in Hswi.
+    + inv Hswi. exists 0, t_p0. split; [done |].
+      rewrite xorFalse in H4. exact H4.
+    + inv Hswi.
+      * ssa. match goal with | Hswi' : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi') as [n' [t_p' [-> Hswi2]]] end.
+        exists n'.+1, (inl i :: t_p'). split; [done |].
+        constructor. exact Hswi2.
+      * ssa. match goal with | Hswi' : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi') as [n' [t_p' [-> Hswi2]]] end.
+        exists n', t_p'. split; [done |].
+        eapply ST2_false; eauto.
+      * ssa. match goal with | Hswi' : SwiTrace _ _ _ _ _ _ |- _ => destruct (IH _ _ _ Hswi') as [n' [t_p' [-> Hswi2]]] end.
+        exists n'.+1, (inr (b_out, o) :: t_p'). split; [done |].
+        eapply ST2_true; eauto.
+Qed.
+
+Lemma swi_conv : forall (I O : Ty) (p : Proc I (Times Bool O)) (ORel : myrel [O]) (BRel : myrel [Bool]) l b t t_p,
+    aware BRel true l ->
+    Trace (eqpair_LR BRel ORel) l t_p p -> SwiTrace ORel BRel l b t t_p -> Trace (eqmaybe_swi ORel BRel) l t (swi b p).
+Proof.
+  intros I O p ORel BRel l b t t_p Haware HT Hswi.
+  move: p HT.
+  elim: Hswi.
+  - intros b' p HT. simpl. con.
+  - intros b' b'' i t_swi t_p' Hswi IH p HT.
+    inv HT.
+    econstructor; [eapply reduce_swiI; eauto | eapply IH; exact H3].
+  - intros o t_swi t_p' Hrel Hswi IH p HT.
+    econstructor; [eapply reduce_swiO; eauto | exact Hrel | eapply IH; exact HT].
+  - intros b_out o o_obs t_swi t_p' Hrel Hswi IH p HT.
+    inv HT.
+    destruct o' as [b_out' o''].
+    destruct H2 as [Hb Ho].
+    simpl in Hb, Ho.
+    have Ho' : rel (eqmaybe_swi ORel BRel) l (Some o'') (Some o) by exact Ho.
+    econstructor.
+    + eapply reduce_swiO2; [reflexivity | exact H1].
+    + eapply rel_trans; [exact Ho' | exact Hrel].
+    + destruct b_out', b_out.
+      * eapply IH; exact H4.
+      * move: (Haware false Hb) => [H_eq _]. discriminate H_eq.
+      * move: (rel_sym Hb) => Hb_sym. move: (Haware false Hb_sym) => [H_eq _]. discriminate H_eq.
+      * eapply IH; exact H4.
+Qed.
