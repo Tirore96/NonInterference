@@ -241,7 +241,7 @@ Definition my_procs_good : forall n, Proc (my_f_I n) (my_f_O n).
   intros. apply unit_p.
 Defined.
 Definition my_f_coopt n := n == 4.
-Definition my_f_initial n := n == 2.
+Definition my_f_initial (n : nat) := false.
 Definition process_pool_good := @scheduled_process_pool 3 my_f_coopt my_f_initial my_f_I my_f_O my_procs_good.
 
 
@@ -265,7 +265,7 @@ Definition my_f_route_good (t : [my_T_out']) : [my_T_in'] :=
   | (_ ,(None,(None,Some handl))) => ((1,4),(None,(None,(Some handl,None)))) (*(1,4) = turn off yourself, turn on scheduler*)
   | _ => ((0,0),none4)    
   end.
-Definition my_f_in_sch_good (t : [my_T_in]) : [Times Nat Nat] := match t with | inl tt | inr DiskInterrupt => (0,0) | inr TimerInterrupt => (0,4) end.
+Definition my_f_in_sch_good (t : [my_T_in]) : [Times Nat Nat] := match t with | inl tt | inr DiskInterrupt => (0,0) | inr TimerInterrupt => (0,0) end.
 Definition my_f_in_t (t : [my_T_in]) : [ (times_Option_n 3 my_f_I) ] := match t with
                                                                         | inl tt => (None,(Some tt,(None,None)))
                                                                         | inr TimerInterrupt => (Some TimerInterrupt,(None,(None,None)))
@@ -365,34 +365,26 @@ Definition override_pool_input (x : [Times V_state my_T_in']) : [Times (Times Na
   let handler_active := snd (snd v) in
   
   if timer_pending then
-    ((0, 4), (Some TimerInterrupt, (None, (None, None))))
+    ((p_sched, 4), (Some TimerInterrupt, (None, (None, None))))
   else if handler_active then
     ((0, 1), (None, (None, (None, Some DiskInterrupt))))
   else
-    ((p_sched, p_sched), clear_interrupts i_pool).
+    let routed_sch := fst i_in' in
+    let final_sch := if routed_sch == (0, 0) then (p_sched, p_sched) else routed_sch in
+    (final_sch, clear_interrupts i_pool).
 
 Definition v_state_init : [V_state] :=
   ((false, false), (false, false), (2, false)).
 
-Definition my_only_loop_good_inner : Proc my_T_in' my_T_out'.
-  eapply (@map my_T_in' my_T_in' (Times V_state my_T_out') my_T_out'). exact id. exact (fun x => snd x).
-  eapply (@sta _ _ V_state).
-  - exact f_state.
-  - exact g_state.
-  - exact v_state_init.
-  - eapply map.
-    + exact override_pool_input.
-    + exact id.
-    + exact process_pool_good.
-Defined.
+Definition my_only_loop_good_inner : Proc my_T_in' my_T_out' :=
+  @map my_T_in' my_T_in' (Times V_state my_T_out') my_T_out' id (fun x => snd x)
+    (sta f_state g_state v_state_init
+      (@map (Times V_state my_T_in') (Times (Times Nat Nat) I_pool) my_T_out' my_T_out' override_pool_input id process_pool_good)).
 
 Definition my_only_loop_good' := @only_loop my_T_in' my_T_out' my_f_route_good my_def my_only_loop_good_inner.
 
-Definition my_only_loop_good : Proc my_T_in my_T_out .
-  eapply map. apply my_f_in_good. apply my_f_out. apply my_only_loop_good'.
-Defined.
-
-  
+Definition my_only_loop_good : Proc my_T_in my_T_out :=
+  @map my_T_in my_T_in' my_T_out' my_T_out my_f_in_good my_f_out my_only_loop_good'.
 
 Definition out0 x : [my_T_out'] := (Some x,(None,(None,None))).
 Definition out1 x : [my_T_out'] := (None,(Some x,(None,None))).
@@ -413,7 +405,8 @@ Definition newtrace' : seqtype' :=
   (cons (inr (out1 GetRequest))
   (cons (inr (out0 2))
   (cons (inr (out3 Notify))
-  (cons (inr (out2 Syscall)) nil)))))))))).
+  (cons (inr (out0 2))
+  (cons (inr (out2 Syscall)) nil))))))))))).
 
 Definition seqtype := seq ([my_T_in] + [my_T_out]).
 
@@ -428,17 +421,46 @@ Definition newtrace_wrap : seqtype  :=
   (cons (inr (Some (inl GetRequest)))
   (cons (inr None)
   (cons (inr None)
-  (cons (inr (Some (inr Syscall))) nil)))))))))).
+  (cons (inr None)
+  (cons (inr (Some (inr Syscall))) nil))))))))))).
 
-Ltac rewr ::= rewrite /low_p /handler /high_p /only_loop /my_only_loop_good' /my_only_loop_good /process_pool_good /good_schedulerp /my_f_coopt /scheduled_process_pool /high_p /alternate_generic /alternate_generic2 /low_p.
+Ltac rewr ::= rewrite /low_p /handler /high_p /my_only_loop_good' /my_only_loop_good /my_only_loop_good_inner /only_loop /process_pool_good /good_schedulerp /my_f_coopt /scheduled_process_pool /high_p /alternate_generic /alternate_generic2 /low_p /my_f_in_good /my_f_in_sch_good /my_f_in_t /=.
 
 Lemma newtrace'_trace : Trace (eqpair_LR (eqmaybe (publicRel Nat))
                           (eqpair_LR (eqmaybe (publicRel TPublicOutput))
                              (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
                                 (eqmaybe (semiprivateRel THandlerOutput))))) false newtrace' my_only_loop_good'.
 Proof.
-Admitted.
+  rewrite /newtrace'.
+  eapply TR1. reduce_tac; repeat (reduce_once || econ).
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR1. reduce_tac; repeat (reduce_once || econ).
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR1. reduce_tac; repeat (reduce_once || econ).
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR2. reduce_tac; repeat (reduce_once || econ). by [].
+  eapply TR0.
+Qed.
 
 Lemma newtrace_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false newtrace_wrap my_only_loop_good.
 Proof.
-Admitted.
+  rewrite /newtrace_wrap.
+  eapply TR1. reduce_tac; repeat (reduce_once || econ). reduce_tac; repeat (reduce_once || econ).
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR1. repeat (reduce_tac; repeat (reduce_once || econ)).
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR1. repeat (reduce_tac; repeat (reduce_once || econ)).
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR2. repeat (reduce_tac; repeat (reduce_once || econ)). by [].
+  eapply TR0.
+Qed.
