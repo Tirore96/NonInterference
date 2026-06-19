@@ -1,3 +1,13 @@
 token.txt
 rocq_mcp_cache*
 *~
+*.aux
+*.vo
+*.vos
+*.vok
+*.glob
+*.DS_Store
+Makefile
+*.Makefile.d
+Makefile.conf
+*.cache
