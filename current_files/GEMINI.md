@@ -11,7 +11,7 @@ You must use the SSReflect (Small Scale Reflection) proof language for all scrip
 * Note: Existing proofs in the development may not use SSReflect, but you *must* use it for all new code you generate.
 
 2. WORKSPACE
-Execute strictly inside NI/llmwork/current_files/.
+Execute strictly inside NI/current_files/.
 The root _CoqProject maps all dependencies; parent directories hold pre-compiled, read-only .vo libraries.
 Do not open, edit, or trace any source outside your directory.
 NEVER open, read, or print any generated build artifacts or binary files (.vo, .vok, .vos, .glob, .v.d, .Makefile.d). Only read human-readable source files (.v, .md).
@@ -23,7 +23,7 @@ Never run a bare prefix dump. Never guess or invent a structure.
 4. COMPILE-FIRST STRATEGY & AUTOMATION
 Draft a complete, structured proof sketch and verify it in one batch. Do not step line-by-line.
 Verify by running exactly this via the bash tool from the workspace:
-make -C ../.. COQFLAGS="-w -all"
+make -C .. COQFLAGS="-w -all"
 
 Prefer SSReflect/Coq automation over manual rewrites. Close subgoals or simplify structures using condensed, automated combinators where applicable:
 * `by []` or `by [tactic]` (Strict SSReflect termination)
@@ -53,6 +53,3 @@ Objective verified. To clear context and reset rate limits:
 1. Copy the verified changes into your local file.
 2. Close this chat session.
 3. Start a fresh session for the next objective.
-
-8. STYLE REFERENCE
-Before writing proofs, read `llmwork/instructivetheorems.txt`. It uses ssreflect style that I prefer. Follow this format.No 
