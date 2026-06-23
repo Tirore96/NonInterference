@@ -1,0 +1,123 @@
+================================================================================
+          COQ PROCESS MODEL AND SCHEDULER SYSTEM ANALYSIS & INSIGHTS
+================================================================================
+
+This file contains the complete analysis and insights derived from the design,
+implementation, and verification of the mitigated OS scheduler system in Coq.
+These insights serve as a detailed reference for future proof engineering.
+
+--------------------------------------------------------------------------------
+1. CORE ARCHITECTURE & THE CPU/OS PROCESS POOL
+--------------------------------------------------------------------------------
+The system is modeled as a parallel composition of processes coordinated by an
+outer feedback loop (`only_loop`). The process pool (of size 3) contains:
+- Index 1 (f_proc 0): `handler` (preempts on disk interrupts, outputs `Notify` or `Nothing`)
+- Index 2 (f_proc 1): `high_p` (user process, outputs `Syscall` or `NOP`)
+- Index 3 (f_proc 2): `low_p` (user process, outputs `GetRequest` or `None`)
+- Index 4 (f_proc 3): `scheduler` (system process, outputs `(next_proc, handle_disk)`)
+
+The CPU and OS state is tracked by a global register tuple `V_state`:
+  `V_state := Times (Times (Times Bool Bool) (Times Bool Bool)) (Times (Times Nat Bool) Bool)`
+representing:
+  `((timer_received, disk_received), (timer_pending, disk_pending), ((p_sched, handler_active), disk_preempt_enabled))`
+
+Where:
+- Latch Registers (`timer_received`, `disk_received`):
+  Record incoming bus interrupt signals during the current CPU step (handled in `f_state`).
+- Pending Registers (`timer_pending`, `disk_pending`):
+  Promoted from the latch registers at the end of the CPU step (handled in `g_state`). These
+  registers are read at the start of the next cycle to trigger preemption.
+- OS Control Registers (`p_sched`, `handler_active`):
+  Identify the currently scheduled process index and whether the interrupt handler is active.
+- Mitigation Flag (`disk_preempt_enabled`):
+  Determines whether incoming disk interrupts can immediately preempt the executing process.
+
+--------------------------------------------------------------------------------
+2. SCHEDULER IMPLEMENTATION DETAILS
+--------------------------------------------------------------------------------
+The scheduler has an internal state representation `V_inner := Times (Times Bool Bool) Bool`,
+which represents `((curr, tm), dk)`:
+- `curr` (Bool): Currently scheduled user process (`false` for 2 / `high_p`, `true` for 3 / `low_p`).
+- `tm` (Bool): Timer interrupt pending flag.
+- `dk` (Bool): Disk interrupt pending flag.
+
+A helper process `get_state_and_timer` is used to circumvent Coq's `sta` (stateful process)
+restrictions. Standard `sta` processes cannot easily share details of the incoming input
+between their transition function and output mapping function. `get_state_and_timer` reads
+the state and incoming interrupt, evaluating whether the input is a `TimerInterrupt`, and
+passes `(V_inner, is_timer)` to the scheduler's outer mapper.
+
+- good_schedulerp (Mitigated Scheduler):
+  * When a `TimerInterrupt` occurs (`is_timer = true`), it schedules the handler (index 1) and
+    disables disk preemption by outputting `(1, false)`.
+  * When a pending timer interrupt exists (`tm = true`), it schedules the next process round-robin:
+    `if curr then 2 else 3` and outputs `false` for disk preemption.
+  * Otherwise, it keeps the currently scheduled process: `if curr then 3 else 2`, and outputs
+    `false` for disk preemption.
+  * In its transition function (`sta`), receiving a `DiskInterrupt` is ignored (in contrast to
+    the bad scheduler). This prevents the disk interrupt from being recorded as pending.
+
+- bad_schedulerp (Preemptive Linux-like Scheduler):
+  * Same round-robin and timer preemption logic as the good scheduler.
+  * However, it outputs `true` for `handle_disk`, allowing disk interrupts to immediately preempt.
+  * In its transition function, receiving a `DiskInterrupt` sets `dk` to `true`.
+
+--------------------------------------------------------------------------------
+3. LOOP TOGGLING DYNAMICS (THE 14-STEP CYCLE)
+--------------------------------------------------------------------------------
+The execution trace spans exactly 14 steps. The dynamics of how process switch states
+toggle are governed by the interaction between the `loop` and `swi` combinators:
+
+- Inside `scheduled_process_pool`, each process `p_i` is wrapped in `swi (f_initial i) (maybe p_i)`.
+- The switch state of `swi` determines if the process executes:
+  * When `switch = false`: Only outputs `None` (idle). The underlying process does not run, and the
+    switch remains `false`.
+  * When `switch = true`: The underlying process executes. Its output is wrapped in a tuple
+    adding its cooperative status (`b_out`). On output, the new switch state becomes `negb b_out`.
+- On loop feedback:
+  The loop feeds the output of the current step back as an input transition (`reduceI`).
+  The input to the process pool determines if process `i` is active (`b_in = true`).
+  The switch state of process `i` is updated via: `new_switch = xor old_switch b_in`.
+  Thus, if a process is active (`b_in = true`) during a feedback transition, its switch state toggles.
+
+Detailed trace of `low_p` (index 3) switch state from Step 6 to Step 10:
+- Step 6 Output: `low_p` is active with `switch = true`. It executes and outputs `GetRequest`.
+  Since `low_p` is not cooperative (`b_out = false`), its switch state remains `true` after execution.
+- Step 6 Feedback: The output `out1 GetRequest` is routed back. `low_p` is scheduled (`final_sch = (3, 3)`),
+  so `b_in = true`. Its switch state toggles `true -> false`.
+- Step 7 (Input Step): External input `DiskInterrupt` is received. `low_p` remains the scheduled process
+  (`final_sch = (3, 3)`), so `b_in = true`. Its switch state toggles `false -> true`.
+- Step 8 Output: `low_p` is active with `switch = true`. It executes and outputs `GetRequest`!
+  (In the previous buggy trace, it was incorrectly assumed that `low_p` would be idle and output `None`).
+  Its switch state remains `true`.
+- Step 8 Feedback: The output `out1 GetRequest` is routed back. `low_p` is scheduled (`final_sch = (3, 3)`),
+  so `b_in = true`. Its switch state toggles `true -> false`.
+- Step 9 (Input Step): External input `TimerInterrupt` is received. `low_p` is the scheduled process
+  (`final_sch = (3, 3)`), so `b_in = true`. Its switch state toggles `false -> true`.
+- Step 10 Output: `low_p` is active with `switch = true`. It executes and outputs `GetRequest`.
+- Step 10 Feedback: The output `out1 GetRequest` is routed back. `low_p` is scheduled, so `b_in = true`.
+  Its switch state toggles `true -> false`.
+- Step 11 Output: A pending timer interrupt is processed, triggering the scheduler. The active processes
+  are `low_p` (index 3) and `scheduler` (index 4).
+  * `scheduler` has `switch = true` (toggled to `true` on Step 10 feedback). It executes and outputs `(1, false)`.
+  * `low_p` has `switch = false`. It does not execute and outputs `None`.
+
+This switch toggling behavior is mathematically precise and has been fully verified.
+
+--------------------------------------------------------------------------------
+4. VERIFICATION PROOFS & AUTOMATION
+--------------------------------------------------------------------------------
+The trace proofs are structured step-by-step using Coq's relational trace rules:
+- `TR1`: Input transition. Does not produce external output.
+- `TR2`: Output transition. Produces external output and checks correctness against the trace spec.
+- `TR0`: Termination. Closed when the trace list is empty.
+
+Proof script automation is handled by `reduce_tac` and `reduce_once` tactics, which:
+1. Unfold all process definitions (`low_p`, `high_p`, `handler`, `good_schedulerp`, etc.).
+2. Reduce constructor steps (`map`, `sta`, `swi`, `par`, `loop`).
+3. Solve simple switch boolean identities.
+
+Each step in the 14-step sequence is verified by calling `eapply TR1` or `eapply TR2` followed by
+the reduction tactic, terminating with `by []` to strictly check that the actual output matches
+the expected specification value.
+================================================================================

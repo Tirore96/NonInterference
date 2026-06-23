@@ -17,4 +17,16 @@ From Stdlib Require Eqdep.
 Import Order.TTheory.
 Open Scope order_scope.
 
-Require Export NonInterference.llmwork.theorems.
+Require Import NonInterference.theorems.
+Require Import NonInterference.current_files.current.
+
+Lemma test_step1 : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
+                          (eqpair_LR (eqmaybe (publicRel TPublicOutput))
+                             (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
+                                 (eqmaybe (semiprivateRel THandlerOutput))))) false badtrace' my_only_loop_bad'.
+Proof.
+  rewrite /badtrace'.
+  eapply TR1.
+  reduce_tac; repeat (reduce_once || econ).
+  match goal with | |- ?G => fail 1 G end.
+Admitted.
