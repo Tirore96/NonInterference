@@ -208,24 +208,28 @@ Definition get_state_and_timer : Proc (Times V_inner TInterrupt) (Times V_inner 
         - Otherwise, update 'curr' to 'p_next == 3' and clear 'tm' (as it is now handled). *)
 Definition bad_schedulerp : Proc TInterrupt (Times Nat Bool) :=
   @map TInterrupt TInterrupt (Times V_inner (Times V_inner Bool)) (Times Nat Bool)
-    id (fun o => 
+    id (fun o =>
       let '(((curr, tm), dk), is_timer) := snd o in
-      if is_timer then (1, true)
-      else if tm then (if curr then 2 else 3, true)
+      (* Linux-like: NEVER schedule the handler. On a timer interrupt, round-robin
+         to the next user process; after a handler preemption completes
+         (is_timer = false), resume the process that was running. handle_disk is
+         always true, so disk interrupts preempt by jumping to the handler. *)
+      if is_timer then (if curr then 2 else 3, true)
       else (if curr then 3 else 2, true))
     (@sta TInterrupt (Times V_inner Bool) V_inner
-         (fun ih '((curr, tm), dk) => 
-            match ih with 
-            | TimerInterrupt => ((curr, true), dk) 
+         (fun ih '((curr, tm), dk) =>
+            match ih with
+            | TimerInterrupt => ((curr, true), dk)
             | DiskInterrupt => ((curr, tm), true)
             end)
-         (fun o '((curr, tm), dk) => 
+         (fun o '((curr, tm), dk) =>
             let '(((curr', tm'), dk'), is_timer) := o in
             if is_timer then
-              ((curr', tm'), dk')
+              (* timer round-robin advances curr to the newly scheduled process *)
+              ((negb curr', false), dk')
             else
-              let p_next := if tm' then (if curr' then 2 else 3) else (if curr' then 3 else 2) in
-              ((p_next == 3, false), dk'))
+              (* resuming after handler: keep the current process *)
+              ((curr', false), dk'))
          ((false, false), false)
          get_state_and_timer).
 
@@ -413,7 +417,11 @@ Definition override_pool_input (x : [Times V_state my_T_in']) : [Times (Times Na
   if timer_pending then
     ((p_sched, 4), (Some TimerInterrupt, (None, (None, None))))
   else if handler_active then
-    ((0, 1), (None, (None, (None, Some DiskInterrupt))))
+    (* Jump to the handler (index 1) AND switch off the preempted process
+       (p_sched) so the handler runs alone -- a clean serialized preemption.
+       (This branch is never taken by the good/mitigated process, which never
+       sets handler_active, so the good proofs are unaffected.) *)
+    ((p_sched, 1), (None, (None, (None, Some DiskInterrupt))))
   else
     let routed_sch := fst i_in' in
     let final_sch := if routed_sch == 0 then (p_sched, p_sched)
@@ -532,63 +540,181 @@ Lemma newtrace'_trace : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
                           (eqpair_LR (eqmaybe (publicRel TPublicOutput))
                              (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
                                  (eqmaybe (semiprivateRel THandlerOutput))))) false newtrace' my_only_loop_good'.
-Admitted.
+Proof.
+  do ? ((econ;first reduce_tac);ssa).
+Qed.
 
 Lemma newtrace_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false newtrace_wrap my_only_loop_good.
 Proof.
-Admitted.
+  econ. reduce_tac. reduce_tac.
+  econ. reduce_tac. simpl. ssa.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl.
+  econ. reduce_tac. done.
+  econ. reduce_tac. done.
+  econ. reduce_tac. done.
+  econ. reduce_tac. done.
+  econ. reduce_tac. done.
+  econ.
+Qed.  
 
 Lemma newtrace_no_disk_trace : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
                           (eqpair_LR (eqmaybe (publicRel TPublicOutput))
                              (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
                                  (eqmaybe (semiprivateRel THandlerOutput))))) false newtrace_no_disk my_only_loop_good'.
 Proof.
-Admitted.
+  do ? ((econ;first reduce_tac);ssa).
+Qed.
 
 Lemma newtrace_no_disk_wrap_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false newtrace_no_disk_wrap my_only_loop_good.
 Proof.
-Admitted.
+  econ. reduce_tac. reduce_tac.
+  econ. reduce_tac. simpl. ssa.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl.
+  econ. reduce_tac. simpl. done.
+  econ. reduce_tac. simpl.
+  econ. reduce_tac. done.
+  econ. reduce_tac. done.
+  econ. reduce_tac. done.
+  econ. reduce_tac. done.
+  econ. reduce_tac. done.
+  econ.
+Qed.    
 
+
+(* Spec for the BAD (Linux-like, interfering) scheduler, WITH a disk interrupt.
+   The handler is NOT scheduled on the timer; it is entered only as a response to
+   the disk interrupt, by preemption (a jump at the end of the CPU cycle).
+   Compare with badtrace_no_disk' below: the two runs share the same input
+   sequence but differ in the PUBLIC projection (steps 7-8), which is the leak. *)
 Definition badtrace' : seqtype' :=
-  cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 1 *)
-  (cons (inr (out2 NOP)) (* Step 2 *)
-  (cons (inr (out0 (1, true))) (* Step 3 *)
-  (cons (inr (out3 Nothing)) (* Step 4 *)
-  (cons (inr (out0 (3, true))) (* Step 5 *)
-  (cons (inr (out1 GetRequest)) (* Step 6 *)
-  (cons (inl (my_f_in_good (inr DiskInterrupt))) (* Step 7 *)
-  (cons (inr (out1 GetRequest)) (* Step 8 *)
-  (cons (inr (out3 Notify)) (* Step 9 *)
-  (cons (inr (out0 (3, true))) (* Step 10 *)
-  (cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 11 *)
-  (cons (inr (Some (1, true), (Some GetRequest, (None, None)))) (* Step 12 *)
-  (cons (inr (None, (Some GetRequest, (None, Some Notify)))) (* Step 13 *)
-  (cons (inr (Some (2, true), (Some GetRequest, (None, None)))) (* Step 14 *)
-  (cons (inr (None, (Some GetRequest, (Some Syscall, None)))) nil)))))))))))))) .
+  cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 1: timer fires *)
+  (cons (inr (out2 NOP)) (* Step 2: high_p (currently scheduled) runs *)
+  (cons (inr (out0 (3, true))) (* Step 3: scheduler round-robins to low_p (3) *)
+  (cons (inr (out1 GetRequest)) (* Step 4: low_p runs *)
+  (cons (inl (my_f_in_good (inr DiskInterrupt))) (* Step 5: disk interrupt arrives *)
+  (cons (inr (out1 GetRequest)) (* Step 6: low_p completes its cycle (disk latched) *)
+  (cons (inr (out3 Notify)) (* Step 7: handler PREEMPTS via jump -- the leak *)
+  (cons (inr (out0 (3, true))) (* Step 8: scheduler resumes the preempted low_p *)
+  (cons (inr (out1 GetRequest)) (* Step 9: low_p resumes *)
+  nil))))))))  .
 
 Definition badtrace_wrap : seqtype :=
-  cons (inl (inr TimerInterrupt))
-  (cons (inr (Some (inr NOP)))
-  (cons (inr None)
-  (cons (inr None)
-  (cons (inr None)
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inr DiskInterrupt))
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inr None)
-  (cons (inr None)
-  (cons (inl (inr TimerInterrupt))
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inr None)
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inr (Some (inr Syscall))) nil)))))))))))))) .
+  cons (inl (inr TimerInterrupt)) (* Step 1 *)
+  (cons (inr (Some (inr NOP))) (* Step 2: high_p *)
+  (cons (inr None) (* Step 3: scheduler *)
+  (cons (inr (Some (inl GetRequest))) (* Step 4: low_p *)
+  (cons (inl (inr DiskInterrupt)) (* Step 5 *)
+  (cons (inr (Some (inl GetRequest))) (* Step 6: low_p *)
+  (cons (inr None) (* Step 7: handler (hidden) -- public sees None here ... *)
+  (cons (inr None) (* Step 8: scheduler -- ... and None here *)
+  (cons (inr (Some (inl GetRequest))) (* Step 9: low_p *)
+  nil))))))))  .
+
+(* Same input sequence as badtrace', but NO disk interrupt (a plain Unit input at
+   step 5). No disk interrupt => the handler is never entered, so low_p keeps
+   running uninterrupted at steps 7-8. *)
+Definition badtrace_no_disk' : seqtype' :=
+  cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 1 *)
+  (cons (inr (out2 NOP)) (* Step 2: high_p *)
+  (cons (inr (out0 (3, true))) (* Step 3: scheduler -> low_p *)
+  (cons (inr (out1 GetRequest)) (* Step 4: low_p *)
+  (cons (inl (my_f_in_good (inl tt))) (* Step 5: NO interrupt *)
+  (cons (inr (out1 GetRequest)) (* Step 6: low_p *)
+  (cons (inr (None, (None, (None, None)))) (* Step 7: idle (low_p alternates; no handler) *)
+  (cons (inr (out1 GetRequest)) (* Step 8: low_p *)
+  (cons (inr (None, (None, (None, None)))) (* Step 9: idle *)
+  nil))))))))  .
+
+(* Public (world-observable) projection. Compare with badtrace_wrap: they share
+   the same input sequence but DIFFER at steps 8 and 9 -- with the disk interrupt
+   the handler steals a CPU cycle, shifting low_p's public output one step later.
+   That observable difference is the timing leak (interference). *)
+Definition badtrace_no_disk_wrap : seqtype :=
+  cons (inl (inr TimerInterrupt)) (* Step 1 *)
+  (cons (inr (Some (inr NOP))) (* Step 2 *)
+  (cons (inr None) (* Step 3 *)
+  (cons (inr (Some (inl GetRequest))) (* Step 4 *)
+  (cons (inl (inl tt)) (* Step 5 *)
+  (cons (inr (Some (inl GetRequest))) (* Step 6 *)
+  (cons (inr None) (* Step 7: idle *)
+  (cons (inr (Some (inl GetRequest))) (* Step 8: low_p (cf. badtrace_wrap = None here) *)
+  (cons (inr None) (* Step 9: idle (cf. badtrace_wrap = Some GetRequest here) *)
+  nil))))))))  .
 
 Lemma badtrace'_trace : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
                           (eqpair_LR (eqmaybe (publicRel TPublicOutput))
                              (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
                                  (eqmaybe (semiprivateRel THandlerOutput))))) false badtrace' my_only_loop_bad'.
-Admitted.
+Proof.
+  rewrite /badtrace'.
+  econ. reduce_tac. reduce_tac.            (* 1 timer *)
+  econ. reduce_tac. reduce_tac. ssa.       (* 2 high_p *)
+  econ. reduce_tac. reduce_tac.            (* 3 scheduler -> low_p *)
+  econ. reduce_tac. reduce_tac.            (* 4 low_p *)
+  econ. reduce_tac.                        (* 5 disk *)
+  econ. reduce_tac. reduce_tac.            (* 6 low_p completes *)
+  econ. reduce_tac. reduce_tac. ssa.       (* 7 handler preempts *)
+  econ. reduce_tac. reduce_tac.            (* 8 scheduler resumes *)
+  econ. reduce_tac. ssa.                   (* 9 low_p resumes *)
+  econ.
+Qed.
 
+Lemma badtrace_no_disk'_trace : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
+                          (eqpair_LR (eqmaybe (publicRel TPublicOutput))
+                             (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
+                                 (eqmaybe (semiprivateRel THandlerOutput))))) false badtrace_no_disk' my_only_loop_bad'.
+Proof.
+  rewrite /badtrace_no_disk'.
+  econ. reduce_tac. reduce_tac.            (* 1 timer *)
+  econ. reduce_tac. reduce_tac. ssa.       (* 2 high_p *)
+  econ. reduce_tac. reduce_tac.            (* 3 scheduler -> low_p *)
+  econ. reduce_tac. reduce_tac.            (* 4 low_p *)
+  econ. reduce_tac.                        (* 5 no interrupt *)
+  econ. reduce_tac. reduce_tac.            (* 6 low_p *)
+  econ. reduce_tac. reduce_tac.            (* 7 idle *)
+  econ. reduce_tac. reduce_tac.            (* 8 low_p *)
+  econ. reduce_tac. ssa.                   (* 9 idle *)
+  econ.
+Qed.
+
+(* The world-observable (wrapped) versions: my_only_loop_bad = map my_f_in_good
+   my_f_out my_only_loop_bad'. badtrace_wrap and badtrace_no_disk_wrap differ at
+   steps 8-9 -- with the disk interrupt the handler steals a CPU cycle and shifts
+   low_p's public output one step later. That difference is the timing leak. *)
 Lemma badtrace_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false badtrace_wrap my_only_loop_bad.
 Proof.
-Admitted.
+  rewrite /badtrace_wrap.
+  econ. reduce_tac. reduce_tac. reduce_tac.   (* 1 timer *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 2 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 3 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 4 *)
+  econ. reduce_tac.                           (* 5 disk *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 6 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 7 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 8 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 9 *)
+Qed.
+
+Lemma badtrace_no_disk_wrap_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false badtrace_no_disk_wrap my_only_loop_bad.
+Proof.
+  rewrite /badtrace_no_disk_wrap.
+  econ. reduce_tac. reduce_tac. reduce_tac.   (* 1 timer *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 2 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 3 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 4 *)
+  econ. reduce_tac.                           (* 5 no interrupt *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 6 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 7 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 8 *)
+  econ. reduce_tac. reduce_tac. simpl. ssa.   (* 9 *)
+Qed.
