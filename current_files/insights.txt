@@ -1,123 +1,196 @@
 ================================================================================
-          COQ PROCESS MODEL AND SCHEDULER SYSTEM ANALYSIS & INSIGHTS
+   NONINTERFERENCE OS MODEL — SIMPLIFICATION HANDOFF (state-simplification pass)
 ================================================================================
 
-This file contains the complete analysis and insights derived from the design,
-implementation, and verification of the mitigated OS scheduler system in Coq.
-These insights serve as a detailed reference for future proof engineering.
+>>> NEXT: ISRs-cooperative + NON-cooperative users, restore `active`. The current
+>>> `my_f_coopt := fun _ => true` wrongly makes user processes (low_p/high_p)
+>>> cooperative (they self-yield every cycle instead of running until the timer
+>>> preempts). Fix: my_f_coopt n := (n==1)||(n==4) (only handler/scheduler), bring
+>>> back the `active` register and switch = if target==active then (0,0) else
+>>> (active,target) -- BUT don't toggle off a self-disabling ISR (the double-toggle
+>>> bug), and do toggle users off/on under the 1-cycle swi lag. Then re-derive +
+>>> Qed the 8 traces.
+
+
+This session SIMPLIFIED current.v per the user's request ("state too complicated;
+the scheduler IS the mitigator; received-vs-pending distinction is inessential").
+Below: what changed, current build status, the trace-derivation methodology that
+WORKS, the confirmed trace prefix, and the remaining work.
 
 --------------------------------------------------------------------------------
-1. CORE ARCHITECTURE & THE CPU/OS PROCESS POOL
+0. CURRENT BUILD STATUS
 --------------------------------------------------------------------------------
-The system is modeled as a parallel composition of processes coordinated by an
-outer feedback loop (`only_loop`). The process pool (of size 3) contains:
-- Index 1 (f_proc 0): `handler` (preempts on disk interrupts, outputs `Notify` or `Nothing`)
-- Index 2 (f_proc 1): `high_p` (user process, outputs `Syscall` or `NOP`)
-- Index 3 (f_proc 2): `low_p` (user process, outputs `GetRequest` or `None`)
-- Index 4 (f_proc 3): `scheduler` (system process, outputs `(next_proc, handle_disk)`)
+- current.v COMPILES (rocq_compile_file succeeds) with all 8 trace lemmas stubbed
+  `Proof. Admitted.`  A fresh current.vo is on disk.
+- The MODEL section (everything before the trace lemmas) type-checks under the new
+  design below. Phases A, B, C of the plan are DONE.
+- REMAINING (Phase D): re-derive the 8 traces for the new dynamics and prove them
+  to Qed (remove the Admitteds). This is the only thing left.
 
-The CPU and OS state is tracked by a global register tuple `V_state`:
-  `V_state := Times (Times (Times Bool Bool) (Times Bool Bool)) (Times (Times Nat Bool) Bool)`
-representing:
-  `((timer_received, disk_received), (timer_pending, disk_pending), ((p_sched, handler_active), disk_preempt_enabled))`
-
-Where:
-- Latch Registers (`timer_received`, `disk_received`):
-  Record incoming bus interrupt signals during the current CPU step (handled in `f_state`).
-- Pending Registers (`timer_pending`, `disk_pending`):
-  Promoted from the latch registers at the end of the CPU step (handled in `g_state`). These
-  registers are read at the start of the next cycle to trigger preemption.
-- OS Control Registers (`p_sched`, `handler_active`):
-  Identify the currently scheduled process index and whether the interrupt handler is active.
-- Mitigation Flag (`disk_preempt_enabled`):
-  Determines whether incoming disk interrupts can immediately preempt the executing process.
+The 8 lemmas (all currently Admitted):
+  newtrace'_trace, newtrace_trace, newtrace_no_disk_trace,
+  newtrace_no_disk_wrap_trace, badtrace'_trace, badtrace_no_disk'_trace,
+  badtrace_trace, badtrace_no_disk_wrap_trace.
+Their trace VALUES (newtrace', newtrace_wrap, badtrace', ...) still hold the OLD
+sequences and MUST be rewritten to the newly-derived ones.
 
 --------------------------------------------------------------------------------
-2. SCHEDULER IMPLEMENTATION DETAILS
+1. WHAT THE REDESIGN CHANGED (all applied, type-checks)
 --------------------------------------------------------------------------------
-The scheduler has an internal state representation `V_inner := Times (Times Bool Bool) Bool`,
-which represents `((curr, tm), dk)`:
-- `curr` (Bool): Currently scheduled user process (`false` for 2 / `high_p`, `true` for 3 / `low_p`).
-- `tm` (Bool): Timer interrupt pending flag.
-- `dk` (Bool): Disk interrupt pending flag.
+(a) Dead code removed: inl_some/inr_some/option_inl_some/inr_inl_some/
+    inr_inr_some/is_none/is_some/some_inl/sum_N/map_option/map_sum, and
+    clear_interrupts (also removed from the model.rewr unfold list).
 
-A helper process `get_state_and_timer` is used to circumvent Coq's `sta` (stateful process)
-restrictions. Standard `sta` processes cannot easily share details of the incoming input
-between their transition function and output mapping function. `get_state_and_timer` reads
-the state and incoming interrupt, evaluating whether the input is a `TimerInterrupt`, and
-passes `(V_inner, is_timer)` to the scheduler's outer mapper.
+(b) Vestigial leading Nat dropped:  my_T_in' := times_Option_n 3 my_f_I  (was
+    Times Nat (...)). Deleted my_f_in_sch_good; my_f_in_good := my_f_in_t;
+    my_f_route_good no longer emits a leading 0. my_T_out' UNCHANGED, so the
+    output relation towers / out0..out3 helpers are unchanged.
 
-- good_schedulerp (Mitigated Scheduler):
-  * When a `TimerInterrupt` occurs (`is_timer = true`), it schedules the handler (index 1) and
-    disables disk preemption by outputting `(1, false)`.
-  * When a pending timer interrupt exists (`tm = true`), it schedules the next process round-robin:
-    `if curr then 2 else 3` and outputs `false` for disk preemption.
-  * Otherwise, it keeps the currently scheduled process: `if curr then 3 else 2`, and outputs
-    `false` for disk preemption.
-  * In its transition function (`sta`), receiving a `DiskInterrupt` is ignored (in contrast to
-    the bad scheduler). This prevents the disk interrupt from being recorded as pending.
+(c) SCHEDULER = MITIGATOR.  mk_scheduler (mitigate : bool) outputs
+    (next_user, mitigate). The bit is the mitigator's control decision:
+      good_schedulerp := mk_scheduler true   (mask + drain disk at every timer)
+      bad_schedulerp  := mk_scheduler false  (no mask, let disk preempt = leak)
+    NOTE the polarity FLIPPED vs the old handle_disk (old good=false).
 
-- bad_schedulerp (Preemptive Linux-like Scheduler):
-  * Same round-robin and timer preemption logic as the good scheduler.
-  * However, it outputs `true` for `handle_disk`, allowing disk interrupts to immediately preempt.
-  * In its transition function, receiving a `DiskInterrupt` sets `dk` to `true`.
+(d) V_state simplified 8 -> 5 fields, NO received pair, NO active register:
+      V_state := Times (Times Bool Bool) (Times Nat (Times Bool Bool)).
+      ((timer_pending, disk_pending), (p_sched, (handler_queued, masked)))
+      v_state_init := ((false,false),(2,(false,false))).
+    f_state: latch pending directly (two ORs). g_state: pure mechanism, applies
+    the mitigate bit (scheduler branch sets masked:=mitigate, handler_queued:=
+    mitigate; handler branch clears; user branch sets handler_queued:=
+    disk_pending && ~~masked = the leak). override: target = timer?4 : hq?1 :
+    p_sched.
 
---------------------------------------------------------------------------------
-3. LOOP TOGGLING DYNAMICS (THE 14-STEP CYCLE)
---------------------------------------------------------------------------------
-The execution trace spans exactly 14 steps. The dynamics of how process switch states
-toggle are governed by the interaction between the `loop` and `swi` combinators:
-
-- Inside `scheduled_process_pool`, each process `p_i` is wrapped in `swi (f_initial i) (maybe p_i)`.
-- The switch state of `swi` determines if the process executes:
-  * When `switch = false`: Only outputs `None` (idle). The underlying process does not run, and the
-    switch remains `false`.
-  * When `switch = true`: The underlying process executes. Its output is wrapped in a tuple
-    adding its cooperative status (`b_out`). On output, the new switch state becomes `negb b_out`.
-- On loop feedback:
-  The loop feeds the output of the current step back as an input transition (`reduceI`).
-  The input to the process pool determines if process `i` is active (`b_in = true`).
-  The switch state of process `i` is updated via: `new_switch = xor old_switch b_in`.
-  Thus, if a process is active (`b_in = true`) during a feedback transition, its switch state toggles.
-
-Detailed trace of `low_p` (index 3) switch state from Step 6 to Step 10:
-- Step 6 Output: `low_p` is active with `switch = true`. It executes and outputs `GetRequest`.
-  Since `low_p` is not cooperative (`b_out = false`), its switch state remains `true` after execution.
-- Step 6 Feedback: The output `out1 GetRequest` is routed back. `low_p` is scheduled (`final_sch = (3, 3)`),
-  so `b_in = true`. Its switch state toggles `true -> false`.
-- Step 7 (Input Step): External input `DiskInterrupt` is received. `low_p` remains the scheduled process
-  (`final_sch = (3, 3)`), so `b_in = true`. Its switch state toggles `false -> true`.
-- Step 8 Output: `low_p` is active with `switch = true`. It executes and outputs `GetRequest`!
-  (In the previous buggy trace, it was incorrectly assumed that `low_p` would be idle and output `None`).
-  Its switch state remains `true`.
-- Step 8 Feedback: The output `out1 GetRequest` is routed back. `low_p` is scheduled (`final_sch = (3, 3)`),
-  so `b_in = true`. Its switch state toggles `true -> false`.
-- Step 9 (Input Step): External input `TimerInterrupt` is received. `low_p` is the scheduled process
-  (`final_sch = (3, 3)`), so `b_in = true`. Its switch state toggles `false -> true`.
-- Step 10 Output: `low_p` is active with `switch = true`. It executes and outputs `GetRequest`.
-- Step 10 Feedback: The output `out1 GetRequest` is routed back. `low_p` is scheduled, so `b_in = true`.
-  Its switch state toggles `true -> false`.
-- Step 11 Output: A pending timer interrupt is processed, triggering the scheduler. The active processes
-  are `low_p` (index 3) and `scheduler` (index 4).
-  * `scheduler` has `switch = true` (toggled to `true` on Step 10 feedback). It executes and outputs `(1, false)`.
-  * `low_p` has `switch = false`. It does not execute and outputs `None`.
-
-This switch toggling behavior is mathematically precise and has been fully verified.
+(e) KEY FIX — ALL PROCESSES COOPERATIVE:  my_f_coopt (n:nat):bool := true.
+    WHY: the swi switch has a ONE-CYCLE PIPELINE LAG (override emits the toggle on
+    the feedback/input phase; it only affects the NEXT cycle's output). The old
+    received->pending double-buffer was SECRETLY compensating that lag to keep
+    exactly one process firing per cycle. Collapsing it (step (d)) broke
+    serialization: the scheduler fired two cycles in a row (output had TWO active
+    slots). Making every process cooperative makes each self-disable after one
+    output, so override only ever turns the target ON:  switch := (0, target)
+    (index 0 matches no process). This guarantees serialization AND let us delete
+    the `active` register. VERIFIED: outputs are now single-slot (see section 3).
 
 --------------------------------------------------------------------------------
-4. VERIFICATION PROOFS & AUTOMATION
+2. TRACE-DERIVATION METHODOLOGY THAT WORKS (rocq-mcp)  -- use this for Phase D
 --------------------------------------------------------------------------------
-The trace proofs are structured step-by-step using Coq's relational trace rules:
-- `TR1`: Input transition. Does not produce external output.
-- `TR2`: Output transition. Produces external output and checks correctness against the trace spec.
-- `TR0`: Termination. Closed when the trace list is empty.
+Interactive session:
+  rocq_start(workspace=<NonInterference dir>, file="current_files/current.v",
+             theorem="newtrace'_trace", force_restart=true)
+  Then in rocq_check from that state:
+    Abort.
+    Notation REL := (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
+                      (eqpair_LR (eqmaybe (publicRel TPublicOutput))
+                         (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
+                             (eqmaybe (semiprivateRel THandlerOutput))))).
+    Goal Trace REL false [:: inl (my_f_in_good (inr TimerInterrupt));
+         inr <guess>; inr <guess>; ... ] my_only_loop_good'.
+  (Requiring the precompiled module does NOT expose its names in a fresh session;
+   start INSIDE current.v at a theorem instead, then Abort and state your Goal.)
 
-Proof script automation is handled by `reduce_tac` and `reduce_once` tactics, which:
-1. Unfold all process definitions (`low_p`, `high_p`, `handler`, `good_schedulerp`, etc.).
-2. Reduce constructor steps (`map`, `sta`, `swi`, `par`, `loop`).
-3. Solve simple switch boolean identities.
+Per-step cadence (CRITICAL — the blanket `do ? (...)` and a second reduce_tac
+BOTH cascade through the whole trace and TIME OUT; do single steps):
+  OUTPUT step:  econ. reduce_tac.
+                match goal with |- rel _ _ ?a _ => idtac a end.   (* prints output *)
+                ssa.                          (* discharges rel WITHOUT cascading *)
+  INPUT step:   econ. reduce_tac.
 
-Each step in the 14-step sequence is verified by calling `eapply TR1` or `eapply TR2` followed by
-the reduction tactic, terminating with `by []` to strictly check that the actual output matches
-the expected specification value.
+- Provide CONCRETE output guesses; `_`/evar holes do NOT unify through .1/.2.2.2
+  projections, so they leave unsolved `match ?o.1 with ...` goals. With a concrete
+  guess the idtac still prints the COMPUTED value before ssa, so a single run
+  reveals every correct step plus the first divergence (where ssa fails).
+- Mentally reduce noise in printed outputs: `if true then 3 else 2` = 3;
+  `match inr (true, tt) with inr (true,_) => Notify | _ => Nothing` = Notify.
+
+SLOT MAP (output tuple position is REVERSED from pool index!):
+  out0 = scheduler (Times Nat Bool, pos0 = my_f_O 3)
+  out1 = low_p     (TPublicOutput,  pos1 = my_f_O 2)  -- the PUBLIC process
+  out2 = high_p    (TTypeSyscall,   pos2 = my_f_O 1)
+  out3 = handler   (THandlerOutput, pos3 = my_f_O 0)
+Switch/target indices (override): handler=1, high_p=2, low_p=3, scheduler=4.
+Scheduler cursor: init false; reduce_staO pairs the ALREADY-advanced cursor, so
+first scheduled user = 3 (low_p), then 2 (high_p), alternating.
+
+--------------------------------------------------------------------------------
+3. CONFIRMED GOOD-WITH-DISK PREFIX (new cooperative dynamics, single-slot = good!)
+--------------------------------------------------------------------------------
+  step1: inl (my_f_in_good (inr TimerInterrupt))     (input)
+  OUT2 : out0 (3, true)     -- scheduler picks low_p(3), mitigate=true
+  OUT3 : out3 Notify        -- disk handler (masked drain at timer)
+  OUT4 : out1 GetRequest    -- low_p runs
+  OUT5 : out1 GetRequest    -- low_p keeps running
+  ... TO DO: from here inject a disk input, then a timer input, and read the rest
+  (expect: low_p stays public-stable under masking; high_p eventually woken by a
+  routed Notify -> out2 Syscall). Then build the no-disk variant with the SAME
+  inputs except disk->`inl tt`, and confirm the PUBLIC projection (out1 GetRequest
+  positions) is IDENTICAL = the NI witness.
+
+Then do the BAD pool (my_only_loop_bad', mk_scheduler false): no masking, so a
+disk pending while a user runs sets handler_queued (preempt) -> the handler steals
+a cycle and SHIFTS low_p's public output. badtrace vs badtrace_no_disk must DIFFER
+at a public (GetRequest) position = the leak.
+
+WRAPPED traces (my_only_loop_good / _bad): outer map my_f_in_good/my_f_out. Per
+old notes the wrapped cadence was: step1 `econ. reduce_tac. reduce_tac. reduce_tac.`;
+output steps `econ. reduce_tac. reduce_tac. simpl. ssa.`; input `econ. reduce_tac.`
+-- but RE-CHECK these against the single-step/no-cascade lesson above; prefer the
+read-then-ssa method and adapt.
+
+--------------------------------------------------------------------------------
+4. ACCEPTANCE (user asked for full property check)
+--------------------------------------------------------------------------------
+- rocq_compile_file current_files/current.v succeeds; all 8 lemmas Qed, no Admitted.
+- GOOD: newtrace_wrap vs newtrace_no_disk_wrap PUBLIC projections IDENTICAL
+  (may differ only in semiprivate Syscall/NOP slots, collapsed by the relation).
+- BAD:  badtrace_wrap vs badtrace_no_disk_wrap DIFFER at a public GetRequest slot.
+- rocq_assumptions on the 8 lemmas: no new axioms beyond theorems.v.
+
+--------------------------------------------------------------------------------
+5. BUILD / ITERATION
+--------------------------------------------------------------------------------
+Use rocq-mcp (the user asked to use it, not raw coqc/bash):
+  rocq_compile_file(file="current_files/current.v", workspace=<NonInterference dir>,
+                    timeout=420)  -- full build ~3 min.
+  rocq_start / rocq_check as in section 2 for interactive derivation.
+Reference (read-only): model.v (Proc@183, reduceI@210, reduceO@225, Trace@253,
+NI@277, swi semantics, reduce_once@1019, swi_instans@1012, controlled_eauto@1073,
+reduce_tac@1081), theorems.v (the *_NI lemmas), willard_gist.txt (leak motivation).
+current.v overrides model.rewr/reduce_tac near the trace section (~line 436) --
+keep them in sync with def names (already updated: my_f_in_sch_good and
+clear_interrupts removed from the unfold list).
+
+--------------------------------------------------------------------------------
+6. OPTIONAL FOLLOW-UPS (not required)
+--------------------------------------------------------------------------------
+- Inline alternate_generic/alternate_generic2 as direct 1-bit sta; replace the
+  generic scheduled_process_pool 3 with a concrete named pool.
+- The real prize: prove NI ... my_only_loop_good from the *_NI theorems, and the
+  NotSim counterexample for the bad pool.
 ================================================================================
+7. WHY NON-COOPERATIVE SEMANTICS BREAK THE MODEL (June 24 Update)
+--------------------------------------------------------------------------------
+Attempting to make processes non-cooperative (where `my_f_coopt` = false, and the
+override must explicitly send `true` to the old process to turn it off) breaks
+`model.v` at a fundamental mathematical level:
+
+In `model.v`, `reduceO` semantics explicitly forbid a `swi true` process from 
+outputting `None` (`reduce_swiO` ONLY matches `swi false`). 
+In our non-cooperative pipeline, because of the 1-cycle lag in the override 
+mechanism, there is exactly one cycle where BOTH the old process (which just 
+received `true` to turn off) and the new process (which just received `true` to 
+turn on) are `swi true`. 
+
+Since `model.v` forces any `swi true` process to output `Some o`, BOTH processes
+attempt to output in the same cycle. This creates a bus collision in the 
+`my_f_route_good` priority encoder, silently dropping the output of the 
+lower-priority process. This violates the `Trace` structure (which expects single, 
+sequential outputs like `out2 NOP` or `out0 (1, false)`) and causes the trace
+derivation to fail completely with unification errors.
+
+The solution is the one identified in Section 1(e): `my_f_coopt n := true`.
+By making processes cooperative, they self-disable after one cycle, preventing 
+overlap. The scheduler provides a continuous "level-triggered" enable by sending
+`true` ONLY to the target process every cycle, naturally recreating continuous 
+execution without pipeline collisions.
