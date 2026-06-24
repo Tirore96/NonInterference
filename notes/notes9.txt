@@ -1,0 +1,53 @@
+Project status:
+
+We went away from previous model where the scheduler was a lambda in a wrapper around the process pool because of 1) it was missing timing interrupts, therefore less realistic and 2) An outer sta construct with an inner swi was causing problems in the NI proof.
+The new idea was to keep the state inside the scheduler as its own process in the process pool, and this addressed both issues.
+
+Issues with having the scheduler be its own process in the pool:
+
+- The trace of the pool becomes unrealistic because of interleaved scheduler outputs.
+An interchangable scheduler (good vs bad) that can be plugged into the pool means we need it as a decider for which process continues after receiving a disk interrupt (good = current process, bad = handler). If the scheduler is an actual process (as opposed to a lambda in a wrapper around the process pool) the choice will come as an output (public, but that's irrelevant) and this would offset a subsequent output of the public process, making the pool as a whole interfering. To fix this, outputs in the trace of the process pool would have to always alternate between scheduler output (the choice) and running process (the chosen).
+
+- The trace of the pool becomes unrealistic because of simultaneous outputs.
+In the former scenario the pool was cooperative, returning control to the scheduler at every turn. If we consider a non-cooperative pool, the scheduler turns off active processes resulting in simultaneous outputs (Some scheduler_out, Some active_process_out,...). This is not realistic for modeling the cpu jumping to different parts of memory to execute code.
+
+If we want a realistic process trace, the model itself becomes less realistic because the scheduler is an interchangable lambda rather than an interchangable process.
+
+The lambda approach has an issue, but this one seems solvable.
+In this design we have a sta around the process pool that introduces the state of which process is currently running.
+
+If our model was of the form sta f g v p and we try to show it is NI.
+
+By the sta theorem it is NI if p is NI.
+
+NI (eqpair_R VRel IRel) ORel p   ....(other assumptions)....
+-------------
+NI IRel (eqpair VRel ORel) (sta f g v p)
+
+For NI of p to hold, output may not visibly change when we insert into a trace input (v,I) where I is distinguished.
+This is too strong. Ideally if I is distinguished (disk interrupt), the accompanying v should not be affecting the schedule, while if it public (timer interrupt) it should.
+We have a dependence between I and v and I think it can be expressed as introducing a new relation combinator eqpair_P VRel IRel, where (v,I) is distinguished if P (v,I) which we define as I distinguished /\ exists v', f I v' = v. If f maps state to neutral state values whenever I is distinguished, we avoid having to reason about problematic state input to p.
+
+We will also need a new swi theorem that assumes BRel distinguishes only false.
+
+
+
+
+
+
+
+
+
+
+Not essential. swi theorem details...
+
+Assuming we found a way to address this with some sigma type on V, we would be left with showing NI of p with input relation eqpair_R VRel IRel, where VRel has empty distinugished set. When we later reach the switch and have mapped the state to a boolean value b we run into a problem. to use the swi theoerm the input relation must be eqpair_LR BRel IRel, but that is too weak because after we map from from VRel to BRel, we have must show NI with input rel eqpair_R BRel IRel. This can only be reduced to eqpair_LR BRel IRel if both true and false are distinugished for labels, which would force the None output of swi to be distinguished, something we don't want because (Some x,None,None) vs (None,Some x,None) is output determined from the public schedule saved in our state.
+
+More precisely the issue with trying to save the swi theorem by forcing true and false in BRel to both be distinguished, is that it prevents us from defining the output relation of the process pool in a way that reflects that which process is scheduled is public knowledge.
+This can be seen by having the output relation with carrier, (option scheduler_out, option handler_out, option public_out, option private_out), be (a,b,c,d) R (a',b',c',d') iff a ARel a',... d DRel d'. With ARel = eqmaybe (public scheduler_out) meaning a ARel a' iff a = a', whereas BRel = eqmaybe (private handler_out), meaning (Some bval) BRel (Some bval') iff bval = bval' \/ bval and bval' distinguished.
+
+
+
+
+
+
