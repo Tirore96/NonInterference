@@ -1,0 +1,58 @@
+(*Original*)
+Theorem swi_NI : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (BRel : myrel [Bool]) p b,
+(forall l, aware BRel true l \/  oblivious (eqpair_R BRel ORel) p l ) -> NI IRel (eqpair_LR BRel ORel) p ->                                
+NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p).
+Proof.
+  intros I O IRel ORel BRel p b H_aware_ob H_NI_p.
+  intro l.
+  (* We use classic here because aware is not constructively decidable in the logic.
+     If the relation and dis were constructively decidable, a constructive decision
+     procedure could be used instead of classical logic. *)
+  destruct (classic (aware BRel true l)) as [H_aware | H_naware].
+  - split; [| split].
+    + intros t [bi val_i] [bi' val_i'] n Hrel Htr.
+      apply rel_eqpair_LR in Hrel as [Hrel_b Hrel_i].
+      have Heq_b: bi = bi'.
+      { destruct bi, bi'; auto.
+        - move: (H_aware false Hrel_b) => [H_false _]. done.
+        - move: (equiv BRel l) => [? Hsym ?].
+          have Hsym_rel := Hsym _ _ Hrel_b.
+          move: (H_aware false Hsym_rel) => [H_false _]. done. }
+      subst bi'.
+      apply swi_trace in Htr as [t_p [Htr_p Hswi_tr]].
+      have [n' [t_p' [Ht_p' Hswi_tr']]]: exists n' t_p', t_p = insert n' (inl val_i) t_p' /\ SwiTrace ORel BRel l b (insert n (inl (bi, val_i')) t) (insert n' (inl val_i') t_p').
+      { eapply (swi_trace_swap (I:=I) (O:=O) (ORel:=ORel) (BRel:=BRel) (l:=l) (b:=b) (t:=t) (t_p:=t_p) (n:=n) (i:=(bi, val_i)) (i':=(bi, val_i'))); auto. }
+      subst t_p.
+      move: (H_NI_p l) => [H_NI_p1 _].
+      have Htr_p': Trace (eqpair_LR BRel ORel) l (insert n' (inl val_i') t_p') p.
+      { eapply H_NI_p1; [apply Hrel_i | apply Htr_p]. }
+      eapply swi_conv; [apply H_aware | apply Htr_p' | apply Hswi_tr'].
+    + intros t [bi val_i] n Hdis Htr.
+      apply dis_eqpair_LR in Hdis as [Hdis_b Hdis_i].
+      apply swi_trace in Htr as [t_p [Htr_p Hswi_tr]].
+      have [n' Hswi_tr']: exists n', SwiTrace ORel BRel l b (insert n (inl (bi, val_i)) t) (insert n' (inl val_i) t_p).
+      { eapply (swi_trace_insert_conv n); eauto. }
+      move: (H_NI_p l) => [_ [H_NI_p2 _]].
+      have Htr_p': Trace (eqpair_LR BRel ORel) l (insert n' (inl val_i) t_p) p.
+      { eapply H_NI_p2; [apply Hdis_i | apply Htr_p]. }
+      eapply swi_conv; [apply H_aware | apply Htr_p' | apply Hswi_tr'].
+    + intros t [bi val_i] n Hdis Htr.
+      apply dis_eqpair_LR in Hdis as [Hdis_b Hdis_i].
+      apply swi_trace in Htr as [t_p [Htr_p Hswi_tr]].
+      have [n' [t_p' [Ht_p' Hswi_tr']]]: exists n' t_p', t_p = insert n' (inl val_i) t_p' /\ SwiTrace ORel BRel l b t t_p'.
+      { eapply (swi_trace_remove (I:=I) (O:=O) (ORel:=ORel) (BRel:=BRel) (l:=l) (b:=b) (t:=t) (t_p:=t_p) (n:=n) (i:=(bi, val_i))); auto. }
+      subst t_p.
+      move: (H_NI_p l) => [_ [_ H_NI_p3]].
+      have Htr_p': Trace (eqpair_LR BRel ORel) l t_p' p.
+      { eapply H_NI_p3; [apply Hdis_i | apply Htr_p]. }
+      eapply swi_conv; [apply H_aware | apply Htr_p' | apply Hswi_tr'].
+    + destruct (H_aware_ob l) as [H_aware_temp | H_oblivious].
+      * contradiction.
+      * apply oblivious_NI_l. eapply oblivious_swi; eauto.
+Qed.
+
+
+(*Conjecture*)
+Theorem swi_NI' : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (BRel : myrel [Bool]) p b,
+(forall l, aware BRel true l) -> NI IRel (eqpair_R BRel ORel) p ->                                
+NI (eqpair_P (eqpair_R BRel IRel) (fun bi => fst b = false)) (eqmaybe_swi ORel BRel) (swi b p).
