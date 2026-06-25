@@ -83,27 +83,27 @@ Definition process_pool
   elim: n.
   - simpl.
     eapply map. simpl.
-      instantiate (1:= Times Bool (Option (f_I 0))). exact (fun n => ((0.+1 \in [:: fst (fst n); snd (fst n)],snd n))).
+      instantiate (1:= Times Bool (Option (f_I 0))). exact (fun n => ((0 \in [:: fst (fst n); snd (fst n)],snd n))).
       exact id. 
-    eapply swi. exact (f_initial 0.+1). 
+    eapply swi. exact (f_initial 0). 
     eapply maybe. 
     eapply map.
       eapply id. 
-      exact (fun o => (f_coopt 0.+1,o)).
+      exact (fun o => (f_coopt 0,o)).
     exact (f_proc 0).
 
   - intros. simpl.
     eapply par.
     * eapply map.
       instantiate (1:= Times Bool (Option (f_I n.+1))). simpl.
-      exact (fun x => ((n.+2) \in [:: fst (fst x); snd (fst x)], fst (snd x))).
+      exact (fun x => ((n.+1) \in [:: fst (fst x); snd (fst x)], fst (snd x))).
         exact id. 
       eapply swi.
-        exact (f_initial n.+2). 
+        exact (f_initial n.+1). 
       eapply maybe.
       eapply map.
         exact id.     
-        exact (fun o => (f_coopt n.+2,o)).
+        exact (fun o => (f_coopt n.+1,o)).
       (*eapply maybe.*) (*not necessary anymore*)
       exact (f_proc n.+1).
     * eapply map. 3: apply H. simpl. 
@@ -122,26 +122,26 @@ Definition nbstate := Times (Times Bool Bool) (Times Nat Nat). (*((b1,b2),(turn_
  *)
       
 Definition loop_and_count
-  (T_in T_in' T_out' : Ty)                
+  (state : [nbstate])           
+  (T_in T_in' T_out T_out' : Ty)                
   (f_I : [Sum T_in T_out'] -> [nbstate] -> [nbstate])
-  (n_state : nat)           
   (f_route : [T_out'] -> [T_in'])
   (def : [T_out'])
   (p : Proc (Times (Times Nat Nat) T_in') T_out')
-  (f_map : [T_in] -> [T_in'])
+  (f_in : [T_in] -> [T_in'])
   : Proc T_in T_out' :=
   (@map T_in (Sum T_in T_out') (Sum T_in T_out') T_out' inl (inr_or_def def)
                           (@loop (Sum T_in T_out')
                              (@map _ _ (Times _ _) _
                                 id snd
-                                (@sta _ _ nbstate f_I (fun _ v => v) ((true,true),(3,3))
+                                (@sta _ _ nbstate f_I (fun _ v => v) state
                                    (@map (Times nbstate (Sum _ _ ))
                                       (Times (Times Nat Nat) T_in')
                                 _ (Sum _ _)
                                 (fun i  =>
                                    match snd i with
-                                   | inl i' => (snd (fst i),f_map i')
-                                   | inr o  => ((3,3),f_route o) (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
+                                   | inl i' => (snd (fst i),f_in i')
+                                   | inr o  => (snd (fst i),f_route o) (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
                                    end) inr
                                 p))))).
 
@@ -159,9 +159,9 @@ Definition my_procs : forall n, Proc (my_f_I n) (my_f_O n).
   intros. apply unit_p.
 Defined.
 
-Definition my_f_coopt (n : nat) : bool := false.
-Definition my_f_initial (n : nat) := false.
-Definition process_pool_good := @process_pool 2 my_f_coopt my_f_initial my_f_I my_f_O my_procs.
+Definition my_f_coopt (n : nat) : bool := n == 0.
+Definition my_f_initial (n : nat) := n == 0.
+Definition my_process_pool := @process_pool 2 my_f_coopt my_f_initial my_f_I my_f_O my_procs.
 
 Definition my_T_in := Sum Unit TInterrupt. (*We need Unit input to be able to differentiate trace, otherwise we only have interrupts in the trace*)
 Definition my_T_out := Option (Sum TPublicOutput TTypeSyscall).
@@ -172,12 +172,24 @@ Definition h_pub := (false,false).
 Definition h_pr := (false,true).
 Definition pub := (true,false).
 Definition pr := (true,true).
-Print my_T_in.
+
 Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
+  match fst v,i with
+  | (true,false),(inl (inr TimerInterrupt)) => (h_pub,(0,2))                                                 
+  | (true,false),_  => (pub,(3,4))
+  | (false,false), inr _ => (pr,(1,1))
+  | (false,false), _ => (pr,(3,5))
+  | (true,true), (inl (inr TimterInterrupt)) => (h_pr,(0,1))
+  | (true,true), _ => (pr,(3,6))
+  | (false,true), inr _ => (pub,(2,2))
+  | bb,_ => (bb,(3,3))
+end.               
+
+Definition bad_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
   match fst v,i with
   | (false,false), inr _ => (pr,(1,1))
   | (false,false), inl _ => (h_pub,(3,3))                            
-  | (false,true), inr _ => (pub,(2,2))
+  | (false,true), inr _ => (pr,(1,1))
   | (false,true), inl _ => (h_pr,(3,3))
   | (true,false), inr _ => (pub,(3,3))
   | (true,false), inl (inr DiskInterrupt) => (h_pub,(0,2))
@@ -188,191 +200,340 @@ Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstat
   | bb,_ => (bb,(3,3))                                             
   end.
 
-Definition model := loop_and_count my_T_in my_T_in' my_T_out' 
+Definition none3 : [ (times_Option_n 2 my_f_I) ]  := (None,(None,None)).
+Definition def : [ (times_Option_n 2 my_f_O) ]  := (None,(None,None)).
 
+Definition my_f_route (t : [my_T_out']) : [my_T_in'] :=
+  match t with
+  | ((Some publ, _)) => none3
+  | (None,(Some prv,_)) => none3
+  | (None,(None,Some handl)) => (None,(Some handl,None))
+  | _ => none3 
+  end.
 
+Definition my_f_in (t : [my_T_in]) : [ (times_Option_n 2 my_f_I) ] :=
+  match t with
+  | inl tt => (Some tt,(None,None))
+  | inr TimerInterrupt => none3
+  | inr DiskInterrupt => (None,(None,Some DiskInterrupt)) end.
 
+Definition my_f_out (t : [my_T_out']) :=
+  match t with
+  | (Some publ, (None, None)) => Some (inl publ)
+  | (None, (Some pr, None)) => Some (inr pr)
+  | _ => None (*includes handler output and simultaneous output*)
+  end.
 
-
-
-
-(* ISR processes are COOPERATIVE (they self-disable after one cycle), while user
-   processes are NON-COOPERATIVE (they run continuously until preempted).
-   1 = disk handler, 4 = scheduler. *)
-
-
-Definition process_pool_bad := @scheduled_process_pool 3 my_f_coopt my_f_initial my_f_I my_f_O my_procs_bad.
-
-
-Definition out0 x : [my_T_out'] := (Some x,(None,(None,None))).
-Definition out1 x : [my_T_out'] := (None,(Some x,(None,None))).
-Definition out2 x : [my_T_out'] := (None,(None,(Some x,None))).
-Definition out3 x : [my_T_out'] := (None,(None,(None, Some x))).
+Definition f_out_helper (t : [my_T_out]) (h : [THandlerOutput]) : [my_T_out'] :=
+  match t with
+  | Some (inl publ) => (Some publ, (None,None))
+  | Some (inr pr) => (None, (Some pr, None))
+  | None => (None,(None,Some h))
+  end.            
+                                                                   
+Definition model' := @loop_and_count (h_pr,(3,3)) my_T_in my_T_in' my_T_out' my_T_out' good_schedule my_f_route def my_process_pool my_f_in.
+Definition model := @map _ _ _ (Option (Sum TPublicOutput TTypeSyscall)) id my_f_out model'.
+Definition bad_model' := @loop_and_count (h_pr,(3,3)) my_T_in my_T_in' my_T_out' my_T_out' bad_schedule my_f_route def my_process_pool my_f_in.
+Definition bad_model := @map _ _ _ (Option (Sum TPublicOutput TTypeSyscall)) id my_f_out bad_model'.
+Definition out0 x : [my_T_out'] := (Some x,(None,(None))).
+Definition out1 x : [my_T_out'] := (None,(Some x,(None))).
+Definition out2 x : [my_T_out'] := (None,(None,(Some x))).
 
 (*Spec for good scheduler*)
-Definition seqtype' := seq ([my_T_in'] + [my_T_out']).
-Definition newtrace' : seqtype' :=
-  cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 1 *)
-  (cons (inr (out0 (3, true))) (* Step 2: scheduler runs, picks low_p *)
-  (cons (inr (out3 Notify)) (* Step 3: handler drains (because mitigate=true) *)
-  (cons (inr (out1 GetRequest)) (* Step 4: low_p runs *)
-  (cons (inl (my_f_in_good (inr DiskInterrupt))) (* Step 5: inject disk *)
-  (cons (inr (out1 GetRequest)) (* Step 6: low_p runs (ignores disk because masked) *)
-  (cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 7: timer *)
-  (cons (inr (out0 (2, true))) (* Step 8: scheduler runs, picks high_p *)
-  (cons (inr (out3 Notify)) (* Step 9: handler drains queued disk *)
-  (cons (inr (out2 Syscall)) nil))))))))). (* Step 10: high_p receives Notify *)
+Definition Tsum' := ([my_T_in] + [my_T_out'])%type.
+Definition Tsum := ([my_T_in] + [my_T_out])%type.
+Definition seqtype' := seq Tsum'.
+Definition seqtype := seq Tsum.
+Definition tI' : Tsum'  := inl (inr TimerInterrupt).
+Definition dI' : Tsum'  := inl (inr DiskInterrupt).
+Definition tI : Tsum  := inl (inr TimerInterrupt).
+Definition dI : Tsum  := inl (inr DiskInterrupt).
+Definition pub_get' : Tsum' := inr (Some GetRequest,(None,None)).
+Definition pub_get : Tsum := inr (Some (inl GetRequest)).
+Definition pub_nop' : Tsum' := inr (Some Public_NOP,(None,None)).
+Definition pub_nop : Tsum := inr (Some (inl (Public_NOP))).
+Definition pr_sys' : Tsum' := inr (None,(Some Syscall,None)).
+Definition pr_sys : Tsum := inr (Some (inr Syscall)).
+Definition pr_nop' : Tsum' := inr (None,(Some NOP,None)).
+Definition pr_nop : Tsum := inr (Some (inr NOP)).
+Definition handl_out_noti' : Tsum' := inr (None,(None,Some Notify)).
+Definition handl_out_noth' : Tsum' := inr (None,(None,Some Nothing)).
+Definition handl_out : Tsum := inr None.
+Definition non' : Tsum' := inr (None,(None,None)).
+Definition non : Tsum := inr None.
 
-Definition seqtype := seq ([my_T_in] + [my_T_out]).
+Definition no_dI' : seqtype' :=   [::handl_out_noth';pub_get';    pub_get';tI';handl_out_noth';pr_nop'(*nop*);pr_nop';tI';handl_out_noth';pub_get'].
+Definition with_dI' : seqtype' := [::handl_out_noth';pub_get';dI';pub_get';tI';handl_out_noti';pr_sys'(*sys*);pr_nop';tI';handl_out_noth';pub_get'].
+Definition no_dI : seqtype :=   [::handl_out;pub_get;    pub_get;tI;handl_out;pr_nop(*nop*);pr_nop;tI;handl_out;pub_get].
+Definition with_dI : seqtype := [::handl_out;pub_get;dI;pub_get;tI;handl_out;pr_sys(*sys*);pr_nop;tI;handl_out;pub_get].
 
-Definition newtrace_wrap : seqtype  :=
-  cons (inl (inr TimerInterrupt))
-  (cons (inr None)
-  (cons (inr None)
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inr DiskInterrupt))
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inr TimerInterrupt))
-  (cons (inr None)
-  (cons (inr None)
-  (cons (inr (Some (inr Syscall))) nil))))))))).
+Definition output_rel' := eqpair (eqmaybe (publicRel TPublicOutput)) (eqpair (eqmaybe (semiprivateRel TTypeSyscall)) (eqmaybe (semiprivateRel THandlerOutput))).
+Definition output_rel := eqmaybe (eqsum_R (publicRel TPublicOutput) (semiprivateRel TTypeSyscall)).
 
-Definition newtrace_no_disk : seqtype' :=
-  cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 1 *)
-  (cons (inr (out0 (3, true))) (* Step 2: scheduler runs, picks low_p *)
-  (cons (inr (out3 Notify)) (* Step 3: handler drains *)
-  (cons (inr (out1 GetRequest)) (* Step 4: low_p runs *)
-  (cons (inl (my_f_in_good (inl tt))) (* Step 5: NO disk interrupt *)
-  (cons (inr (out1 GetRequest)) (* Step 6: low_p runs *)
-  (cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 7: timer *)
-  (cons (inr (out0 (2, true))) (* Step 8: scheduler runs, picks high_p *)
-  (cons (inr (out3 Nothing)) (* Step 9: handler runs but disk is empty *)
-  (cons (inr (out2 NOP)) nil))))))))). (* Step 10: high_p receives Nothing *)
+Ltac rewr := rewrite /model /model' /loop_and_count /my_process_pool /process_pool /my_f_initial /low_p /my_f_coopt /handler /alternate_generic /alternate_generic2 /high_p.
+Lemma trace_no_dI' : forall l, Trace output_rel' l no_dI' model'.
+  intros.
+  rewr. simpl. rewr. simpl. rewr.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. rewrite !inE. cbn.
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+Qed.
 
-Definition newtrace_no_disk_wrap : seqtype  :=
-  cons (inl (inr TimerInterrupt))
-  (cons (inr None)
-  (cons (inr None)
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inl tt))
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inr TimerInterrupt))
-  (cons (inr None)
-  (cons (inr None)
-  (cons (inr (Some (inr NOP))) nil))))))))).
+Lemma trace_with_dI' : forall l, Trace output_rel' l with_dI' model'.
+  rewr. simpl. rewr. simpl. rewr.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. rewrite !inE. cbn.
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+Qed.
 
-Ltac model.rewr ::= rewrite /low_p /handler /high_p /my_only_loop_good' /my_only_loop_good /my_only_loop_good_inner /only_loop /process_pool_good /process_pool_bad /good_schedulerp /my_f_coopt /scheduled_process_pool /high_p /alternate_generic /alternate_generic2 /low_p /my_f_in_good /my_f_in_t /mk_scheduler /bad_schedulerp /my_procs_good /my_procs_bad /f_state /g_state /override_pool_input /v_state_init /my_only_loop_bad' /my_only_loop_bad /my_only_loop_bad_inner /my_f_initial /=.
+(*Necessary to avoid controlled_eauto tactic weirdness in reduce_tac*)
+Ltac reduce_tac2 :=
+  (try rewr);
+   (repeat
+      reduce_once);(try swi_instans); rewrite ?eqxx /= /xor /=.
 
-Ltac safe_econstructor :=
-  match goal with
-  | |- reduceI ?p _ _ => is_evar p; fail 1
-  | |- reduceO ?p _ _ => is_evar p; fail 1
-  | |- _ => idtac
-  end;
-  econstructor.
 
-Ltac reduce_tac ::= try model.rewr; repeat reduce_once; try swi_instans; controlled_eauto; rewrite ?eqtype.eq_refl /= /xor /=; repeat (reduce_once || safe_econstructor || reflexivity).
-
-Lemma newtrace'_trace : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
-                          (eqpair_LR (eqmaybe (publicRel TPublicOutput))
-                             (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
-                                 (eqmaybe (semiprivateRel THandlerOutput))))) false newtrace' my_only_loop_good'.
-Proof.
-  econ. reduce_tac. simpl.
-  econ. reduce_tac. simpl.   done.
-  econ. reduce_tac. simpl. ssa.
-  econ. reduce_tac. ssa.
-  econ. reduce_tac. ssa.
-  econ. reduce_tac. ssa.
+Lemma trace_no_dI : forall l, Trace output_rel l no_dI model.
+  rewr. simpl. rewr. simpl. rewr.
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 Nothing)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
   
-Lemma newtrace_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false newtrace_wrap my_only_loop_good.
-Proof. Admitted.
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
 
-Lemma newtrace_no_disk_trace : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
-                          (eqpair_LR (eqmaybe (publicRel TPublicOutput))
-                             (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
-                                 (eqmaybe (semiprivateRel THandlerOutput))))) false newtrace_no_disk my_only_loop_good'.
-Proof. Admitted.
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
 
-Lemma newtrace_no_disk_wrap_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false newtrace_no_disk_wrap my_only_loop_good.
-Proof. Admitted.
+  econ. reduce_tac2;reduce_tac2;try econ.
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+  
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
+  done.
+Qed.
+
+Lemma trace_with_dI : forall l, Trace output_rel l with_dI model.
+  rewr. simpl. rewr. simpl. rewr.
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 Nothing)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+  
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
+
+  econ. reduce_tac2;reduce_tac2;try econ. reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:=  (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+  
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
+  done.
+Qed.
 
 
-(* Spec for the BAD (Linux-like, interfering) scheduler, WITH a disk interrupt.
-   The handler is NOT scheduled on the timer; it is entered only as a response to
-   the disk interrupt, by preemption (a jump at the end of the CPU cycle).
-   Compare with badtrace_no_disk' below: the two runs share the same input
-   sequence but differ in the PUBLIC projection (steps 7-8), which is the leak. *)
-Definition badtrace' : seqtype' :=
-  cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 1 *)
-  (cons (inr (out0 (3, false))) (* Step 2: scheduler picks low_p, mitigate=false *)
-  (cons (inr (out1 GetRequest)) (* Step 3: low_p runs *)
-  (cons (inl (my_f_in_good (inr DiskInterrupt))) (* Step 4: disk interrupt arrives *)
-  (cons (inr (out1 GetRequest)) (* Step 5: low_p runs. Preempt gets set! *)
-  (cons (inr (out3 Notify)) (* Step 6: handler preempts! *)
-  (cons (inr (out1 GetRequest)) (* Step 7: low_p resumes *)
-  (cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 8: timer interrupt *)
-  (cons (inr (out0 (2, false))) (* Step 9: scheduler picks high_p *)
-  (cons (inr (out2 NOP)) nil))))))))). (* Step 10: high_p runs (no Notify because disk already handled) *)
+Definition bad_no_dI' : seqtype' :=   [::handl_out_noth';tI';pub_get';                                        pub_get';tI';pr_nop';pr_nop';tI';pub_get'].
+Definition bad_with_dI' : seqtype' := [::handl_out_noth';tI';pub_get';dI';handl_out_noti';pr_sys';pr_nop';tI';pub_get';tI';pr_nop';pr_nop';tI';pub_get'].
 
-Definition badtrace_wrap : seqtype :=
-  cons (inl (inr TimerInterrupt))
-  (cons (inr None)
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inr DiskInterrupt))
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inr None)
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inr TimerInterrupt))
-  (cons (inr None)
-  (cons (inr (Some (inr NOP))) nil))))))))).
+Definition bad_no_dI : seqtype :=     [::handl_out;      tI; pub_get;                                         pub_get;tI;pr_nop;pr_nop;tI;pub_get].
+Definition bad_with_dI : seqtype :=   [::handl_out;tI;pub_get;dI;handl_out;pr_sys;pr_nop;tI;pub_get;tI;pr_nop;pr_nop;tI;pub_get].
 
-Definition badtrace_no_disk' : seqtype' :=
-  cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 1 *)
-  (cons (inr (out0 (3, false))) (* Step 2: scheduler *)
-  (cons (inr (out1 GetRequest)) (* Step 3: low_p *)
-  (cons (inl (my_f_in_good (inl tt))) (* Step 4: empty disk *)
-  (cons (inr (out1 GetRequest)) (* Step 5: low_p runs. Preempt is false! *)
-  (cons (inr (out1 GetRequest)) (* Step 6: low_p runs AGAIN! *)
-  (cons (inr (out1 GetRequest)) (* Step 7: low_p runs YET AGAIN! *)
-  (cons (inl (my_f_in_good (inr TimerInterrupt))) (* Step 8: timer *)
-  (cons (inr (out0 (2, false))) (* Step 9: scheduler picks high_p *)
-  (cons (inr (out2 NOP)) nil))))))))). (* Step 10: high_p runs *)
+Ltac rewr ::= rewrite /model /model' /bad_model /bad_model' /loop_and_count /my_process_pool /process_pool /my_f_initial /low_p /my_f_coopt /handler /alternate_generic /alternate_generic2 /high_p.
 
-(* Public (world-observable) projection. Compare with badtrace_wrap: they share
-   the same input sequence but DIFFER at steps 8 and 9 -- with the disk interrupt
-   the handler steals a CPU cycle, shifting low_p's public output one step later.
-   That observable difference is the timing leak (interference). *)
-Definition badtrace_no_disk_wrap : seqtype :=
-  cons (inl (inr TimerInterrupt))
-  (cons (inr None)
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inl tt))
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inr (Some (inl GetRequest)))
-  (cons (inl (inr TimerInterrupt))
-  (cons (inr None)
-  (cons (inr (Some (inr NOP))) nil))))))))).
+Lemma bad_trace_no_dI' : forall l, Trace output_rel' l bad_no_dI' bad_model'.
+  intros.
+  rewr. simpl. rewr. simpl. rewr.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].  
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. 
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].  
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].    
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. 
+Qed.
 
-Lemma badtrace'_trace : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
-                          (eqpair_LR (eqmaybe (publicRel TPublicOutput))
-                             (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
-                                 (eqmaybe (semiprivateRel THandlerOutput))))) false badtrace' my_only_loop_bad'.
-Proof. Admitted.
+Lemma bad_trace_with_dI' : forall l, Trace output_rel' l bad_with_dI' bad_model'.
+  intros.
+  rewr. simpl. rewr. simpl. rewr.
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].  
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].    
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. 
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].    
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
+  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].  
+Qed.
 
-Lemma badtrace_no_disk'_trace : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
-                          (eqpair_LR (eqmaybe (publicRel TPublicOutput))
-                             (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
-                                 (eqmaybe (semiprivateRel THandlerOutput))))) false badtrace_no_disk' my_only_loop_bad'.
-Proof. Admitted.
+Lemma bad_trace_no_dI : forall l, Trace output_rel l bad_no_dI bad_model.
+Proof.
+  rewr. simpl. rewr. simpl. rewr.
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 Nothing)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
 
-(* The world-observable (wrapped) versions: my_only_loop_bad = map my_f_in_good
-   my_f_out my_only_loop_bad'. badtrace_wrap and badtrace_no_disk_wrap differ at
-   steps 8-9 -- with the disk interrupt the handler steals a CPU cycle and shifts
-   low_p's public output one step later. That difference is the timing leak. *)
-Lemma badtrace_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false badtrace_wrap my_only_loop_bad.
-Proof. Admitted.
+  econ. reduce_tac2;reduce_tac2;try econ.
+  
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
 
-Lemma badtrace_no_disk_wrap_trace : Trace (eqmaybe (eqsum_LR (publicRel TPublicOutput) (semiprivateRel TTypeSyscall))) false badtrace_no_disk_wrap my_only_loop_bad.
-Proof. Admitted.
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+  
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
+  done.
+Qed.
+
+Lemma bad_trace_with_dI : forall l, Trace output_rel l bad_with_dI bad_model.
+Proof.
+  rewr. simpl. rewr. simpl. rewr.
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 Nothing)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+  
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
+
+  econ. reduce_tac2;reduce_tac2;try econ. reduce_tac.
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+  
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
+
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
+
+  econ. reduce_tac2;reduce_tac2;try econ.
+  
+  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
+  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
+  
+  done.
+Qed.
+
+Definition eqpair_P {I : Ty} (IRel : myrel [I]) (P : [I] -> Prop) : myrel ([I]).
+  refine (@MyRel _ 
+            (fun (l : level) i => dis IRel l i /\ (exists i', rel IRel l i i' /\ P i'  ))
+            (fun l i0 i1 => rel IRel l i0 i1 \/
+                             (dis IRel l i0 /\ (exists i', rel IRel l i0 i' /\ P i' )) /\
+                             (dis IRel l i1 /\ (exists i', rel IRel l i1 i' /\ P i' ))                               
+            )
+            _
+            _
+            _
+            _).
+  - ssa. con. intro. ssa. intro. ssa. de H.
+    intro. ssa. de H. de H0. left. eauto.
+    left. eauto. de H0. eauto.
+    ssa. de H0. eauto. right. ssa. eauto. eauto. eauto. eauto.
+    ssa. eauto. eauto.
+    ssa. con. ssa. ssa. de H2. eauto. de H2. eauto. eauto.
+Defined.
+
+Definition Pf (V I : Ty) (f : [I] -> [V] -> [V]) (vi : [Times V I]) := exists v', f (snd vi) v' = fst vi.
+              
+Lemma sta_NI' : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
+    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
+    NI (eqpair_P (eqpair_R VRel IRel) (Pf f) ) ORel p ->
+    NI IRel (eqpair VRel ORel) (sta f g v p).
+Proof.
+Admitted.
+
+
+
+Definition interrupt_rel : myrel [TInterrupt].
+  refine (@MyRel _
+            (fun l (b : [TInterrupt]) => b = DiskInterrupt /\ l = \bot)
+            (fun l b1 b2 => b1 = b2)
+            _
+            _
+            _
+            _).
+  ssa. ssa. ssa. rewrite /order in H. subst. rewrite lex0 in H. apply/eqP. done.
+  ssa. subst. con. ssa. ssa.
+Defined.
+
+Definition input_rel' := eqsum_R (publicRel Unit) interrupt_rel.
+
+Lemma NI_model' : NI input_rel' output_rel' model'.
+Admitted.
+
+Lemma NI_model : NI input_rel' output_rel model.  
+Admitted.
