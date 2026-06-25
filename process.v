@@ -16,7 +16,7 @@ Require Import Coq.Classes.DecidableClass.
 Import Order.TTheory.
 Open Scope order_scope.
 
-Require Import NonInterference.theorems.
+Require Export NonInterference.theorems.
 
 Fixpoint times_N n (f : nat -> Ty) : Ty :=
   let t := f n in
@@ -488,52 +488,8 @@ Proof.
   done.
 Qed.
 
-Definition eqpair_P {I : Ty} (IRel : myrel [I]) (P : [I] -> Prop) : myrel ([I]).
-  refine (@MyRel _ 
-            (fun (l : level) i => dis IRel l i /\ (exists i', rel IRel l i i' /\ P i'  ))
-            (fun l i0 i1 => rel IRel l i0 i1 \/
-                             (dis IRel l i0 /\ (exists i', rel IRel l i0 i' /\ P i' )) /\
-                             (dis IRel l i1 /\ (exists i', rel IRel l i1 i' /\ P i' ))                               
-            )
-            _
-            _
-            _
-            _).
-  - ssa. con. intro. ssa. intro. ssa. de H.
-    intro. ssa. de H. de H0. left. eauto.
-    left. eauto. de H0. eauto.
-    ssa. de H0. eauto. right. ssa. eauto. eauto. eauto. eauto.
-    ssa. eauto. eauto.
-    ssa. con. ssa. ssa. de H2. eauto. de H2. eauto. eauto.
-Defined.
-
-Definition Pf (V I : Ty) (f : [I] -> [V] -> [V]) (vi : [Times V I]) := exists v', f (snd vi) v' = fst vi.
-              
-Lemma sta_NI' : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]),
-    fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
-    NI (eqpair_P (eqpair_R VRel IRel) (Pf f) ) ORel p ->
-    NI IRel (eqpair VRel ORel) (sta f g v p).
-Proof.
-Admitted.
 
 
 
-Definition interrupt_rel : myrel [TInterrupt].
-  refine (@MyRel _
-            (fun l (b : [TInterrupt]) => b = DiskInterrupt /\ l = \bot)
-            (fun l b1 b2 => b1 = b2)
-            _
-            _
-            _
-            _).
-  ssa. ssa. ssa. rewrite /order in H. subst. rewrite lex0 in H. apply/eqP. done.
-  ssa. subst. con. ssa. ssa.
-Defined.
-
-Definition input_rel' := eqsum_R (publicRel Unit) interrupt_rel.
-
-Lemma NI_model' : NI input_rel' output_rel' model'.
-Admitted.
-
-Lemma NI_model : NI input_rel' output_rel model.  
-Admitted.
+(*Lemma NI_model : NI input_rel' output_rel model.  
+Admitted.*)

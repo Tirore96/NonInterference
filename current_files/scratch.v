@@ -9,24 +9,32 @@ From mathcomp Require Import order.
 Require Import Streams.
 From HB Require Import structures.
 From deriving Require Import deriving.
-Require Import Stdlib.Program.Equality.
+Require Import Coq.Program.Equality.
 From Equations Require Import Equations.
-Require Import Stdlib.Classes.DecidableClass.
-From Stdlib Require Eqdep.
+Require Import Coq.Classes.DecidableClass.
 
 Import Order.TTheory.
 Open Scope order_scope.
 
+Require Import NonInterference.process.
 Require Import NonInterference.theorems.
-Require Import NonInterference.current_files.current.
 
-Lemma test_step1 : Trace (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
-                          (eqpair_LR (eqmaybe (publicRel TPublicOutput))
-                             (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
-                                 (eqmaybe (semiprivateRel THandlerOutput))))) false badtrace' my_only_loop_bad'.
+Definition interrupt_rel : myrel [TInterrupt].
+  refine (@MyRel _
+            (fun l (b : [TInterrupt]) => b = DiskInterrupt /\ l = \bot)
+            (fun l b1 b2 => b1 = b2)
+            _ _ _ _).
+  ssa. ssa. ssa. rewrite /order in H. subst. rewrite lex0 in H. apply/eqP. done.
+  ssa. subst. con. ssa. ssa.
+Defined.
+
+Definition input_rel' := eqsum_R (publicRel Unit) interrupt_rel.
+
+Lemma good_schedule_Hclo : forall (l : level) (x y : [nbstate] * [Sum my_T_in my_T_out']),
+  rel (semiprivateRel nbstate) l x.1 y.1 ->
+  rel (eqsum_LR input_rel' output_rel') l x.2 y.2 ->
+  Pf good_schedule x -> Pf good_schedule y.
 Proof.
-  rewrite /badtrace'.
-  eapply TR1.
-  reduce_tac; repeat (reduce_once || econ).
-  match goal with | |- ?G => fail 1 G end.
+  rewrite /Pf /semiprivateRel /rel /=.
+  move=> l x y H_v H_i [v' H_x].
 Admitted.

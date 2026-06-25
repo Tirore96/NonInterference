@@ -1,0 +1,38 @@
+================================================================================
+ ANALYSIS: Why the P-conditioned approach (sta_NI') fails for good_schedule
+================================================================================
+
+1. THE SYSTEM OF CONSTRAINTS
+To use `sta_NI'` to prove non-interference of the stateful scheduler wrapper, we must supply a state relation `VRel : myrel [V]` (where `V = nbstate`) and prove two premises:
+  
+  a) f_EP (Exposed/Disclosed Preservation):
+     forall l i, dis IRel l i -> forall v, rel VRel l (f i v) v
+     
+  b) Hclo (Closure):
+     forall l x y, rel VRel l x.1 y.1 -> rel IRel l x.2 y.2 -> Pf f x -> Pf f y
+     
+Where:
+  - `Pf f x` is `exists v', f x.2 v' = x.1` (i.e., state `x.1` is in the image of `f x.2`).
+  - `IRel = eqsum_LR input_rel' output_rel'`.
+  - At `l = \bot` (i.e., `false`), `dis IRel \bot i` holds for `i = inl (inr DiskInterrupt)`.
+
+2. THE INDUCTIVE CONTRADICTION
+For any candidate relation `VRel`, we must analyze its behavior at `l = \bot`.
+
+* Case A: VRel is trivial at \bot (e.g., semiprivateRel)
+  - `rel VRel \bot v1 v2` holds for all `v1, v2`.
+  - `f_EP` is satisfied: `rel VRel \bot (good_schedule i v) v` holds trivially.
+  - However, `Hclo` at `l = \bot` becomes:
+    forall x y, rel IRel \bot x.2 y.2 -> Pf good_schedule x -> Pf good_schedule y
+  - Since `y.1` is completely unrestricted by the hypotheses, `Pf good_schedule y` must hold for all `y.1` (i.e. `y.1` must be in the image of `good_schedule y.2`).
+  - Because `good_schedule` is not surjective, we can choose `y.1` outside the image (e.g. `(false, false, (99, 99))`), making the conclusion false. Thus, `Hclo` is false.
+
+* Case B: VRel restricts states at \bot (e.g., publicRel or custom image-based relation)
+  - To make `Hclo` provable, `rel VRel \bot x.1 y.1` must restrict `y.1` to the image of `good_schedule` (or require `x.1 = y.1`).
+  - If it requires `y.1` to be in the image of `good_schedule`, then by reflexivity, every state `v` must relate to itself, so `v` must be in the image. Thus, the relation cannot be reflexive on the entire state space `nbstate`.
+  - If we make it reflexive by allowing `v = v` for states outside the image, then `f_EP` requires `rel VRel \bot (good_schedule i v) v`. Since `good_schedule i v` is in the image and `v` is not, `VRel` must relate an in-image state to an out-of-image state.
+  - By transitivity/symmetry, this collapses the relation to relate all states, returning to Case A.
+  - If `VRel` is `publicRel` (equality at `\bot`), `f_EP` requires `good_schedule (inl (inr DiskInterrupt)) v = v` for all `v`, which is false.
+
+3. CONCLUSION
+The premise `Hclo` of `sta_NI'` is mathematically unsatisfiable for any state relation `VRel` when the transition function `f` changes the state on private inputs and is not surjective. Therefore, the P-conditioned approach using `sta_NI'` cannot be completed.

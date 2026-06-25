@@ -1,14 +1,13 @@
 ================================================================================
- HANDOFF: eqpair_dom refactor in current.v  (session 2026-06-25)
+ HANDOFF: Proving NI_model' in current_files/current.v (session 2026-06-25)
 ================================================================================
 
 ONE-LINE STATUS
-  Plan "Replace eqpair_P with eqpair_dom" is fully implemented and COMPILES
-  end-to-end. Everything is Qed EXCEPT one lemma, swi_NI', which is Admitted
-  (statement type-checked & landed; proof deferred — see "REMAINING WORK").
+  swi_NI' is fully proved and Qed! The remaining objective is to prove the
+  NI_model' theorem in the updated current_files/current.v.
 
 --------------------------------------------------------------------------------
- BUILD / ITERATION  (unchanged, repeated here for convenience)
+ BUILD / ITERATION
 --------------------------------------------------------------------------------
   Project dir (the workspace, has _CoqProject = "-Q . NonInterference -I .."):
     ~/Library/CloudStorage/OneDrive-ITU/Desktop/NonInterference
@@ -17,184 +16,65 @@ ONE-LINE STATUS
     export PATH="$HOME/.opam/5.4.0/bin:$PATH"; eval $(opam env --switch=5.4.0)
 
   PREFERRED: drive everything through the rocq MCP.
-    - Full compile (~slow, heavy mathcomp/paco/deriving/equations):
+    - Full compile:
         rocq_compile_file(file="current_files/current.v",
                           workspace=<NonInterference dir>, timeout=420)
-    - Interactive development: rocq_start(file="current_files/current.v",
-        theorem=<lemma name>, force_restart=true) then rocq_check(body="...").
-    - WORKFLOW THAT WORKED THIS SESSION: write each new lemma into current.v
-      with a "Proof. admit. Admitted." (or "all: admit. Admitted." for refine
-      Definitions), then rocq_start at that lemma name, develop the body with
-      rocq_check, and once proof_finished paste the proof_tactics back into the
-      file replacing the admit. The file must PARSE for rocq_start to find the
-      lemma, so keep placeholders syntactically valid.
-    - rocq_assumptions(name=..., file=..., workspace=...) to confirm no admits
-      leak: "standard_only" verdict + only Eq_rect_eq is the expected/clean
-      result (Eq_rect_eq comes from dependent elimination in the imports).
-
-  CAUTION: rocq_start reads the file at start time; after you Edit current.v,
-  the open session is STALE — restart with force_restart=true.
+    - Interactive development:
+        rocq_start(file="current_files/current.v", theorem="NI_model'", force_restart=true)
+        then use rocq_check(body="...") to step through the proof.
 
 --------------------------------------------------------------------------------
- KEY DEFINITIONS / LEMMAS from NonInterference.theorems & model (verified types)
+ OBJECTIVE: NI_model'
 --------------------------------------------------------------------------------
-  myrel A = record { dis : level->A->Prop;  rel : level->A->A->Prop;
-                     + 3 laws: equiv(rel l) ; order-monotone rel ; order-monotone
-                     dis ; and dis l a0 -> (dis l a1 <-> rel l a0 a1) }.
-  Build with refine (@MyRel _ dis rel _ _ _ _).  ssreflect: fst=.1, snd=.2.
+  The target theorem to prove in current_files/current.v:
+    Lemma NI_model' : NI input_rel' output_rel' model'.
 
-  rel_refl/sym/trans, dis_rel_dis (dis x -> rel x y -> dis y),
-  dis_rel_dis2 (dis x -> rel y x -> dis y),
-  myrel_rule1 (order l0 l1 -> rel l1 -> rel l0),
-  myrel_rule2 (order l0 l1 -> dis l1 -> dis l0).
+  Where:
+    - model' := @loop_and_count (h_pr,(3,3)) my_T_in my_T_in' my_T_out' my_T_out'
+                   good_schedule my_f_route def my_process_pool my_f_in.
+      (defined in NonInterference.process)
 
-  eqpair_R I O IRel ORel : myrel [Times I O]  -- RIGHT-keyed disclosure:
-     rel = (rel IRel x.1 y.1 /\ rel ORel x.2 y.2) \/ (dis ORel x.2 /\ dis ORel y.2)
-     dis = dis ORel x.2
-  eqpair_LR : LEFT-keyed (dis ARel x.1).  rel_eqpair_LR / dis_eqpair_LR split them.
-  eqpair I O : the "both must be related" pair (no disclosed branch) -- sta output.
+    - input_rel' := eqsum_R (publicRel Unit) interrupt_rel.
+      (defined in current_files/current.v)
 
-  NI IRel ORel p = forall l, NI_l ... ; NI_l has 3 clauses:
-    (1 rel)    rel IRel l i i' -> Trace(insert n (inl i) t) -> Trace(insert n (inl i') t)
-    (2 insert) dis IRel l i    -> Trace t                   -> Trace(insert n (inl i) t)
-    (3 remove) dis IRel l i    -> Trace(insert n (inl i) t) -> Trace t
-  NI_reduceI / NI_reduceO peel a reduceI/reduceO step off an NI.
-
-  insert n a l:  n=0 -> a::l ; (S n') on [] -> [] ; (S n') on a'::l' -> a'::insert n' a l'.
-    *** insert DROPS a when n > size l (out-of-range = no-op). This is the source
-        of the clause-2/3 "wrinkle" below. ***
-  lthread VRel f g l v L: per-element rel chain; for inl wi at the head it gives
-    rel VRel l wi.1 (f wi.2 v) and recurses with state (f wi.2 v).
-  projIl/projOl: map a seq of sums; size-preserving.
-  sta_proj_lthread: Trace(eqpair VRel ORel) of (sta f g v p) <-> exists T,
-     ts=projIl T /\ Trace ORel (projOl T) p /\ lthread ... T.
-  projIl_insert_inv: projIl T = insert n (inl i) t -> exists w T'',
-     T = insert n (inl (w,i)) T'' /\ projIl T''=t.
-  lthread_insert_dis / lthread_remove_dis / lthread_swap / lthread_stable: as named.
-
-  swi I O : bool -> Proc I (Times Bool O) -> Proc (Times Bool I) (Option O).
-  swi_trace: Trace(eqmaybe_swi ORel BRel) (swi b p) -> exists t',
-     Trace (eqpair_LR BRel ORel) l t' p /\ SwiTrace ORel BRel l b t t'.   <-- eqpair_LR!
-  swi_conv: aware BRel true l -> Trace (eqpair_LR BRel ORel) l t_p p ->
-     SwiTrace ... -> Trace(eqmaybe_swi ORel BRel) l t (swi b p).           <-- eqpair_LR!
-  aware BRel v l = forall v', rel BRel l v v' -> v=v' /\ ~ dis BRel l v'.
-  oblivious_NI_l, oblivious_swi (used in original swi_NI's last branch).
-  map_NI: f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
-          NI IRel' ORel p -> NI IRel ORel' (map f g p).
-  f_NI ARel BRel h = forall l i i', rel ARel l i i' -> rel BRel l (h i)(h i').
-  f_PU ARel BRel h = forall l i,    dis ARel l i    -> dis BRel l (h i).
+    - output_rel' := eqpair (eqmaybe (publicRel TPublicOutput))
+                       (eqpair (eqmaybe (semiprivateRel TTypeSyscall))
+                          (eqmaybe (semiprivateRel THandlerOutput))).
+      (defined in NonInterference.process)
 
 --------------------------------------------------------------------------------
- WHAT WAS BUILT THIS SESSION (all Qed, all in current.v, in file order)
+ TASK BACKGROUND & GUIDELINES
 --------------------------------------------------------------------------------
-1. eqpair_dom (V I) VRel IRel P Hclo : myrel [Times V I]
-     Hclo : forall l x y, rel VRel l x.1 y.1 -> rel IRel l x.2 y.2 -> P x -> P y
-     dis l x   := dis IRel l x.2 /\ P x
-     rel l x y := (rel VRel l x.1 y.1 /\ rel IRel l x.2 y.2)
-                  \/ ((dis IRel l x.2 /\ P x) /\ (dis IRel l y.2 /\ P y))
-   *** INSIGHT (the crux): naive dis:=dis/\P breaks TRANSITIVITY. The fix is the
-       closure Hclo: in a mixed rel-trans case (x rel y, y disclosed) you recover
-       P x by applying Hclo to the SYMMETRIC rels (rel_sym) with P y. dis x.2 comes
-       from dis_rel_dis2. This is exactly why the old eqpair_P used a vacuous
-       witness instead. ***
-   Arguments eqpair_dom {V I} VRel IRel P Hclo.  -- so all uses are positional.
-   NOTE: rel/dis fields are INDEPENDENT of Hclo, so two eqpair_dom with different
-   Hclo proofs are CONVERTIBLE for NI purposes (apply/eapply unify them fine).
+  - Description:
+    We are proving non-interference of a model of how interrupts should be handled
+    by an OS in order not to leak when secret input (disk interrupt) is received.
 
-2. Helpers:
-   insert_oversize (A) a t n : size t < n -> insert n a t = t.   (elim t; destruct n)
-   lthread_insert_rel : n <= size T -> lthread VRel f g l v (insert n (inl(w,i)) T)
-        -> exists v', rel VRel l w (f i v').   (present-case extractor; elim n,
-        generalize T v; head case gives the rel directly, recurse on tail state)
-   projIl_size / projOl_size : size (projIl/projOl T) = size T.
+  - Compositional Proof Structure:
+    The proof is done compositionally, using the non-interference theorems for each
+    of the process combinators. Since model' is defined using loop_and_count, the
+    proof must peel off layers of loop_and_count:
+      1. @map (inl / inr_or_def) -> apply map_NI
+      2. @loop -> apply loop_NI
+      3. @map (id / snd) -> apply map_NI
+      4. @sta -> apply sta_NI (or sta_NI')
+      5. @map -> apply map_NI
+      6. Process pool -> prove NI for my_process_pool.
 
-3. Pf (V I) f vi := exists v', f (snd vi) v' = fst vi.   (kept; the sta-side predicate)
-
-4. sta_conv'  -- same as library sta_conv but over (eqpair_dom VRel IRel (Pf f) Hclo);
-   takes Hclo as an explicit param. Only diff from the eqpair_P version: input-case
-   rel witness is "left. split;[apply Hw|apply rel_refl]" (was "left. left.").
-
-5. sta_NI' : forall ... (Hclo : <Pf f closure>),
-       fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
-       NI (eqpair_dom VRel IRel (Pf f) Hclo) ORel p ->
-       NI IRel (eqpair VRel ORel) (sta f g v p).
-   *** Hclo is a GENUINE separate side-condition the caller discharges; fv_NI f
-       does NOT imply it. This is the real weakening over the original sta_NI. ***
-   Clause 1 (rel): unchanged shape; rel left branch ("left; split;[rel_refl|Hii]").
-   Clauses 2 & 3: CASE-SPLIT on (leqP n (size T)):
-     - present (n<=size): get Pf f (w,i) via lthread_insert_rel + Hclo
-       (Hclo l (f i v',i) (w,i) [rel_sym Hr] [rel_refl] [exists v']), then feed the
-       eqpair_dom dis = (dis IRel l i /\ Pf f (w,i)) to p's clause 2/3.
-     - absent (n>size): insert is a no-op (insert_oversize + projIl_size/projOl_size),
-       so the inserted/removed element isn't really there — short-circuit straight to
-       sta_conv' (clause 2) or to the already-equal Htp (clause 3). A bare
-       "lthread ... -> Pf f (w,i)" helper would be FALSE here, which is why the
-       split is necessary.
-   VERIFIED: rocq_assumptions sta_NI' = standard_only (only Eq_rect_eq).
-
-6. aware_false_closure {I} IRel {BRel} (Haware : forall l, aware BRel true l)
-       : forall l (x y:[Times Bool I]), rel BRel l x.1 y.1 -> rel IRel l x.2 y.2
-         -> x.1=false -> y.1=false.
-   Proof: if y.1=true then rel BRel l false true, rel_sym, aware true gives
-   true=false, discriminate. This IS the Hclo for eqpair_dom with P=(bi.1=false).
-
-7. eqpair_dom_f_NI / eqpair_dom_f_PU  (the map-congruence keystone):
-   given f_NI VRel BRel h and (forall x, P x -> Q (h x.1, x.2)), the value map
-   (fun x => (h x.1, x.2)) is f_NI / f_PU from (eqpair_dom VRel IRel P) to
-   (eqpair_dom BRel IRel Q). This is what lets map_NI carry eqpair_dom VRel I (Pf f)
-   (produced by sta) to eqpair_dom BRel I (bool=false) (consumed by swi).
-
-8. CLEANUP: removed eqpair_P (dead) and the unfinished collapse_test. Kept Pf.
+  - Avoiding Evars (Existentials):
+    Applying these combinator theorems using `eapply` introduces many evars (existential
+    variables) which are extremely hard to keep track of and can cause unification
+    issues.
+    * Guideline: Try avoiding introducing existentials. Instead, use `apply` with
+      specialized lemmas or explicitly instantiate the relations and functions
+      where applicable.
+    * When in doubt about a structure instantiation (for example, in the application
+      of the map_NI theorem), ask the user for guidance!
 
 --------------------------------------------------------------------------------
- REMAINING WORK  --  swi_NI' (the ONLY Admitted lemma)
+ RECENTLY COMPLETED WORK (fully proved and verified)
 --------------------------------------------------------------------------------
-  Statement (type-checked, in current.v):
-    swi_NI' : forall (I O) IRel ORel BRel (p:Proc I (Times Bool O)) (b:bool)
-                (Haware : forall l, aware BRel true l),
-      NI IRel (eqpair_R BRel ORel) p ->
-      NI (eqpair_dom BRel IRel (fun bi => bi.1=false) (aware_false_closure IRel Haware))
-         (eqmaybe_swi ORel BRel) (swi b p).
-
-  *** THE BLOCKER (important, not yet resolved): swi_trace and swi_conv are
-  hard-wired to (eqpair_LR BRel ORel) on p's OUTPUT, but this premise gives p's NI
-  at (eqpair_R BRel ORel). eqpair_LR is LEFT(bool)-keyed, eqpair_R is RIGHT(O)-keyed;
-  they are NOT equal and their Traces differ in general. The original library swi_NI
-  (see swi.txt) used (eqpair_LR BRel ORel) for p throughout and went through cleanly.
-  So either:
-    (a) prove a bridge: under TOTAL `aware BRel true` (every level), p's eqpair_R
-        traces and eqpair_LR traces coincide for swi-relevant traces (the bool is
-        never disclosed and only relates to itself, so the LR-disclosed vs
-        R-disclosed branches should collapse) — then convert the premise; OR
-    (b) re-derive eqpair_R-keyed analogs of swi_trace/swi_conv/swi_trace_*.
-  Once the output keying is bridged, the INPUT-side adaptation is mechanical: take
-  the original swi_NI proof (reproduced in swi.txt) and replace the
-  rel_eqpair_LR / dis_eqpair_LR splits on the INPUT (eqpair_LR BRel IRel ->
-  eqpair_dom) with eqpair_dom case-splits (left branch = related; right = both
-  disclosed with bi.1=false from the predicate). The original derives bi=bi' from
-  aware; here dis(eqpair_dom) already carries bi.1=false, which should make the
-  bool-equality step easier, not harder. Note original swi_NI also had an
-  oblivious branch (last +) guarded by classic/aware-or-oblivious; this swi_NI'
-  assumes TOTAL aware, so that branch is gone.
-
-  Suggested next step: state and prove the bridge lemma first, in isolation, e.g.
-    (forall l, aware BRel true l) ->
-    NI IRel (eqpair_R BRel ORel) p -> NI IRel (eqpair_LR BRel ORel) p
-  (or the Trace-level equivalence), then apply the original swi_NI shape.
-
---------------------------------------------------------------------------------
- FULL THEORY GOAL (why all this exists)
---------------------------------------------------------------------------------
-  Compositional NI for sta f g v (map ... (map ... (swi b p))). eqpair_dom is the
-  shared relation shape so the two map layers thread the relation through map_NI
-  with NO re-indexing: sta produces eqpair_dom VRel I (Pf f); eqpair_dom_f_NI/_PU
-  carry it across the maps to eqpair_dom BRel I (bool=false); swi_NI' consumes that.
-  The last missing link in the chain is the swi_NI' proof above.
-
-  Sanity lemmas from earlier investigation (dis_eq/rel_eq/premise_collapses showing
-  eqpair_P over eqpair_R was a no-op) were the MOTIVATION for eqpair_dom and are not
-  needed in the file anymore.
-
-  Plan file: ~/.claude/plans/i-want-you-to-calm-cocke.md
-  Memory:    eqpair-dom-refactor.md ; noninterference-build-and-trace-proofs.md
+  1. swi_trace_insert_conv_false (proved and verified in current.v)
+  2. swi_NI' (proved and verified in current.v):
+     Corrected the premise of swi_NI' from the weaker eqpair_R to the correct/provable
+     eqpair_LR BRel ORel relation, and fully proved all goals.
 ================================================================================
