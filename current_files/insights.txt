@@ -1,196 +1,200 @@
 ================================================================================
-   NONINTERFERENCE OS MODEL — SIMPLIFICATION HANDOFF (state-simplification pass)
+ HANDOFF: eqpair_dom refactor in current.v  (session 2026-06-25)
 ================================================================================
 
->>> NEXT: ISRs-cooperative + NON-cooperative users, restore `active`. The current
->>> `my_f_coopt := fun _ => true` wrongly makes user processes (low_p/high_p)
->>> cooperative (they self-yield every cycle instead of running until the timer
->>> preempts). Fix: my_f_coopt n := (n==1)||(n==4) (only handler/scheduler), bring
->>> back the `active` register and switch = if target==active then (0,0) else
->>> (active,target) -- BUT don't toggle off a self-disabling ISR (the double-toggle
->>> bug), and do toggle users off/on under the 1-cycle swi lag. Then re-derive +
->>> Qed the 8 traces.
-
-
-This session SIMPLIFIED current.v per the user's request ("state too complicated;
-the scheduler IS the mitigator; received-vs-pending distinction is inessential").
-Below: what changed, current build status, the trace-derivation methodology that
-WORKS, the confirmed trace prefix, and the remaining work.
+ONE-LINE STATUS
+  Plan "Replace eqpair_P with eqpair_dom" is fully implemented and COMPILES
+  end-to-end. Everything is Qed EXCEPT one lemma, swi_NI', which is Admitted
+  (statement type-checked & landed; proof deferred — see "REMAINING WORK").
 
 --------------------------------------------------------------------------------
-0. CURRENT BUILD STATUS
+ BUILD / ITERATION  (unchanged, repeated here for convenience)
 --------------------------------------------------------------------------------
-- current.v COMPILES (rocq_compile_file succeeds) with all 8 trace lemmas stubbed
-  `Proof. Admitted.`  A fresh current.vo is on disk.
-- The MODEL section (everything before the trace lemmas) type-checks under the new
-  design below. Phases A, B, C of the plan are DONE.
-- REMAINING (Phase D): re-derive the 8 traces for the new dynamics and prove them
-  to Qed (remove the Admitteds). This is the only thing left.
+  Project dir (the workspace, has _CoqProject = "-Q . NonInterference -I .."):
+    ~/Library/CloudStorage/OneDrive-ITU/Desktop/NonInterference
+  Target file: current_files/current.v  (module NonInterference.current_files.current)
+  Toolchain: opam switch 5.4.0 (binaries NOT on PATH by default):
+    export PATH="$HOME/.opam/5.4.0/bin:$PATH"; eval $(opam env --switch=5.4.0)
 
-The 8 lemmas (all currently Admitted):
-  newtrace'_trace, newtrace_trace, newtrace_no_disk_trace,
-  newtrace_no_disk_wrap_trace, badtrace'_trace, badtrace_no_disk'_trace,
-  badtrace_trace, badtrace_no_disk_wrap_trace.
-Their trace VALUES (newtrace', newtrace_wrap, badtrace', ...) still hold the OLD
-sequences and MUST be rewritten to the newly-derived ones.
+  PREFERRED: drive everything through the rocq MCP.
+    - Full compile (~slow, heavy mathcomp/paco/deriving/equations):
+        rocq_compile_file(file="current_files/current.v",
+                          workspace=<NonInterference dir>, timeout=420)
+    - Interactive development: rocq_start(file="current_files/current.v",
+        theorem=<lemma name>, force_restart=true) then rocq_check(body="...").
+    - WORKFLOW THAT WORKED THIS SESSION: write each new lemma into current.v
+      with a "Proof. admit. Admitted." (or "all: admit. Admitted." for refine
+      Definitions), then rocq_start at that lemma name, develop the body with
+      rocq_check, and once proof_finished paste the proof_tactics back into the
+      file replacing the admit. The file must PARSE for rocq_start to find the
+      lemma, so keep placeholders syntactically valid.
+    - rocq_assumptions(name=..., file=..., workspace=...) to confirm no admits
+      leak: "standard_only" verdict + only Eq_rect_eq is the expected/clean
+      result (Eq_rect_eq comes from dependent elimination in the imports).
 
---------------------------------------------------------------------------------
-1. WHAT THE REDESIGN CHANGED (all applied, type-checks)
---------------------------------------------------------------------------------
-(a) Dead code removed: inl_some/inr_some/option_inl_some/inr_inl_some/
-    inr_inr_some/is_none/is_some/some_inl/sum_N/map_option/map_sum, and
-    clear_interrupts (also removed from the model.rewr unfold list).
-
-(b) Vestigial leading Nat dropped:  my_T_in' := times_Option_n 3 my_f_I  (was
-    Times Nat (...)). Deleted my_f_in_sch_good; my_f_in_good := my_f_in_t;
-    my_f_route_good no longer emits a leading 0. my_T_out' UNCHANGED, so the
-    output relation towers / out0..out3 helpers are unchanged.
-
-(c) SCHEDULER = MITIGATOR.  mk_scheduler (mitigate : bool) outputs
-    (next_user, mitigate). The bit is the mitigator's control decision:
-      good_schedulerp := mk_scheduler true   (mask + drain disk at every timer)
-      bad_schedulerp  := mk_scheduler false  (no mask, let disk preempt = leak)
-    NOTE the polarity FLIPPED vs the old handle_disk (old good=false).
-
-(d) V_state simplified 8 -> 5 fields, NO received pair, NO active register:
-      V_state := Times (Times Bool Bool) (Times Nat (Times Bool Bool)).
-      ((timer_pending, disk_pending), (p_sched, (handler_queued, masked)))
-      v_state_init := ((false,false),(2,(false,false))).
-    f_state: latch pending directly (two ORs). g_state: pure mechanism, applies
-    the mitigate bit (scheduler branch sets masked:=mitigate, handler_queued:=
-    mitigate; handler branch clears; user branch sets handler_queued:=
-    disk_pending && ~~masked = the leak). override: target = timer?4 : hq?1 :
-    p_sched.
-
-(e) KEY FIX — ALL PROCESSES COOPERATIVE:  my_f_coopt (n:nat):bool := true.
-    WHY: the swi switch has a ONE-CYCLE PIPELINE LAG (override emits the toggle on
-    the feedback/input phase; it only affects the NEXT cycle's output). The old
-    received->pending double-buffer was SECRETLY compensating that lag to keep
-    exactly one process firing per cycle. Collapsing it (step (d)) broke
-    serialization: the scheduler fired two cycles in a row (output had TWO active
-    slots). Making every process cooperative makes each self-disable after one
-    output, so override only ever turns the target ON:  switch := (0, target)
-    (index 0 matches no process). This guarantees serialization AND let us delete
-    the `active` register. VERIFIED: outputs are now single-slot (see section 3).
+  CAUTION: rocq_start reads the file at start time; after you Edit current.v,
+  the open session is STALE — restart with force_restart=true.
 
 --------------------------------------------------------------------------------
-2. TRACE-DERIVATION METHODOLOGY THAT WORKS (rocq-mcp)  -- use this for Phase D
+ KEY DEFINITIONS / LEMMAS from NonInterference.theorems & model (verified types)
 --------------------------------------------------------------------------------
-Interactive session:
-  rocq_start(workspace=<NonInterference dir>, file="current_files/current.v",
-             theorem="newtrace'_trace", force_restart=true)
-  Then in rocq_check from that state:
-    Abort.
-    Notation REL := (eqpair_LR (eqmaybe (publicRel (Times Nat Bool)))
-                      (eqpair_LR (eqmaybe (publicRel TPublicOutput))
-                         (eqpair_LR (eqmaybe (semiprivateRel TTypeSyscall))
-                             (eqmaybe (semiprivateRel THandlerOutput))))).
-    Goal Trace REL false [:: inl (my_f_in_good (inr TimerInterrupt));
-         inr <guess>; inr <guess>; ... ] my_only_loop_good'.
-  (Requiring the precompiled module does NOT expose its names in a fresh session;
-   start INSIDE current.v at a theorem instead, then Abort and state your Goal.)
+  myrel A = record { dis : level->A->Prop;  rel : level->A->A->Prop;
+                     + 3 laws: equiv(rel l) ; order-monotone rel ; order-monotone
+                     dis ; and dis l a0 -> (dis l a1 <-> rel l a0 a1) }.
+  Build with refine (@MyRel _ dis rel _ _ _ _).  ssreflect: fst=.1, snd=.2.
 
-Per-step cadence (CRITICAL — the blanket `do ? (...)` and a second reduce_tac
-BOTH cascade through the whole trace and TIME OUT; do single steps):
-  OUTPUT step:  econ. reduce_tac.
-                match goal with |- rel _ _ ?a _ => idtac a end.   (* prints output *)
-                ssa.                          (* discharges rel WITHOUT cascading *)
-  INPUT step:   econ. reduce_tac.
+  rel_refl/sym/trans, dis_rel_dis (dis x -> rel x y -> dis y),
+  dis_rel_dis2 (dis x -> rel y x -> dis y),
+  myrel_rule1 (order l0 l1 -> rel l1 -> rel l0),
+  myrel_rule2 (order l0 l1 -> dis l1 -> dis l0).
 
-- Provide CONCRETE output guesses; `_`/evar holes do NOT unify through .1/.2.2.2
-  projections, so they leave unsolved `match ?o.1 with ...` goals. With a concrete
-  guess the idtac still prints the COMPUTED value before ssa, so a single run
-  reveals every correct step plus the first divergence (where ssa fails).
-- Mentally reduce noise in printed outputs: `if true then 3 else 2` = 3;
-  `match inr (true, tt) with inr (true,_) => Notify | _ => Nothing` = Notify.
+  eqpair_R I O IRel ORel : myrel [Times I O]  -- RIGHT-keyed disclosure:
+     rel = (rel IRel x.1 y.1 /\ rel ORel x.2 y.2) \/ (dis ORel x.2 /\ dis ORel y.2)
+     dis = dis ORel x.2
+  eqpair_LR : LEFT-keyed (dis ARel x.1).  rel_eqpair_LR / dis_eqpair_LR split them.
+  eqpair I O : the "both must be related" pair (no disclosed branch) -- sta output.
 
-SLOT MAP (output tuple position is REVERSED from pool index!):
-  out0 = scheduler (Times Nat Bool, pos0 = my_f_O 3)
-  out1 = low_p     (TPublicOutput,  pos1 = my_f_O 2)  -- the PUBLIC process
-  out2 = high_p    (TTypeSyscall,   pos2 = my_f_O 1)
-  out3 = handler   (THandlerOutput, pos3 = my_f_O 0)
-Switch/target indices (override): handler=1, high_p=2, low_p=3, scheduler=4.
-Scheduler cursor: init false; reduce_staO pairs the ALREADY-advanced cursor, so
-first scheduled user = 3 (low_p), then 2 (high_p), alternating.
+  NI IRel ORel p = forall l, NI_l ... ; NI_l has 3 clauses:
+    (1 rel)    rel IRel l i i' -> Trace(insert n (inl i) t) -> Trace(insert n (inl i') t)
+    (2 insert) dis IRel l i    -> Trace t                   -> Trace(insert n (inl i) t)
+    (3 remove) dis IRel l i    -> Trace(insert n (inl i) t) -> Trace t
+  NI_reduceI / NI_reduceO peel a reduceI/reduceO step off an NI.
 
---------------------------------------------------------------------------------
-3. CONFIRMED GOOD-WITH-DISK PREFIX (new cooperative dynamics, single-slot = good!)
---------------------------------------------------------------------------------
-  step1: inl (my_f_in_good (inr TimerInterrupt))     (input)
-  OUT2 : out0 (3, true)     -- scheduler picks low_p(3), mitigate=true
-  OUT3 : out3 Notify        -- disk handler (masked drain at timer)
-  OUT4 : out1 GetRequest    -- low_p runs
-  OUT5 : out1 GetRequest    -- low_p keeps running
-  ... TO DO: from here inject a disk input, then a timer input, and read the rest
-  (expect: low_p stays public-stable under masking; high_p eventually woken by a
-  routed Notify -> out2 Syscall). Then build the no-disk variant with the SAME
-  inputs except disk->`inl tt`, and confirm the PUBLIC projection (out1 GetRequest
-  positions) is IDENTICAL = the NI witness.
+  insert n a l:  n=0 -> a::l ; (S n') on [] -> [] ; (S n') on a'::l' -> a'::insert n' a l'.
+    *** insert DROPS a when n > size l (out-of-range = no-op). This is the source
+        of the clause-2/3 "wrinkle" below. ***
+  lthread VRel f g l v L: per-element rel chain; for inl wi at the head it gives
+    rel VRel l wi.1 (f wi.2 v) and recurses with state (f wi.2 v).
+  projIl/projOl: map a seq of sums; size-preserving.
+  sta_proj_lthread: Trace(eqpair VRel ORel) of (sta f g v p) <-> exists T,
+     ts=projIl T /\ Trace ORel (projOl T) p /\ lthread ... T.
+  projIl_insert_inv: projIl T = insert n (inl i) t -> exists w T'',
+     T = insert n (inl (w,i)) T'' /\ projIl T''=t.
+  lthread_insert_dis / lthread_remove_dis / lthread_swap / lthread_stable: as named.
 
-Then do the BAD pool (my_only_loop_bad', mk_scheduler false): no masking, so a
-disk pending while a user runs sets handler_queued (preempt) -> the handler steals
-a cycle and SHIFTS low_p's public output. badtrace vs badtrace_no_disk must DIFFER
-at a public (GetRequest) position = the leak.
-
-WRAPPED traces (my_only_loop_good / _bad): outer map my_f_in_good/my_f_out. Per
-old notes the wrapped cadence was: step1 `econ. reduce_tac. reduce_tac. reduce_tac.`;
-output steps `econ. reduce_tac. reduce_tac. simpl. ssa.`; input `econ. reduce_tac.`
--- but RE-CHECK these against the single-step/no-cascade lesson above; prefer the
-read-then-ssa method and adapt.
+  swi I O : bool -> Proc I (Times Bool O) -> Proc (Times Bool I) (Option O).
+  swi_trace: Trace(eqmaybe_swi ORel BRel) (swi b p) -> exists t',
+     Trace (eqpair_LR BRel ORel) l t' p /\ SwiTrace ORel BRel l b t t'.   <-- eqpair_LR!
+  swi_conv: aware BRel true l -> Trace (eqpair_LR BRel ORel) l t_p p ->
+     SwiTrace ... -> Trace(eqmaybe_swi ORel BRel) l t (swi b p).           <-- eqpair_LR!
+  aware BRel v l = forall v', rel BRel l v v' -> v=v' /\ ~ dis BRel l v'.
+  oblivious_NI_l, oblivious_swi (used in original swi_NI's last branch).
+  map_NI: f_NI IRel IRel' f -> f_PU IRel IRel' f -> f_NI ORel ORel' g ->
+          NI IRel' ORel p -> NI IRel ORel' (map f g p).
+  f_NI ARel BRel h = forall l i i', rel ARel l i i' -> rel BRel l (h i)(h i').
+  f_PU ARel BRel h = forall l i,    dis ARel l i    -> dis BRel l (h i).
 
 --------------------------------------------------------------------------------
-4. ACCEPTANCE (user asked for full property check)
+ WHAT WAS BUILT THIS SESSION (all Qed, all in current.v, in file order)
 --------------------------------------------------------------------------------
-- rocq_compile_file current_files/current.v succeeds; all 8 lemmas Qed, no Admitted.
-- GOOD: newtrace_wrap vs newtrace_no_disk_wrap PUBLIC projections IDENTICAL
-  (may differ only in semiprivate Syscall/NOP slots, collapsed by the relation).
-- BAD:  badtrace_wrap vs badtrace_no_disk_wrap DIFFER at a public GetRequest slot.
-- rocq_assumptions on the 8 lemmas: no new axioms beyond theorems.v.
+1. eqpair_dom (V I) VRel IRel P Hclo : myrel [Times V I]
+     Hclo : forall l x y, rel VRel l x.1 y.1 -> rel IRel l x.2 y.2 -> P x -> P y
+     dis l x   := dis IRel l x.2 /\ P x
+     rel l x y := (rel VRel l x.1 y.1 /\ rel IRel l x.2 y.2)
+                  \/ ((dis IRel l x.2 /\ P x) /\ (dis IRel l y.2 /\ P y))
+   *** INSIGHT (the crux): naive dis:=dis/\P breaks TRANSITIVITY. The fix is the
+       closure Hclo: in a mixed rel-trans case (x rel y, y disclosed) you recover
+       P x by applying Hclo to the SYMMETRIC rels (rel_sym) with P y. dis x.2 comes
+       from dis_rel_dis2. This is exactly why the old eqpair_P used a vacuous
+       witness instead. ***
+   Arguments eqpair_dom {V I} VRel IRel P Hclo.  -- so all uses are positional.
+   NOTE: rel/dis fields are INDEPENDENT of Hclo, so two eqpair_dom with different
+   Hclo proofs are CONVERTIBLE for NI purposes (apply/eapply unify them fine).
+
+2. Helpers:
+   insert_oversize (A) a t n : size t < n -> insert n a t = t.   (elim t; destruct n)
+   lthread_insert_rel : n <= size T -> lthread VRel f g l v (insert n (inl(w,i)) T)
+        -> exists v', rel VRel l w (f i v').   (present-case extractor; elim n,
+        generalize T v; head case gives the rel directly, recurse on tail state)
+   projIl_size / projOl_size : size (projIl/projOl T) = size T.
+
+3. Pf (V I) f vi := exists v', f (snd vi) v' = fst vi.   (kept; the sta-side predicate)
+
+4. sta_conv'  -- same as library sta_conv but over (eqpair_dom VRel IRel (Pf f) Hclo);
+   takes Hclo as an explicit param. Only diff from the eqpair_P version: input-case
+   rel witness is "left. split;[apply Hw|apply rel_refl]" (was "left. left.").
+
+5. sta_NI' : forall ... (Hclo : <Pf f closure>),
+       fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
+       NI (eqpair_dom VRel IRel (Pf f) Hclo) ORel p ->
+       NI IRel (eqpair VRel ORel) (sta f g v p).
+   *** Hclo is a GENUINE separate side-condition the caller discharges; fv_NI f
+       does NOT imply it. This is the real weakening over the original sta_NI. ***
+   Clause 1 (rel): unchanged shape; rel left branch ("left; split;[rel_refl|Hii]").
+   Clauses 2 & 3: CASE-SPLIT on (leqP n (size T)):
+     - present (n<=size): get Pf f (w,i) via lthread_insert_rel + Hclo
+       (Hclo l (f i v',i) (w,i) [rel_sym Hr] [rel_refl] [exists v']), then feed the
+       eqpair_dom dis = (dis IRel l i /\ Pf f (w,i)) to p's clause 2/3.
+     - absent (n>size): insert is a no-op (insert_oversize + projIl_size/projOl_size),
+       so the inserted/removed element isn't really there — short-circuit straight to
+       sta_conv' (clause 2) or to the already-equal Htp (clause 3). A bare
+       "lthread ... -> Pf f (w,i)" helper would be FALSE here, which is why the
+       split is necessary.
+   VERIFIED: rocq_assumptions sta_NI' = standard_only (only Eq_rect_eq).
+
+6. aware_false_closure {I} IRel {BRel} (Haware : forall l, aware BRel true l)
+       : forall l (x y:[Times Bool I]), rel BRel l x.1 y.1 -> rel IRel l x.2 y.2
+         -> x.1=false -> y.1=false.
+   Proof: if y.1=true then rel BRel l false true, rel_sym, aware true gives
+   true=false, discriminate. This IS the Hclo for eqpair_dom with P=(bi.1=false).
+
+7. eqpair_dom_f_NI / eqpair_dom_f_PU  (the map-congruence keystone):
+   given f_NI VRel BRel h and (forall x, P x -> Q (h x.1, x.2)), the value map
+   (fun x => (h x.1, x.2)) is f_NI / f_PU from (eqpair_dom VRel IRel P) to
+   (eqpair_dom BRel IRel Q). This is what lets map_NI carry eqpair_dom VRel I (Pf f)
+   (produced by sta) to eqpair_dom BRel I (bool=false) (consumed by swi).
+
+8. CLEANUP: removed eqpair_P (dead) and the unfinished collapse_test. Kept Pf.
 
 --------------------------------------------------------------------------------
-5. BUILD / ITERATION
+ REMAINING WORK  --  swi_NI' (the ONLY Admitted lemma)
 --------------------------------------------------------------------------------
-Use rocq-mcp (the user asked to use it, not raw coqc/bash):
-  rocq_compile_file(file="current_files/current.v", workspace=<NonInterference dir>,
-                    timeout=420)  -- full build ~3 min.
-  rocq_start / rocq_check as in section 2 for interactive derivation.
-Reference (read-only): model.v (Proc@183, reduceI@210, reduceO@225, Trace@253,
-NI@277, swi semantics, reduce_once@1019, swi_instans@1012, controlled_eauto@1073,
-reduce_tac@1081), theorems.v (the *_NI lemmas), willard_gist.txt (leak motivation).
-current.v overrides model.rewr/reduce_tac near the trace section (~line 436) --
-keep them in sync with def names (already updated: my_f_in_sch_good and
-clear_interrupts removed from the unfold list).
+  Statement (type-checked, in current.v):
+    swi_NI' : forall (I O) IRel ORel BRel (p:Proc I (Times Bool O)) (b:bool)
+                (Haware : forall l, aware BRel true l),
+      NI IRel (eqpair_R BRel ORel) p ->
+      NI (eqpair_dom BRel IRel (fun bi => bi.1=false) (aware_false_closure IRel Haware))
+         (eqmaybe_swi ORel BRel) (swi b p).
+
+  *** THE BLOCKER (important, not yet resolved): swi_trace and swi_conv are
+  hard-wired to (eqpair_LR BRel ORel) on p's OUTPUT, but this premise gives p's NI
+  at (eqpair_R BRel ORel). eqpair_LR is LEFT(bool)-keyed, eqpair_R is RIGHT(O)-keyed;
+  they are NOT equal and their Traces differ in general. The original library swi_NI
+  (see swi.txt) used (eqpair_LR BRel ORel) for p throughout and went through cleanly.
+  So either:
+    (a) prove a bridge: under TOTAL `aware BRel true` (every level), p's eqpair_R
+        traces and eqpair_LR traces coincide for swi-relevant traces (the bool is
+        never disclosed and only relates to itself, so the LR-disclosed vs
+        R-disclosed branches should collapse) — then convert the premise; OR
+    (b) re-derive eqpair_R-keyed analogs of swi_trace/swi_conv/swi_trace_*.
+  Once the output keying is bridged, the INPUT-side adaptation is mechanical: take
+  the original swi_NI proof (reproduced in swi.txt) and replace the
+  rel_eqpair_LR / dis_eqpair_LR splits on the INPUT (eqpair_LR BRel IRel ->
+  eqpair_dom) with eqpair_dom case-splits (left branch = related; right = both
+  disclosed with bi.1=false from the predicate). The original derives bi=bi' from
+  aware; here dis(eqpair_dom) already carries bi.1=false, which should make the
+  bool-equality step easier, not harder. Note original swi_NI also had an
+  oblivious branch (last +) guarded by classic/aware-or-oblivious; this swi_NI'
+  assumes TOTAL aware, so that branch is gone.
+
+  Suggested next step: state and prove the bridge lemma first, in isolation, e.g.
+    (forall l, aware BRel true l) ->
+    NI IRel (eqpair_R BRel ORel) p -> NI IRel (eqpair_LR BRel ORel) p
+  (or the Trace-level equivalence), then apply the original swi_NI shape.
 
 --------------------------------------------------------------------------------
-6. OPTIONAL FOLLOW-UPS (not required)
+ FULL THEORY GOAL (why all this exists)
 --------------------------------------------------------------------------------
-- Inline alternate_generic/alternate_generic2 as direct 1-bit sta; replace the
-  generic scheduled_process_pool 3 with a concrete named pool.
-- The real prize: prove NI ... my_only_loop_good from the *_NI theorems, and the
-  NotSim counterexample for the bad pool.
+  Compositional NI for sta f g v (map ... (map ... (swi b p))). eqpair_dom is the
+  shared relation shape so the two map layers thread the relation through map_NI
+  with NO re-indexing: sta produces eqpair_dom VRel I (Pf f); eqpair_dom_f_NI/_PU
+  carry it across the maps to eqpair_dom BRel I (bool=false); swi_NI' consumes that.
+  The last missing link in the chain is the swi_NI' proof above.
+
+  Sanity lemmas from earlier investigation (dis_eq/rel_eq/premise_collapses showing
+  eqpair_P over eqpair_R was a no-op) were the MOTIVATION for eqpair_dom and are not
+  needed in the file anymore.
+
+  Plan file: ~/.claude/plans/i-want-you-to-calm-cocke.md
+  Memory:    eqpair-dom-refactor.md ; noninterference-build-and-trace-proofs.md
 ================================================================================
-7. WHY NON-COOPERATIVE SEMANTICS BREAK THE MODEL (June 24 Update)
---------------------------------------------------------------------------------
-Attempting to make processes non-cooperative (where `my_f_coopt` = false, and the
-override must explicitly send `true` to the old process to turn it off) breaks
-`model.v` at a fundamental mathematical level:
-
-In `model.v`, `reduceO` semantics explicitly forbid a `swi true` process from 
-outputting `None` (`reduce_swiO` ONLY matches `swi false`). 
-In our non-cooperative pipeline, because of the 1-cycle lag in the override 
-mechanism, there is exactly one cycle where BOTH the old process (which just 
-received `true` to turn off) and the new process (which just received `true` to 
-turn on) are `swi true`. 
-
-Since `model.v` forces any `swi true` process to output `Some o`, BOTH processes
-attempt to output in the same cycle. This creates a bus collision in the 
-`my_f_route_good` priority encoder, silently dropping the output of the 
-lower-priority process. This violates the `Trace` structure (which expects single, 
-sequential outputs like `out2 NOP` or `out0 (1, false)`) and causes the trace
-derivation to fail completely with unification errors.
-
-The solution is the one identified in Section 1(e): `my_f_coopt n := true`.
-By making processes cooperative, they self-disable after one cycle, preventing 
-overlap. The scheduler provides a continuous "level-triggered" enable by sending
-`true` ONLY to the target process every cycle, naturally recreating continuous 
-execution without pipeline collisions.
