@@ -13,7 +13,7 @@ In the former scenario the pool was cooperative, returning control to the schedu
 
 If we want a realistic process trace, the model itself becomes less realistic because the scheduler is an interchangable lambda rather than an interchangable process.
 
-The lambda approach has an issue, but this one seems solvable.
+The lambda approach itself also has an issue, but this one seems solvable.
 In this design we have a sta around the process pool that introduces the state of which process is currently running.
 
 If our model was of the form sta f g v p and we try to show it is NI.
@@ -25,29 +25,20 @@ NI (eqpair_R VRel IRel) ORel p   ....(other assumptions)....
 NI IRel (eqpair VRel ORel) (sta f g v p)
 
 For NI of p to hold, output may not visibly change when we insert into a trace input (v,I) where I is distinguished.
-This is too strong. Ideally if I is distinguished (disk interrupt), the accompanying v should not be affecting the schedule, while if it public (timer interrupt) it should.
-We have a dependence between I and v and I think it can be expressed as introducing a new relation combinator eqpair_P VRel IRel, where (v,I) is distinguished if P (v,I) which we define as I distinguished /\ exists v', f I v' = v. If f maps state to neutral state values whenever I is distinguished, we avoid having to reason about problematic state input to p.
+This is too strong and our model will not satisfy it. Some state inputs to p can and should alter public output since state controls the schedule. To be non interferring the model must be implemented such that if I is distinguished (disk interrupt), the accompanying v in the input (v,I) to p should not be affecting this schedule. If I is not distinguished, then inputting (v,I) to p may affect later output.
+We have a dependence between I and v that cannot be expressed by existing eqpair relation combinators.
 
-We will also need a new swi theorem that assumes BRel distinguishes only false.
+I think it can be expressed as introducing a new relation combinator eqpair_P VRel IRel, where (v,I) is distinguished if P (v,I) which we set P(v,I) := I distinguished /\ (exists v', f I v' = v). If f maps state to neutral state values (those that do not visibly alter output) whenever I is distinguished, we avoid having to reason about problematic state input to p.
 
+NI (eqpair_P VRel IRel) ORel p   ....(other assumptions)....
+-------------
+NI IRel (eqpair VRel ORel) (sta f g v p)
 
+Continuing, this dependence between (v,I) means that when v is later translated to a boolean it will only be true (thus having an effect) if I is not distinugished. We can therefore extend the idea to the swi theorem. This is necessary because the existing swi theorem has a conclusion with an input relation built with eqpair_LR BRel IRel, but during our proof we arrive at an obligation of the form eqpair_P VRel IRel.
 
-
-
-
-
-
-
-
-Not essential. swi theorem details...
-
-Assuming we found a way to address this with some sigma type on V, we would be left with showing NI of p with input relation eqpair_R VRel IRel, where VRel has empty distinugished set. When we later reach the switch and have mapped the state to a boolean value b we run into a problem. to use the swi theoerm the input relation must be eqpair_LR BRel IRel, but that is too weak because after we map from from VRel to BRel, we have must show NI with input rel eqpair_R BRel IRel. This can only be reduced to eqpair_LR BRel IRel if both true and false are distinugished for labels, which would force the None output of swi to be distinguished, something we don't want because (Some x,None,None) vs (None,Some x,None) is output determined from the public schedule saved in our state.
-
-More precisely the issue with trying to save the swi theorem by forcing true and false in BRel to both be distinguished, is that it prevents us from defining the output relation of the process pool in a way that reflects that which process is scheduled is public knowledge.
-This can be seen by having the output relation with carrier, (option scheduler_out, option handler_out, option public_out, option private_out), be (a,b,c,d) R (a',b',c',d') iff a ARel a',... d DRel d'. With ARel = eqmaybe (public scheduler_out) meaning a ARel a' iff a = a', whereas BRel = eqmaybe (private handler_out), meaning (Some bval) BRel (Some bval') iff bval = bval' \/ bval and bval' distinguished.
-
-
-
+(forall l, aware BRel true l) 	    NI IRel (eqpair_R BRel ORel) p
+------------------------------------------------------------------ (P (b,I) := I distinguished /\ b = false)
+NI (eqpair_P BRel IRel) (eqmaybe ORel) (swi b p)
 
 
 

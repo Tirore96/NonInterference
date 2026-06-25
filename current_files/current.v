@@ -113,8 +113,14 @@ Defined.
 
 Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x' else def.
 
-Definition nbstate := Times Bool (Times Bool Bool).
-Definition b_to_n (bb : [Times Bool Bool]) := 
+Definition nbstate := Times (Times Bool Bool) (Times Nat Nat). (*((b1,b2),(turn_on,turn_off)*)
+(*b1,b2 = state
+  FF = handler from public
+  FT = handler from private
+  TF = public
+  TT ) private
+ *)
+      
 Definition loop_and_count
   (T_in T_in' T_out' : Ty)                
   (f_I : [Sum T_in T_out'] -> [nbstate] -> [nbstate])
@@ -128,13 +134,13 @@ Definition loop_and_count
                           (@loop (Sum T_in T_out')
                              (@map _ _ (Times _ _) _
                                 id snd
-                                (@sta _ _ nbstate f_I (fun _ v => v) (false,(true,true))
+                                (@sta _ _ nbstate f_I (fun _ v => v) ((true,true),(3,3))
                                    (@map (Times nbstate (Sum _ _ ))
                                       (Times (Times Nat Nat) T_in')
                                 _ (Sum _ _)
                                 (fun i  =>
                                    match snd i with
-                                   | inl i' => let nn := if fst (fst i) then snd (fst i) else (,3) in (nn,f_map i')
+                                   | inl i' => (snd (fst i),f_map i')
                                    | inr o  => ((3,3),f_route o) (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
                                    end) inr
                                 p))))).
@@ -162,10 +168,26 @@ Definition my_T_out := Option (Sum TPublicOutput TTypeSyscall).
 Definition my_T_in' := times_Option_n 2 my_f_I.
 Definition my_T_out' := times_Option_n 2 my_f_O.
 
+Definition h_pub := (false,false).
+Definition h_pr := (false,true).
+Definition pub := (true,false).
+Definition pr := (true,true).
+Print my_T_in.
 Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
-  match i with
-  | inl (inl TimerInterrupt) => if
-        
+  match fst v,i with
+  | (false,false), inr _ => (pr,(1,1))
+  | (false,false), inl _ => (h_pub,(3,3))                            
+  | (false,true), inr _ => (pub,(2,2))
+  | (false,true), inl _ => (h_pr,(3,3))
+  | (true,false), inr _ => (pub,(3,3))
+  | (true,false), inl (inr DiskInterrupt) => (h_pub,(0,2))
+  | (true,false), inl (inr TimerInterrupt) => (pr,(1,2))                                      
+  | (true,true), inr _ => (pr,(3,3))
+  | (true,true), inl (inr DiskInterrupt) => (h_pr,(0,1))
+  | (true,true), inl (inr TimerInterrupt) => (pub,(2,1))
+  | bb,_ => (bb,(3,3))                                             
+  end.
+
 Definition model := loop_and_count my_T_in my_T_in' my_T_out' 
 
 
