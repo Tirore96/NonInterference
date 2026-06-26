@@ -1,0 +1,61 @@
+================================================================================
+ ANALYSIS: Why the premises of sta_NI' are mutually exclusive for non-surjective f
+================================================================================
+
+1. THE SYSTEM OF CONSTRAINTS
+To apply the lemma `sta_NI'`, we must supply an input relation `IRel`, a state
+relation `VRel`, a transition function `f`, and prove two premises:
+
+  a) f_EP (Exposed/Disclosed Preservation):
+     forall l i, dis IRel l i -> forall v, rel VRel l (f i v) v
+
+  b) Hclo (Closure):
+     forall l x y, rel VRel l x.1 y.1 -> rel IRel l x.2 y.2 -> Pf f x -> Pf f y
+
+Where:
+  - `Pf f x` is `exists v', f x.2 v' = x.1` (i.e., state `x.1` is in the image of `f x.2`).
+  - `dis IRel l i` means input `i` is distinguished/disclosed at level `l`.
+
+2. THE GENERAL PROOF OF CONTRADICTION
+Let `i` be a distinguished input at level `l` (i.e., `dis IRel l i` holds).
+Assume `f i` is a non-surjective transition function on the state space `V`.
+
+Since `f i` is not surjective, we can choose:
+  - An "out-of-image" state: `s_out` such that for all `v`, `f i v <> s_out`.
+  - An "in-image" state: `s_in = f i s_out`.
+
+Let's evaluate the two premises under these states:
+
+- By `f_EP` (with `v = s_out`):
+  `rel VRel l (f i s_out) s_out`
+  which simplifies to:
+  `rel VRel l s_in s_out`  (Constraint 1)
+  *(This forces the state relation VRel to relate an in-image state to an out-of-image state).*
+
+- By `Hclo` (with `x = (s_in, i)` and `y = (s_out, i)`):
+  `rel VRel l s_in s_out -> rel IRel l i i -> Pf f (s_in, i) -> Pf f (s_out, i)`
+
+Evaluating the conditions of `Hclo`:
+  1. `rel VRel l s_in s_out` holds by Constraint 1.
+  2. `rel IRel l i i` holds by the reflexivity of `IRel`.
+  3. `Pf f (s_in, i)` holds since `s_in = f i s_out` is in the image.
+
+Therefore, `Hclo` forces:
+  `Pf f (s_out, i)`
+  which means there must exist some `v'` such that `f i v' = s_out`.
+  This directly contradicts our choice of `s_out` as an out-of-image state.
+
+3. APPLICATION TO good_schedule
+In the scheduler model wrapper:
+  - `i = inl (inr DiskInterrupt)` is distinguished at `l = \bot`.
+  - `good_schedule (inl (inr DiskInterrupt)) v` always transitions the state to have
+    the state bit set to `true`. Thus, any state with the state bit set to `false`
+    (e.g., `s_out = (h_pub, false)`) is outside the image of the transition.
+  - Choosing `s_out = (h_pub, false)` and `s_in = (h_pub, true)` reproduces the exact
+    contradiction above.
+
+4. CONCLUSION
+`sta_NI'` is mathematically incompatible with any transition function that is not
+surjective on a public/disclosed input. To prove non-interference for such models,
+one must instead use `sta_NI` (which does not restrict the inner process's state
+domain via `Pf`).
