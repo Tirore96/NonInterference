@@ -30,8 +30,9 @@ Defined.
 
 Definition input_rel' := eqsum_R (publicRel Unit) interrupt_rel.
 
+Definition bstate_rel : myrel [bstate] := eqpair (eqpair (publicRel _) (publicRel _)) (semiprivateRel _).
 Lemma good_schedule_Hclo : forall (l : level) (x y : [bstate] * [Sum my_T_in my_T_out']),
-  rel (semiprivateRel bstate) l x.1 y.1 ->
+  rel bstate_rel l x.1 y.1 ->
   rel (eqsum_LR input_rel' output_rel') l x.2 y.2 ->
   Pf good_schedule x -> Pf good_schedule y.
 Proof.

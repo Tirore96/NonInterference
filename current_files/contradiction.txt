@@ -54,8 +54,59 @@ In the scheduler model wrapper:
   - Choosing `s_out = (h_pub, false)` and `s_in = (h_pub, true)` reproduces the exact
     contradiction above.
 
-4. CONCLUSION
+4. CONCLUSION (for the choice P = Pf = image(f))
 `sta_NI'` is mathematically incompatible with any transition function that is not
-surjective on a public/disclosed input. To prove non-interference for such models,
-one must instead use `sta_NI` (which does not restrict the inner process's state
-domain via `Pf`).
+surjective on a public/disclosed input, *when the restricting predicate is
+P = image(f)*. To prove non-interference for such models, one must NOT restrict the
+inner process's state domain via `Pf` specifically.
+
+================================================================================
+ CORRECTION / RESOLUTION: the contradiction is an artifact of P = image(f)
+================================================================================
+
+The contradiction above is NOT fundamental to domain-restriction; it is specific to
+the *too-narrow* predicate P = image(f). The actual invariant satisfied by every
+threaded state in `sta f g v p` is the REACHABILITY set, closed under BOTH updates:
+
+  P_reach w := w = v0  \/  (exists i v', f i v' = w)  \/  (exists o v', g o v' = w)
+
+Key point: the contradiction's witness s_out = (h_pub, false) is out of image(f),
+but it IS in image(g) (it is the post-output / pre-interrupt state). So:
+
+  - f_EP(s_out) still gives  rel VRel l s_in s_out.
+  - Hclo for P_reach then concludes  P_reach s_out  ==  "s_out is reachable",
+    which is TRUE (s_out in image(g)).  No contradiction.
+
+The explosion only happened because Hclo for P=image(f) concluded the FALSE statement
+"s_out in image(f)". With P = P_reach the same step concludes a TRUE statement.
+
+Two adjustments make the relation approach (eqpair_dom) viable again, neither of
+which is self-contradictory:
+
+  (A) Relax f_EP to the reachable domain:
+        dis IRel l i -> P_reach v -> rel VRel l (f i v) v
+      This is all the proof needs: the surgery only applies f_EP at threaded states,
+      which are reachable. The contradiction required f_EP at an UNREACHABLE v, which
+      the relaxed form never asserts.
+
+  (B) Thread the reachability invariant through `lthread` (every threaded state
+      satisfies P_reach). Preserved by construction: v0 in P_reach, and f/g updates
+      land in image(f)/image(g).
+
+Remaining ORDINARY side-conditions (no longer contradictions):
+  - Hclo for P_reach: P_reach must be VRel-closed. Reachability is not automatically
+    closed; if needed take P := VRel-saturation of P_reach (Hclo-true by construction).
+  - Usefulness: the restriction helps p only if the states p actually mishandles lie
+    OUTSIDE that closed P. If a bad state is VRel-related to a reachable one, the
+    saturation pulls it back in and nothing is gained. The real model question is
+    whether p's bad states are VRel-separated from the reachable set.
+
+Subtlety: p only ever RECEIVES image(f) states as inputs, yet lawfulness forces P up
+to the full reachable + saturated set (incl. image(g), v0). So eqpair_dom's predicate
+is slightly larger than "what p is fed"; p's NI obligation then also covers reachable
+image(g) states. Acceptable as long as p is NI on all reachable inputs.
+
+NET: P = image(f) is dead (this file's sections 1-4); P = reachability (saturated),
+with a domain-restricted f_EP and a reachability invariant on lthread, is the
+candidate to pursue. The domain-indexing (NI_dom) route remains a fallback that needs
+no Hclo at all.
