@@ -1,0 +1,16 @@
+So sta_NI' seems to be making sense, but the current good_schedule is actually bad
+
+Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
+  match fst v,i with
+  | (true,false),(inl (inr TimerInterrupt)) => (h_pub,(0,2))                                                 
+  | (true,false),_  => (pub,(3,4))
+  | (false,false), inr _ => (pr,(1,1))
+  | (false,false), _ => (pr,(3,5))
+  | (true,true), (inl (inr TimterInterrupt)) => (h_pr,(0,1))
+  | (true,true), _ => (pr,(3,6))
+  | (false,true), inr _ => (pub,(2,2))
+  | bb,_ => (bb,(3,3))
+end.
+
+It does not visibly affect output based on receiving disk interrupts, but it allows the potential for it since it changes state of the natural numbers to the high values that prevent the switches in the pool to be affected. The intention is that it has no public effect, but it is still information leak. Being compositional, we have to prevent this information leak at the border of the sta combinator. We do this by making the state of the loop_and_count parametric, so that the bad_schedule can continue using the natural numbers. We want it to continnue using it because we by definition of being a bad scheduler not determine its scheduling deterministically, as it will change course based on disk interrupts.
+The good schedulers transitions can uniquly be determined from the current state

@@ -113,6 +113,8 @@ Defined.
 
 Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x' else def.
 
+Definition bstate := Times (Times Bool Bool) Bool. (*((b1,b2),(turn_on,turn_off)*)
+
 Definition nbstate := Times (Times Bool Bool) (Times Nat Nat). (*((b1,b2),(turn_on,turn_off)*)
 (*b1,b2 = state
   FF = handler from public
@@ -122,9 +124,11 @@ Definition nbstate := Times (Times Bool Bool) (Times Nat Nat). (*((b1,b2),(turn_
  *)
       
 Definition loop_and_count
-  (state : [nbstate])           
+  (stateType : Ty)           
+  (state : [stateType])
+  (to_nats : [stateType] -> nat * nat)
   (T_in T_in' T_out T_out' : Ty)                
-  (f_I : [Sum T_in T_out'] -> [nbstate] -> [nbstate])
+  (f_I : [Sum T_in T_out'] -> [stateType] -> [stateType])
   (f_route : [T_out'] -> [T_in'])
   (def : [T_out'])
   (p : Proc (Times (Times Nat Nat) T_in') T_out')
@@ -134,14 +138,14 @@ Definition loop_and_count
                           (@loop (Sum T_in T_out')
                              (@map _ _ (Times _ _) _
                                 id snd
-                                (@sta _ _ nbstate f_I (fun _ v => v) state
-                                   (@map (Times nbstate (Sum _ _ ))
+                                (@sta _ _ stateType f_I (fun _ v => v) state
+                                   (@map (Times stateType (Sum _ _ ))
                                       (Times (Times Nat Nat) T_in')
                                 _ (Sum _ _)
                                 (fun i  =>
                                    match snd i with
-                                   | inl i' => (snd (fst i),f_in i')
-                                   | inr o  => (snd (fst i),f_route o) (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
+                                   | inl i' => (to_nats (fst i),f_in i')
+                                   | inr o  => (to_nats (fst i),f_route o) (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
                                    end) inr
                                 p))))).
 
@@ -173,7 +177,15 @@ Definition h_pr := (false,true).
 Definition pub := (true,false).
 Definition pr := (true,true).
 
-Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
+Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [bstate]) : [bstate] :=
+  let: (proc_state,flag) := v in
+  if proc_state == pub then match i with | inl (inr TimerInterrupt) => (h_pub,false) | inl (inr DiskInterrupt) => (pub,true) | _ => (pub,true) end
+  else if proc_state == h_pub then match i with | inr _ => (pr,false) | inl (inr DiskInterrupt) => (h_pub,true) | _ => (h_pub,false) end
+  else if proc_state == pr then match i with inl (inr TimerInterrupt) => (h_pr,false) | inl (inr DiskInterrupt) => (pr,true) | _ => (pr,true) end
+  else if proc_state == h_pr then match i with | inr _ => (pub,false) | inl (inr DiskInterrupt) => (h_pr,true)  | _ => (h_pr,false) end
+  else v.
+
+(*Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
   match fst v,i with
   | (true,false),(inl (inr TimerInterrupt)) => (h_pub,(0,2))                                                 
   | (true,false),_  => (pub,(3,4))
@@ -183,7 +195,7 @@ Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstat
   | (true,true), _ => (pr,(3,6))
   | (false,true), inr _ => (pub,(2,2))
   | bb,_ => (bb,(3,3))
-end.               
+end. *)              
 
 Definition bad_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
   match fst v,i with
@@ -230,10 +242,20 @@ Definition f_out_helper (t : [my_T_out]) (h : [THandlerOutput]) : [my_T_out'] :=
   | Some (inr pr) => (None, (Some pr, None))
   | None => (None,(None,Some h))
   end.            
-                                                                   
-Definition model' := @loop_and_count (h_pr,(3,3)) my_T_in my_T_in' my_T_out' my_T_out' good_schedule my_f_route def my_process_pool my_f_in.
+Check loop_and_count.
+Definition to_nats (s : [bstate]) :=
+  let: (proc_state,flag) := s in
+  if flag then (3,3) else
+    match proc_state with
+    | (true,false) => (2,2)
+    | (false,false) => (0,2)
+    | (true,true) => (1,1)
+    | (false,true) => (0,1)                                            
+    end.
+
+Definition model' := @loop_and_count bstate (h_pr,false) to_nats my_T_in my_T_in' my_T_out' my_T_out' good_schedule my_f_route def my_process_pool my_f_in.
 Definition model := @map _ _ _ (Option (Sum TPublicOutput TTypeSyscall)) id my_f_out model'.
-Definition bad_model' := @loop_and_count (h_pr,(3,3)) my_T_in my_T_in' my_T_out' my_T_out' bad_schedule my_f_route def my_process_pool my_f_in.
+Definition bad_model' := @loop_and_count nbstate (h_pr,(3,3)) snd my_T_in my_T_in' my_T_out' my_T_out' bad_schedule my_f_route def my_process_pool my_f_in.
 Definition bad_model := @map _ _ _ (Option (Sum TPublicOutput TTypeSyscall)) id my_f_out bad_model'.
 Definition out0 x : [my_T_out'] := (Some x,(None,(None))).
 Definition out1 x : [my_T_out'] := (None,(Some x,(None))).
