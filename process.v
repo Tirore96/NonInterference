@@ -151,8 +151,127 @@ Definition loop_and_count
 
 
 Definition low_p := @out Unit TPublicOutput GetRequest.
-Definition handler := @alternate_generic TInterrupt THandlerOutput Unit2 Notify Nothing tt.
 Definition high_p := @alternate_generic2 THandlerOutput TTypeSyscall Unit1 Syscall NOP tt (fun i => i == Notify).
+
+(*sta_swi b n f p:
+ (i == n,I') -> enables p
+ (i <> n,I') -> disables p
+ f projects input from pair e.g. f (I1,I2) = I1*)
+Definition sta_swi (I O : Ty) (b : bool) (n : nat) (p : Proc I O) :=
+@map (Times Nat _) (Times Bool _) (Times _ _) _ (fun x => (fst x == n,snd x)) snd
+  (@sta (Times Bool _) _ Bool
+       (fun i v => xor (fst i) v)
+       (fun o v => false)
+       b
+       ( @map (Times Bool (Times Bool _)) (Times Bool _) _ _
+          (fun i => (fst i,snd (snd i)))
+          id
+          (swi b (@map _ _ _ (Times Bool _)
+                    id
+                    (fun o => (false,o))
+                    (p)
+  )))).
+
+Definition test := @map (Times Nat (Sum Unit THandlerOutput)) (Times Nat (Times (Option Unit) (Option THandlerOutput))) _ _ (fun i => if snd i is inr ho then (fst i,(None,Some ho)) else (fst i,(Some tt,None))) id
+                     (par (@map (Times _ (Times _ _)) (Times _ _) _ _ (fun i => (fst i, (fst (snd i)))) id ((sta_swi true 0 (maybe (low_p)))))
+                       (@map (Times _ (Times _ _)) (Times _ _) _ _ (fun i => (fst i, (snd (snd i)))) id ((sta_swi false 1 (maybe (high_p)))))).
+
+Definition intype := Times Nat (Sum Unit THandlerOutput).
+Definition intype' := Times Nat (Times (Option Unit) (Option THandlerOutput)).
+Definition outtype := Times (Option TPublicOutput) (Option TTypeSyscall).
+
+(*
+Say we mapped from unit + handleroutput to intype with handleroutput distinguished
+inl tt -> (Some tt,None)
+inr hl -> (None, Some ho)
+
+We need (None,Some ho) to be distinguished. Compositionally it means that
+Option Unit needs eqmaybe_top _
+while Handleroutput suffices with eqmaybe _
+Thus (None,None) does not become distinguished, so we don't have to reason about it
+
+schedule is public so publicRel for nat
+
+
+(*problem in f_EP, we update v to xor v b for any b
+ and since state is supposed to be public we cannot opt for the naive solution of making everything distinguished
+(what would the problem of that be however? It makes bool rel private as well, which forces us to use oblivious, inconsistent with public output) 
+So we need to keep the distinguished set that enters public process empty, so from eqmaybe_top to eqmaybe.
+What does that mean for the tuple?
+replace eqpair_LR with eqpair_R
+it increases set of distinguished pairs, everything is if handleroutput is Some h.
+
+ *)
+ *)
+Definition test_in_rel : myrel [intype] := eqpair_R (publicRel _) (eqsum_R (publicRel _) (semiprivateRel _)).
+Definition test_in_rel' : myrel [intype'] := eqpair_R (publicRel _) (eqpair_R (eqmaybe (publicRel _)) (eqmaybe (semiprivateRel _))).
+
+(*
+output rel does not need any tuples distinguished, so eqpair is fine
+we also want to keep it public which process was scheduled, so eqmaybe for both types
+finally attacker cannot tell difference between secret outputs, so semiprivateRel on right component
+ *)
+Definition test_out_rel : myrel [outtype] := eqpair (eqmaybe (publicRel _)) (eqmaybe (semiprivateRel _)).
+Lemma low_NI : NI test_in_rel test_out_rel test.
+Proof. rewrite /test.
+       eapply map_NI. instantiate (1:= test_in_rel'). mrw. rewrite /test_in_rel'.
+       mrw. intros. apply rel_eqpair_R2' in H. 
+       destruct H. 
+       destruct H. simpl in H. destruct i,i'. rewrite !pair_rewr in H0. rewrite !pair_rewr. simpl in H. subst.
+       have : is_inl i0 /\ is_inl i2 \/ is_inr i0 /\ is_inr i2. de i0. de i2. de i2.
+       case. case. intros. destruct i0. destruct i2. done. done. done.
+       case. intros. destruct i0. done. destruct i2. done.
+       ssa.
+       destruct H. destruct i,i'. rewrite !pair_rewr in H,H0.
+       destruct i0. done.
+       destruct i2. done.
+       rewrite !pair_rewr. ssa.
+        simpl in H0.
+       apply par_NI.
+       eapply map_NI. mrw. intros. rewrite /test_in_rel in H. instantiate (1:= eqpair_R (publicRel _) (eqmaybe (publicRel _))). 
+       apply rel_eqpair_R2.
+       apply rel_eqpair_R2' in H.
+       destruct H. left. destruct H. con. ssa.
+
+       Search _ (rel (eqpair_R _ _)).
+       apply rel_eqpair_R2' in H0.
+       destruct H0. ssa.
+       apply rel_eqpair_R in H0. destruct H0. clear H H1. ssa.
+       destruct H. right. ssa.
+       mrw. intros. ssa.
+       eauto.
+
+       rewrite /sta_swi.
+       eapply map_NI. mrw. intros. instantiate (1:= eqpair_R (publicRel _) (eqmaybe_top (publicRel _))).
+       destruct i,i'. rewrite !pair_rewr.
+       apply rel_eqpair_R2. apply rel_eqpair_R2' in H. destruct H.
+       left. ssa. right. ssa.
+       mrw. ssa.
+       2: eapply sta_NI.
+       mrw. intros. apply rel_eqpair in H. destruct H. eauto.
+       3: { mrw. intros. simpl in H. destruct i. simpl in H. simpl. destruct i0. simpl in H. done.
+            simpl in H.
+       
+       ssa. de H. rewrite H. de i.de p. de o. de i'. de p. de o. subst. de o0. de o1. de H1. de o1. ssa.
+  rewrite /sta_low_p /sta_swi.
+  eapply map_NI.
+  mrw. intros. instantiate (1:= (eqpair (publicRel _) (publicRel _))). simpl. ssa.
+  mrw. ssa.
+  mrw. intros.
+  2: eapply sta_NI. Search _ (rel (eqpair _ _)). apply rel_eqpair in H. destruct H. eauto.
+  4: { eapply map_NI. mrw. intros. 
+
+
+
+
+
+      
+Definition low_in_rel := public
+
+
+
+
+Definition handler := @alternate_generic TInterrupt THandlerOutput Unit2 Notify Nothing tt.
 Definition unit_p : Proc Unit Unit := @out Unit Unit tt.
 
 Definition my_procs : forall n, Proc (my_f_I n) (my_f_O n).
