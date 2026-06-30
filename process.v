@@ -18,32 +18,17 @@ Open Scope order_scope.
 
 Require Export NonInterference.theorems.
 
-Fixpoint times_N n (f : nat -> Ty) : Ty :=
+Fixpoint times_n n (f : nat -> Ty) : Ty :=
   let t := f n in
   match n with
   | 0 => t
-  | S n' => Times t (times_N n' f)
+  | S n' => Times t (times_n n' f)
   end.
 
 Definition map_pair {A B C D :Set} (f : A -> C) (g : B -> D) := fun (x: A * B) => match x with
                                                                                 | (x0,x1) => (f x0, g x1)
                                                                                   end.
-Definition times_Option_n (n : nat) (f : nat -> Ty) := times_N n (Option \o f).
-
-(*Example*)
-Definition my_f_I := fun (n : nat) => match n with
-                                      | 0 => TInterrupt (*handler*)
-                                      | 1 => THandlerOutput (*private*)
-                                      | 2 => Unit (*public*)
-                                      | _ => Unit
-                                      end.
-
-Definition my_f_O := fun (n : nat) => match n with
-                                      | 0 => THandlerOutput
-                                      | 1 => TTypeSyscall
-                                      | 2 => TPublicOutput
-                                      | _ => Unit
-                                      end.
+Definition times_on (n : nat) (f : nat -> Ty) := times_n n (Option \o f).
 
 
 
@@ -79,7 +64,7 @@ Definition process_pool
   (f_coopt : nat -> bool)
   (f_initial : nat -> bool)
   (f_I f_O : nat -> Ty)
-  (f_proc : forall n, Proc (f_I n) (f_O n)) : Proc (Times (Times Nat Nat) ((times_Option_n n f_I))) (times_Option_n n f_O).
+  (f_proc : forall n, Proc (f_I n) (f_O n)) : Proc (Times (Times Nat Nat) ((times_on n f_I))) (times_on n f_O).
   elim: n.
   - simpl.
     eapply map. simpl.
@@ -122,33 +107,159 @@ Definition nbstate := Times (Times Bool Bool) (Times Nat Nat). (*((b1,b2),(turn_
   TF = public
   TT ) private
  *)
-      
+
 Definition loop_and_count
   (stateType : Ty)           
   (state : [stateType])
-  (to_nats : [stateType] -> nat * nat)
-  (T_in T_in' T_out T_out' : Ty)                
-  (f_I : [Sum T_in T_out'] -> [stateType] -> [stateType])
-  (f_route : [T_out'] -> [T_in'])
+  (T_in' T_out' : Ty)                
+  (f_I : [Sum T_in' T_out'] -> [stateType] -> [stateType])
   (def : [T_out'])
-  (p : Proc (Times (Times Nat Nat) T_in') T_out')
-  (f_in : [T_in] -> [T_in'])
-  : Proc T_in T_out' :=
-  (@map T_in (Sum T_in T_out') (Sum T_in T_out') T_out' inl (inr_or_def def)
-                          (@loop (Sum T_in T_out')
+  (p : Proc (Times Nat T_in') T_out')
+  (f_si : [Times stateType (Sum T_in' T_out')] -> [Times Nat T_in'])
+  : Proc T_in' T_out' :=
+  (@map T_in' (Sum T_in' T_out') (Sum T_in' T_out') T_out' inl (inr_or_def def)
+                          (@loop (Sum T_in' T_out')
                              (@map _ _ (Times _ _) _
                                 id snd
                                 (@sta _ _ stateType f_I (fun _ v => v) state
                                    (@map (Times stateType (Sum _ _ ))
-                                      (Times (Times Nat Nat) T_in')
-                                _ (Sum _ _)
-                                (fun i  =>
-                                   match snd i with
-                                   | inl i' => (to_nats (fst i),f_in i')
-                                   | inr o  => (to_nats (fst i),f_route o) (*i tilfælde hvor vi både ændrer switch og rerouter input, problem?*)
-                                   end) inr
-                                p))))).
+                                      (Times Nat T_in') _ (Sum T_in' T_out') f_si inr p))))).
 
+Definition mask := Bool.
+Definition pending := Bool.
+Definition I_bits := Times pending mask.
+Definition ic := (Times I_bits I_bits).
+Definition count := Nat.
+Definition re_sch := Bool.
+Definition cur_pid := Option Nat.
+(*Definition stateType := Times (Times cur_pid re_sch) ic.*)
+Definition bool_state := Times re_sch ic.
+Definition stateType := Times cur_pid bool_state.
+
+(*Example*)
+Definition my_f_I := fun (n : nat) => match n with
+                                      | 0 => Unit
+                                      | 1 => THandlerOutput
+                                      | _ => Unit
+                                      end.
+
+Definition I_output_type := Times THandlerOutput bool_state.
+
+Definition my_f_O := fun (n : nat) => match n with
+                                      | 0 => TPublicOutput
+                                      | 1 => TTypeSyscall
+                                      | 2 => Nat
+                                      | 3 => I_output_type
+                                      | 4 => I_output_type
+                                      | _ => Unit
+                                      end.
+
+(*Definition get_count (v : [stateType]) := v.1.1.*)
+Definition get_cur_pid (v : [stateType]) := v.1.1. 
+Definition get_re_sch (v : [stateType]) := v.1.2.
+Definition get_ic (v : [stateType]) := v.2. 
+Definition get_I_bits' (ic : [ic]) (ir : [TInterrupt]) := if ir is TimerInterrupt then ic.1 else ic.2.
+Definition get_I_bits (v : [stateType]) (ir : [TInterrupt]) := get_I_bits' (get_ic v) ir.
+
+Definition get_pending' (bits : [I_bits]) := bits.1.
+Definition get_mask' (bits : [I_bits]) := bits.2.
+
+Definition get_I_pending (v : [stateType]) (ir : [TInterrupt]) := get_pending' (get_I_bits v ir).
+Definition get_I_mask (v : [stateType]) (ir : [TInterrupt]) := get_mask' (get_I_bits v ir).
+
+Definition update_cur_pid (v : [stateType]) cur_pid : [stateType] := ((cur_pid,v.1.2),v.2).
+Definition update_re_sch (v : [stateType]) re_sch : [stateType] := ((v.1.1,re_sch),v.2).
+Definition update_I_bits' (ic : [ic])  (ir : [TInterrupt]) (bits : [I_bits]) := if ir is TimerInterrupt then (bits,ic.2) else (ic.1,bits).
+Definition update_ic (v : [stateType]) ic : [stateType] := (v.1,ic).
+Definition update_I_bits (v : [stateType]) (ir : [TInterrupt]) (bits : [I_bits]) := update_ic v (update_I_bits' (get_ic v) ir bits).
+
+Definition update_I_pending (v : [stateType]) (ir : [TInterrupt]) pending : [stateType] :=
+  update_I_bits v ir (pending,get_I_mask v ir).
+Definition update_I_mask (v : [stateType]) (ir : [TInterrupt ]) mask : [stateType] :=
+  update_I_bits v ir (get_I_pending v ir,mask).
+
+Check foldr.
+Definition set_masks (v : [stateType]) : [stateType] := foldr (fun I v' => update_I_mask v' I true) v [::TimerInterrupt;DiskInterrupt].
+Definition unset_masks (v : [stateType]) : [stateType] := foldr (fun I v' => update_I_mask v' I false) v [::TimerInterrupt;DiskInterrupt].
+
+Definition T_in' := times_on 4 my_f_I.
+Definition T_out' := times_on 4 my_f_O.
+
+Definition is_I_in (i : [T_in']) :=
+  match i with
+  | (_,(Some _,_)) => Some true
+  | (Some _,_) => Some false
+  | _ => None
+  end.
+
+Definition is_I_out_done (i : [T_out']) :=
+  match i with
+  | (_,(Some (Notify,_),_)) => Some true
+  | (Some (Notify,_),_) => Some false
+  | _ => None
+  end.
+
+Definition is_I_out_running (i : [T_out']) :=
+  match i with
+  | (_,(Some (Nothing,_),_)) => Some true
+  | (Some (Nothing,_),_) => Some false
+  | _ => None
+  end.
+
+Definition is_sch_out (o : [T_out']) :=
+  match o with
+  | (_,(_,(Some n,_))) => Some n
+  | _ => None
+  end.
+
+Print I_output_type.
+Definition I_out_re_sch (o : I_output_type) :=
+let: (_,(_,(  
+
+Definition should_re_sch (o : [T_out']) :=
+  match o with
+  | (_,(Some (_,true),_)) => true
+  | (Some (_,true),_) => true
+  | _ => false
+  end.
+
+Definition f_I (i : [Sum T_in' T_out']) (v : [stateType]) : [stateType] :=
+  match i with
+  | inl i => match is_I_in i with | Some true => update_tI_pending v true | Some false => update_dI_pending v true | None => v end
+  | inr o => let v' := update_re_sch v ((get_re_sch v) || (should_re_sch o)) in
+             match is_I_out_done o with | Some true => update_tI_mask v false | Some false => update_dI_mask v false | None => v end
+  end.
+
+Definition none5 : [T_in'] := (None,(None,(None,(None,None)))).
+
+Definition route_message (o : [T_out']) : [T_in'] :=
+  match o with
+  | (Some (Notify,_),_) => (None,(None,(None,(Some Notify,None))))
+  | (_,(Some (Notify,_),_)) => (None,(None,(None,(Some Notify,None))))
+  | _ => none5
+  end.
+
+Definition to_Nat (s : [stateType]) (o : [T_out']) : [Nat] :=
+  if is_sch_out o is Some n then Some (inl n)
+  else match is_I_done o, s.2 with
+         | Some true, ((true,false),_) =>
+
+then (tI_Nat,none5)
+                  else if is_dI_running o then (dI_Nat,none5)
+                  else if (is_tI_done o
+                                                                                           
+  end    
+
+
+Definition tI_signal : [signal] :=  Some (inr (inr 3)).
+Definition dI_signal : [signal] :=  Some (inr (inr 4)).
+
+Definition f_si (sio : [Times stateType (Sum T_in' T_out')]) : [Times signal T_in'] :=
+  let s := sio.1 in
+  match sio.2 with
+  | inl i => match is_I_in i with Some true => (tI_signal,i) | Some false => (dI_signal, i) | None => (None,i) end
+  | inr o => (to_signal s o, route_message o)
+  end.             
 
 Definition low_p := @out Unit TPublicOutput GetRequest.
 Definition high_p := @alternate_generic2 THandlerOutput TTypeSyscall Unit1 Syscall NOP tt (fun i => i == Notify).
@@ -225,8 +336,12 @@ Proof. rewrite /test.
        destruct H. destruct i,i'. rewrite !pair_rewr in H,H0.
        destruct i0. done.
        destruct i2. done.
-       rewrite !pair_rewr. ssa.
-        simpl in H0.
+       rewrite !pair_rewr. ssa.  
+
+       mrw. ssa. de i. de s.
+       eauto.
+       
+       simpl in H0.
        apply par_NI.
        eapply map_NI. mrw. intros. rewrite /test_in_rel in H. instantiate (1:= eqpair_R (publicRel _) (eqmaybe (publicRel _))). 
        apply rel_eqpair_R2.
@@ -634,3 +749,61 @@ Qed.
 
 (*Lemma NI_model : NI input_rel' output_rel model.  
 Admitted.*)
+
+
+(*Definition is_tI_in (i : [T_in']) :=
+  match i with
+  | (_,(Some _,_)) => true
+  | _ => false                              
+  end.
+
+Definition is_dI_in (i : [T_in']) :=
+  match i with
+  | (Some _,_) => true
+  | _ => false                              
+  end.*)
+
+
+(*Definition is_tI_out_done (o : [T_out']) :=
+  match o with
+  | (_,(Some Notify,_)) => true
+  | _ => false   
+  end.
+
+Definition is_tI_out_running (o : [T_out']) :=
+  match o with
+  | (_,(Some Nothing,_)) => true
+  | _ => false   
+  end.
+
+Definition is_dI_out_done (o : [T_out']) :=
+  match o with
+  | (Some Notify,_) => true
+  | _ => false 
+  end.
+
+Definition is_dI_out_running (o : [T_out']) :=
+  match o with
+  | (Some Nothing,_) => true
+  | _ => false 
+  end.*)
+
+(*Definition incoming_tI (v : [stateType]) : [stateType] :=
+  let tI_bits := if negb (get_tI_mask v) then (false,true) else (true,true) in
+  update_tI_bits v tI_bits.
+
+
+Definition incoming_dI (v : [stateType]) :=
+  let bb := v.2.2 in
+  let bb' := if negb bb.2 then (false,true) else (true,true) in
+  (v.1,(v.2.1,bb')).
+
+Definition outgoing_tI (v : [stateType]) :=
+  let bb := v.2.1 in
+  let bb' := if bb.1 then (false,true) else (false,false) in
+  (v.1,(bb',v.2.2)).
+
+Definition outgoing_dI (v : [stateType]) :=
+  let bb := v.2.2 in
+  let bb' := if bb.1 then (false,true) else (false,false) in
+  (v.1,(v.2.1,bb')).*)
