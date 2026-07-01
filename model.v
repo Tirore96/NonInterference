@@ -98,7 +98,7 @@ Hint Mode myrel +.*)
 (* Types *)
 
 (*Example 3*)
-Inductive Interrupt := DiskInterrupt | TimerInterrupt.
+Inductive Interrupt := DiskInterrupt | TimerInterrupt | DefaultInterrupt.
 Inductive HandlerOutput := Nothing | Notify.
 Inductive TypeSyscall := Syscall | NOP.
 Inductive PublicOutput := GetRequest | Public_NOP.

@@ -310,7 +310,7 @@ Definition f_I (n : nat) (i : [Sum T_in (T_out' n)]) (v : [stateType]) : [stateT
                             else update_prev_pid (update_cur_pid v (odflt 2 (get_prev_pid v))) None
              end
   end.
-Print T_out'.
+
 
 Definition is_I_out (n : nat) (i : [T_out' n]) : [Option THandlerOutput].
   case: i. move=>_.
@@ -329,20 +329,25 @@ Definition low_p := @out Unit TPublicOutput GetRequest.
 Definition high_p := @alternate_generic2 THandlerOutput TTypeSyscall Unit1 Syscall NOP tt (fun i => i == Notify).
 
 Definition handler_type := Proc Unit I_output_type.
-Definition false_ic : [ic] := fun _ => (false,false). Print bool_state.
-Definition bad_I_handler (re_sch : bool) : handler_type.
+Definition false_ic : [ic] := fun _ => (false,false).
+
+
+Definition I_handler (b: [bool_state]) : handler_type.
   rewrite /handler_type.
   eapply map. exact id.
   instantiate (1:= Times Nat Unit).
-  exact (fun o => if o.1 == 0 then (Notify,(re_sch,false_ic)) else (Nothing,(false,false_ic))).
+  exact (fun o => if o.1 == 0 then (Notify,b) else (Nothing,(false,false_ic))).
   eapply sta. exact (fun _ v => v). exact (fun _ v => v.+1%%2).
   exact 0.
   apply out. exact tt.
 Defined.
 
-Definition bad_tI_handler : handler_type := bad_I_handler true.
-Definition bad_dI_handler : handler_type := bad_I_handler false.
-Definition default_handler : handler_type := bad_I_handler false.                                                      
+
+Definition bad_tI_handler : handler_type := I_handler (true,false_ic).
+Definition bad_dI_handler : handler_type := I_handler (false,false_ic).
+Definition bad_default_handler : handler_type := I_handler (false,false_ic).
+
+
   
 Definition scheduler : Proc Unit Nat.
   eapply map. exact id.
@@ -352,30 +357,104 @@ Definition scheduler : Proc Unit Nat.
   apply out. exact tt.
 Defined.
 
-Definition my_procs : forall n, Proc (@my_f_I 1 n) (my_f_O 1 n).
+Definition my_procs_bad : forall n, Proc (@my_f_I 1 n) (my_f_O 1 n).
   case. apply bad_tI_handler.
   case. apply bad_dI_handler.
   case. apply scheduler.
   case. apply high_p.  
   case. apply low_p.
-  elim. apply default_handler.
-  intros. apply default_handler.
+  elim. apply bad_default_handler.
+  intros. apply bad_default_handler.
 Defined.
-
 Definition my_f_coopt (n : nat) : bool := true.
 Definition my_f_initial (n : nat) := n == 0. 
 Definition f_proj (n : nat) (i : [T']) : forall n', [Option (my_f_I n n')].
   simpl. rewrite /my_f_I. intros. case_if.
   apply i.
   exact (Some tt).
-Defined. 
-Definition my_process_pool := @process_pool 4 my_f_coopt my_f_initial (my_f_I 1) (my_f_O 1) T' (f_proj 1) my_procs.
-
-Definition initial_state : [stateType] := ((0,None),([::TimerInterrupt;DiskInterrupt],(false,(fun _ => (false,false))))).
-
+Defined.
+Definition my_procs : forall n, Proc (@my_f_I 1 n) (my_f_O 1 n).
+  case. apply bad_tI_handler.
+  case. apply bad_dI_handler.
+  case. apply scheduler.
+  case. apply high_p.  
+  case. apply low_p.
+  elim. apply bad_default_handler.
+  intros. apply bad_default_handler.
+Defined.
+Definition my_process_pool_bad := @process_pool 4 my_f_coopt my_f_initial (my_f_I 1) (my_f_O 1) T' (f_proj 1) my_procs.
+Definition initial_state_bad : [stateType] := ((0,None),([::TimerInterrupt;DiskInterrupt],(false,(fun _ => (false,false))))).
 Definition def : [ (T_out' 1) ]  := (None,(None,(None,(None,None)))).
+Definition model_bad := @loop_and_count stateType initial_state_bad T_in (T_out' 1) T' (@f_I 1) def my_process_pool_bad (@f_si 1).
 
-Definition model := @loop_and_count stateType initial_state T_in (T_out' 1) T' (@f_I 1) def my_process_pool (@f_si 1).
+
+
+Definition initial_state_good : [stateType] := ((0,None),([::TimerInterrupt;DiskInterrupt;DefaultInterrupt],(false,(fun ir => if ir is TimerInterrupt then (false,false) else (false,true))))).
+
+Definition my_f_I_good (n : nat) := fun (n' : nat) => if n' == n.+1 then Unit else if n' == n.+2 then THandlerOutput else if n' == n.+3 then Unit else Bool.
+
+Definition T'_good := Option (Times THandlerOutput Bool).
+(*We extend the input to schedulers so we can distinguish if the latest output was from a timer interrupt.
+ This will feed their counter.
+ true = from finishing timer interrupt, reset counter
+ false = output pulse, decrement counter*)
+Definition f_proj_good (n : nat) (i : [T'_good]) : forall n', [Option (my_f_I_good n n')].
+  simpl. rewrite /my_f_I_good. intros.
+  case_if. exact None.
+  case_if. destruct i. destruct i. exact (Some i). exact None.
+  case_if. exact None.
+  destruct i. destruct i. exact (Some i0). exact None.
+Defined.  
+
+Definition good_handler_type := Proc Bool I_output_type.
+Definition default_on_ic : [ic] := fun (ir :[TInterrupt]) => if ir is DefaultInterrupt then (true,false) else (false,false).
+Definition mask_most : [ic] := fun (ir :[TInterrupt]) => if ir is TimerInterrupt then (false,false) else (false,true).
+Definition good_I_handler (b : [bool_state]) : good_handler_type.
+  eapply map. exact id.
+  2: eapply sta.
+  instantiate (2:= Nat).
+  instantiate (1:= I_output_type).
+  exact (fun o => if o.1 != 0 then o.2 else (Notify,(false,mask_most))).
+  exact (fun b n => if b then 4 else n.-1).
+  exact (fun o n => n).
+  exact 4.
+  eapply map. instantiate (1:= Unit). exact (fun i => tt). exact id.
+  apply (I_handler b).
+Defined.
+
+Definition good_tI_handler : good_handler_type := good_I_handler (true,default_on_ic).
+Definition good_dI_handler : good_handler_type := good_I_handler (false,default_on_ic).
+Definition good_default_handler : good_handler_type := good_I_handler (false,default_on_ic).      
+
+Definition my_good_procs : forall n, Proc (@my_f_I_good 2 n) (my_f_O 2 n).
+  case. apply good_tI_handler.
+  case. apply good_dI_handler.
+  case. apply good_default_handler.
+  case. apply scheduler.
+  case. apply high_p.
+  case. apply low_p.
+  elim. apply good_default_handler.
+  intros. apply good_default_handler.
+Defined.
+
+Definition my_process_pool_good := @process_pool 5 my_f_coopt my_f_initial (my_f_I_good 2) (my_f_O 2) T'_good  (@f_proj_good 2) my_good_procs.
+
+Definition def_good : [ (T_out' 2) ]  := (None,(None,(None,(None,(None,None))))).
+
+Definition is_I_out_good (i : [T_out' 2]) : [T'_good].
+  case: i. move=>_.
+  case. move=>_. 
+  case. move=>_.
+  simpl.
+  case. case. case=>h. intros. exact (Some (h,false)).
+  case. case. case=>h. intros. exact (Some (h,false)).
+  case. case=>h. intros. exact (Some (h,true)). exact None.
+Defined.
+
+Definition f_si_good (si : [Times stateType (Sum T_in (T_out' 2))]) : [Option (Times Nat T'_good)] :=
+  if si.2 is inr o then Some (get_cur_pid si.1, is_I_out_good o) else None.
+
+Definition model_good := @loop_and_count stateType initial_state_good T_in (T_out' 2) T'_good (@f_I 2) def_good my_process_pool_good f_si_good.
 
 
 
