@@ -59,217 +59,12 @@ Definition alternate_generic2 (A B C : Ty) (x y : [B]) (z : [C]) (pred : [A] -> 
                            (@out (Times Bool _ ) C z)
                         )))).
 
-Definition process_pool
-  (n : nat)
-  (f_coopt : nat -> bool)
-  (f_initial : nat -> bool)
-  (f_I f_O : nat -> Ty)
-  (f_proc : forall n, Proc (f_I n) (f_O n)) : Proc (Times (Times Nat Nat) ((times_on n f_I))) (times_on n f_O).
-  elim: n.
-  - simpl.
-    eapply map. simpl.
-      instantiate (1:= Times Bool (Option (f_I 0))). exact (fun n => ((0 \in [:: fst (fst n); snd (fst n)],snd n))).
-      exact id. 
-    eapply swi. exact (f_initial 0). 
-    eapply maybe. 
-    eapply map.
-      eapply id. 
-      exact (fun o => (f_coopt 0,o)).
-    exact (f_proc 0).
-
-  - intros. simpl.
-    eapply par.
-    * eapply map.
-      instantiate (1:= Times Bool (Option (f_I n.+1))). simpl.
-      exact (fun x => ((n.+1) \in [:: fst (fst x); snd (fst x)], fst (snd x))).
-        exact id. 
-      eapply swi.
-        exact (f_initial n.+1). 
-      eapply maybe.
-      eapply map.
-        exact id.     
-        exact (fun o => (f_coopt n.+1,o)).
-      (*eapply maybe.*) (*not necessary anymore*)
-      exact (f_proc n.+1).
-    * eapply map. 3: apply H. simpl. 
-      exact (map_pair id snd).
-      exact id. 
-Defined.
-
-Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x' else def.
-
-Definition bstate := Times (Times Bool Bool) Bool. (*((b1,b2),(turn_on,turn_off)*)
-
-Definition nbstate := Times (Times Bool Bool) (Times Nat Nat). (*((b1,b2),(turn_on,turn_off)*)
-(*b1,b2 = state
-  FF = handler from public
-  FT = handler from private
-  TF = public
-  TT ) private
- *)
-
-Definition loop_and_count
-  (stateType : Ty)           
-  (state : [stateType])
-  (T_in' T_out' : Ty)                
-  (f_I : [Sum T_in' T_out'] -> [stateType] -> [stateType])
-  (def : [T_out'])
-  (p : Proc (Times Nat T_in') T_out')
-  (f_si : [Times stateType (Sum T_in' T_out')] -> [Times Nat T_in'])
-  : Proc T_in' T_out' :=
-  (@map T_in' (Sum T_in' T_out') (Sum T_in' T_out') T_out' inl (inr_or_def def)
-                          (@loop (Sum T_in' T_out')
-                             (@map _ _ (Times _ _) _
-                                id snd
-                                (@sta _ _ stateType f_I (fun _ v => v) state
-                                   (@map (Times stateType (Sum _ _ ))
-                                      (Times Nat T_in') _ (Sum T_in' T_out') f_si inr p))))).
-
-Definition mask := Bool.
-Definition pending := Bool.
-Definition I_bits := Times pending mask.
-Definition ic := (Times I_bits I_bits).
-Definition count := Nat.
-Definition re_sch := Bool.
-Definition cur_pid := Option Nat.
-(*Definition stateType := Times (Times cur_pid re_sch) ic.*)
-Definition bool_state := Times re_sch ic.
-Definition stateType := Times cur_pid bool_state.
-
-(*Example*)
-Definition my_f_I := fun (n : nat) => match n with
-                                      | 0 => Unit
-                                      | 1 => THandlerOutput
-                                      | _ => Unit
-                                      end.
-
-Definition I_output_type := Times THandlerOutput bool_state.
-
-Definition my_f_O := fun (n : nat) => match n with
-                                      | 0 => TPublicOutput
-                                      | 1 => TTypeSyscall
-                                      | 2 => Nat
-                                      | 3 => I_output_type
-                                      | 4 => I_output_type
-                                      | _ => Unit
-                                      end.
-
-(*Definition get_count (v : [stateType]) := v.1.1.*)
-Definition get_cur_pid (v : [stateType]) := v.1.1. 
-Definition get_re_sch (v : [stateType]) := v.1.2.
-Definition get_ic (v : [stateType]) := v.2. 
-Definition get_I_bits' (ic : [ic]) (ir : [TInterrupt]) := if ir is TimerInterrupt then ic.1 else ic.2.
-Definition get_I_bits (v : [stateType]) (ir : [TInterrupt]) := get_I_bits' (get_ic v) ir.
-
-Definition get_pending' (bits : [I_bits]) := bits.1.
-Definition get_mask' (bits : [I_bits]) := bits.2.
-
-Definition get_I_pending (v : [stateType]) (ir : [TInterrupt]) := get_pending' (get_I_bits v ir).
-Definition get_I_mask (v : [stateType]) (ir : [TInterrupt]) := get_mask' (get_I_bits v ir).
-
-Definition update_cur_pid (v : [stateType]) cur_pid : [stateType] := ((cur_pid,v.1.2),v.2).
-Definition update_re_sch (v : [stateType]) re_sch : [stateType] := ((v.1.1,re_sch),v.2).
-Definition update_I_bits' (ic : [ic])  (ir : [TInterrupt]) (bits : [I_bits]) := if ir is TimerInterrupt then (bits,ic.2) else (ic.1,bits).
-Definition update_ic (v : [stateType]) ic : [stateType] := (v.1,ic).
-Definition update_I_bits (v : [stateType]) (ir : [TInterrupt]) (bits : [I_bits]) := update_ic v (update_I_bits' (get_ic v) ir bits).
-
-Definition update_I_pending (v : [stateType]) (ir : [TInterrupt]) pending : [stateType] :=
-  update_I_bits v ir (pending,get_I_mask v ir).
-Definition update_I_mask (v : [stateType]) (ir : [TInterrupt ]) mask : [stateType] :=
-  update_I_bits v ir (get_I_pending v ir,mask).
-
-Check foldr.
-Definition set_masks (v : [stateType]) : [stateType] := foldr (fun I v' => update_I_mask v' I true) v [::TimerInterrupt;DiskInterrupt].
-Definition unset_masks (v : [stateType]) : [stateType] := foldr (fun I v' => update_I_mask v' I false) v [::TimerInterrupt;DiskInterrupt].
-
-Definition T_in' := times_on 4 my_f_I.
-Definition T_out' := times_on 4 my_f_O.
-
-Definition is_I_in (i : [T_in']) :=
-  match i with
-  | (_,(Some _,_)) => Some true
-  | (Some _,_) => Some false
-  | _ => None
-  end.
-
-Definition is_I_out_done (i : [T_out']) :=
-  match i with
-  | (_,(Some (Notify,_),_)) => Some true
-  | (Some (Notify,_),_) => Some false
-  | _ => None
-  end.
-
-Definition is_I_out_running (i : [T_out']) :=
-  match i with
-  | (_,(Some (Nothing,_),_)) => Some true
-  | (Some (Nothing,_),_) => Some false
-  | _ => None
-  end.
-
-Definition is_sch_out (o : [T_out']) :=
-  match o with
-  | (_,(_,(Some n,_))) => Some n
-  | _ => None
-  end.
-
-Print I_output_type.
-Definition I_out_re_sch (o : I_output_type) :=
-let: (_,(_,(  
-
-Definition should_re_sch (o : [T_out']) :=
-  match o with
-  | (_,(Some (_,true),_)) => true
-  | (Some (_,true),_) => true
-  | _ => false
-  end.
-
-Definition f_I (i : [Sum T_in' T_out']) (v : [stateType]) : [stateType] :=
-  match i with
-  | inl i => match is_I_in i with | Some true => update_tI_pending v true | Some false => update_dI_pending v true | None => v end
-  | inr o => let v' := update_re_sch v ((get_re_sch v) || (should_re_sch o)) in
-             match is_I_out_done o with | Some true => update_tI_mask v false | Some false => update_dI_mask v false | None => v end
-  end.
-
-Definition none5 : [T_in'] := (None,(None,(None,(None,None)))).
-
-Definition route_message (o : [T_out']) : [T_in'] :=
-  match o with
-  | (Some (Notify,_),_) => (None,(None,(None,(Some Notify,None))))
-  | (_,(Some (Notify,_),_)) => (None,(None,(None,(Some Notify,None))))
-  | _ => none5
-  end.
-
-Definition to_Nat (s : [stateType]) (o : [T_out']) : [Nat] :=
-  if is_sch_out o is Some n then Some (inl n)
-  else match is_I_done o, s.2 with
-         | Some true, ((true,false),_) =>
-
-then (tI_Nat,none5)
-                  else if is_dI_running o then (dI_Nat,none5)
-                  else if (is_tI_done o
-                                                                                           
-  end    
-
-
-Definition tI_signal : [signal] :=  Some (inr (inr 3)).
-Definition dI_signal : [signal] :=  Some (inr (inr 4)).
-
-Definition f_si (sio : [Times stateType (Sum T_in' T_out')]) : [Times signal T_in'] :=
-  let s := sio.1 in
-  match sio.2 with
-  | inl i => match is_I_in i with Some true => (tI_signal,i) | Some false => (dI_signal, i) | None => (None,i) end
-  | inr o => (to_signal s o, route_message o)
-  end.             
-
-Definition low_p := @out Unit TPublicOutput GetRequest.
-Definition high_p := @alternate_generic2 THandlerOutput TTypeSyscall Unit1 Syscall NOP tt (fun i => i == Notify).
-
 (*sta_swi b n f p:
  (i == n,I') -> enables p
  (i <> n,I') -> disables p
  f projects input from pair e.g. f (I1,I2) = I1*)
-Definition sta_swi (I O : Ty) (b : bool) (n : nat) (p : Proc I O) :=
-@map (Times Nat _) (Times Bool _) (Times _ _) _ (fun x => (fst x == n,snd x)) snd
+Definition sta_swi (I O : Ty) (b : bool) (p : Proc I O) :=
+@map _ _ (Times _ _) _ id snd
   (@sta (Times Bool _) _ Bool
        (fun i v => xor (fst i) v)
        (fun o v => false)
@@ -282,6 +77,330 @@ Definition sta_swi (I O : Ty) (b : bool) (n : nat) (p : Proc I O) :=
                     (fun o => (false,o))
                     (p)
   )))).
+
+Definition process_pool
+  (n : nat)
+  (f_coopt : nat -> bool)
+  (f_initial : nat -> bool)
+  (f_I f_O : nat -> Ty)  
+  (T' : Ty)
+  (f_proj : [T'] -> forall n, [Option (f_I n)])
+  (f_proc : forall n, Proc (f_I n) (f_O n)) : Proc (Times Nat T') (times_on n f_O).
+  elim: n.
+  - simpl.
+    eapply map. simpl.
+    instantiate (1:= Times Bool (Option (f_I 0))). exact (fun i => (i.1 == 0, f_proj i.2 0)). 
+    exact id.  
+    apply swi. exact (f_initial 0). 
+    apply maybe. 
+    eapply map.
+      eapply id. 
+      exact (fun o => (f_coopt 0,o)).
+    exact (f_proc 0).
+
+  - intros. rewrite /times_on. simpl.
+    apply par.
+    * eapply map.
+      instantiate (1:= Times Bool (Option (f_I n.+1))). simpl.
+      exact (fun i => (i.1 == n.+1,f_proj i.2 n.+1)).
+        exact id. 
+      eapply swi.
+        exact (f_initial n.+1). 
+      eapply maybe.
+      eapply map.
+        exact id.     
+        exact (fun o => (f_coopt n.+1,o)).
+      (*eapply maybe.*) (*not necessary anymore*)
+        exact (f_proc n.+1).
+        apply H.
+Defined.
+
+Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x' else def.
+
+Definition loop_and_count
+  (stateType : Ty)           
+  (state : [stateType])
+  (T_in T_out T' : Ty)                
+  (f_I : [Sum T_in T_out] -> [stateType] -> [stateType])
+  (def : [T_out])
+  (p : Proc (Times Nat T') T_out)
+  (f_si : [Times stateType (Sum T_in T_out)] -> [Option (Times Nat T')])
+  : Proc T_in T_out :=
+  (@map T_in (Sum T_in T_out) (Sum T_in T_out) T_out inl (inr_or_def def)
+                          (@loop (Sum T_in T_out)
+                             (@map _ _ (Times _ _) _
+                                id snd
+                                (@sta _ _ stateType f_I (fun _ v => v) state
+                                   (@map (Times stateType (Sum _ _ ))
+                                      (Option (Times Nat T')) _ (Sum T_in T_out) f_si inr (maybe p)))))).
+
+(*Definition loop_and_count
+  (stateType : Ty)           
+  (state : [stateType])
+  (T_in' T_out' : Ty)                
+  (f_I : [Sum T_in' T_out'] -> [stateType] -> [stateType])
+  (def : [T_out'])
+  (p : Proc (Times Nat T_in') T_out')
+  (f_si : [Times stateType (Sum T_in' T_out')] -> [Option (Times Nat T_in')])
+  : Proc T_in' T_out' :=
+  (@map T_in' (Sum T_in' T_out') (Sum T_in' T_out') T_out' inl (inr_or_def def)
+                          (@loop (Sum T_in' T_out')
+                             (@map _ _ (Times _ _) _
+                                id snd
+                                (@sta _ _ stateType f_I (fun _ v => v) state
+                                   (@map (Times stateType (Sum _ _ ))
+                                      (Option (Times Nat T_in')) _ (Sum T_in' T_out') f_si inr (maybe p)))))).*)
+(*maybe p eliminates input, since we only want it for state change
+ very cool, this still wroks for bad example too because we will switch to disk handler after next output
+ This is similar to cpu cycle where we check the ic at the end of the cycle.*)
+
+Definition mask := Bool.
+Definition pending := Bool.
+Definition I_bits := Times pending mask.
+Definition ic := Arrow TInterrupt I_bits.
+Definition count := Nat.
+Definition re_sch := Bool.
+Definition prev_pid := Option Nat.
+Definition cur_pid := Nat.
+Definition pids := Times cur_pid prev_pid.
+(*Definition stateType := Times (Times cur_pid re_sch) ic.*)
+Definition bool_state := Times re_sch ic.
+Definition I_list := List TInterrupt.
+Definition stateType := Times pids (Times I_list bool_state).
+
+(*Example*)
+Definition my_f_I (n : nat) := fun (n' : nat) => if n' == n.+2 then THandlerOutput else Unit.
+
+Definition I_output_type := Times THandlerOutput bool_state.
+
+Definition my_f_O (n : nat) := fun (n' : nat) => if n' == n.+1 then Nat (*handler*) else if n' == n.+2 then TTypeSyscall else if n' == n.+3 then TPublicOutput else I_output_type.
+
+
+(*Definition get_count (v : [stateType]) := v.1.1.*)
+Definition get_pids (v : [stateType]) := v.1.
+Definition get_I_list (v : [stateType]) := v.2.1.
+Definition get_bool_state (v : [stateType]) := v.2.2.
+Definition get_cur_pid (v : [stateType]) := (get_pids v).1.
+Definition get_prev_pid (v : [stateType]) := (get_pids v).2.
+Definition get_re_sch (v : [stateType]) := (get_bool_state v).1.
+Definition get_ic (v : [stateType]) := (get_bool_state v).2.
+Definition get_I_bits' (ic : [ic]) (ir : [TInterrupt]) : [I_bits] := ic ir. 
+Definition get_I_bits (v : [stateType]) (ir : [TInterrupt]) := get_I_bits' (get_ic v) ir.
+
+Definition get_pending' (bits : [I_bits]) := bits.1.
+Definition get_mask' (bits : [I_bits]) := bits.2.
+
+Definition get_I_pending (v : [stateType]) (ir : [TInterrupt]) := get_pending' (get_I_bits v ir).
+Definition get_I_mask (v : [stateType]) (ir : [TInterrupt]) := get_mask' (get_I_bits v ir).
+
+Definition update_pids (v : [stateType]) pids : [stateType] := (pids,v.2).
+Definition update_I_list (v : [stateType]) l : [stateType] := (v.1,(l,v.2.2)).
+Definition update_bool_state (v : [stateType]) bs : [stateType] := (v.1,(v.2.1,bs)).
+Definition update_cur_pid (v : [stateType]) cur_pid : [stateType] := update_pids v (cur_pid,(get_pids v).2).
+Definition update_prev_pid (v : [stateType]) prev_pid : [stateType] := update_pids v ((get_pids v).1,prev_pid).
+Definition update_re_sch (v : [stateType]) re_sch : [stateType] := update_bool_state v (re_sch,(get_bool_state v).2).
+Definition update_I_bits' (myic : [ic])  (ir : [TInterrupt]) (bits : [I_bits]) : [ic] := fun (i : [TInterrupt]) => if i == ir then bits else myic i.
+
+Definition update_ic (v : [stateType]) ic : [stateType] := update_bool_state v ((get_bool_state v).1,ic).
+Definition update_I_bits (v : [stateType]) (ir : [TInterrupt]) (bits : [I_bits]) := update_ic v (update_I_bits' (get_ic v) ir bits).
+
+Definition update_I_pending (v : [stateType]) (ir : [TInterrupt]) pending : [stateType] :=
+  update_I_bits v ir (pending,get_I_mask v ir).
+Definition update_I_mask (v : [stateType]) (ir : [TInterrupt ]) mask : [stateType] :=
+  update_I_bits v ir (get_I_pending v ir,mask).
+
+Definition or_I_bits (b1 b2 : [I_bits]) : [I_bits] := (b1.1 || b2.1, b1.2 || b2.2).
+Definition or_ic (c1 c2 : [ic]) : [ic] := fun (i : [TInterrupt]) => or_I_bits (c1 i) (c2 i).
+Definition or_bool_state (s1 s2 : [bool_state]) : [bool_state] := (s1.1 || s2.1, or_ic s1.2 s2.2).
+
+
+Definition set_masks (v : [stateType]) : [stateType] := foldr (fun I v' => update_I_mask v' I true) v (get_I_list v).
+Definition unset_masks (v : [stateType]) : [stateType] := foldr (fun I v' => if I \in get_I_list v then update_I_mask v' I false else v') v (get_I_list v).
+Definition masks_set (v : [stateType]) := foldr (fun I b => (get_I_mask v I) && b) true (get_I_list v).
+
+Definition T_in := Sum TInterrupt Unit.
+Definition T_out' (handler_count : nat) := Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Times (Option Nat) (times_on handler_count (fun _ => I_output_type)))).
+Definition T' := Option THandlerOutput.
+Definition is_sch_out (n : nat) (o : [T_out' n]) :=
+  match o with
+  | (None,(None,(Some n',_))) => Some n'
+  | _ => None                                   
+  end.
+
+Definition is_I_in (i : [T_in]) :=
+  match i with
+  | inl ir => Some ir
+  | inr _ => None
+  end.
+
+(*Definition all_interrupts : seq [TInterrupt] := [::TimerInterrupt;DiskInterrupt].*)
+Definition n_to_I (v : [stateType]) (n : nat) := nth TimerInterrupt (get_I_list v) n.
+
+(* generic version of
+match i with
+  | (_,(Some (Notify,bstate),_)) => Some (TimerInterrupt,bstate)
+  | (Some (Notify,bstate),_) => Some (DiskInterrupt,bstate)
+  | _ => None
+  end.*)
+Definition is_I_out_done (v : [stateType]) (n : nat) (i : [T_out' n]) : [Option (Times TInterrupt bool_state)].
+  case: i. move=>_.
+  case. move=>_. 
+  case. move=>_.
+  elim: n. simpl. case. case. move=>_. intros. apply Some. exact (n_to_I v 0,b). exact None.
+  simpl. intros.
+  case: b. case. case. move=>_. intros. apply Some. exact (n_to_I v n.+1, b).
+  intros. apply H in b. apply b.
+Defined.    
+
+
+(*Definition is_I_out_running (i : [T_out']) :=
+  match i with
+  | (_,(Some (Nothing,_),_)) => Some TimerInterrupt
+  | (Some (Nothing,_),_) => Some DiskInterrupt
+  | _ => None
+  end.*)
+
+
+
+Definition is_user_pid (p : [cur_pid]) : bool := (p < 2).
+Definition is_handler_pid (p : [cur_pid]) : bool := (2 < p).
+
+(* interrupt handlers live at pids 3 (timer) and 4 (disk) *)
+Definition I_handler_pid (v : [stateType]) (ir : [TInterrupt]) : [cur_pid] :=
+  3 + index TimerInterrupt (get_I_list v).
+
+(* a handler is selectable iff pending and not masked *)
+Definition I_ready (v : [stateType]) (ir : [TInterrupt]) : bool :=
+  get_I_pending v ir && ~~ get_I_mask v ir.
+
+(*in prioritised order*) Locate all_interrupts.
+
+
+Definition first_ready (v : [stateType]) : option [TInterrupt] :=
+  ohead [seq ir <-  get_I_list v | (I_ready v ir) ].
+
+(* before overriding cur_pid, save it to prev_pid if it is a user process *)
+Definition save_cur_to_prev (v : [stateType]) : [stateType] :=
+  if is_user_pid (get_cur_pid v)
+  then update_prev_pid v (Some (get_cur_pid v))
+  else v.
+
+
+(*
+output scenarios
+- a handler finishes
+- a handler running, not finished
+- scheduler choice
+- public/private output
+
+ *)
+
+(*issues*)
+Definition f_I (n : nat) (i : [Sum T_in (T_out' n)]) (v : [stateType]) : [stateType] :=
+  match i with
+  | inl i => if is_I_in i is Some ir then update_I_pending v ir true else v
+  | inr o => let v' := if @is_sch_out n o is Some n then update_cur_pid v n else v in (*apply scheduler choice, lowest priority*)
+             let v'':= if is_I_out_done v o is Some (ir,bstate) then
+                         update_bool_state v' (or_bool_state (get_bool_state (unset_masks v')) bstate) else v in
+             match first_ready v'' with
+             | Some ir => (update_I_pending (set_masks (update_cur_pid (save_cur_to_prev v) (I_handler_pid v ir))) ir false)
+             | None => if is_I_out_done v o is None then v
+                       else if (get_re_sch v)
+                            then update_re_sch (update_prev_pid (update_cur_pid v 2) None) false
+                            else update_prev_pid (update_cur_pid v (odflt 2 (get_prev_pid v))) None
+             end
+  end.
+Print T_out'.
+
+Definition is_I_out (n : nat) (i : [T_out' n]) : [Option THandlerOutput].
+  case: i. move=>_.
+  case. move=>_. 
+  case. move=>_.
+  elim: n. simpl. case. case. intros. exact (Some a). exact None.
+  simpl. intros.
+  case: b. case. case. intros. exact (Some a).
+  intros. apply H in b. apply b.
+Defined.
+
+Definition f_si (n : nat) (si : [Times stateType (Sum T_in (T_out' n))]) : [Option (Times Nat T')] :=
+  if si.2 is inr o then Some (get_cur_pid si.1, @is_I_out n o) else None.
+
+Definition low_p := @out Unit TPublicOutput GetRequest.
+Definition high_p := @alternate_generic2 THandlerOutput TTypeSyscall Unit1 Syscall NOP tt (fun i => i == Notify).
+
+Definition handler_type := Proc Unit I_output_type.
+Definition false_ic : [ic] := fun _ => (false,false). Print bool_state.
+Definition bad_I_handler (re_sch : bool) : handler_type.
+  rewrite /handler_type.
+  eapply map. exact id.
+  instantiate (1:= Times Nat Unit).
+  exact (fun o => if o.1 == 0 then (Notify,(re_sch,false_ic)) else (Nothing,(false,false_ic))).
+  eapply sta. exact (fun _ v => v). exact (fun _ v => v.+1%%2).
+  exact 0.
+  apply out. exact tt.
+Defined.
+
+Definition bad_tI_handler : handler_type := bad_I_handler true.
+Definition bad_dI_handler : handler_type := bad_I_handler false.
+Definition default_handler : handler_type := bad_I_handler false.                                                      
+  
+Definition scheduler : Proc Unit Nat.
+  eapply map. exact id.
+  instantiate (1:= Times Nat Unit). exact fst.
+  eapply sta. exact (fun _ v => v). exact (fun _ v => v.+1%%2).
+  exact 0.
+  apply out. exact tt.
+Defined.
+
+Definition my_procs : forall n, Proc (@my_f_I 1 n) (my_f_O 1 n).
+  case. apply bad_tI_handler.
+  case. apply bad_dI_handler.
+  case. apply scheduler.
+  case. apply high_p.  
+  case. apply low_p.
+  elim. apply default_handler.
+  intros. apply default_handler.
+Defined.
+
+Definition my_f_coopt (n : nat) : bool := true.
+Definition my_f_initial (n : nat) := n == 0. 
+Definition f_proj (n : nat) (i : [T']) : forall n', [Option (my_f_I n n')].
+  simpl. rewrite /my_f_I. intros. case_if.
+  apply i.
+  exact (Some tt).
+Defined. 
+Definition my_process_pool := @process_pool 4 my_f_coopt my_f_initial (my_f_I 1) (my_f_O 1) T' (f_proj 1) my_procs.
+
+Definition initial_state : [stateType] := ((0,None),([::TimerInterrupt;DiskInterrupt],(false,(fun _ => (false,false))))).
+
+Definition def : [ (T_out' 1) ]  := (None,(None,(None,(None,None)))).
+
+Definition model := @loop_and_count stateType initial_state T_in (T_out' 1) T' (@f_I 1) def my_process_pool (@f_si 1).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
 
 Definition test := @map (Times Nat (Sum Unit THandlerOutput)) (Times Nat (Times (Option Unit) (Option THandlerOutput))) _ _ (fun i => if snd i is inr ho then (fst i,(None,Some ho)) else (fst i,(Some tt,None))) id
                      (par (@map (Times _ (Times _ _)) (Times _ _) _ _ (fun i => (fst i, (fst (snd i)))) id ((sta_swi true 0 (maybe (low_p)))))
@@ -447,7 +566,7 @@ Definition bad_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate
   end.
 
 Definition none3 : [ (times_Option_n 2 my_f_I) ]  := (None,(None,None)).
-Definition def : [ (times_Option_n 2 my_f_O) ]  := (None,(None,None)).
+
 
 Definition my_f_route (t : [my_T_out']) : [my_T_in'] :=
   match t with

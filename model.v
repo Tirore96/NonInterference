@@ -144,7 +144,7 @@ Definition Output_hasDecEq := [derive hasDecEq for Output].
 HB.instance Definition _ := Output_hasDecEq.
 
 Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool
-                 | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | Unit1 | Unit2 |  TInterrupt | THandlerOutput |  TPublicOutput | TPublicInput. 
+                 | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | Unit1 | Unit2 |  TInterrupt | THandlerOutput |  TPublicOutput | TPublicInput | Arrow : Ty -> Ty -> Ty | List : Ty -> Ty. 
 
 Derive NoConfusion for Ty.
 Derive EqDec for Ty.
@@ -168,7 +168,9 @@ Fixpoint interp (t : Ty) : Set :=
   | TInterrupt => Interrupt
   | THandlerOutput => HandlerOutput
   | TPublicOutput => PublicOutput
-  | TPublicInput => PublicInput                       
+  | TPublicInput => PublicInput
+  | Arrow t0 t1 => (interp t0) -> (interp t1)
+  | List t0 => list (interp t0)                                  
   end.
 Notation "[ i ]" := (interp i).
 
