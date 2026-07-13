@@ -622,13 +622,17 @@ Definition tI_no'g : Tsum' :=  inr (tI_o (Nothing,(false,false_ic))).
 Definition tI_yes'g : Tsum' :=  inr (tI_o (Notify,(true,default_on_ic))).
 
 Definition default_and_masked_ic := or_bool_state (false, default_on_ic) (false, mask_most).
+
+Definition dI_no'g : Tsum' :=  inr (dI_o (Nothing,(false,false_ic))).
+Definition dI_yes'g : Tsum' :=  inr (dI_o (Notify,default_and_masked_ic)).
+
+
                                      
 Definition defaultI_no'g : Tsum' :=  inr (defaultI_o (Nothing,(false,false_ic))).
 Definition defaultI_yes'g : Tsum' :=  inr (defaultI_o (Notify,default_and_masked_ic)).
 
-
-Definition good_no_dI' : seqtype' :=   [::pub_get';                        tI';pub_get';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;sch_high;pr_nop'(*nop*);tI';pr_nop';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;sch_low;pub_get'].
-Definition good_with_dI' : seqtype' :=   [::pub_get';dI';pub_get';pub_get';tI';pub_get';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;sch_high;pr_sys'(*sys*);tI';pr_nop';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;sch_low;pub_get'].
+Definition good_no_dI' : seqtype' :=   [::pub_get';                      tI';pub_get';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;sch_high;pr_nop'(*nop*);tI';pr_nop';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;sch_low;pub_get'].
+Definition good_with_dI' : seqtype' := [::pub_get';dI';pub_get';pub_get';tI';pub_get';tI_no'g;tI_yes'g;dI_no'g;dI_yes'g;sch_high;pr_sys'(*sys*);tI';pr_nop';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;sch_low;pub_get'].
 
 
 Ltac rewr ::= rewrite /model_bad /loop_and_count /my_process_pool_bad /process_pool /my_f_initial /low_p /my_f_coopt /alternate_generic /alternate_generic2 /high_p /f_si /tI_o /bad_tI_handler /I_handler /f_proj /scheduler /bad_dI_handler /is_I_out /bad_default_handler /low_out /model_good /my_process_pool_good /f_si_good /to_T'_good /f_proj_good /good_default_handler /good_tI_handler /good_dI_handler /good_I_handler.
@@ -655,7 +659,7 @@ Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
 
-  do 9(first [econ;[idtac | econ | idtac] | econ];
+  do 19(first [econ;[idtac | econ | idtac] | econ];
         reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans).
 
    (first [econ;[idtac | econ | idtac] | econ];
@@ -665,612 +669,110 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.  
 
- do 6(first [econ;[idtac | econ | idtac] | econ];
-       reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans).  
+Definition ir_dis (l : level) (ir : [TInterrupt]) := ir = DiskInterrupt /\ l = \bot.
+Definition TInterrupt_rel : myrel [TInterrupt].
+  refine (@MyRel _
+            ir_dis
+            (fun l ir ir' => ir = ir' \/ ir_dis l ir /\ ir_dis l ir')
+            _
+            _
+            _
+            _).
+  ssa. con. intro. ssa. intro. ssa. de H.
+  intro. ssa. de H. de H0. subst. ssa. subst.
+  eauto. de H0. subst. ssa.
+  ssa. de H0. eauto. move: H0 H1. rewrite /ir_dis. ssa.
+  subst. eauto.
+  ssa. move: H0. rewrite /ir_dis. ssa. subst.
+  rewrite /order in H. rewrite lex0 in H. apply/eqP. done.
+  ssa. rewrite /ir_dis. con. ssa. ssa. de H0. subst.
+  move:H. rewrite /ir_dis. intros;subst. ssa.
+  ssa. de H0. move: H. rewrite /ir_dis. ssa.
+Defined.  
 
-  Eval cbv in ( (update_re_sch
-                   (update_prev_pid
-                      (update_cur_pid
-                         (update_bool_state
-                            (update_I_pending
-                               (set_masks
-                                  (update_cur_pid
-                                     (save_cur_to_prev
-                                        (update_I_pending initial_state_good TimerInterrupt true))
-                                     (I_handler_pid TimerInterrupt)))
-                               TimerInterrupt false)
-                            (or_bool_state
-                               (false,
-                                (get_I_pending
-                                   (update_I_pending
-                                      (set_masks
-                                         (update_cur_pid
-                                            (save_cur_to_prev
-                                               (update_I_pending initial_state_good TimerInterrupt
-                                                  true))
-                                            (I_handler_pid TimerInterrupt)))
-                                      TimerInterrupt false)
-                                   DefaultInterrupt,
-                                 false,
-                                 (get_I_pending
-                                    (update_I_mask
-                                       (update_I_pending
-                                          (set_masks
-                                             (update_cur_pid
-                                                (save_cur_to_prev
-                                                   (update_I_pending initial_state_good TimerInterrupt
-                                                      true))
-                                                (I_handler_pid TimerInterrupt)))
-                                          TimerInterrupt false)
-                                       DefaultInterrupt false)
-                                    DiskInterrupt,
-                                  false,
-                                  (get_I_pending
-                                     (update_I_mask
-                                        (update_I_mask
-                                           (update_I_pending
-                                              (set_masks
-                                                 (update_cur_pid
-                                                    (save_cur_to_prev
-                                                       (update_I_pending initial_state_good
-                                                          TimerInterrupt true))
-                                                    (I_handler_pid TimerInterrupt)))
-                                              TimerInterrupt false)
-                                           DefaultInterrupt false)
-                                        DiskInterrupt false)
-                                     TimerInterrupt,
-                                   false))))
-                               (true, default_on_ic)))
-                         handler_pid)
-                      None)
-                   false)).
 
-  econ. 2:econ. reduce_tac;reduce_tac.
+Definition in_rel : myrel [T_in] := eqsum_L TInterrupt_rel (publicRel _).
+Eval cbv in T_out'.
+Definition out_rel : myrel [T_out'] := eqpair (eqmaybe (publicRel _))
+                                          (eqpair (eqmaybe (semiprivateRel _))
+                                             (eqpair (eqmaybe (publicRel _))
+                                                (eqpair (eqmaybe (publicRel _))
+                                                   (eqpair (eqmaybe_top (semiprivateRel _))
+                                                      (eqmaybe_top (semiprivateRel _)))))).
 
-  Eval cbv in (update_I_pending initial_state_good TimerInterrupt true).
+Lemma Trace_imp : forall (A B : Ty) (p : Proc A B) (s : seq ([A] + [B])) l (BRel BRel' : myrel [B]), (forall x y, rel BRel l x y -> rel BRel' l x y) -> Trace BRel l s p -> Trace BRel' l s p.
+Proof.  
+  intros.
+  elim : H0 H;ssa.
+  econ. eauto. eauto.
+  econ;eauto.
+Qed.
 
-  (*proved the last element of the trace manually to avoid evar holes in proof*)
+Lemma helper_trace' : Trace (publicRel _) false [::pub_get';pub_get'] model_bad.
+Proof.
+    rewr;simpl;rewr;simpl;rewr;simpl;rewr.
+    (first [econ;[idtac | econ | idtac] | econ];
+     reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans).
+    simpl.
+
    (first [econ;[idtac | econ | idtac] | econ];
     reduce_tac2;try solve [reflexivity| reduce_tac2;reduce_tac2];simpl;try swi_instans).
    econ. reduce_tac2;reduce_tac2. econ. econ. reduce_tac. econ. econ.
    reduce_tac. econ. econ. reduce_tac. econ. econ. reduce_tac. econ.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
+Qed.   
+
+Lemma helper_trace : Trace out_rel false [::pub_get';pub_get'] model_bad.
+Proof.
+  eapply Trace_imp. 2:eapply helper_trace'.
+  intros. simpl in H. subst. auto.
+Qed.  
+(* Unfolding lemmas: since we hide these below with `Opaque`, `unfold`/`simpl` no
+   longer expose their bodies. Use `rewrite f_I_eq` (etc.) to unfold on demand. Each
+   RHS is the definition's own body, captured with `cbv delta`, so nothing is copied
+   by hand and the lemmas stay in sync with the definitions automatically. Stated
+   here while the constants are still transparent, so `reflexivity` closes them. *)
+Lemma f_I_eq : f_I = ltac:(let x := eval cbv delta [f_I] in f_I in exact x).
+Proof. reflexivity. Qed.
+Lemma f_si_eq : f_si = ltac:(let x := eval cbv delta [f_si] in f_si in exact x).
+Proof. reflexivity. Qed.
+Lemma initial_state_bad_eq :
+  initial_state_bad = ltac:(let x := eval cbv delta [initial_state_bad] in initial_state_bad in exact x).
+Proof. reflexivity. Qed.
+Lemma def_eq : def = ltac:(let x := eval cbv delta [def] in def in exact x).
+Proof. reflexivity. Qed.
+Lemma f_proj_eq : f_proj = ltac:(let x := eval cbv delta [f_proj] in f_proj in exact x).
+Proof. reflexivity. Qed.
+
+(* Part B (see plan): keep the large *data* leaves folded during this proof so
+   coq-lsp does not serialize their unfolded bodies while `match_dd` inverts the
+   reduction. These are only carried by map/sta nodes, never pattern-matched by the
+   inversion, so hiding them cannot block `match_dd`. NOTE: my_f_I/my_f_O (type
+   indices) and my_f_initial (feeds the swi bool that reduce_swiO/swiO2 must see
+   concretely) are deliberately NOT hidden. Scoped to this lemma; restored below. *)
+Opaque f_I f_si initial_state_bad def f_proj.
+
+
+Lemma model_bad_not_NI : ~ NI in_rel out_rel model_bad.
+Proof.
+  intro. rewrite /NI in H. move: (H false). clear H.
+  rewrite /NI_l. case=>_ [] + _. intros.
+  move: helper_trace.
+  move/a. move/(_ (inl DiskInterrupt) 0). simpl.
+  have: ir_dis false DiskInterrupt. ssa.
+  move=>aa. move/(_ aa).
+  move=>Htr. clear a aa.
+  inv Htr;clear Htr;match_dd. 
+  rewrite f_si_eq /= in x. clear x.
+  inv H3;clear H3;match_dd. ssa.
+  inv H5;clear H5;match_dd.
+  move: H9. clear. simpl. ssa.
 Qed.
-Lemma trace_good_with_dI' : forall l, Trace (publicRel _) l good_with_dI' model_good.
+
+Transparent f_I f_si initial_state_bad def f_proj.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
-Definition test := @map (Times Nat (Sum Unit THandlerOutput)) (Times Nat (Times (Option Unit) (Option THandlerOutput))) _ _ (fun i => if snd i is inr ho then (fst i,(None,Some ho)) else (fst i,(Some tt,None))) id
-                     (par (@map (Times _ (Times _ _)) (Times _ _) _ _ (fun i => (fst i, (fst (snd i)))) id ((sta_swi true 0 (maybe (low_p)))))
-                       (@map (Times _ (Times _ _)) (Times _ _) _ _ (fun i => (fst i, (snd (snd i)))) id ((sta_swi false 1 (maybe (high_p)))))).
-
-Definition intype := Times Nat (Sum Unit THandlerOutput).
-Definition intype' := Times Nat (Times (Option Unit) (Option THandlerOutput)).
-Definition outtype := Times (Option TPublicOutput) (Option TTypeSyscall).
-
-(*
-Say we mapped from unit + handleroutput to intype with handleroutput distinguished
-inl tt -> (Some tt,None)
-inr hl -> (None, Some ho)
-
-We need (None,Some ho) to be distinguished. Compositionally it means that
-Option Unit needs eqmaybe_top _
-while Handleroutput suffices with eqmaybe _
-Thus (None,None) does not become distinguished, so we don't have to reason about it
-
-schedule is public so publicRel for nat
-
-
-(*problem in f_EP, we update v to xor v b for any b
- and since state is supposed to be public we cannot opt for the naive solution of making everything distinguished
-(what would the problem of that be however? It makes bool rel private as well, which forces us to use oblivious, inconsistent with public output) 
-So we need to keep the distinguished set that enters public process empty, so from eqmaybe_top to eqmaybe.
-What does that mean for the tuple?
-replace eqpair_LR with eqpair_R
-it increases set of distinguished pairs, everything is if handleroutput is Some h.
-
- *)
- *)
-Definition test_in_rel : myrel [intype] := eqpair_R (publicRel _) (eqsum_R (publicRel _) (semiprivateRel _)).
-Definition test_in_rel' : myrel [intype'] := eqpair_R (publicRel _) (eqpair_R (eqmaybe (publicRel _)) (eqmaybe (semiprivateRel _))).
-
-(*
-output rel does not need any tuples distinguished, so eqpair is fine
-we also want to keep it public which process was scheduled, so eqmaybe for both types
-finally attacker cannot tell difference between secret outputs, so semiprivateRel on right component
- *)
-Definition test_out_rel : myrel [outtype] := eqpair (eqmaybe (publicRel _)) (eqmaybe (semiprivateRel _)).
-Lemma low_NI : NI test_in_rel test_out_rel test.
-Proof. rewrite /test.
-       eapply map_NI. instantiate (1:= test_in_rel'). mrw. rewrite /test_in_rel'.
-       mrw. intros. apply rel_eqpair_R2' in H. 
-       destruct H. 
-       destruct H. simpl in H. destruct i,i'. rewrite !pair_rewr in H0. rewrite !pair_rewr. simpl in H. subst.
-       have : is_inl i0 /\ is_inl i2 \/ is_inr i0 /\ is_inr i2. de i0. de i2. de i2.
-       case. case. intros. destruct i0. destruct i2. done. done. done.
-       case. intros. destruct i0. done. destruct i2. done.
-       ssa.
-       destruct H. destruct i,i'. rewrite !pair_rewr in H,H0.
-       destruct i0. done.
-       destruct i2. done.
-       rewrite !pair_rewr. ssa.  
-
-       mrw. ssa. de i. de s.
-       eauto.
-       
-       simpl in H0.
-       apply par_NI.
-       eapply map_NI. mrw. intros. rewrite /test_in_rel in H. instantiate (1:= eqpair_R (publicRel _) (eqmaybe (publicRel _))). 
-       apply rel_eqpair_R2.
-       apply rel_eqpair_R2' in H.
-       destruct H. left. destruct H. con. ssa.
-
-       Search _ (rel (eqpair_R _ _)).
-       apply rel_eqpair_R2' in H0.
-       destruct H0. ssa.
-       apply rel_eqpair_R in H0. destruct H0. clear H H1. ssa.
-       destruct H. right. ssa.
-       mrw. intros. ssa.
-       eauto.
-
-       rewrite /sta_swi.
-       eapply map_NI. mrw. intros. instantiate (1:= eqpair_R (publicRel _) (eqmaybe_top (publicRel _))).
-       destruct i,i'. rewrite !pair_rewr.
-       apply rel_eqpair_R2. apply rel_eqpair_R2' in H. destruct H.
-       left. ssa. right. ssa.
-       mrw. ssa.
-       2: eapply sta_NI.
-       mrw. intros. apply rel_eqpair in H. destruct H. eauto.
-       3: { mrw. intros. simpl in H. destruct i. simpl in H. simpl. destruct i0. simpl in H. done.
-            simpl in H.
-       
-       ssa. de H. rewrite H. de i.de p. de o. de i'. de p. de o. subst. de o0. de o1. de H1. de o1. ssa.
-  rewrite /sta_low_p /sta_swi.
+Lemma model_good_NI : NI in_rel out_rel model_good.
+Proof.
+  rewr;simpl;rewr;simpl.
   eapply map_NI.
-  mrw. intros. instantiate (1:= (eqpair (publicRel _) (publicRel _))). simpl. ssa.
-  mrw. ssa.
-  mrw. intros.
-  2: eapply sta_NI. Search _ (rel (eqpair _ _)). apply rel_eqpair in H. destruct H. eauto.
-  4: { eapply map_NI. mrw. intros. 
-
-
-
-
-
-      
-Definition low_in_rel := public
-
-
-
-
-Definition handler := @alternate_generic TInterrupt THandlerOutput Unit2 Notify Nothing tt.
-Definition unit_p : Proc Unit Unit := @out Unit Unit tt.
-
-Definition my_procs : forall n, Proc (my_f_I n) (my_f_O n).
-  case. apply handler.
-  case. apply high_p.
-  case. apply low_p.
-  elim. apply unit_p.
-  intros. apply unit_p.
-Defined.
-
-Definition my_f_coopt (n : nat) : bool := n == 0.
-Definition my_f_initial (n : nat) := n == 0.
-Definition my_process_pool := @process_pool 2 my_f_coopt my_f_initial my_f_I my_f_O my_procs.
-
-Definition my_T_in := Sum Unit TInterrupt. (*We need Unit input to be able to differentiate trace, otherwise we only have interrupts in the trace*)
-Definition my_T_out := Option (Sum TPublicOutput TTypeSyscall).
-Definition my_T_in' := times_Option_n 2 my_f_I.
-Definition my_T_out' := times_Option_n 2 my_f_O.
-
-Definition h_pub := (false,false).
-Definition h_pr := (false,true).
-Definition pub := (true,false).
-Definition pr := (true,true).
-
-Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [bstate]) : [bstate] :=
-  let: (proc_state,flag) := v in
-  if proc_state == pub then match i with | inl (inr TimerInterrupt) => (h_pub,false) | inl (inr DiskInterrupt) => (pub,true) | _ => (pub,true) end
-  else if proc_state == h_pub then match i with | inr _ => (pr,false) | inl (inr DiskInterrupt) => (h_pub,true) | _ => (h_pub,false) end
-  else if proc_state == pr then match i with inl (inr TimerInterrupt) => (h_pr,false) | inl (inr DiskInterrupt) => (pr,true) | _ => (pr,true) end
-  else if proc_state == h_pr then match i with | inr _ => (pub,false) | inl (inr DiskInterrupt) => (h_pr,true)  | _ => (h_pr,false) end
-  else v.
-
-(*Definition good_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
-  match fst v,i with
-  | (true,false),(inl (inr TimerInterrupt)) => (h_pub,(0,2))                                                 
-  | (true,false),_  => (pub,(3,4))
-  | (false,false), inr _ => (pr,(1,1))
-  | (false,false), _ => (pr,(3,5))
-  | (true,true), (inl (inr TimterInterrupt)) => (h_pr,(0,1))
-  | (true,true), _ => (pr,(3,6))
-  | (false,true), inr _ => (pub,(2,2))
-  | bb,_ => (bb,(3,3))
-end. *)              
-
-Definition bad_schedule (i : [Sum my_T_in my_T_out']) (v : [nbstate]) : [nbstate] :=
-  match fst v,i with
-  | (false,false), inr _ => (pr,(1,1))
-  | (false,false), inl _ => (h_pub,(3,3))                            
-  | (false,true), inr _ => (pr,(1,1))
-  | (false,true), inl _ => (h_pr,(3,3))
-  | (true,false), inr _ => (pub,(3,3))
-  | (true,false), inl (inr DiskInterrupt) => (h_pub,(0,2))
-  | (true,false), inl (inr TimerInterrupt) => (pr,(1,2))                                      
-  | (true,true), inr _ => (pr,(3,3))
-  | (true,true), inl (inr DiskInterrupt) => (h_pr,(0,1))
-  | (true,true), inl (inr TimerInterrupt) => (pub,(2,1))
-  | bb,_ => (bb,(3,3))                                             
-  end.
-
-Definition none3 : [ (times_Option_n 2 my_f_I) ]  := (None,(None,None)).
-
-
-Definition my_f_route (t : [my_T_out']) : [my_T_in'] :=
-  match t with
-  | ((Some publ, _)) => none3
-  | (None,(Some prv,_)) => none3
-  | (None,(None,Some handl)) => (None,(Some handl,None))
-  | _ => none3 
-  end.
-
-Definition my_f_in (t : [my_T_in]) : [ (times_Option_n 2 my_f_I) ] :=
-  match t with
-  | inl tt => (Some tt,(None,None))
-  | inr TimerInterrupt => none3
-  | inr DiskInterrupt => (None,(None,Some DiskInterrupt)) end.
-
-Definition my_f_out (t : [my_T_out']) :=
-  match t with
-  | (Some publ, (None, None)) => Some (inl publ)
-  | (None, (Some pr, None)) => Some (inr pr)
-  | _ => None (*includes handler output and simultaneous output*)
-  end.
-
-Definition f_out_helper (t : [my_T_out]) (h : [THandlerOutput]) : [my_T_out'] :=
-  match t with
-  | Some (inl publ) => (Some publ, (None,None))
-  | Some (inr pr) => (None, (Some pr, None))
-  | None => (None,(None,Some h))
-  end.            
-Check loop_and_count.
-Definition to_nats (s : [bstate]) :=
-  let: (proc_state,flag) := s in
-  if flag then (3,3) else
-    match proc_state with
-    | (true,false) => (2,2)
-    | (false,false) => (0,2)
-    | (true,true) => (1,1)
-    | (false,true) => (0,1)                                            
-    end.
-
-Definition model' := @loop_and_count bstate (h_pr,false) to_nats my_T_in my_T_in' my_T_out' my_T_out' good_schedule my_f_route def my_process_pool my_f_in.
-Definition model := @map _ _ _ (Option (Sum TPublicOutput TTypeSyscall)) id my_f_out model'.
-Definition bad_model' := @loop_and_count nbstate (h_pr,(3,3)) snd my_T_in my_T_in' my_T_out' my_T_out' bad_schedule my_f_route def my_process_pool my_f_in.
-Definition bad_model := @map _ _ _ (Option (Sum TPublicOutput TTypeSyscall)) id my_f_out bad_model'.
-Definition out0 x : [my_T_out'] := (Some x,(None,(None))).
-Definition out1 x : [my_T_out'] := (None,(Some x,(None))).
-Definition out2 x : [my_T_out'] := (None,(None,(Some x))).
-
-(*Spec for good scheduler*)
-Definition Tsum' := ([my_T_in] + [my_T_out'])%type.
-Definition Tsum := ([my_T_in] + [my_T_out])%type.
-Definition seqtype' := seq Tsum'.
-Definition seqtype := seq Tsum.
-Definition tI' : Tsum'  := inl (inr TimerInterrupt).
-Definition dI' : Tsum'  := inl (inr DiskInterrupt).
-Definition tI : Tsum  := inl (inr TimerInterrupt).
-Definition dI : Tsum  := inl (inr DiskInterrupt).
-Definition pub_get' : Tsum' := inr (Some GetRequest,(None,None)).
-Definition pub_get : Tsum := inr (Some (inl GetRequest)).
-Definition pub_nop' : Tsum' := inr (Some Public_NOP,(None,None)).
-Definition pub_nop : Tsum := inr (Some (inl (Public_NOP))).
-Definition pr_sys' : Tsum' := inr (None,(Some Syscall,None)).
-Definition pr_sys : Tsum := inr (Some (inr Syscall)).
-Definition pr_nop' : Tsum' := inr (None,(Some NOP,None)).
-Definition pr_nop : Tsum := inr (Some (inr NOP)).
-Definition handl_out_noti' : Tsum' := inr (None,(None,Some Notify)).
-Definition handl_out_noth' : Tsum' := inr (None,(None,Some Nothing)).
-Definition handl_out : Tsum := inr None.
-Definition non' : Tsum' := inr (None,(None,None)).
-Definition non : Tsum := inr None.
-
-
-Definition no_dI : seqtype :=   [::handl_out;pub_get;    pub_get;tI;handl_out;pr_nop(*nop*);pr_nop;tI;handl_out;pub_get].
-Definition with_dI : seqtype := [::handl_out;pub_get;dI;pub_get;tI;handl_out;pr_sys(*sys*);pr_nop;tI;handl_out;pub_get].
-
-Definition output_rel' := eqpair (eqmaybe (publicRel TPublicOutput)) (eqpair (eqmaybe (semiprivateRel TTypeSyscall)) (eqmaybe (semiprivateRel THandlerOutput))).
-Definition output_rel := eqmaybe (eqsum_R (publicRel TPublicOutput) (semiprivateRel TTypeSyscall)).
-
-Ltac rewr := rewrite /model /model' /loop_and_count /my_process_pool /process_pool /my_f_initial /low_p /my_f_coopt /handler /alternate_generic /alternate_generic2 /high_p.
-Lemma trace_no_dI' : forall l, Trace output_rel' l no_dI' model'.
-  intros.
-  rewr. simpl. rewr. simpl. rewr.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. rewrite !inE. cbn.
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-Qed.
-
-Lemma trace_with_dI' : forall l, Trace output_rel' l with_dI' model'.
-  rewr. simpl. rewr. simpl. rewr.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. rewrite !inE. cbn.
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-Qed.
-
-(*Necessary to avoid controlled_eauto tactic weirdness in reduce_tac*)
-
-
-
-Lemma trace_no_dI : forall l, Trace output_rel l no_dI model.
-  rewr. simpl. rewr. simpl. rewr.
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 Nothing)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
-  done.
-Qed.
-
-Lemma trace_with_dI : forall l, Trace output_rel l with_dI model.
-  rewr. simpl. rewr. simpl. rewr.
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 Nothing)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
-
-  econ. reduce_tac2;reduce_tac2;try econ. reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:=  (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
-  done.
-Qed.
-
-
-
-Definition bad_no_dI : seqtype :=     [::handl_out;      tI; pub_get;                                         pub_get;tI;pr_nop;pr_nop;tI;pub_get].
-Definition bad_with_dI : seqtype :=   [::handl_out;tI;pub_get;dI;handl_out;pr_sys;pr_nop;tI;pub_get;tI;pr_nop;pr_nop;tI;pub_get].
-
-Ltac rewr ::= rewrite /model /model' /bad_model /bad_model' /loop_and_count /my_process_pool /process_pool /my_f_initial /low_p /my_f_coopt /handler /alternate_generic /alternate_generic2 /high_p.
-
-Lemma bad_trace_no_dI' : forall l, Trace output_rel' l bad_no_dI' bad_model'.
-  intros.
-  rewr. simpl. rewr. simpl. rewr.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].  
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. cbn.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. 
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].  
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].    
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. 
-Qed.
-
-Lemma bad_trace_with_dI' : forall l, Trace output_rel' l bad_with_dI' bad_model'.
-  intros.
-  rewr. simpl. rewr. simpl. rewr.
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].  
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].    
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac]. 
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].    
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; first reduce_tac;try solve [ reduce_tac;reduce_tac].
-  econ; [ idtac | apply rel_refl | idtac ];first reduce_tac;try solve [ reduce_tac;reduce_tac].  
-Qed.
-
-Lemma bad_trace_no_dI : forall l, Trace output_rel l bad_no_dI bad_model.
-Proof.
-  rewr. simpl. rewr. simpl. rewr.
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 Nothing)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
-  done.
-Qed.
-
-Lemma bad_trace_with_dI : forall l, Trace output_rel l bad_with_dI bad_model.
-Proof.
-  rewr. simpl. rewr. simpl. rewr.
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 Nothing)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
-
-  econ. reduce_tac2;reduce_tac2;try econ. reduce_tac.
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out2 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac. 
-
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out1 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
-
-  econ. reduce_tac2;reduce_tac2;try econ.
-  
-  econ;[ idtac | apply rel_refl | idtac ]. reduce_once. instantiate (1:= (out0 _)). done.
-  reduce_tac2;reduce_tac2;try econ;try econ;reduce_tac.  
-  
-  done.
-Qed.
-
-
-
-
-(*Lemma NI_model : NI input_rel' output_rel model.  
-Admitted.*)
-
-
-(*Definition is_tI_in (i : [T_in']) :=
-  match i with
-  | (_,(Some _,_)) => true
-  | _ => false                              
-  end.
-
-Definition is_dI_in (i : [T_in']) :=
-  match i with
-  | (Some _,_) => true
-  | _ => false                              
-  end.*)
-
-
-(*Definition is_tI_out_done (o : [T_out']) :=
-  match o with
-  | (_,(Some Notify,_)) => true
-  | _ => false   
-  end.
-
-Definition is_tI_out_running (o : [T_out']) :=
-  match o with
-  | (_,(Some Nothing,_)) => true
-  | _ => false   
-  end.
-
-Definition is_dI_out_done (o : [T_out']) :=
-  match o with
-  | (Some Notify,_) => true
-  | _ => false 
-  end.
-
-Definition is_dI_out_running (o : [T_out']) :=
-  match o with
-  | (Some Nothing,_) => true
-  | _ => false 
-  end.*)
-
-(*Definition incoming_tI (v : [stateType]) : [stateType] :=
-  let tI_bits := if negb (get_tI_mask v) then (false,true) else (true,true) in
-  update_tI_bits v tI_bits.
-
-
-Definition incoming_dI (v : [stateType]) :=
-  let bb := v.2.2 in
-  let bb' := if negb bb.2 then (false,true) else (true,true) in
-  (v.1,(v.2.1,bb')).
-
-Definition outgoing_tI (v : [stateType]) :=
-  let bb := v.2.1 in
-  let bb' := if bb.1 then (false,true) else (false,false) in
-  (v.1,(bb',v.2.2)).
-
-Definition outgoing_dI (v : [stateType]) :=
-  let bb := v.2.2 in
-  let bb' := if bb.1 then (false,true) else (false,false) in
-  (v.1,(v.2.1,bb')).*)
