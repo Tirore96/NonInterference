@@ -771,8 +771,340 @@ Qed.
 
 Transparent f_I f_si initial_state_bad def f_proj.
 
+Lemma test_test l i i' : rel (eqsum_L in_rel out_rel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
+Proof.
+  intros. destruct i. destruct i'. ssa.
+  exfalso. ssa. destruct i'. ssa. ssa.
+Qed.
+
+Lemma semiprivate_not_bot : forall (A : Ty) l (x y : [A]), l <> \bot -> x = y -> rel (semiprivateRel _) l x y.
+Proof.
+ssa.
+Qed.
+
+Lemma semiprivate_not_bot' : forall (A : Ty) l (x y : [A]), l <> \bot -> rel (semiprivateRel _) l x y -> x = y.
+Proof.
+ssa. de H0.
+Qed.
+
+Lemma eqmaybe_semiprivate_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (semiprivateRel _)) l x y -> x = y.
+Proof.
+ssa. de x. de y. de H0. subst. done. de y.
+Qed.
+
+Lemma eqmaybe_public_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (publicRel _)) l x y -> x = y.
+Proof.
+ssa. de x. de y. subst. done. de y.
+Qed.
+
+Lemma eqmaybe_semiprivate_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_top (semiprivateRel _)) l x y -> x = y.
+Proof.
+ssa. de x. de y. de H0. subst. done. de y.
+Qed.
+
+Lemma eqmaybe_semiprivate_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_top (semiprivateRel _)) \bot x y.
+Proof.
+  ssa. de x. de y. de y.
+Qed.
+
+Lemma semiprivate_bot : forall (A : Ty) (x y : [A]), rel ((semiprivateRel _)) \bot x y.
+Proof.
+  ssa.
+Qed.  
+
+Hint Resolve semiprivate_bot.
+(*
+  H2 : rel (eqmaybe (semiprivateRel TTypeSyscall)) l i1 i6
+  H3 : rel (eqmaybe (publicRel Nat)) l i2 i7
+  H4 : rel (eqmaybe (publicRel I_output_type)) l i3 i8
+  H5 : rel (eqmaybe_top (semiprivateRel I_output_type)) l i4 i9
+  H6 : rel (eqmaybe_top (semiprivateRel I_output_type)) l i5 i10
+ *)
+
+Lemma out_rel_not_bot : forall i i' l, l <> \bot -> rel out_rel l i i' -> i = i'.
+Proof.
+  intros.
+  move:H0. move/rel_eqpair=> [] + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [].
+  move: i=>[a [b [c [d [e f]]]]].
+  move: i'=>[a' [b' [c' [d' [e' f']]]]].  
+  rewrite !pair_rewr.
+  move=>/eqmaybe_public_not_bot=>->//.
+  move=>/eqmaybe_semiprivate_not_bot'=>->//.
+  move=>/eqmaybe_public_not_bot=>->//.
+  move=>/eqmaybe_public_not_bot=>->//.
+  move=>/eqmaybe_semiprivate_not_bot=>->//.
+  move=>/eqmaybe_semiprivate_not_bot=>->//.
+Qed.
+
+Lemma falseRel_aware : forall l, aware falseRel true l.
+Proof.
+intros. rewrite /aware. intros. ssa. subst. simpl. intro. ssa.
+Qed.
+
+Definition lt_dis (nP : nat -> Prop) (l : level) (n : nat) := nP n /\ l = \bot.
+
+Definition natLTRel (nP : nat -> Prop) : myrel ([Nat]).
+  refine (@MyRel _
+            (lt_dis nP)
+            (fun l n1 n2 => n1 = n2 \/ (lt_dis nP l n1) /\ (lt_dis nP l n2))
+            _
+            _
+            _
+            _).
+  ssa. con. intro. ssa. intro. ssa. de H.
+  intro. ssa. de H. subst. de H0. de H0. subst.
+  move: H H1. rewrite /lt_dis. ssa.
+  ssa. de H0. move: H0 H1. rewrite /lt_dis. ssa. subst.
+  rewrite /order lex0 in H. move/eqP : H=>->. ssa.
+  ssa. move: H0. rewrite /lt_dis. ssa. subst.
+  rewrite /order lex0 in H. move/eqP : H=>->. done.
+  ssa. move: H. rewrite /lt_dis. ssa. subst.
+  con. intros. ssa. ssa. de H0. subst. done.
+Defined.
+(*nP = {1,2} (disk or default handler)*)
+Lemma model_good_NI : NI in_rel out_rel model_good.
+Proof.
+  rewr;simpl;rewr;simpl.
+  eapply map_NI.
+  instantiate (1:= eqsum_L in_rel out_rel). ssa. ssa.
+  mrw. intros.
+  2:eapply loop_NI. apply test_test in H as H'. destruct H'.
+  destruct i. destruct i'. ssa. ssa. ssa.
+  destruct i. ssa. destruct i'. ssa.
+  apply rel_eqsum_L2' in H. 
+  rewrite /inr_or_def. done.
+
+  eapply map_NI.
+  eauto. eauto.
+  mrw. intros.
+  2:apply sta_NI. apply rel_eqpair in H. destruct H. eauto.
+  instantiate (1:= eqpair (eqpair (natLTRel 2) (semiprivateRel _)) (semiprivateRel _)). ssa. mrw. intros.
+  simpl in H0. subst.
+  apply test_test in H as H'.
+  destruct H'. destruct i. destruct i'. ssa.
+  destruct i. destruct i0. destruct H. subst. ssa. ssa.
+  rewrite /ir_dis in H H2. ssa. subst. done. done. de i0. ssa. ssa.
+  destruct i. ssa. destruct i'. ssa.
+  apply rel_eqsum_L2' in H. Print T_out'. Print I_output_type.
+  apply out_rel_not_bot in H. subst. eauto. done.
+  subst. eauto.
+
+  mrw. intros. destruct i. 2:ssa.
+  have: dis in_rel l i. ssa. clear H=>H.
+  destruct (eqVneq l \bot). subst. ssa.
+  ssa. de i. rewrite /ir_dis in H. ssa.
+
+  eapply map_NI.
+
+  4: eapply maybe_NI.
+  mrw. intros. destruct i. destruct i'.
+  rewrite !pair_rewr.
+  apply rel_eqpair_R2' in H.
+  destruct H. destruct H.
+  apply test_test in H0 as H0'.
+  destruct H0'. destruct i0. destruct i2. ssa. ssa. ssa.
+  destruct i0. ssa. destruct i2. ssa.
+  apply rel_eqmaybe_false2.
+  instantiate (1:= eqpair _ _).
+  apply rel_eqpair2. rewrite !pair_rewr. con.
+  instantiate (1:= publicRel _). (*changed from private to public*)
+  clear H0 H1. Print stateType.
+
+  destruct (eqVneq l \bot). subst. eauto.
+  apply semiprivate_not_bot' in H. subst. eauto. apply/eqP. done.
+  instantiate (1:= eqpair _ _).
+  apply rel_eqpair2. rewrite !pair_rewr. con.
+  instantiate (1:= eqmaybe_top (semiprivateRel _)).
+  apply rel_eqsum_L2' in H0.
+  clear H1.
+  destruct (eqVneq l \bot). subst. apply eqmaybe_semiprivate_bot.
+
+  apply  out_rel_not_bot in H0. subst. eauto. apply/eqP. done.
+  clear H.
+  apply rel_eqsum_L2' in H0.
+  destruct (eqVneq l \bot). subst. eauto.
+  apply  out_rel_not_bot in H0. subst. eauto. apply/eqP. done.
+  destruct H. destruct i0. 2:ssa. destruct i2. 2:ssa. auto.
+  mrw. intros.
+  destruct i.
+  apply dis_eqpair_R in H. destruct i0. 2:ssa.
+  have: dis in_rel l i0. ssa. clear H=>H.
+  rewrite !pair_rewr. done.
+  mrw. intros.
+  apply rel_eqsum_L2. eauto.
+
+  apply par_NI.
+
+  eapply map_NI. 
+  4: eapply swi_NI.
+  mrw. intros.
+  move/rel_eqpair : H. case=>H0 H1.
+  apply rel_eqpair_LR2. con.
+  instantiate (1:= falseRel).
+  
+
+
+  5: { intros. left. apply falseRel_aware. move: H0. clear. ssa. de H0.
+  5: eapply maybe_NI. eauto.
+  2: { mrw. intros. move: H. instantiate (1:= publicRel _). simpl. de i. de i'. de i'. }
+  mrw. ssa. 
+
+  3: { mrw. intros. simpl in i,i'.
+       move: H. instantiate (1:= publicRel _). instantiate (1:= publicRel _). ssa. de i. de i'. de i'. }
+  mrw. intros.
+
+
+  mrw. intros.
+  destruct i. destruct i0.  destruct i'. destruct i3.
+  rewrite !pair_rewr.
+  move:H. move/rel_eqpair=>[] H0 /rel_eqpair [] H1.
+  rewrite !pair_rewr in H0 H1. rewrite !pair_rewr.
+  intros.
+  instantiate (1:= eqpair _ _). apply rel_eqpair2.
+  rewrite !pair_rewr. con.
+  instantiate (1:= semiprivateRel _). move: H0. clear.
+  intros. ssa. de H0. eauto. 2:eauto.
+  mrw. intros. ssa.
+
+  eapply swi_NI.
+  
+  
+  Search _ (rel (eqsum_L _ _)).
+  clear H1.
+
+  apply rel_eqsum_L2' in H0.
+  destruct (eqVneq l \bot). subst.
+  apply eqmaybe_semiprivate_bot.
+  apply semiprivate_not_bot' in H;eauto. subst.
+  apply eqmaybe_semiprivate_not_bot.  
+  ssa.
+  de i0.
+  ssa. de H. subst.
+  Search _ (eqmaybe_false). (Some _)).
+  Search _ (rel (eqpair_R _ _)).  
+  4: eapply par_NI.
+
 
 Lemma model_good_NI : NI in_rel out_rel model_good.
 Proof.
   rewr;simpl;rewr;simpl.
   eapply map_NI.
+  instantiate (1:= eqsum_L in_rel out_rel). ssa. ssa.
+  mrw. intros.
+  2:eapply loop_NI. apply test_test in H as H'. destruct H'.
+  destruct i. destruct i'. ssa. ssa. ssa.
+  destruct i. ssa. destruct i'. ssa.
+  apply rel_eqsum_L2' in H. 
+  rewrite /inr_or_def. done.
+
+  eapply map_NI.
+  eauto. eauto.
+  mrw. intros.
+  2:apply sta_NI. apply rel_eqpair in H. destruct H. eauto.
+  instantiate (1:= semiprivateRel _). ssa. mrw. intros.
+  simpl in H0. subst.
+  destruct H0. destruct H0. subst.
+  apply test_test in H as H'.
+  destruct H'. destruct i. destruct i'. ssa.
+  destruct i. destruct i0. destruct H. subst. ssa. ssa.
+  left. ssa.
+  move: H H3. rewrite /ir_dis. ssa. done. de i0. done. ssa.
+  destruct i. ssa. destruct i'. ssa.
+  apply rel_eqsum_L2' in H.
+  apply out_rel_not_bot in H. subst. eauto. done.
+  subst. eauto.
+
+  mrw. intros. destruct i. 2:ssa.
+  have: dis in_rel l i. ssa. clear H=>H.
+  destruct (eqVneq l \bot). subst. ssa.
+  ssa. de i. rewrite /ir_dis in H. ssa.
+
+  eapply map_NI.
+
+  4: eapply maybe_NI.
+  mrw. intros. destruct i. destruct i'.
+  rewrite !pair_rewr.
+  apply rel_eqpair_R2' in H.
+  destruct H. destruct H.
+  apply test_test in H0 as H0'.
+  destruct H0'. destruct i0. destruct i2. ssa. ssa. ssa.
+  destruct i0. ssa. destruct i2. ssa.
+  apply rel_eqmaybe_false2.
+  instantiate (1:= eqpair _ _).
+  apply rel_eqpair2. rewrite !pair_rewr. con.
+  instantiate (1:= publicRel _). (*changed from private to public*)
+  clear H0 H1. Print stateType.
+
+  destruct (eqVneq l \bot). subst. eauto.
+  apply semiprivate_not_bot' in H. subst. eauto. apply/eqP. done.
+  instantiate (1:= eqpair _ _).
+  apply rel_eqpair2. rewrite !pair_rewr. con.
+  instantiate (1:= eqmaybe_top (semiprivateRel _)).
+  apply rel_eqsum_L2' in H0.
+  clear H1.
+  destruct (eqVneq l \bot). subst. apply eqmaybe_semiprivate_bot.
+
+  apply  out_rel_not_bot in H0. subst. eauto. apply/eqP. done.
+  clear H.
+  apply rel_eqsum_L2' in H0.
+  destruct (eqVneq l \bot). subst. eauto.
+  apply  out_rel_not_bot in H0. subst. eauto. apply/eqP. done.
+  destruct H. destruct i0. 2:ssa. destruct i2. 2:ssa. auto.
+  mrw. intros.
+  destruct i.
+  apply dis_eqpair_R in H. destruct i0. 2:ssa.
+  have: dis in_rel l i0. ssa. clear H=>H.
+  rewrite !pair_rewr. done.
+  mrw. intros.
+  apply rel_eqsum_L2. eauto.
+
+  apply par_NI.
+
+  eapply map_NI. 
+  4: eapply swi_NI.
+  mrw. intros.
+  move/rel_eqpair : H. case=>H0 H1.
+  apply rel_eqpair_LR2. con.
+  instantiate (1:= falseRel).
+  
+
+
+  5: { intros. left. apply falseRel_aware. move: H0. clear. ssa. de H0.
+  5: eapply maybe_NI. eauto.
+  2: { mrw. intros. move: H. instantiate (1:= publicRel _). simpl. de i. de i'. de i'. }
+  mrw. ssa. 
+
+  3: { mrw. intros. simpl in i,i'.
+       move: H. instantiate (1:= publicRel _). instantiate (1:= publicRel _). ssa. de i. de i'. de i'. }
+  mrw. intros.
+
+
+  mrw. intros.
+  destruct i. destruct i0.  destruct i'. destruct i3.
+  rewrite !pair_rewr.
+  move:H. move/rel_eqpair=>[] H0 /rel_eqpair [] H1.
+  rewrite !pair_rewr in H0 H1. rewrite !pair_rewr.
+  intros.
+  instantiate (1:= eqpair _ _). apply rel_eqpair2.
+  rewrite !pair_rewr. con.
+  instantiate (1:= semiprivateRel _). move: H0. clear.
+  intros. ssa. de H0. eauto. 2:eauto.
+  mrw. intros. ssa.
+
+  eapply swi_NI.
+  
+  
+  Search _ (rel (eqsum_L _ _)).
+  clear H1.
+
+  apply rel_eqsum_L2' in H0.
+  destruct (eqVneq l \bot). subst.
+  apply eqmaybe_semiprivate_bot.
+  apply semiprivate_not_bot' in H;eauto. subst.
+  apply eqmaybe_semiprivate_not_bot.  
+  ssa.
+  de i0.
+  ssa. de H. subst.
+  Search _ (eqmaybe_false). (Some _)).
+  Search _ (rel (eqpair_R _ _)).  
+  4: eapply par_NI.
