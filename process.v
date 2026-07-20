@@ -86,6 +86,7 @@ Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x'
 Definition mask := Bool.
 Definition pending := Bool.
 Definition I_bits := Times pending mask.
+Definition ir_count := Option Nat.
 Definition ic := Times I_bits (Times I_bits I_bits).
 Definition count := Nat.
 Definition re_sch := Bool.
@@ -93,9 +94,15 @@ Definition prev_pid := Option Nat.
 Definition cur_pid := Sum Bool Nat. (*false = defaultInterrupt, true=diskInterrupt*)
 (*Definition pids := Times cur_pid prev_pid.*)
 Definition pids := Times cur_pid prev_pid.
-Definition bool_state := Times re_sch ic.
+(* ic_count bundles the interrupt-handler time slice with the interrupt controller.
+   ir_count = None  -> feature disabled
+   ir_count = Some n -> n steps of handler execution left; Some 0 -> return to user space *)
+Definition ic_count := Times ir_count ic.
+Definition bool_state := Times re_sch ic_count.
 Definition all_interrupts : seq [TInterrupt] :=
   [:: TimerInterrupt; DiskInterrupt; DefaultInterrupt].
+Definition sans_timer : seq [TInterrupt] :=
+  [:: DiskInterrupt; DefaultInterrupt].
 Definition stateType := Times pids bool_state.
 
 Definition get_pids (v : [stateType]) := v.1.
@@ -103,7 +110,9 @@ Definition get_bool_state (v : [stateType]) := v.2.
 Definition get_cur_pid (v : [stateType]) := (get_pids v).1.
 Definition get_prev_pid (v : [stateType]) := (get_pids v).2.
 Definition get_re_sch (v : [stateType]) := (get_bool_state v).1.
-Definition get_ic (v : [stateType]) := (get_bool_state v).2.
+Definition get_ic_count (v : [stateType]) := (get_bool_state v).2.
+Definition get_ir_count (v : [stateType]) := (get_ic_count v).1.
+Definition get_ic (v : [stateType]) := (get_ic_count v).2.
 
 Definition get_I_bits' (ic : [ic]) (ir : [TInterrupt]) : [I_bits] :=
   match ir with
@@ -132,7 +141,9 @@ Definition update_I_bits' (myic : [ic]) (ir : [TInterrupt]) (bits : [I_bits]) : 
   | TimerInterrupt => (myic.1, (myic.2.1, bits))
   end.
 
-Definition update_ic (v : [stateType]) ic : [stateType] := update_bool_state v ((get_bool_state v).1,ic).
+Definition update_ic_count (v : [stateType]) icc : [stateType] := update_bool_state v ((get_bool_state v).1,icc).
+Definition update_ir_count (v : [stateType]) c : [stateType] := update_ic_count v (c,(get_ic_count v).2).
+Definition update_ic (v : [stateType]) ic : [stateType] := update_ic_count v ((get_ic_count v).1,ic).
 Definition update_I_bits (v : [stateType]) (ir : [TInterrupt]) (bits : [I_bits]) := update_ic v (update_I_bits' (get_ic v) ir bits).
 
 Definition update_I_pending (v : [stateType]) (ir : [TInterrupt]) pending : [stateType] :=
@@ -145,12 +156,18 @@ Definition or_ic (c1 c2 : [ic]) : [ic] :=
   (or_I_bits c1.1  c2.1,
    (or_I_bits c1.2.1 c2.2.1,
     or_I_bits c1.2.2 c2.2.2)).
-Definition or_bool_state (s1 s2 : [bool_state]) : [bool_state] := (s1.1 || s2.1, or_ic s1.2 s2.2).
+(* keep the base state's time slice (s1.2.1); only the interrupt controller is merged *)
+Definition or_bool_state (s1 s2 : [bool_state]) : [bool_state] := (s1.1 || s2.1, (s1.2.1, or_ic s1.2.2 s2.2.2)).
 
 Definition set_masks (v : [stateType]) : [stateType] :=
   foldr (fun I v' => update_I_mask v' I true) v all_interrupts.
 Definition unset_masks (v : [stateType]) : [stateType] :=
   foldr (fun I v' => update_I_mask v' I false) v all_interrupts.
+Definition unset_masks_sans (v : [stateType]) : [stateType] :=
+  foldr (fun I v' => update_I_mask v' I false) v sans_timer.
+Definition unset_tI (v : [stateType]) : [stateType] := update_I_mask v TimerInterrupt false.
+Definition set_tI (v : [stateType]) : [stateType] := update_I_mask v TimerInterrupt true.
+Definition set_otherIs (v : [stateType]) : [stateType] := foldr (fun I v' => update_I_mask v' I true) v sans_timer.
 Definition masks_set (v : [stateType]) :=
   foldr (fun I b => (get_I_mask v I) && b) true all_interrupts.
 
@@ -158,11 +175,11 @@ Definition my_f_I := fun (n : nat) => if n == 4 then THandlerOutput else if n ==
 
 (*Definition I_output_type := Times THandlerOutput bool_state.*)
 
-Definition my_f_O := fun (n : nat) => if n == 3 then Nat else if n == 4 then TTypeSyscall else if n == 5 then TPublicOutput else (Times THandlerOutput Bool).
+Definition my_f_O := fun (n : nat) => if n == 3 then Nat else if n == 4 then TTypeSyscall else if n == 5 then TPublicOutput else THandlerOutput.
 
 
 Definition T_in := TInterrupt.
-Definition T_out' := Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Times (Option Nat) (times_on 2 (fun _ => Times THandlerOutput Bool)))).
+Definition T_out' := Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Times (Option Nat) (times_on 2 (fun _ => THandlerOutput)))).
 Definition T' := Option THandlerOutput.
 Definition is_sch_out (o : [T_out']) :=
   match o with
@@ -188,10 +205,10 @@ Definition default_I_out (o : [T_out']) :=
   | (_,(_,(_,(x,(_,_))))) => x
   end.  
 
-Definition is_I_out_done (o : [T_out']) : [Option (Times TInterrupt Bool)] :=
-  if tI_out o is Some (Notify,b) then Some (TimerInterrupt,b)
-  else if dI_out o is Some (Notify,b) then Some (DiskInterrupt,b)
-  else if default_I_out o is Some (Notify,b) then Some (DefaultInterrupt,b)
+Definition is_I_out_done (o : [T_out']) : [Option TInterrupt] :=
+  if tI_out o is Some Notify then Some TimerInterrupt
+  else if dI_out o is Some Notify then Some DiskInterrupt
+  else if default_I_out o is Some Notify then Some DefaultInterrupt
   else None.          
 
 
@@ -234,22 +251,25 @@ Definition save_cur_to_prev (v : [stateType]) : [stateType] :=
 
 Definition false_I_bits : [I_bits] := (false,false).
 Definition false_ic : [ic] := ((false,false),(false_I_bits,false_I_bits)).
-Definition bad_to_bs (ir : [TInterrupt]) (b : [Bool]) : [bool_state] :=
-  match ir with
-    | TimerInterrupt => (true,false_ic)
-    | DiskInterrupt => (false,false_ic)
-  | DefaultInterrupt => (false,false_ic)
-  end.
+
+
+  
+
 
 (*Definition step_on_input (i : [T_in]) (v : [stateType]) : [stateType] :=*)
- 
+
+(*Definition check_ir_count (o : [T_out']) (v : [stateType]) : [stateType] :=
+  if get_ir_count v is None then v else
+  if is_I_out_done o is Some TimerInterrupt then update_ir_count v (Some 4) else if get_ir_count v is Some n then update_ir_count v (Some n.-1) else v.*)
 
 Definition check_scheduler (o : [T_out']) (v : [stateType])  :=
   if @is_sch_out o is Some n then update_cur_pid v (inr n) else v.
 
-Definition check_handlers (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (o : [T_out']) (v : [stateType])  :=
-  if is_I_out_done o is Some (ir,b) then
-    update_bool_state v (or_bool_state (get_bool_state (unset_masks v)) (to_bs ir b)) else v.
+(*Definition check_tI (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (o : [T_out']) (v : [stateType])  :=
+  if is_I_out_done o is Some  then
+    update_bool_state v (or_bool_state (get_bool_state (unset_masks v)) (to_bs ir ((get_ir_count v) == (Some 0)))) else v.*)
+
+
 
 Definition initiate_handler (ir : [TInterrupt]) (v : [stateType]) :=
   update_I_pending (set_masks (update_cur_pid (save_cur_to_prev v) (I_handler_pid ir))) ir false.
@@ -259,8 +279,8 @@ Definition initiate_scheduler  (v : [stateType]) := update_re_sch (update_prev_p
 Definition get_prev_pid_wrap (v : [stateType]) : [Option cur_pid] := if get_prev_pid v is Some n then Some (inr n) else None.
 Definition initiate_prev_pid  (v : [stateType]) := update_prev_pid (update_cur_pid v (odflt scheduler_pid (get_prev_pid_wrap v))) None.
 
-Definition inspect_output (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (o : [T_out']) : [stateType] -> [stateType] :=
-  (check_handlers to_bs o) \o check_scheduler o.
+(*Definition inspect_output (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (o : [T_out']) : [stateType] -> [stateType] :=
+  (check_handlers to_bs o) \o check_scheduler o.*)
 
 Definition compute_next_pid (o : [T_out']) (v : [stateType]) : [stateType] :=
   match first_ready v with
@@ -271,10 +291,8 @@ Definition compute_next_pid (o : [T_out']) (v : [stateType]) : [stateType] :=
                  else initiate_prev_pid v
   end.
 
-Definition step_on_output (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (o : [T_out']) : [stateType] -> [stateType]:=
-  (compute_next_pid o) \o (inspect_output to_bs o).
-
-
+(*Definition step_on_output (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (o : [T_out']) : [stateType] -> [stateType]:=
+  (compute_next_pid o) \o (inspect_output to_bs o).*)
 
 Lemma sta_comp : forall (I V O : Ty) (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]) (f f' : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V])
                         (v : [V]) (p : Proc (Times V I) O),
@@ -316,17 +334,21 @@ Definition initiate_next :  [T_out'] -> [stateType] -> [stateType] := fun o v =>
 (*Definition maybe_initiate_scheduler :  [T_out'] -> [stateType] -> [stateType] := fun o v => if first_ready v is Some _ then v else if is_I_out_done o is None then v else if get_re_sch v then initiate_scheduler v else v.
 Definition maybe_initiate_prev_pid : [T_out'] -> [stateType] -> [stateType] := fun o v => if first_ready v is Some _ then v else if is_I_out_done o is None then v else if ~~ get_re_sch v then initiate_prev_pid v else v.*)
 Definition step0 := step_left (fun i v => update_I_pending v i true).
+
+Definition dec_ir_count (c : [ir_count]) : [ir_count] :=
+  if c is Some n then Some n.-1 else None.
+
+
+(*Definition step0' := step_right check_ir_count.*)
 Definition step1 := step_right check_scheduler.
-Definition step2  (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) := step_right (check_handlers to_bs).
+(*Definition step2  (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) := step_right (check_handlers to_bs).*)
 Definition step3 := step_right initiate_next.
 (*Definition step4 := step_right maybe_initiate_scheduler.
 Definition step5 := step_right maybe_initiate_prev_pid.*)
 
 
-Definition state_step (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (i : [Sum T_in T_out']) : [stateType] -> [stateType] :=
-  (step3 i) \o (step2 to_bs i) \o (step1 i) \o (step0 i).
-
-
+Definition state_step (handler_preroutine : [T_out'] -> [stateType] -> [stateType]) (i : [Sum T_in T_out']) : [stateType] -> [stateType] :=
+  (step3 i) \o (step_right handler_preroutine i) \o (step1 i) \o (step0 i).
 
 
 (*Definition f_I (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (i : [Sum T_in T_out']) (v : [stateType]) : [stateType] :=
@@ -345,24 +367,24 @@ Definition state_step (to_bs : [TInterrupt] -> [Bool] -> [bool_state]) (i : [Sum
   end.*)
 
 (*We only reroute disk interrupts*)
-Definition is_I_out (o : [T_out']) : [Option THandlerOutput] :=
+(*Definition is_I_out (o : [T_out']) : [Option THandlerOutput] :=
 if dI_out o is Some (o',_) then Some o'
-       else None.
+       else None.*)
 
 (*discards input from the inner process, only allowed to affect bit in ic, not pid*)
 Definition f_si (si : [Times stateType (Sum T_in T_out')]) : [Option (Times cur_pid T')] :=
-  if si.2 is inr o then Some (get_cur_pid si.1, is_I_out o) else None.
+  if si.2 is inr o then Some (get_cur_pid si.1, dI_out o) else None.
 
 Definition low_p := @out Unit TPublicOutput GetRequest.
 Definition high_p := @alternate_generic2 THandlerOutput TTypeSyscall Unit1 Syscall NOP tt (fun i => i == Notify).
 
-Definition handler_type := Proc Unit (Times THandlerOutput Bool).
+Definition handler_type := Proc Unit THandlerOutput.
 
 Definition I_handler : handler_type.
   rewrite /handler_type.
   eapply map. exact id.
   instantiate (1:= Times Nat Unit).
-  exact (fun o => if o.1 == 0 then (Notify,false) else (Nothing,false)).
+  exact (fun o => if o.1 == 0 then Notify else Nothing).
   eapply sta. exact (fun _ v => v). exact (fun _ v => v.+1%%2).
   exact 0.
   apply out. exact tt.
@@ -455,9 +477,8 @@ Definition my_f_pid (pid : [cur_pid]) : [Nat] :=
 Definition my_f_initial (n : nat) := n == (my_f_pid initial_pid).
 
 
-
 Definition my_process_pool_bad := @process_pool 5 my_f_coopt my_f_initial my_f_I my_f_O T' f_proj my_f_pid my_procs_bad.
-Definition initial_state : [stateType] := ((initial_pid,None),(false,false_ic)).
+Definition initial_state : [stateType] := ((initial_pid,None),(false,(None,false_ic))).
 Definition def : [ T_out' ]  := (None,(None,(None,(None,(None,None))))).
 
 
@@ -479,7 +500,20 @@ Definition loop_sta
                                       (Option (Times cur_pid T')) _ (Sum T_in T_out) f_si inr (maybe p)))))).
 
 
-Definition model_bad : Proc T_in T_out' := @loop_sta stateType initial_state T_in T_out' T' (state_step bad_to_bs) def my_process_pool_bad f_si.
+(*Definition bad_to_bs (ir : [TInterrupt]) : [bool_state] :=
+  match ir with
+    | TimerInterrupt => (true,(None,false_ic))
+    | DiskInterrupt => (false,(None,false_ic))
+    | DefaultInterrupt => (false,(None,false_ic))
+  end.*)
+
+Definition bad_preroutine (o : [T_out']) (v : [stateType])  :=
+  if is_I_out_done o is Some ir then let v := unset_masks v in if ir is TimerInterrupt then update_re_sch v true else v else v.
+
+(*    update_bool_state v (or_bool_state (get_bool_state (unset_masks v)) (bad_to_bs ir)) else v.*)
+
+
+Definition model_bad : Proc T_in T_out' := @loop_sta stateType initial_state T_in T_out' T' (state_step bad_preroutine) def my_process_pool_bad f_si.
 
 Definition Tsum' := ([T_in] + [T_out'])%type.
 
@@ -492,11 +526,11 @@ Definition defaultI_o x : [T_out'] := (None,(None,(None,(Some x,(None,None))))).
 Definition dI_o x : [T_out'] := (None,(None,(None,(None,(Some x,None))))).
 Definition tI_o x : [T_out'] := (None,(None,(None,(None,(None,Some x))))).
 
-Definition tI_yes' : Tsum' :=  inr (tI_o (Notify,false)).
-Definition tI_no' : Tsum' :=  inr (tI_o (Nothing,false)).
+Definition tI_yes' : Tsum' :=  inr (tI_o (Notify)).
+Definition tI_no' : Tsum' :=  inr (tI_o (Nothing)).
 
-Definition dI_yes' : Tsum' :=  inr (dI_o (Notify,false)).
-Definition dI_no' : Tsum' :=  inr (dI_o (Nothing,false)).
+Definition dI_yes' : Tsum' :=  inr (dI_o (Notify)).
+Definition dI_no' : Tsum' :=  inr (dI_o (Nothing)).
 
 Definition pub_get' : Tsum' := inr (low_out GetRequest).
 Definition pr_nop' : Tsum' := inr (high_out NOP).
@@ -515,7 +549,7 @@ Definition with_dI' : seqtype' := [::pub_get';dI';pub_get';dI_no';dI_yes';pub_ge
 (*Definition output_rel' := eqpair (eqmaybe (publicRel TPublicOutput)) (eqpair (eqmaybe (semiprivateRel TTypeSyscall)) (eqmaybe (semiprivateRel THandlerOutput))).*)
 (*Definition output_rel := eqmaybe (eqsum_R (publicRel TPublicOutput) (semiprivateRel TTypeSyscall)).*)
 
-Ltac rewr := rewrite /model_bad /loop_sta /my_process_pool_bad /process_pool /my_f_initial /low_p /my_f_coopt /alternate_generic /alternate_generic2 /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out /is_I_out.
+Ltac rewr := rewrite /model_bad /loop_sta /my_process_pool_bad /process_pool /my_f_initial /low_p /my_f_coopt /alternate_generic /alternate_generic2 /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out.
 
 Ltac lsolv := try solve [ reduce_tac;reduce_tac | reduce_tac;try solve [reduce_once | econ];simpl;first (reduce_tac;reduce_tac)];simpl.
 Ltac reduce_tac2 :=
@@ -616,15 +650,15 @@ Qed.
 Definition T'_good := Times (Option THandlerOutput) Bool.
 
 Definition to_T'_good (o : [T_out']) : [T'_good] :=
-  let b := if tI_out o is Some (Notify,_) then true else false in
-  let o' := if dI_out o is Some (o',_) then Some o' else None in
+  let b := if tI_out o is Some (Notify) then true else false in
+  let o' := if dI_out o is Some (o') then Some o' else None in
   (o',b).
 
 Definition my_f_I_good (n : nat) :=
   match n with
   | 0 => Unit (*tI*)
-  | 1 => Bool (*dI*)
-  | 2 => Bool (*defaultI*)
+  | 1 => Unit (*dI*)
+  | 2 => Unit (*defaultI*)
   | 3 => Empty (*scheduler*)         
   | 4 => THandlerOutput (*high*)
   | 5 => Unit (*low*)
@@ -633,9 +667,9 @@ Definition my_f_I_good (n : nat) :=
 
 Definition my_f_O_good (n : nat) :=
   match n with
-  | 0 => Times THandlerOutput Bool (*tI*)
-  | 1 => Times THandlerOutput Bool (*dI*)
-  | 2 => Times THandlerOutput Bool (*defaultI*)
+  | 0 => THandlerOutput (*tI*)
+  | 1 => THandlerOutput (*dI*)
+  | 2 => THandlerOutput (*defaultI*)
   | 3 => Nat (*scheduler*)         
   | 4 => TTypeSyscall (*high*)
   | 5 => TPublicOutput (*low*)
@@ -654,8 +688,8 @@ Definition my_f_O_good (n : nat) :=
 Definition f_proj_good (i : [T'_good]) : forall n, [Option (my_f_I_good n)].
   simpl. rewrite /my_f_I_good. intros.
   case: n. exact None. (*timer interrupt handler does not need any information*)
-  case. exact (Some (snd i)). (*dI gets tick*)
-  case. exact (Some (snd i)). (*defaultI gets tick*)
+  case. exact None.
+  case. exact None.
   case. exact None. (*scheduler receives nothing*)
   case. exact (fst i). (*high process receives dI outut*)
   case. exact None. (*low process receives nothing*)
@@ -686,15 +720,14 @@ Definition good_I_handler (n : nat) : good_handler_type.
   exact (fun o n' => n').
   exact n.
   eapply map.
-  instantiate (1:= Unit). exact (fun i => tt).
-  instantiate (1:= Times THandlerOutput _). exact fst.
+  instantiate (1:= Unit). exact (fun i => tt). exact id.
   apply I_handler.
 Defined.
 
-Definition time_slice := 3. 
+(*Definition time_slice := 3. *)
 Definition good_tI_handler : handler_type := I_handler.
-Definition good_dI_handler : good_handler_type := good_I_handler time_slice.
-Definition good_default_handler : good_handler_type := good_I_handler time_slice.
+Definition good_dI_handler : handler_type := I_handler.
+Definition good_default_handler : handler_type := I_handler.
 
 Definition unit_proc : Proc Unit Unit.
   apply out. exact tt.
@@ -729,57 +762,84 @@ Defined.*)
 Definition f_si_good (si : [Times stateType (Sum T_in T_out')]) : [Option (Times cur_pid T'_good)] :=
   if si.2 is inr o then Some (get_cur_pid si.1, to_T'_good o) else None.
 
+Definition init_ir_count : [ir_count] := Some 4.
+
 Definition good_to_bs (ir : [TInterrupt]) (b : [Bool]) : [bool_state] :=
-  let ic := ((~~b,b),((false,b||( ir==DiskInterrupt)),(false,~~b))) in (*~~b ensures tI is masked during the time slice, this prevents infering from toggling tI mask that defaultI/diskI handler has run (which toggles all masks. So in essence, the secret handlers may run, this sets the mask of tI, if we are not finished, e.g. b = false, then we mask again. If we are done, b = true, we don't mess with the unset tI mask*)
+  let ic := ((~~b,b),((false,b),(false,~~b))) in
+  let ic' := ((~~b,b),((false,b),(false,false))) in (*this one may not touch the timer interrupt mask because it depends on scheduling the private handlers*)
+  
+  (*~~b ensures tI is masked during the time slice, this prevents infering from toggling tI mask that defaultI/diskI handler has run (which toggles all masks. So in essence, the secret handlers may run, this sets the mask of tI, if we are not finished, e.g. b = false, then we mask again. If we are done, b = true, we don't mess with the unset tI mask*)
   (*We need ir = dI to ensure that it only runs once, which ensures that defaultI runs as the last one, this allows the termination signal to be public because the defaultI may output it*)
   match ir with
-    | TimerInterrupt => (true,ic)
-    | DiskInterrupt => (false,ic)
-  | DefaultInterrupt => (false,ic)
-  end.    
+    | TimerInterrupt => (true,(None,ic))
+    | DiskInterrupt => (false,(None,ic'))
+  | DefaultInterrupt => (false,(None,ic'))
+  end.
+
+Definition compute_bool_state (b : [Bool]) : [bool_state] := (false,(None,((~~b,b),((false,b),(false,false))))).
+Definition timer_bool_state : [bool_state] := (true,(None,((true,false),((false,false),(false,true))))).
+(*Definition good_check_handlers (o : [T_out']) (v : [stateType])  :=
+  if tI_out o is Some Notify then
+    unset_masks v else v.*)
 
 
-Definition initial_state_good : [stateType] := ((initial_pid,None),(false,mask_most)).
 
-Definition model_good := @loop_sta stateType initial_state_good T_in T_out' T'_good (state_step good_to_bs) def_good my_process_pool_good f_si_good.
+(*Definition good_check_handlers (o : [T_out']) : [stateType] ->  [stateType]  := ((good_check_other_handlers o) \o (good_check_tI o)).*)
+
+(*Definition good_to_bs (ir : [TInterrupt]) (b : [Bool]) : [bool_state] :=
+  (*  let ic := ((true,timeslice_done),((false,timeslice_done),(false,~~timeslice_done))) in*)
+  let ic := ((true,false),((false,false),(true,false))) in
+(*  let ic := ((true,ir_done),(((false,ir_done)),(false,~~ir_done))) in (*~~b ensures tI is masked during the time slice, this prevents infering from toggling tI mask that defaultI/diskI handler has run (which toggles all masks. So in essence, the secret handlers may run, this sets the mask of tI, if we are not finished, e.g. b = false, then we mask again. If we are done, b = true, we don't mess with the unset tI mask*)
+  (*We need ir = dI to ensure that it only runs once, which ensures that defaultI runs as the last one, this allows the termination signal to be public because the defaultI may output it*)*)
+  match ir with
+    | TimerInterrupt => (true,(init_ir_count,((false,false),((false,false),(false,true)))))
+    | DiskInterrupt => (false,(c,ic))
+  | DefaultInterrupt => (false,(c,ic))
+  end.*)
+
+Definition initial_state_good : [stateType] := ((initial_pid,None),(false,(Some 0,mask_most))).
+
+Definition unset_handler_masks (o : [T_out']) (v : [stateType])  :=
+  let v := update_I_pending v DefaultInterrupt true in
+  match is_I_out_done o with
+  | Some ir => if ir is TimerInterrupt then update_re_sch (unset_masks_sans v) true else unset_masks_sans v
+  | _ => v                                                                   
+  end.
+
+Definition check_ir_count (o : [T_out']) (v : [stateType]) : [stateType] :=
+  if tI_out o is Some Notify then update_ir_count (unset_masks_sans (set_tI v)) (Some 4)
+  else
+    match (get_ir_count v) with
+    | Some n.+2 => update_ir_count v (Some n.+1)
+    | Some 1 => update_ir_count (set_otherIs (unset_tI v)) (Some 0)                           
+    | Some 0 | None => v
+    end.
+
+Definition good_prereoutine (o : [T_out']) : [stateType] -> [stateType] := (check_ir_count o) \o (unset_handler_masks o) .
+
+Definition model_good := @loop_sta stateType initial_state_good T_in T_out' T'_good (state_step good_prereoutine) def_good my_process_pool_good f_si_good.
 
 
-Definition tI_no'g : Tsum' :=  inr (tI_o (Nothing,false)).
-Definition tI_yes'g : Tsum' :=  inr (tI_o (Notify,false)).
+Definition tI_no'g : Tsum' :=  inr (tI_o (Nothing)).
+Definition tI_yes'g : Tsum' :=  inr (tI_o (Notify)).
 
 (*Definition default_and_masked_ic := or_bool_state (false, default_on_ic) (false, mask_most).*)
 
-Definition dI_no'g : Tsum' :=  inr (dI_o (Nothing,false)).
-Definition dI_yes'g : Tsum' :=  inr (dI_o (Notify,false)).
-Definition dI_terminate'g : Tsum' :=  inr (dI_o (Notify,true)).
+Definition dI_no'g : Tsum' :=  inr (dI_o (Nothing)).
+Definition dI_yes'g : Tsum' :=  inr (dI_o (Notify)).
+Definition dI_terminate'g : Tsum' :=  inr (dI_o (Notify)).
 
                                      
-Definition defaultI_no'g : Tsum' :=  inr (defaultI_o (Nothing,false)).
-Definition defaultI_yes'g : Tsum' :=  inr (defaultI_o (Notify,false)).
-Definition defaultI_terminate'g : Tsum' :=  inr (defaultI_o (Notify,true)).
+Definition defaultI_no'g : Tsum' :=  inr (defaultI_o (Nothing)).
+Definition defaultI_yes'g : Tsum' :=  inr (defaultI_o (Notify)).
+Definition defaultI_terminate'g : Tsum' :=  inr (defaultI_o (Notify)).
 
 Definition good_no_dI' : seqtype' :=   [::pub_get';                      tI';pub_get';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;defaultI_no'g;defaultI_terminate'g;sch_high;pr_nop'(*nop*);tI';pr_nop';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;defaultI_no'g;defaultI_terminate'g;sch_low;pub_get'].
 Definition good_with_dI' : seqtype' := [::pub_get';dI';pub_get';pub_get';tI';pub_get';tI_no'g;tI_yes'g;dI_no'g      ;dI_yes'g      ;defaultI_no'g;defaultI_terminate'g;sch_high;pr_sys'(*sys*);tI';pr_nop';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;defaultI_no'g;defaultI_terminate'g;sch_low;pub_get'].
 
 
-Ltac rewr ::= rewrite /model_bad /loop_sta /my_process_pool_bad /process_pool /my_f_initial /low_p /my_f_coopt /alternate_generic /alternate_generic2 /high_p /f_si /tI_o /I_handler /f_proj /scheduler /is_I_out /low_out /model_good /my_process_pool_good /f_si_good /to_T'_good /f_proj_good /good_default_handler /good_tI_handler /good_dI_handler /good_I_handler.
+Ltac rewr ::= rewrite /model_bad /loop_sta /my_process_pool_bad /process_pool /my_f_initial /low_p /my_f_coopt /alternate_generic /alternate_generic2 /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out /model_good /my_process_pool_good /f_si_good /to_T'_good /f_proj_good /good_default_handler /good_tI_handler /good_dI_handler /good_I_handler.
 
-
-(*Ltac reduce_state' :=
-  rewrite ?initial_state_bad_eq
-          (*?I_handler_pid_timer ?I_handler_pid_disk ?I_handler_pid_default*);
-  cbv [ state_step step_on_input step_on_output get_pids get_bool_state get_cur_pid get_prev_pid get_re_sch get_ic
-        get_I_bits get_I_bits' get_pending' get_mask' get_I_pending get_I_mask
-        update_pids update_bool_state update_cur_pid update_prev_pid update_re_sch
-        update_ic update_I_bits update_I_bits' update_I_pending update_I_mask
-        or_I_bits or_ic or_bool_state
-        set_masks unset_masks all_interrupts save_cur_to_prev is_user_pid
-        (*default_on_ic*) false_ic false_I_bits initial_pid check_handlers initiate_handler initiate_scheduler check_scheduler I_handler_pid
-        foldr fst snd ];
-  simpl.*)
-(*
-(inr 0, Some 3, (false, (true, (false, true, (false, true)))))
- *)
 Lemma trace_good_no_dI' : forall l, Trace (publicRel _) l good_no_dI' model_good.
 Proof.  
   intros.
@@ -837,7 +897,7 @@ Definition in_rel : myrel [T_in] := TInterrupt_rel.
 Definition out_rel : myrel [T_out'] := eqpair (eqmaybe (publicRel _))
                                           (eqpair (eqmaybe (semiprivateRel _))
                                              (eqpair (eqmaybe (publicRel _))
-                                                (eqpair (eqmaybe_top (eqpair (semiprivateRel _) (publicRel _)))
+                                                (eqpair (eqmaybe_top ((semiprivateRel _)))
                                                    (eqpair (eqmaybe_top (semiprivateRel _))
                                                       (eqmaybe (publicRel _)))))).
 
@@ -952,7 +1012,7 @@ Qed.
 Lemma semiprivate_bot : forall (A : Ty) (x y : [A]), rel ((semiprivateRel _)) \bot x y.
 Proof.
   ssa.
-Qed.  
+Qed.
 
 Hint Resolve semiprivate_bot.
 (*
@@ -962,6 +1022,9 @@ Hint Resolve semiprivate_bot.
   H5 : rel (eqmaybe_top (semiprivateRel I_output_type)) l i4 i9
   H6 : rel (eqmaybe_top (semiprivateRel I_output_type)) l i5 i10
  *)
+
+Lemma publicRel_eq : forall (A : Ty) l x y, rel (publicRel A) l x y -> x = y.
+Proof. ssa. Qed.
 
 Lemma out_rel_not_bot : forall i i' l, l <> \bot -> rel out_rel l i i' -> i = i'.
 Proof.
@@ -973,9 +1036,16 @@ Proof.
   move=>/eqmaybe_public_not_bot=>->//.
   move=>/eqmaybe_semiprivate_not_bot'=>->//.
   move=>/eqmaybe_public_not_bot=>->//.
+  move/rel_eqmaybe_top.
+  case.
+  move=>[x0][y0][]->[]-> /semiprivate_not_bot' ->//.
   move=>/eqmaybe_semiprivate_not_bot=>->//.
-  move=>/eqmaybe_semiprivate_not_bot=>->//.  
   move=>/eqmaybe_public_not_bot=>->//.
+  case. ssa.
+  case. ssa.
+  move=>[]->->.
+  move=>/eqmaybe_semiprivate_not_bot=>->//.
+  move=>/eqmaybe_public_not_bot=>->//.  
 Qed.
 
 
@@ -1010,21 +1080,21 @@ Definition pids_rel : myrel [pids] := eqpair (eqsum (semiprivateRel _) (publicRe
 Definition hidden_pair : myrel [I_bits] := eqpair (semiprivateRel _) (semiprivateRel _).
 Definition public_pair : myrel [I_bits] := eqpair (publicRel _) (publicRel _).
 Definition ic_rel : myrel [ic] := eqpair hidden_pair (eqpair hidden_pair public_pair).
-Definition bool_state_rel : myrel [bool_state] := eqpair (publicRel _) ic_rel.
+Definition bool_state_rel : myrel [bool_state] := eqpair (publicRel _) (eqpair (publicRel _) ic_rel).
 Definition stateType_rel : myrel [stateType] := eqpair pids_rel bool_state_rel.
 
-Lemma publicRel_eq : forall (A : Ty) l x y, rel (publicRel A) l x y -> x = y.
-Proof. ssa. Qed.
+
 
 Lemma stateType_rel_not_bot : forall i i' l, l <> \bot -> rel stateType_rel l i i' -> i = i'.
 Proof.
   intros.
-  move:H0. move/rel_eqpair=> [] /rel_eqpair[] + + /rel_eqpair [] + /rel_eqpair [] /rel_eqpair [] + + /rel_eqpair [] /rel_eqpair[] + + /rel_eqpair [].
-  move: i=>[[a0 a1] [b [[c0 c1] [[d0 d1] [e f]]]]].
-  move: i'=>[[a0' a1'] [b' [[c0' c1'] [[d0' d1'] [e' f']]]]].  
+  move:H0.
+  move/rel_eqpair=> [] /rel_eqpair[] + + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [] /rel_eqpair [] + + /rel_eqpair[] /rel_eqpair[] + + /rel_eqpair [] + +.
+  move: i=>[[a0 a1]] [b [b0 [[b1 b2 [[b3 b4 [b5 b6]]]]]]].
+  move: i'=>[[a0' a1']] [b' [b0' [[b1' b2' [[b3' b4' [b5' b6']]]]]]].  
   rewrite !pair_rewr. 
   move=> /eqsum_split Hsplit.
-  move=>/publicRel_eq -> /publicRel_eq -> /semiprivate_not_bot' -> // /semiprivate_not_bot' -> // /semiprivate_not_bot' -> // /semiprivate_not_bot' /publicRel_eq -> // /publicRel_eq -> /publicRel_eq ->.
+  move=>/publicRel_eq -> /publicRel_eq -> /publicRel_eq -> // /semiprivate_not_bot' -> // /semiprivate_not_bot' -> // /semiprivate_not_bot' /publicRel_eq -> // /semiprivate_not_bot' -> // /publicRel_eq -> /publicRel_eq ->.
   case: Hsplit.
   move=>[x][y][]->[]->/semiprivate_not_bot' ->//.
   move=>[x][y][]->[]-> /publicRel_eq ->//.  
@@ -1100,33 +1170,29 @@ Proof.
   mrw. intros.
   apply in_rel_eq in H;subst.
   move: H0.
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]/rel_eqpair[H2 H3] /rel_eqpair[]/rel_eqpair[H4 H5] /rel_eqpair[] H6 H7.
-
-  move: H0 H1 H2 H3 H4 H5 H6 H7.
-  move: v=> [[cur prev]] [re_sch] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 /rel_eqpair[]/rel_eqpair[]H3 H4/rel_eqpair[]/rel_eqpair[]H5 H6/rel_eqpair[]H7 H8.
+  move: H0 H1 H2 H3 H4 H5 H6 H7 H8.
+  move: v=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
   rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_I_mask /get_mask' /update_I_pending /update_I_bits /update_I_bits' !pair_rewr.
-  move=> H0 H1 H2 H3 H4 H5 H6 H7.
+  move=> H0 H1 H2 H3 H4 H5 H6 H7 H8.
   rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_I_mask /get_mask' /update_I_pending /update_I_bits /update_I_bits' !pair_rewr.    
 
   apply/rel_eqpair2;con;first ssa.
   apply/rel_eqpair2;con;first ssa.
   apply/rel_eqpair2.
-  rewrite !pair_rewr.  
+  rewrite !pair_rewr.
+  con. done.
   apply/rel_eqpair2;con. 
   apply/rel_eqpair2;con.
 
   destruct i';rewrite !pair_rewr;eauto.
   destruct i';rewrite !pair_rewr;eauto.
-  destruct i';rewrite !pair_rewr.
   apply/rel_eqpair2;con.
-  apply/rel_eqpair2;con. done. done.
-  apply/rel_eqpair2;con. done. done.
-  apply/rel_eqpair2;con.
-  apply/rel_eqpair2;con. done. done.
-  apply/rel_eqpair2;con. done. done.
-  apply/rel_eqpair2;con. done. done.
-
+  apply/rel_eqpair2;con.  
+  destruct i';rewrite !pair_rewr //.
+  destruct i';rewrite !pair_rewr //.
+  destruct i';rewrite !pair_rewr //.    
 
   apply fv_NI_comp.
 
@@ -1136,11 +1202,105 @@ Proof.
 
   mrw. intros.
 
-  move: v H0=> [[cur prev]] [re_sch] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  destruct (eqVneq l \bot).
+  2: {  apply out_rel_not_bot in H. 2:apply/eqP=>//. subst.
+        apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
+  subst.  
 
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]/rel_eqpair[H2 H3] /rel_eqpair[]/rel_eqpair[H4 H5] /rel_eqpair[] H6 H7.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6 H7.
+  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] /publicRel_eq H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6. 
+  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
+
+  move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] _ /rel_eqpair[] _ +.
+  move: i=>[a[] b[] c[] d[] e f].
+  move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
+  rewrite !pair_rewr /is_sch_out. subst.
+ 
+  case/rel_eqmaybe2.
+  move=>[]x []y []-> []->// /publicRel_eq ->//.
+
+  case/rel_eqmaybe2.
+  move=>[]x' []y' []-> []->// Hpr.
+
+  case/rel_eqmaybe2.
+  move=>[]x0 []y0 []-> []->// /publicRel_eq ->//.
+
+  case/rel_eqmaybe2.
+  move=>[]x1 []y1 [] -> []->// /publicRel_eq ->//.
+
+  move=>[]->[]->//.
+  move=>[]->[]->//.
+
+  case/rel_eqmaybe2.
+  move=>[]x1 []y1 [] -> []->// /publicRel_eq ->//.  
+
+  move=>[]->[]->//.
+  move=>[]->[]->//.
+
+  case/rel_eqmaybe2.
+  move=>[]x' []y' [] -> []->// /publicRel_eq ->//.  
+
+  case/rel_eqmaybe2.
+  move=>[]x0 []y0 [] -> []->// /publicRel_eq ->//.    
+
+  move=>[]->[]->//.
+  move=>[]->[]->//.
+
+  case/rel_eqmaybe2.
+  move=>[]x3 []y3 [] -> []->// /publicRel_eq ->//.    
+
+  move=>[]->[]->//.
+
+  move=>[]->[]->//.
+
+  case/rel_eqmaybe2.
+
+  move=>[]x' []y' [] -> []->// Hsys.
+
+  case/rel_eqmaybe2.
+  move=>[]x3 []y3 [] -> []->// /publicRel_eq ->//.
+
+  case/rel_eqmaybe2.
+  move=>[]x4 []y4 [] -> []->// /publicRel_eq ->//.    
+
+  move=>[]->[]->//.
+  move=>[]->[]->//.
+
+  case/rel_eqmaybe2.
+  move=>[]x4 []y4 [] -> []->// /publicRel_eq ->//.    
+
+  move=>[]->[]->//.
+  move=>[]->[]->//.   
+
+  case/rel_eqmaybe2.
+  move=>[]x4 []y4 [] -> []->// /publicRel_eq ->//.    
+
+  case/rel_eqmaybe2.
+  move=>[]x5 []y5 [] -> []->// /publicRel_eq ->//.    
+  move=>[]->[]->//.
+  move=>[]->[]->//.
+
+  case/rel_eqmaybe2.
+  move=>[]x5 []y5 [] -> []->// /publicRel_eq ->//.    
+  move=>[]->[]->//.
+
+
+
+  (*step1*)
+  apply fv_NI_comp.
+  
+  rewrite /step1.
+  apply fv_NI_step_right. rewrite /check_scheduler.
+
+  mrw. intros.
+
+  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
+  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
   move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] _ /rel_eqpair[] _ _.
   move: i=>[a[] b[] c[] d[] e f].
@@ -1155,11 +1315,8 @@ Proof.
   move=>[]x []y []-> []->//.
   case=>->->.
 
-
   case/rel_eqmaybe2.
   move=>[]x []y []-> []->// /publicRel_eq ->.
-
-
 
   apply/rel_eqpair2;con;first ssa.
   apply/rel_eqpair2;con;first ssa.
@@ -1177,10 +1334,9 @@ Proof.
   apply/rel_eqpair2;con;first ssa.  
   rewrite !pair_rewr. eauto.
 
-
-  apply fv_NI_comp.
-
   (*step2*)
+  apply fv_NI_comp.
+  
   rewrite /step2.
   apply fv_NI_step_right.
   rewrite /check_handlers.
@@ -1192,11 +1348,11 @@ Proof.
         apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
   subst.
 
-  move: v H0=> [[cur prev]] [re_sch] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]/rel_eqpair[H2 H3] /rel_eqpair[]/rel_eqpair[H4 H5] /rel_eqpair[] H6 H7.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6 H7.
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
+  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
   move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + +.
   move: i =>[a[] b[] c[] d[] e f]. 
@@ -1224,16 +1380,14 @@ Proof.
   rewrite /is_I_out_done.
 
   rewrite /tI_out.
-  case: y'''''=>a0 b0.
-  case: a0. rewrite /dI_out.
-  case: x'''' Hdisk=> a1 b1.
-  case: y''''=> a2 b2.
-  case: a1. case: a2.
+  case: y'''''.
+  rewrite /dI_out.
+  case: x'''' Hdisk.
+  case: y''''.
   move=>Hdisk.
   rewrite /default_I_out.
   move: x''' y''' Hdef.
-  move=>[a3 b3] [a4 b4].
-  case: a3. case: a4.
+  move=>[] [].
   move=>Hdef.
   
   apply/rel_eqpair2;con;first ssa.
@@ -1251,35 +1405,26 @@ Proof.
   rewrite !pair_rewr. rewrite orbC /orb. eauto.
   rewrite !pair_rewr.
   apply/rel_eqpair2;con. 
-  apply/rel_eqpair2;con.
-  rewrite !pair_rewr.
-  rewrite /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_bool_state orbC /orb.
-  done.
-
   rewrite !pair_rewr. eauto.
+  rewrite /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_bool_state orbC /orb.
+
   rewrite !pair_rewr. 
     
   apply/rel_eqpair2;con.
-  apply/rel_eqpair2;con;first ssa.
+  apply/rel_eqpair2;con.
   rewrite !pair_rewr. eauto.
 
-  apply/rel_eqpair2;con.
-  rewrite !pair_rewr.
-  rewrite /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_bool_state /update_I_mask /update_I_bits /update_ic /update_bool_state !pair_rewr orbC /orb. eauto.
-
-  rewrite !pair_rewr. rewrite /orb.
-  admit.
-  case: a4.
-  move=>Htim.
-  repeat rewrite /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_bool_state /update_I_mask /update_I_bits /update_I_bits' /update_ic /update_bool_state !pair_rewr.
-
+  rewrite !pair_rewr. eauto.
   
   apply/rel_eqpair2;con.
   apply/rel_eqpair2;con. eauto.
   rewrite !pair_rewr. eauto.
-  apply/rel_eqpair2;con. rewrite !pair_rewr.
-  apply/rel_eqpair2;con. eauto.
-  rewrite !pair_rewr. eauto.
+  apply/rel_eqpair2;con. rewrite !pair_rewr orbC /orb.
+  move/rel_eqpair2 : H6=>[]. eauto.
+
+  rewrite !pair_rewr.
+  rewrite /orb /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  
   apply/rel_eqpair2;con;eauto.  
 
 
