@@ -2,5 +2,7 @@
 -I ..
 -arg -w -arg all
 
-model.v
-theorems.v
+theories/definitions.v
+theories/models.v
+theories/theorems.v
+theories/noninterference.v

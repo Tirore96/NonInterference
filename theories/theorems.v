@@ -6,7 +6,6 @@ Require Import RelationClasses.
 From Paco Require Import paco.
 From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
-Require Import Streams.
 From HB Require Import structures.
 From deriving Require Import deriving.
 Require Import Stdlib.Program.Equality.
@@ -16,11 +15,7 @@ Require Import Stdlib.Classes.DecidableClass.
 Import Order.TTheory.
 Open Scope order_scope.
 
-Require Export NonInterference.model.
-
-
-
-
+Require Export NonInterference.theories.definitions.
 
 Lemma out_NI : forall I O (IRel : myrel [I]) (ORel : myrel [O]) (o : [O]), NI IRel ORel (out o).
 Proof.
@@ -183,6 +178,9 @@ Proof.
   - ssa. inv Htp. econ. econ. eauto. eauto. eauto.
   - ssa. inv Htp. econ. econ. eauto. eauto. eauto. eauto.
 Qed.
+
+
+(*The rest of this file is generated with claude*)
 
 
 (* ============================================================== *)
@@ -1336,7 +1334,7 @@ Proof.
 Qed.
 
 
-Definition eqpair_dom (V I : Ty) (VRel : myrel [V]) (IRel : myrel [I])
+(*Definition eqpair_dom (V I : Ty) (VRel : myrel [V]) (IRel : myrel [I])
    (P : [Times V I] -> Prop)
    (Hclo : forall l x y, rel VRel l x.1 y.1 -> rel IRel l x.2 y.2 -> P x -> P y)
    : myrel [Times V I].
@@ -1544,9 +1542,9 @@ Proof.
         exists n'. eapply ST2_false; eauto.
       * simpl. destruct (IH _ _ n H4) as [n' Hswi'].
         exists n'.+1. eapply ST2_true; eauto.
-Qed.
+Qed.*)
 
-
+(*
 (* swi in the eqpair_dom shape: the input base is right-keyed BRel/IRel (the shape *)
 (* sta/map produce), and the bool constraint lives in the predicate.              *)
 Lemma swi_NI' : forall (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (BRel : myrel [Bool])
@@ -1597,9 +1595,9 @@ Proof.
     have Htr_p': Trace (eqpair_LR BRel ORel) l t_p' p.
     { eapply H_NI_3; [exact Hdis_i | exact Htr_p]. }
     eapply swi_conv; [apply Haware | apply Htr_p' | apply Hswi_tr'].
-Qed.
+Qed.*)
 
-
+(*
 (* Map-congruence for eqpair_dom (keystone of the threading): a value map h that  *)
 (* is NI on the V-component and carries the predicate P into Q lifts to an f_NI    *)
 (* (and f_PU) between the two domain-restricted relations, so map_NI can thread    *)
@@ -1633,4 +1631,4 @@ Lemma eqpair_dom_f_PU : forall (V B I : Ty) (VRel : myrel [V]) (BRel : myrel [B]
 Proof.
   intros V B I VRel BRel IRel P Q h HclP HclQ HPQ.
   intros l x [Hd Hp]. split; simpl; [exact Hd | apply HPQ; exact Hp].
-Qed.
+Qed.*)

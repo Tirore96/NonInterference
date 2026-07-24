@@ -17,14 +17,11 @@ Require Import Stdlib.Classes.DecidableClass.
 Import Order.TTheory.
 Open Scope order_scope.
 
-Set Automatic Obligations.
-Fail Next Obligation.
+Variable d : Order.disp_t.
+Variable L : bPOrderType d.
 
-(*Before*)
-(*Parameter (level : tbLatticeType (Order.Disp tt tt)).*)
-
-(*Just for now*)
-Definition level := bool.
+(*Possible instantiations of L are bool, nat, etc...*)
+Definition level := L.
 
 Ltac con := constructor.
 Ltac econ := econstructor.
@@ -78,6 +75,7 @@ Ltac coseq_tac_in l H := rewrite (coseq_match l) /= in H.
 
 Definition order (b1 b2 : level) := b1 <= b2.
 
+
 Record myrel (A : Set) :=
         MyRel {
            dis : level -> A -> Prop;
@@ -87,23 +85,14 @@ Record myrel (A : Set) :=
                              forall a0 a1, rel l1 a0 a1 -> rel l0 a0 a1;
            _ : forall l0 l1, order l0 l1 ->
                              forall a, dis l1 a -> dis l0 a;
-           _: forall l a0, dis l a0 -> forall a1, dis l a1 <-> rel l a0 a1 (* dis is an equivalence class: (->) contains enough, (<-) does not include too much s  *)
-(*           _: forall l a0 a1, dis l a0 -> rel l a0 a1 -> dis l a1;
-           _: forall l a0 a1, dis l a0 -> dis l a1 -> rel l a0 a1*)
+            _: forall l a0, dis l a0 -> forall a1, dis l a1 <-> rel l a0 a1
           }.
 
-(*Existing Class myrel. 
-Hint Mode myrel +.*)
-
-(* Types *)
-
-(*Example 3*)
 Inductive Interrupt := DiskInterrupt | TimerInterrupt | DefaultInterrupt.
 Inductive HandlerOutput := Nothing | Notify.
 Inductive TypeSyscall := Syscall | NOP.
 Inductive PublicOutput := GetRequest | Public_NOP.
-Inductive PublicInput := PublicIn
-.
+
 Definition Interrupt_indDef := [indDef for Interrupt_rect].
 Canonical Interrupt_indType := IndType Interrupt Interrupt_indDef.
 Definition Interrupt_hasDecEq := [derive hasDecEq for Interrupt].
@@ -124,30 +113,14 @@ Canonical PublicOutput_indType := IndType PublicOutput PublicOutput_indDef.
 Definition PublicOutput_hasDecEq := [derive hasDecEq for PublicOutput].
 HB.instance Definition _ := PublicOutput_hasDecEq.
 
-Definition PublicInput_indDef := [indDef for PublicInput_rect].
-Canonical PublicInput_indType := IndType PublicInput PublicInput_indDef.
-Definition PublicInput_hasDecEq := [derive hasDecEq for PublicInput].
-HB.instance Definition _ := PublicInput_hasDecEq.
-
-Inductive Input := Skip | DiskRead.
-Inductive Output := Idle | Step.
-
-
-Definition Input_indDef := [indDef for Input_rect].
-Canonical Input_indType := IndType Input Input_indDef.
-Definition Input_hasDecEq := [derive hasDecEq for Input].
-HB.instance Definition _ := Input_hasDecEq.
-
-Definition Output_indDef := [indDef for Output_rect].
-Canonical Output_indType := IndType Output Output_indDef.
-Definition Output_hasDecEq := [derive hasDecEq for Output].
-HB.instance Definition _ := Output_hasDecEq.
-
 Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool
-                 | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty | TInput | TOutput | TTypeSyscall | Unit | Unit1 | Unit2 |  TInterrupt | THandlerOutput |  TPublicOutput | TPublicInput | Arrow : Ty -> Ty -> Ty | List : Ty -> Ty | Empty. 
+                 | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty
+                 | TTypeSyscall | Unit
+                 | TInterrupt | THandlerOutput |  TPublicOutput
+                 | Empty. 
 
-Derive NoConfusion for Ty.
-Derive EqDec for Ty.
+(*Derive NoConfusion for Ty.
+Derive EqDec for Ty.*)
 
 Definition Ty_indDef := [indDef for Ty_rect].
 Canonical Ty_indType := IndType Ty Ty_indDef.
@@ -160,27 +133,15 @@ Fixpoint interp (t : Ty) : Set :=
   | Times t0 t1 => (interp t0) * (interp t1)
   | Bool => bool
   | Option t' => option (interp t')
-  | TInput => Input
-  | TOutput => Output
   | Sum t0 t1 => (interp t0) + (interp t1)            
   | TTypeSyscall => TypeSyscall
-  | Unit | Unit1 | Unit2 => unit                     
+  | Unit => unit                     
   | TInterrupt => Interrupt
   | THandlerOutput => HandlerOutput
   | TPublicOutput => PublicOutput
-  | TPublicInput => PublicInput
-  | Arrow t0 t1 => (interp t0) -> (interp t1)
-  | List t0 => list (interp t0)
   | Empty => Empty_set
   end.
 Notation "[ i ]" := (interp i).
-
-
-
-(*Record Inv (I I' : Ty) := mkInv {
-  inv_fn :> [I] -> [I'];
-  inv_pf : forall o : [I'], exists i : [I], inv_fn i = o
-}.*)
 
 (** Process type **)
 Inductive Proc : Ty -> Ty -> Set :=
@@ -192,9 +153,6 @@ Inductive Proc : Ty -> Ty -> Set :=
 | loop  : forall {I : Ty}, Proc I I -> Proc I I
 | maybe : forall {I O: Ty}, Proc I O -> Proc (Option I) O.
 Arguments out {_} {_} o.
-(*Derive NoConfusion for Proc.
-Derive NoConfusionHom for Proc.
-Derive Signature for Proc.*)
 
 Definition xor (b1 b2 : bool) := (Datatypes.negb (b1 == b2)).
 
@@ -221,9 +179,6 @@ Inductive reduceI : forall (I O : Ty), Proc I O -> interp I -> Proc I O -> Prop 
 | reduce_loopI (I :Ty) (p p' : Proc I I) (i : [I]) : reduceI p i p' -> reduceI (loop p) i (loop p').
 
 Hint Constructors reduceI : core.
-
-(*Create HintDb omitdb.
-Hint Resolve reduce_mapI reduce_staI reduce_swiI reduce_maybeI reduce_maybeI2 reduce_parI reduce_loopI : omitdb.*)
 
 Inductive reduceO : forall (I O : Ty), Proc I O -> [O] -> Proc I O -> Prop :=
 | reduce_outO (I O : Ty) (o : [O]) : reduceO ( @out I _ o) o ( @out I _ o)
@@ -280,7 +235,7 @@ Definition NI_l (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (l : level) (p 
 Definition NI (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I O) := forall l, NI_l IRel ORel l p.
 
 
-Definition boolRel : myrel ([Bool]).
+(*Definition boolRel : myrel ([Bool]).
   refine (@MyRel _
             (fun l (b : [Bool]) => b \/ l = \bot)
             (fun l b1 b2 => b1 = b2 \/  (b1 \/ l = \bot) /\ (b2 \/ l = \bot))
@@ -301,7 +256,7 @@ rewrite /order in H.
 rewrite lex0 in H. right. apply/eqP. done.
 intros. con. intros. de H. de H.
 de H0. de a0.
-Defined.
+Defined.*)
 
 Definition falseRel : myrel ([Bool]).
   refine (@MyRel _
@@ -332,7 +287,7 @@ eauto.
 intros. done.
 Defined.
 
-Definition toPublicRel (A : Ty) (ARel : myrel [A]) : myrel ([A]).
+(*Definition toPublicRel (A : Ty) (ARel : myrel [A]) : myrel ([A]).
   refine (@MyRel _
             (fun l b => False)
             (rel ARel)
@@ -341,7 +296,7 @@ Definition toPublicRel (A : Ty) (ARel : myrel [A]) : myrel ([A]).
             _
             _).
 intros. all: de ARel. eauto.
-Defined.
+Defined.*)
 
 Lemma order_bot : forall (l : level), order l \bot -> l = \bot.
 Proof.
@@ -359,7 +314,7 @@ done.
 Qed.
 Hint Resolve not_booleq.
 
-Definition privateRel (A : Ty) : myrel ([A]).
+(*Definition privateRel (A : Ty) : myrel ([A]).
   refine (@MyRel _
             (fun l b => True)
             (fun l b1 b2 => True) (*Since everything is always hidden, there the value space is an equivalence class*)
@@ -370,7 +325,7 @@ Definition privateRel (A : Ty) : myrel ([A]).
 intros.
 done. done.
 intros. done. done.
-Defined.
+Defined.*)
 
   
 Definition semiprivateRel (A : Ty) : myrel ([A]).
@@ -567,7 +522,7 @@ Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
     case. ssa.
 Defined.
 
-Definition eqpair_REQ {I O : Ty} (def : [I]) (ORel : myrel [O]) : myrel ([Times I O]).
+(*Definition eqpair_REQ {I O : Ty} (def : [I]) (ORel : myrel [O]) : myrel ([Times I O]).
   refine (@MyRel _ 
             (fun (l : level) io => fst io = def /\ dis ORel l (snd io))
             (fun l io1 io2 => rel (publicRel _) l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ fst io1 = fst io2 /\ dis ORel l (snd io1) /\ dis ORel l (snd io2))
@@ -613,7 +568,7 @@ Definition eqpair_REQ {I O : Ty} (def : [I]) (ORel : myrel [O]) : myrel ([Times 
     ssa. destruct H1. ssa. rewrite -H1 H. done. ssa. rewrite -H1 H. done.
     destruct H1. ssa. apply/i. 2:eauto. done.
     ssa.
-Defined.
+Defined.*)
 
 Lemma dis_rel_dis : forall (I : Ty) (IRel : myrel [I]) l x y, dis IRel l x -> rel IRel l x y -> dis IRel l y.
 Proof.
@@ -634,7 +589,7 @@ Hint Resolve dis_rel_dis dis_rel_dis2 dis_dis_rel.
 
 
 
-Definition eqpair_OR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
+(*Definition eqpair_OR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
   refine (@MyRel _ 
             (fun (l : level) io => dis IRel l (fst io) \/ dis ORel l (snd io))
             (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/
@@ -686,7 +641,7 @@ Definition eqpair_OR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([
          intros. con. intros. de H.
          case. case. intros. de H. eauto. eauto.
          de H.
-Defined.
+Defined.*)
 
 Lemma eqsum_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
   refine (@MyRel _ 
@@ -960,7 +915,7 @@ Definition eqmaybe_false {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply:Option_presP_false.
 Defined. 
 
-Fixpoint to_rel (ty : Ty): myrel [ty]:=
+(*Fixpoint to_rel (ty : Ty): myrel [ty]:=
       match ty as x return myrel [x] with
     | TInput => publicRel TInput
     | THandlerOutput => semiprivateRel THandlerOutput
@@ -971,7 +926,7 @@ Fixpoint to_rel (ty : Ty): myrel [ty]:=
       | Sum t0 t1 => eqsum_LR (to_rel t0) (to_rel t1)
       | Bool => boolRel
     | ty' => publicRel ty'
-    end.
+    end.*)
 
 
     
@@ -988,25 +943,10 @@ Hint Resolve rel_eq.
 Inductive ObliviousTrace {I O : Ty} (ORel : myrel [O]) (l : level) : seq ([I] + [O]) -> Prop :=
  | OT_nil : ObliviousTrace ORel l nil
  | OT_cons_in i s :  ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inl i)::s)
-| OT_cons_out o s :  dis ORel l o -> ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inr o)::s).
+ | OT_cons_out o s :  dis ORel l o -> ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inr o)::s).
 
 Definition oblivious  {I O : Ty} (ORel : myrel [O]) (p : Proc I O)  (l : level) :=
   forall s, Trace ORel l s p -> ObliviousTrace ORel l s.
-
-(*  Variant ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) (R : Proc I O -> Prop) : Proc I O -> Prop :=
-  OF1 p : (forall i p', reduceI p i p' -> R p') -> (forall o p', reduceO p o p' -> R p' /\ dis ORel l o) ->  ObliviousF ORel l R p.
-
-Lemma monotone_ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) : monotone1 (@ObliviousF I O ORel l).
-Proof.
-intro;ssa.
-inv IN;eauto.
-econ;eauto.
-intros.
-move: (H0 _ _ H1). case. eauto.
-Qed.
-Hint Resolve monotone_ObliviousF : paco.
-
-Definition oblivious {I O : Ty} (ORel : myrel [O]) p : levelPred := fun l => paco1 (@ObliviousF I O ORel l) bot1 p.*)
 
 Definition aware_or_oblivious  {I O : Ty} (ORel : myrel [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware ORel o l \/ oblivious ORel p l.
 
@@ -1173,17 +1113,6 @@ Proof.
   intros. ssa.
   Qed.
 
-
-
-
-
-
-
-
-
-
-
-
 Lemma f_NI_id (A : Ty) B : @f_NI A A B B id.
   rewrite /f_NI. done.
 Qed.
@@ -1196,8 +1125,6 @@ Hint Resolve (*f_NI_eq*) f_NI_id f_PU_id.
 Ltac mrw := rewrite /f_NI /f_PU /fv_NI /f_EP.
 
 
-
-
 Lemma f_NI_snd_eqpair : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair ARel BRel) BRel snd. 
 Proof.
 mrw. ssa.
@@ -1208,7 +1135,7 @@ Proof.
 mrw. ssa.
 Qed.
 
-Hint Resolve f_NI_snd_eqpair (*f_NI_snd_eqpair_L f_NI_snd_eqpair_R*) f_NI_snd_eqpair_LR (*f_NI_snd_eqpair_OR*) : tempdb.
+Hint Resolve f_NI_snd_eqpair f_NI_snd_eqpair_LR: tempdb.
 
 Lemma rel_eqsum_LR : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum_LR ARel BRel) l (inl a1) (inl a2). 
 Proof. ssa.
@@ -1316,118 +1243,114 @@ Lemma rel_eqmaybe : forall (A : Ty) (ARel : myrel [A]) l x y, rel ARel l x y -> 
 Proof. ssa.
 Qed.
 
+(*Lemma rel_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l x0 x1 y0 y1,
+    rel (eqpair_OR ARel BRel) l (x0,x1) (y0,y1) -> rel ARel l x0 y0 /\ rel BRel l x1 y1 \/ (dis ARel l x0 \/ dis BRel l x1) /\ (dis ARel l y0 \/ dis BRel l y1).  
+Proof. ssa.
+Qed.*)
 
 
+Lemma level_not : forall (l : level), ~ (l <> \bot) -> l = \bot.
+  intros. de (eqVneq l \bot). exfalso. apply H. intro. subst. by rewrite eqxx in i.
+Qed.
+Hint Resolve level_not.
 
 
-  Lemma rel_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l x0 x1 y0 y1,
-      rel (eqpair_OR ARel BRel) l (x0,x1) (y0,y1) -> rel ARel l x0 y0 /\ rel BRel l x1 y1 \/ (dis ARel l x0 \/ dis BRel l x1) /\ (dis ARel l y0 \/ dis BRel l y1).  
-  Proof. ssa.
-  Qed.
+Ltac inner_match H := match H with
+                      | context[match ?x with _ => _ end] => first [ inner_match x | idtac x;de x ]
+                      end.                                             
 
-  
-  Lemma level_not : forall (l : level), ~ (l <> \bot) -> l = \bot.
-    intros. de (eqVneq l \bot). exfalso. apply H. intro. subst. by rewrite eqxx in i.
-  Qed.
-  Hint Resolve level_not.
+Ltac temp_tac := (match reverse goal with
+                  | H : _ \/ _ |- _ => de H
+                  | H : match ?x with _ => _ end |- _ => de x
+                  | |- ?H => inner_match H
+                  end                      
+                  ;subst;ssa).
+
+Lemma rel_eqmaybe_top_aux : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe_top ARel) l x y -> match x,y with
+                                                                                                      | Some x', Some y' => rel ARel l x' y'
+                                                                                                      | Some x', None => l = \bot /\ dis ARel l x'
+                                                                                                      | None, Some y' => l = \bot /\ dis ARel l y'
+                                                                                                      | None, None => True
+                                                                                                      end.
+Proof.
+  intros.
+  temp_tac.
+  temp_tac.
+  temp_tac.
+Qed.
+
+Lemma rel_eqmaybe_top : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe_top ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+                                                                                                    (exists x', x = Some x' /\ y = None /\ l = \bot /\ dis ARel l x') \/
+                                                                                                    (exists y', x = None /\ y = Some y' /\ l = \bot /\ dis ARel l y') \/ x = None /\ y = None.
+Proof.
+  intros. de x. de y. left. eauto.
+  right. left. econ.  eauto.
+  de y. right. right. econ. econ. eauto.
+Qed.
+
+Lemma rel_eqmaybe_top2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel ARel l x y -> rel (eqmaybe_top ARel) l (Some x) (Some y).
+Proof. ssa.
+Qed.
+
+Lemma rel_eqmaybe_false2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel ARel l x y -> rel (eqmaybe_false ARel) l (Some x) (Some y).
+Proof. ssa.
+Qed.
 
 
-  Ltac inner_match H := match H with
-                         | context[match ?x with _ => _ end] => first [ inner_match x | idtac x;de x ]
-                         end.                                             
-
-  Ltac temp_tac := (match reverse goal with
-                           | H : _ \/ _ |- _ => de H
-                           | H : match ?x with _ => _ end |- _ => de x
-                           | |- ?H => inner_match H
-                    end                      
-                    ;subst;ssa).
-
-  Lemma rel_eqmaybe_top_aux : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe_top ARel) l x y -> match x,y with
-                                                                                              | Some x', Some y' => rel ARel l x' y'
-                                                                                              | Some x', None => l = \bot /\ dis ARel l x'
-                                                                                              | None, Some y' => l = \bot /\ dis ARel l y'
-                                                                                              | None, None => True
-                                                                                                    end.
-  Proof.
-    intros.
-    temp_tac.
-    temp_tac.
-    temp_tac.
-  Qed.
-
-  Lemma rel_eqmaybe_top : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe_top ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
-                                                                                                      (exists x', x = Some x' /\ y = None /\ l = \bot /\ dis ARel l x') \/
-                                                                                                      (exists y', x = None /\ y = Some y' /\ l = \bot /\ dis ARel l y') \/ x = None /\ y = None.
-  Proof.
-    intros. de x. de y. left. eauto.
-    right. left. econ.  eauto.
-    de y. right. right. econ. econ. eauto.
-  Qed.
-
-  Lemma rel_eqmaybe_top2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel ARel l x y -> rel (eqmaybe_top ARel) l (Some x) (Some y).
-    Proof. ssa.
-    Qed.
-
-  Lemma rel_eqmaybe_false2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel ARel l x y -> rel (eqmaybe_false ARel) l (Some x) (Some y).
-    Proof. ssa.
-    Qed.
-
-    
-  Lemma rel_eqmaybe_aux : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe ARel) l x y -> match x,y with
+Lemma rel_eqmaybe_aux : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe ARel) l x y -> match x,y with
                                                                                               | Some x', Some y' => rel ARel l x' y'
                                                                                               | Some x', None => dis ARel l x'
                                                                                               | None, Some y' => dis ARel l y'
                                                                                               | None, None => True
-                                                                                                    end.
-  Proof.
-    intros.
-    temp_tac.
-    temp_tac.
-    temp_tac.
-  Qed.
+                                                                                              end.
+Proof.
+  intros.
+  temp_tac.
+  temp_tac.
+  temp_tac.
+Qed.
 
-  Lemma rel_eqmaybe2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
-                                                                                               x = None /\ y = None.
-  Proof.
-    intros.
-    de x. de y.
-    left. eauto.
-    de y.
-  Qed.
+Lemma rel_eqmaybe2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+                                                                                             x = None /\ y = None.
+Proof.
+  intros.
+  de x. de y.
+  left. eauto.
+  de y.
+Qed.
 
-  Lemma rel_eqmaybe_swi2 : forall (A : Ty) (ARel : myrel [A]) (BRel : myrel [Bool]) l x y, rel (eqmaybe_swi ARel BRel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
-                                                                                               (x = None /\ y = None) \/ (eqmaybe_dis (aware BRel true) ARel l x /\ eqmaybe_dis (aware BRel true) ARel l y).
-  Proof.
-    intros.
-    de x. de y.
-    left. eauto.
-    de y.
-  Qed.
+Lemma rel_eqmaybe_swi2 : forall (A : Ty) (ARel : myrel [A]) (BRel : myrel [Bool]) l x y, rel (eqmaybe_swi ARel BRel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+                                                                                                                                (x = None /\ y = None) \/ (eqmaybe_dis (aware BRel true) ARel l x /\ eqmaybe_dis (aware BRel true) ARel l y).
+Proof.
+  intros.
+  de x. de y.
+  left. eauto.
+  de y.
+Qed.
 
-  Lemma dis_eqmaybe : forall (A : Ty) (ARel : myrel [A]) l v, dis (eqmaybe ARel) l v -> exists v', v = Some v' /\ dis ARel l v'.
-  Proof.
-    intros. ssa. de v. econ. eauto.
-  Qed.
+Lemma dis_eqmaybe : forall (A : Ty) (ARel : myrel [A]) l v, dis (eqmaybe ARel) l v -> exists v', v = Some v' /\ dis ARel l v'.
+Proof.
+  intros. ssa. de v. econ. eauto.
+Qed.
 
-  Lemma dis_eqmaybe2 : forall (A : Ty) (ARel : myrel [A]) l x, dis ARel l x -> dis (eqmaybe ARel) l (Some x). 
-  Proof.
-    intros. ssa. 
-  Qed.
+Lemma dis_eqmaybe2 : forall (A : Ty) (ARel : myrel [A]) l x, dis ARel l x -> dis (eqmaybe ARel) l (Some x). 
+Proof.
+  intros. ssa. 
+Qed.
 
-  Lemma dis_eqmaybe_false2 : forall (A : Ty) (ARel : myrel [A]) l x, dis ARel l x -> dis (eqmaybe_false ARel) l (Some x). 
-  Proof.
-    intros. ssa. 
-  Qed.    
+Lemma dis_eqmaybe_false2 : forall (A : Ty) (ARel : myrel [A]) l x, dis ARel l x -> dis (eqmaybe_false ARel) l (Some x). 
+Proof.
+  intros. ssa. 
+Qed.    
 
-  Definition is_inl (A B : Set) (x : A + B) := if x is inl _ then true else false.
-  Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
+Definition is_inl (A B : Set) (x : A + B) := if x is inl _ then true else false.
+Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
 
-  Lemma dis_eqsum_LR2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l b, dis BRel l b -> dis (eqsum_LR ARel BRel) l (inr b).
-  Proof. intros. ssa.
-  Qed.
-    
-  Lemma aware_public : aware (publicRel Bool) true \bot.
-  Proof. rewrite /aware. ssa.
-  Qed.
-  Hint Resolve aware_public.
+Lemma dis_eqsum_LR2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l b, dis BRel l b -> dis (eqsum_LR ARel BRel) l (inr b).
+Proof. intros. ssa.
+Qed.
+
+Lemma aware_public : aware (publicRel Bool) true \bot.
+Proof. rewrite /aware. ssa.
+Qed.
+Hint Resolve aware_public.
