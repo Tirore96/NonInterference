@@ -248,7 +248,7 @@ Lemma fv_NI_comp : forall (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f f' 
 Proof.
 intros. move: H H0. rewrite /fv_NI. ssa.
 Qed.
-Check f_EP.
+
 Lemma f_EP_comp : forall (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f f' : [I]  -> [V] ->  [V]),
     f_EP IRel VRel f -> f_EP IRel VRel f' -> f_EP IRel VRel (fun i => (f' i) \o (f i)).
 Proof.

@@ -1,6 +1,6 @@
 -Q . NonInterference
 -I ..
--arg -w -arg all
+-arg "-w -all"
 
 theories/definitions.v
 theories/models.v
