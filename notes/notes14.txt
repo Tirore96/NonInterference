@@ -1,0 +1,20 @@
+(*Out dated, keeping for posterity*)
+
+Some thoughts about state transition
+
+The final stage which we call initiate_next does the following:
+It checks if a handler should run, given by the pending and mask bits
+It checks if the scheduler or prev process should run, given by whether a handler has just terminated and the re_sch flag
+
+We need to reorder some checks.
+We perform the first_ready check at each output received, this means we need additional conditions inside the positive case to check if we are interrupting a handler. As I am writing this I realise that ofc no, if we have a handler ready it means that something was not blocked which means a handler is currently not running. So keeping first_ready top-level is fine.
+The challenge was to ensure that when the timeslice is initialised and not yet depleted, we always run a handler, defaulting to default handler.
+Logic related to the timeslice is given earlierin the state transition definition, but because of compositional reasoning, treating state transition as the composition of multiple composed state transition functions, then we cannot reason about, in isolation, the subset of state configurations that the image of the previously applied strate transition function forces the domain of the subequent function to have.
+We don't use timeslice that early in the pipe line so we should just move it.
+Before we check first_ready, we check if the time slice is live (between Some 4 and Some 1) and set timer interrupt mask to true, disk interrupt mask false, default pending true and default mask false. When timer interrupt completes, we need to initiate the time slice, this can be in its own function. When reasoning about fv_NI we know that if one state has an active disk interrupt handler it means that the time slice is live.
+We have f2 \o f1
+So Timer interrupt handler finishes and we initate slice in f1
+In f2 we always mask timer interrupt.
+
+Disk interrupt handler finishes. In f1 we unmask both disk and default.
+Default handler finishes.

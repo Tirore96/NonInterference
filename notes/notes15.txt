@@ -1,0 +1,27 @@
+All masks should be pulic.
+We kept disk and default masks private because they are toggled based on handler completion, which is determined by secret output.
+Looking at mask toggling it would leak scheduling details about the handlers.
+Technically we could maybe form the output type in a way that indicates that one of the two secret handlers have completed, but we can't do that with a normal eqpair and it would make applying par_NI messy.
+
+We should not infer completion from secret output, we should ensure that all handlers run the exact same amount of time. This can be achieved by padding execution time. We assume all handlers take two outputs to complete.
+
+We can reason about whether this is a realistic constraint.
+
+Assume that we have a variable execution time of handlers, this means that we cannot determine by simple cpu cycle counting when to switch handler. This means that the masks will change in response to handler output which is secret. To steelman the argument we could say that it could be public info that either the disk or default handler has completed (does not leak presence of disk interrupt) but this information in the output cannot simply be modeled using eqpair. We would need some condition that prevents None R None. It would be a subset of eqpair. The process would however still be implemented using the pair construct, which requires eqpair in the output, and since output weaking moves towards a superset, we would need to derive a new par_NI theorem for this approach to work.
+Returning to the private masks. Across v and v', we cannot assert whether they both are in a handler running or handler non running state using masks (masks_set v would have been the test if they were public). We have to base it on output, but also here there is no connection between o and o'. Through the public time slice we know that we should not jump back to user space yet. We can also use the secret part of the process id to know that we are currently in a secret handler. 
+
+
+
+
+Actually maybe we can make it work
+It is a good demonstration of the technique to show the hard way and I think we can do it if we make assertions on the state. If it does not satisfy the assertion, we map it to some constant value, and then
+
+
+Nope it does not work:
+It is very complicated.
+We need to preserve the initiate_next function shape. It needs to be a realistic way of checking what the next piece of code to run should be, used across bad and good model.
+For the good model we want it to be much more refined, casing on whether we are in the timer interrupt handler for example.
+We need to ensure that for all overlapping cases, based on the state relation, that we land in the same pid.
+This requires us to restrict v to the subset of consistent states, for example if timeslice is live then pid is not timer interrupt. We cannot assert the shape of the state because it does not seem to be possible to enforce neither v R v' -> assert v R' assert v'.
+The only difference is optimisation. If we have one handler that is much quicker than another then we lose some time.
+To summarise. We need the timer handler to run in lock step betwen v and v' and only after this may their behavior differ. The current state cannot enforce this. It would be possible to enforce this by extending the state to track the progress of the timer interrupt but it would make the masking logic more complicated.
