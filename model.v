@@ -973,11 +973,7 @@ Fixpoint to_rel (ty : Ty): myrel [ty]:=
     | ty' => publicRel ty'
     end.
 
-Inductive NotSim {I O : Ty} (l : level) (IRel : myrel [I]) (ORel : myrel [O]) : Stream ([I] + [O]) -> Proc I O -> Prop :=
-| NS1 i s p : dis IRel l i -> NotSim l IRel ORel s p -> NotSim l IRel ORel (Cons (inl i) s) p
-| NS2 i s p : dis IRel l i -> (forall p', reduceI p i p' -> NotSim l IRel ORel s p') -> NotSim l IRel ORel s p
-| NS3 i s p : (forall p', (exists i', rel IRel l i i' /\ reduceI p i' p') ->  NotSim l IRel ORel s p') -> NotSim l IRel ORel (Cons (inl i) s) p
-| NS4 o s p : (forall p' o', rel ORel l o o' -> reduceO p o' p' -> NotSim l IRel ORel s p') -> NotSim l IRel ORel (Cons (inr o) s) p.
+
     
 Ltac pc := pclearbot.
 Definition streampred (I O : Set) l (IRel : myrel I) (ORel : myrel O) (s : Stream (I + O))  := ForAll (fun x => match x with | Cons (inl x') _ => dis IRel l x' | Cons (inr x') _ => dis ORel l x' end) s.
@@ -989,8 +985,15 @@ Proof.
 Qed.
 Hint Resolve rel_eq.
 
+Inductive ObliviousTrace {I O : Ty} (ORel : myrel [O]) (l : level) : seq ([I] + [O]) -> Prop :=
+ | OT_nil : ObliviousTrace ORel l nil
+ | OT_cons_in i s :  ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inl i)::s)
+| OT_cons_out o s :  dis ORel l o -> ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inr o)::s).
 
-  Variant ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) (R : Proc I O -> Prop) : Proc I O -> Prop :=
+Definition oblivious  {I O : Ty} (ORel : myrel [O]) (p : Proc I O)  (l : level) :=
+  forall s, Trace ORel l s p -> ObliviousTrace ORel l s.
+
+(*  Variant ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) (R : Proc I O -> Prop) : Proc I O -> Prop :=
   OF1 p : (forall i p', reduceI p i p' -> R p') -> (forall o p', reduceO p o p' -> R p' /\ dis ORel l o) ->  ObliviousF ORel l R p.
 
 Lemma monotone_ObliviousF {I O : Ty} (ORel : myrel [O]) (l : level) : monotone1 (@ObliviousF I O ORel l).
@@ -1003,7 +1006,7 @@ move: (H0 _ _ H1). case. eauto.
 Qed.
 Hint Resolve monotone_ObliviousF : paco.
 
-Definition oblivious {I O : Ty} (ORel : myrel [O]) p : levelPred := fun l => paco1 (@ObliviousF I O ORel l) bot1 p.
+Definition oblivious {I O : Ty} (ORel : myrel [O]) p : levelPred := fun l => paco1 (@ObliviousF I O ORel l) bot1 p.*)
 
 Definition aware_or_oblivious  {I O : Ty} (ORel : myrel [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware ORel o l \/ oblivious ORel p l.
 

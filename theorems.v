@@ -788,43 +788,71 @@ Proof.
     exists o_val, (maybe p'). apply reduce_maybeO; auto.
 Qed.
 
+(* With the new inductive [oblivious ORel p l := forall s, Trace ORel l s p ->
+   ObliviousTrace ORel l s], these three lemmas replace the old coinductive
+   inversion: they feed a one-longer trace to the hypothesis and invert the
+   resulting ObliviousTrace. *)
+Lemma oblivious_reduceI : forall (I O : Ty) (ORel : myrel [O]) (p p' : Proc I O) l i,
+  oblivious ORel p l -> reduceI p i p' -> oblivious ORel p' l.
+Proof.
+  intros I O ORel p p' l i H_obl H_red s H_tr.
+  have H_tr': Trace ORel l (inl i :: s) p by (eapply TR1; eauto).
+  apply H_obl in H_tr'. inv H_tr'. auto.
+Qed.
+
+Lemma oblivious_reduceO : forall (I O : Ty) (ORel : myrel [O]) (p p' : Proc I O) l o,
+  oblivious ORel p l -> reduceO p o p' -> oblivious ORel p' l.
+Proof.
+  intros I O ORel p p' l o H_obl H_red s H_tr.
+  have H_tr': Trace ORel l (inr o :: s) p by (eapply TR2; [eauto | apply rel_eq | eauto]).
+  apply H_obl in H_tr'. inv H_tr'. auto.
+Qed.
+
+Lemma oblivious_reduceO_dis : forall (I O : Ty) (ORel : myrel [O]) (p p' : Proc I O) l o,
+  oblivious ORel p l -> reduceO p o p' -> dis ORel l o.
+Proof.
+  intros I O ORel p p' l o H_obl H_red.
+  have H_tr': Trace ORel l [:: inr o] p by (eapply TR2; [eauto | apply rel_eq | apply TR0]).
+  apply H_obl in H_tr'. inv H_tr'. auto.
+Qed.
+
+(* Generalized over the switch state so the trace induction hypothesis stays
+   available across the [swi] step. *)
+Lemma oblivious_swi_aux : forall (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) l,
+  ~ aware BRel true l ->
+  forall s q, Trace (eqmaybe_swi ORel BRel) l s q ->
+    forall b (p : Proc I (Times Bool O)), q = swi b p ->
+      oblivious (eqpair_R BRel ORel) p l ->
+      ObliviousTrace (eqmaybe_swi ORel BRel) l s.
+Proof.
+  intros I O ORel BRel l H_naware s q Htr.
+  induction Htr as [q0 | q0 i q' t HredI Htr IH | q0 o' o q' t HredO Hrel Htr IH];
+    intros b p Hq H_obl; subst q0.
+  - apply OT_nil.
+  - dependent destruction HredI.
+    apply OT_cons_in.
+    eapply IH; [reflexivity | eapply oblivious_reduceI; eauto].
+  - dependent destruction HredO.
+    + (* reduce_swiO: output None, process unchanged *)
+      apply OT_cons_out.
+      * have H_dis_None: dis (eqmaybe_swi ORel BRel) l (@None [O]) by (simpl; exact H_naware).
+        apply (proj2 (myrel_rule3 H_dis_None o)); exact Hrel.
+      * eapply IH; [reflexivity | exact H_obl].
+    + (* reduce_swiO2: output Some o0, inner step reduceO p (b0,o0) p'0 *)
+      have H_dis_o0: dis ORel l o0 by (eapply dis_eqpair_R; eapply oblivious_reduceO_dis; eauto).
+      apply OT_cons_out.
+      * have H_dis_Some: dis (eqmaybe_swi ORel BRel) l (Some o0) by (simpl; exact H_dis_o0).
+        apply (proj2 (myrel_rule3 H_dis_Some o)); exact Hrel.
+      * eapply IH; [reflexivity | eapply oblivious_reduceO; eauto].
+Qed.
+
 Lemma oblivious_swi : forall (I O : Ty) (ORel : myrel [O]) (BRel : myrel [Bool]) (p : Proc I (Times Bool O)) l b,
   ~ aware BRel true l ->
   oblivious (eqpair_R BRel ORel) p l ->
   oblivious (eqmaybe_swi ORel BRel) (swi b p) l.
 Proof.
-  intros I O ORel BRel p l b H_naware H_obl.
-  set (R := fun (q : Proc (Times Bool I) (Option O)) =>
-              exists b' p', q = swi b' p' /\ oblivious (eqpair_R BRel ORel) p' l).
-  assert (H_R : R (swi b p)).
-  { exists b, p. split; auto. }
-  move: H_R.
-  eapply paco1_acc.
-  intros rr H_bot H_R_rr q H_Rq.
-  destruct H_Rq as [b' [p' [Hq H_obl']]].
-  subst q.
-  eapply paco1_fold.
-  constructor.
-  + intros i q' H_redI.
-    right. apply H_R_rr.
-    dependent destruction H_redI.
-    exists (xor b' b'0), p'0. split; auto.
-    punfold H_obl'.
-    dependent destruction H_obl'.
-    move: (H i0 p'0 H_redI) => [H_p'0 | H_bot_p'0]; [exact H_p'0 | contradiction].
-  + intros o q' H_redO.
-    dependent destruction H_redO.
-    * split.
-      { right. apply H_R_rr. exists false, p'. split; auto. }
-      { simpl. exact H_naware. }
-    * punfold H_obl'.
-      dependent destruction H_obl'.
-      move: (H0 (b0, o0) p'0 H_redO) => [H_p'0 H_dis].
-      destruct H_p'0 as [H_p'0 | H_bot_p'0]; [| contradiction].
-      apply dis_eqpair_R in H_dis.
-      split.
-      { right. apply H_R_rr. exists (~~ b0), p'0. split; auto. }
-      { simpl. exact H_dis. }
+  intros I O ORel BRel p l b H_naware H_obl s Htr.
+  eapply oblivious_swi_aux; eauto.
 Qed.
 
 Fixpoint all_outputs_dis (I O : Ty) (ORel : myrel [O]) (l : level) (t : seq ([I] + [O])) : Prop :=
@@ -833,6 +861,12 @@ Fixpoint all_outputs_dis (I O : Ty) (ORel : myrel [O]) (l : level) (t : seq ([I]
   | inl _ :: t' => all_outputs_dis I O ORel l t'
   | inr o :: t' => dis ORel l o /\ all_outputs_dis I O ORel l t'
   end.
+
+Lemma ObliviousTrace_all_outputs_dis : forall (I O : Ty) (ORel : myrel [O]) l t,
+  ObliviousTrace ORel l t -> all_outputs_dis I O ORel l t.
+Proof.
+  intros I O ORel l t H. induction H; simpl; try (split; assumption); auto.
+Qed.
 
 Lemma oblivious_trace_any : forall (I O : Ty) (ORel : myrel [O]) (l : level) (p : Proc I O) t,
   oblivious ORel p l ->
@@ -846,18 +880,15 @@ Proof.
     + simpl in H_dis.
       destruct (Proc_has_input I O p i) as [p' HredI].
       eapply TR1; [exact HredI |].
-      punfold H_obl. dependent destruction H_obl.
-      destruct (H i p' HredI) as [H_p' | H_bot]; [| contradiction].
-      apply IH; [exact H_p' | exact H_dis].
+      apply IH; [eapply oblivious_reduceI; eauto | exact H_dis].
     + simpl in H_dis. destruct H_dis as [H_dis_o H_dis_t].
       destruct (Proc_has_output I O p) as [o' [p' HredO]].
-      punfold H_obl. dependent destruction H_obl.
-      destruct (H0 o' p' HredO) as [H_obl' H_dis_o'].
+      have H_dis_o': dis ORel l o' by (eapply oblivious_reduceO_dis; eauto).
+      have H_obl': oblivious ORel p' l by (eapply oblivious_reduceO; eauto).
       have H_rel: rel ORel l o' o.
       { destruct ORel as [dis rel equiv r d i0]. simpl in *.
         move: (i0 l o' H_dis_o' o) => [H_impl1 H_impl2].
         apply H_impl1; auto. }
-      destruct H_obl' as [H_obl' | H_bot]; [| contradiction].
       eapply TR2; [exact HredO | exact H_rel |].
       apply IH; [exact H_obl' | exact H_dis_t].
 Qed.
@@ -868,23 +899,7 @@ Lemma oblivious_trace_dis : forall (I O : Ty) (ORel : myrel [O]) (l : level) (p 
   all_outputs_dis I O ORel l t.
 Proof.
   intros I O ORel l p t H_obl H_tr.
-  elim: H_tr H_obl.
-  - intros p0 H_obl. simpl. auto.
-  - intros p0 i p'0 t0 H_redI H_tr' IH H_obl.
-    simpl. apply IH.
-    punfold H_obl. dependent destruction H_obl.
-    destruct (H i p'0 H_redI) as [H_p'0 | H_bot]; [exact H_p'0 | contradiction].
-  - intros p0 o' o p'0 t0 H_redO H_rel H_tr' IH H_obl.
-    simpl. split.
-    + punfold H_obl. dependent destruction H_obl.
-      destruct (H0 o' p'0 H_redO) as [H_obl' H_dis_o'].
-      destruct ORel as [dis rel equiv r d i0]. simpl in *.
-      move: (i0 l o' H_dis_o' o) => [H_impl1 H_impl2].
-      apply H_impl2; auto.
-    + apply IH.
-      punfold H_obl. dependent destruction H_obl.
-      destruct (H0 o' p'0 H_redO) as [H_obl' H_dis_o'].
-      destruct H_obl' as [H_obl' | H_bot_p']; [exact H_obl' | contradiction].
+  apply H_obl in H_tr. eapply ObliviousTrace_all_outputs_dis; eauto.
 Qed.
 
 Lemma all_outputs_dis_insert_inl : forall I O (ORel : myrel [O]) l t n i,

@@ -661,12 +661,7 @@ Qed.
 
 (*Definition initial_state_good : [stateType] := ((initial_pid,None),(false,good_ic)).*)
 
-Definition T'_good := Times (Option THandlerOutput) Bool.
-
-Definition to_T'_good (o : [T_out']) : [T'_good] :=
-  let b := if tI_out o is Some (Notify) then true else false in
-  let o' := if dI_out o is Some (o') then Some o' else None in
-  (o',b).
+Definition T'_good := Option THandlerOutput.
 
 Definition my_f_I_good (n : nat) :=
   match n with
@@ -705,7 +700,7 @@ Definition f_proj_good (i : [T'_good]) : forall n, [Option (my_f_I_good n)].
   case. exact None.
   case. exact None.
   case. exact None. (*scheduler receives nothing*)
-  case. exact (fst i). (*high process receives dI outut*)
+  case. exact i. (*high process receives dI outut*)
   case. exact None. (*low process receives nothing*)
   move=>_. exact None.
 Defined.  
@@ -774,7 +769,7 @@ Definition def_good : [ T_out' ]  := (None,(None,(None,(None,(None,None))))).
 Defined.*)
 
 Definition f_si_good (si : [Times stateType (Sum T_in T_out')]) : [Option (Times cur_pid T'_good)] :=
-  if si.2 is inr o then Some (get_cur_pid si.1, to_T'_good o) else None.
+  if si.2 is inr o then Some (get_cur_pid si.1, dI_out o) else None.
 
 Definition init_ir_count : [ir_count] := Some 4.
 
@@ -872,7 +867,7 @@ Definition good_no_dI' : seqtype' :=   [::pub_get';                      tI';pub
 Definition good_with_dI' : seqtype' := [::pub_get';dI';pub_get';pub_get';tI';pub_get';tI_no'g;tI_yes'g;dI_no'g      ;dI_yes'g      ;defaultI_no'g;defaultI_terminate'g;sch_high;pr_sys'(*sys*);tI';pr_nop';tI_no'g;tI_yes'g;defaultI_no'g;defaultI_yes'g;defaultI_no'g;defaultI_terminate'g;sch_low;pub_get'].
 
 
-Ltac rewr ::= rewrite /model_bad /loop_sta /my_process_pool_bad /process_pool /my_f_initial /low_p /my_f_coopt /alternate_generic /alternate_generic2 /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out /model_good /my_process_pool_good /f_si_good /to_T'_good /f_proj_good /good_default_handler /good_tI_handler /good_dI_handler /good_I_handler.
+Ltac rewr ::= rewrite /model_bad /loop_sta /my_process_pool_bad /process_pool /my_f_initial /low_p /my_f_coopt /alternate_generic /alternate_generic2 /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out /model_good /my_process_pool_good /f_si_good /f_proj_good /good_default_handler /good_tI_handler /good_dI_handler /good_I_handler.
 
 Lemma trace_good_no_dI' : forall l, Trace (publicRel _) l good_no_dI' model_good.
 Proof.  
@@ -1459,300 +1454,6 @@ Proof.
   
   apply/rel_eqpair2. con. ssa.
   apply/rel_eqpair2. con. ssa. ssa. done.
-
-
-
-(*  intros.
-  move:
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. ssa. eauto.
-  apply/rel_eqpair2. con. ssa. ssa.   
-  
-
-  
-  mrw. intros.
-  destruct (eqVneq l \bot).
-  2: {  apply out_rel_not_bot in H. 2:apply/eqP=>//. subst.
-        apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
-  subst.
-
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-
-  move: H=> /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] + /rel_eqpair[] + +.
-  move: i=>[a[] b[] c[] d[] e f].
-  move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
-  rewrite !pair_rewr /is_sch_out.
- 
-  case/rel_eqmaybe_top.
-  move=>[]x []y []-> []->// Hdef.
-
-  case/rel_eqmaybe_top.
-  move=>[]x0 []y0 []-> []->// Hdisk.
-
-  case/rel_eqmaybe2.
-  move=>[]x1 []y1 []-> []->// /publicRel_eq ->//.
-  case:y1. 
-  Print check_ir_count.
-  rewrite /check_ir_count. /get_ir_count /get_ic_count /get_bool_state /handler_completed.
-
-  case:x0 Hdisk. rewrite /default_I_out.
-  case:x Hdef.
-  case:y0. 
-  case:y. ssa. ssa. 
-  move=> _ _. ssa.
-  case:y0.
-  case:y. ssa. ssa. ssa.
-  case:y0. case:y Hdef. ssa. ssa. ssa. ssa.
-  case=>->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x0 Hdisk.
-  case:x Hdef.
-  move=>_ _.
-  case:y0.
-  case:y. ssa. ssa. ssa.
-  case:y0. case:y. ssa. ssa. ssa.
-  case:y0. case:y Hdef. ssa. ssa. ssa.
-
-  case.
-  move=>[x0][]->[]-> _.
-
-  case/rel_eqmaybe2.
-  move=>[]x1 []y1 []-> []->// /publicRel_eq ->.
-
-  rewrite /is_I_out_done /tI_out.
-  case:y1. rewrite /dI_out.
-  case:x0. rewrite /default_I_out.
-  case:x Hdef.
-  case:y. ssa. ssa. case:y. ssa. ssa.
-  rewrite /default_I_out.
-  case:y Hdef. ssa. ssa. ssa.
-  case=>->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x0.
-  case:x Hdef.
-  case:y. ssa. ssa. case:y. ssa. ssa.
-  case:y Hdef. ssa. ssa.
-
-  case.
-  move=>[] x1 []->[]->_.
-  case/rel_eqmaybe2.
-  move=>[]x2 []y2 []-> []->// /publicRel_eq ->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-
-  case:y2.
-  case:x Hdef.
-  case:x1.
-  case:y. ssa. ssa. ssa.
-  case:x1. case:y. ssa. ssa. ssa. ssa.
-  move=>[]->->.
-
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  
-  case:x Hdef.
-  case:x1. case:y. ssa. ssa. ssa.
-  case:x1. case:y. ssa. ssa. ssa.
-  move=>[]->->.
-
-  case/rel_eqmaybe2.
-  move=>[]x'[]y'[]->[]->/publicRel_eq->.
-
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y'. case:x Hdef. case:y. ssa. ssa.
-  case:y. ssa. ssa. ssa.
-  move=>[]->->.
-
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x Hdef.
-  case:y. ssa. ssa.
-  move=>_. case:y. ssa. ssa.
-  case.
-  move=>[x][]->[]->_.
-
-  case/rel_eqmaybe_top.
-  move=>[]x'[]y'[]->[]-> _.
-
-  case/rel_eqmaybe2.
-  move=>[]x0'[]y0'[]->[]->/publicRel_eq->.  
-
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y0'. case:x.
-  case:x'. case:y'. ssa. ssa.
-  case:y'. ssa. ssa.
-  case:x'. case:y'. ssa. ssa.
-  case:y'. ssa. ssa. ssa.
-  move=>[]->->.
-
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x'.
-  case:x.
-  case:y'. ssa. ssa. case:y'. ssa. ssa. case:y'. ssa. ssa.
-
-  case.
-  move=>[]x0[]->_.
-  case/rel_eqmaybe2.
-  move=>[]x0'[]y0'[]->[]->/publicRel_eq->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y0'. case:x0.
-  case:x. case: e'.
-  case. ssa. ssa. ssa.
-  case:e'. case. ssa. ssa. ssa.
-  case:e'. case. ssa. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x0. case:x. case:e'.
-  case. ssa. ssa. ssa.
-  case:e'. case. ssa. ssa. ssa.
-  case:e'. case. ssa. ssa. ssa.
-  case.
-  move=>[]y'[]->[]->_.
-  case/rel_eqmaybe2.
-  move=>[]x0'[]y0'[]->[]->/publicRel_eq->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.  
-  case:y0'.
-  case:x. case:y'. ssa. ssa.
-  case:y'. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.  
-  case:x. case:y'. ssa. ssa.
-  case:y'. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.  
-  case/rel_eqmaybe2.
-  move=>[]x0'[]y0'[]->[]->/publicRel_eq->.  
-  case:y0'. case:x. ssa. ssa. ssa.
-  move=>[]->->.
-  case:x. ssa. ssa.
-  case. move=>[]y'[]->[]->_.
-  case/rel_eqmaybe_top.
-  move=>[]x0'[]y0'[]->[]->_.
-
-  case/rel_eqmaybe2.
-  move=>[]x1'[]y1'[]->[]->_.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.  
-  case:x1'. case:x0'.
-  case:y1'. case:y0'.
-  case:y'. ssa. ssa. ssa. ssa.
-  case:y1'. case:y0'.
-  case:y'. ssa. ssa. ssa. ssa.
-  case:y1'. case:y0'. case:y'. ssa. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.  
-  case:x0'. case:y0'. case:y'. ssa. ssa. ssa.
-  case:y0'. case:y'. ssa. ssa. ssa.
-
-  case.
-  move=>[]x []->[]->_.
-  case/rel_eqmaybe2.
-  move=>[]x1'[]y1'[]->[]->_.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.  
-  case:x1'. case:x. case:y1'. case:y'. ssa. ssa. ssa.
-  case:y1'. case:y'. ssa. ssa. ssa.
-  case:y1'. case:y'. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.  
-  case:x. case:y'. ssa. ssa.
-  case:y'. ssa. ssa.
-  case.
-  move=>[]x []->[]->_.
-  case/rel_eqmaybe2.
-  move=>[]x1'[]y1'[]->[]->/publicRel_eq ->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.  
-  case:y1'. case:x. case:y'. ssa. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x. case:y'. ssa. ssa. ssa.
-  move=>[]->->.
-  case/rel_eqmaybe2.
-  move=>[]x1'[]y1'[]->[]->/publicRel_eq ->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y1'.
-  case:y'. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y'. ssa. ssa.
-  move=>[]->->.
-  case/rel_eqmaybe_top.
-  move=>[]x1'[]y1'[]->[]->_.
-  case/rel_eqmaybe2.
-  move=>[]x2'[]y2'[]->[]->/publicRel_eq ->.  
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y2'. case:x1'. case:y1'. ssa. ssa.
-  case:y1'. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x1'. case:y1'. ssa. ssa.
-  case:y1'. ssa. ssa.
-
-  case.
-  move=>[]x'[]->[]->_.
-  case/rel_eqmaybe2.
-  move=>[]x2'[]y2'[]->[]->/publicRel_eq ->.   
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y2'. case:x'. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x'. ssa. ssa.
-
-  case.
-  move=>[]x'[]->[]->_.
-  case/rel_eqmaybe2.
-  move=>[]x2'[]y2'[]->[]->/publicRel_eq ->.   
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y2'. case:x'. ssa. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:x'. ssa. ssa.
-  move=>[]->->.
-  case/rel_eqmaybe2.
-  move=>[]x1'[]y1'[]->[]->/publicRel_eq ->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  case:y1'. ssa. ssa.
-  move=>[]->->.
-  rewrite /is_I_out_done /tI_out /dI_out /default_I_out.
-  ssa.
-
-
-  mrw. intros.
-  destruct (eqVneq l \bot).
-  2: {  apply out_rel_not_bot in H. 2:apply/eqP=>//. subst.
-        apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
-  subst.  
-  rewrite /check_ir_count.
-
-
-
-(*  have:get_ir_count (update_re_sch (update_I_pending v DefaultInterrupt true) true)= get_ir_count v.  ssa.
-  move=>->.
-  have:get_ir_count (update_re_sch (update_I_pending v' DefaultInterrupt true) true)=get_ir_count v'. ssa.
-  move=>->.*)
-  
-  have: get_ir_count v = get_ir_count v'.
-
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-
-  move/publicRel_eq : H2=>->//.
-
-  
-  move=>->.
-
-  destruct (tI_out i').
-  destruct h.
-  destruct (get_ir_count v').
-  destruct n. ssa.
-  destruct n. ssa. ssa. ssa. ssa.
-  destruct (get_ir_count v').
-  destruct n. ssa. destruct n. ssa. ssa. ssa.
-
-  mrw. intros.
-  clear H.*)
 
   mrw. intros.
   destruct (eqVneq l \bot).
@@ -2448,390 +2149,331 @@ Proof.
   move=>->. auto.
   ssa.
 
-
-
-  
-  move: (ready_casesP v v').
-  rewrite /ready_cases.
-  have: is_I_out_done i' = 
-  move=>+[][]. move=>++->.
-  move=>++[][]. move=>+++->.
-  admit.
-  move=>->+[]//.
-  move=>->+[]//;ssa.
-  move=>+[]+[]+->.
-  move=>->+[]//;ssa.
-
-  move: v H0 Heq Ht Ht' => [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-
-  rewrite /initiate_handler. simpl. 
-  
-  move: H=> /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] + /rel_eqpair[] + +.
-  move: i=>[a[] b[] c[] d[] e f].
-  move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
-  rewrite !pair_rewr /is_sch_out.
- 
-  case/rel_eqmaybe_top.
-  move=>[]x []y []-> []->// Hdef.
-
-  case/rel_eqmaybe_top.
-  move=>[]x0 []y0 []-> []->// Hdisk.
-
-  case/rel_eqmaybe2.
-  move=>[]x1 []y1 []-> []-> /publicRel_eq ->// .
-  destruct (first_ready (cur, prev, (re_sch, (ir_count, (def_pending, def_mask, (disk_pending, disk_mask, (timer_pending, timer_mask))))))) eqn:Heqn.
-  rewrite Heqn.
-
-  have: i = TimerInterrupt -> first_ready (cur', prev', (re_sch', (ir_count', (def_pending', def_mask', (disk_pending', disk_mask', (timer_pending', timer_mask')))))) = Some i.
-  intros. subst.
-  move:Heqn.
-  case/rel_eqpair2: H6. rewrite !pair_rewr. move=>/publicRel_eq -> /publicRel_eq ->.
-  cbv.
-  case:timer_pending'.
-  case:timer_mask'.
-  case:disk_pending H5.
-  case:disk_mask.
-  case:def_pending H3.
-  case:def_mask H4. ssa. ssa. ssa. ssa.
-  move=>_.
-  case:def_pending H3.
-  case:def_mask H4. ssa. ssa. ssa. ssa.
-  case:disk_pending H5.
-  case:disk_mask.
-  case:def_pending H3.
-  case:def_mask H4. ssa. ssa. ssa. ssa.
-  case:def_pending H3.
-  case:def_mask H4. ssa. ssa. ssa.
-  move=>Heq.
-  destruct i. simpl.
-  
-  case:disk_pending
-  case_if;ssa.
-  case_if. move: H. case_if.
-
-  destruct (I_ready ((cur, prev, (re_sch, (ir_count, (def_pending, def_mask, (disk_pending, disk_mask, (timer_pending, timer_mask))))))) TimerInterrupt) eqn:Heqn.
-
-
-  case/rel_eqmaybe2.
-  have: first_ready (cur, prev, (re_sch, (ir_count, (def_pending, def_mask, (disk_pending, disk_mask, (timer_pending, timer_mask))))))
-        =first_ready (cur, prev, (re_sch, (ir_count, (def_pending, def_mask, (disk_pending, disk_mask, (timer_pending, timer_mask)))))).
-  cbv.
-  move=>[]x1 []y1 []-> []->// Htim.
-
-  rewrite /first_ready /ohead /I_ready /all_interrupts.
-
-  
-  
-
-
-  
-
-  rewrite /update_I_pending /update_I_bits /update_ic /update_ic_count /update_bool_state.
-  rewrite !pair_rewr. ssa.
-
-  ssa. ssa.
-  apply/rel_eqpair2;con;try solve [ssa].
-
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.
-  rewrite !pair_rewr.    
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.
-  rewrite !pair_rewr. eauto.
-  case=>->->.
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.
-  rewrite !pair_rewr.    
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.  
-  rewrite !pair_rewr. eauto.
-
-  (*step2*)
-  apply fv_NI_comp.
-  
-  rewrite /step2.
-  apply fv_NI_step_right.
-  rewrite /check_handlers.
-
-  mrw. intros.
-
-  destruct (eqVneq l \bot).
-  2: {  apply out_rel_not_bot in H. 2:apply/eqP=>//. subst.
-        apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
-  subst.
-
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-
-  move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + +.
-  move: i =>[a[] b[] c[] d[] e f]. 
-  move: i'=>[a'[] b'[] c'[] d'[] e' f'].
-  rewrite !pair_rewr.
- 
-  case/rel_eqmaybe2.
-  move=>[]x []y []-> []->// /publicRel_eq ->.
-
-  case/rel_eqmaybe2.
-  move=>[]x' []y' []-> []->// Hsys.
-
-  case/rel_eqmaybe2.
-  move=>[]x'' []y'' []-> []->// /publicRel_eq ->.
-
-  case/rel_eqmaybe_top.
-  move=>[]x''' []y''' []-> [] ->// Hdef.
-
-  case/rel_eqmaybe_top.
-  move=>[]x'''' []y'''' []-> [] ->// Hdisk.
-
-  case/rel_eqmaybe2.
-  move=>[]x''''' []y''''' []-> [] ->// /publicRel_eq ->.    
-
-  rewrite /is_I_out_done.
-
-  rewrite /tI_out.
-  case: y'''''.
-  rewrite /dI_out.
-  case: x'''' Hdisk.
-  case: y''''.
-  move=>Hdisk.
-  rewrite /default_I_out.
-  move: x''' y''' Hdef.
-  move=>[] [].
-  move=>Hdef.
-  
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.
-  rewrite !pair_rewr.    
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con;first ssa.
-  rewrite !pair_rewr. eauto.
-
-  move=>Hdef.
-  
-  apply/rel_eqpair2;con;first ssa.
-  apply/rel_eqpair2;con.
-  rewrite !pair_rewr. rewrite orbC /orb. eauto.
-  rewrite !pair_rewr.
-  apply/rel_eqpair2;con. 
-  rewrite !pair_rewr. eauto.
-  rewrite /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_bool_state orbC /orb.
-
-  rewrite !pair_rewr. 
-    
-  apply/rel_eqpair2;con.
-  apply/rel_eqpair2;con.
-  rewrite !pair_rewr. eauto.
-
-  rewrite !pair_rewr. eauto.
-  
-  apply/rel_eqpair2;con.
-  apply/rel_eqpair2;con. eauto.
-  rewrite !pair_rewr. eauto.
-  apply/rel_eqpair2;con. rewrite !pair_rewr orbC /orb.
-  move/rel_eqpair2 : H6=>[]. eauto.
-
-  rewrite !pair_rewr.
-  rewrite /orb /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  
-  apply/rel_eqpair2;con;eauto.  
-
-
-  destruct i. exfalso;ssa.
-  destruct i'. exfalso;ssa.
-  apply rel_eqsum_L2' in H.
-  clear H1. move: H0.
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]/rel_eqpair[H2 H3] /rel_eqpair[]/rel_eqpair[H4 H5] /rel_eqpair[] H6 H7.
-  move: H0 H1 H2 H3 H4 H5 H6 H7.
-  move: v=> [[cur prev]] [re_sch] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
-  rewrite !pair_rewr.
-  move=> H0 H1 H2 H3 H4 H5 H6 H7.
-  
-  rewrite /state_step /step_on_output.
-
- have: rel stateType_rel l
-    ((inspect_output good_to_bs i)
-       (cur, prev, (re_sch, (def_pending, def_mask, (disk_pending, disk_mask, (timer_pending, timer_mask))))))
-    ((inspect_output good_to_bs i0)
-       (cur', prev', (re_sch', (def_pending', def_mask', (disk_pending', disk_mask', (timer_pending', timer_mask')))))).
-
- rewrite /inspect_output.
-
- have:   rel stateType_rel l
-    ((check_scheduler i)
-       (cur, prev, (re_sch, (def_pending, def_mask, (disk_pending, disk_mask, (timer_pending, timer_mask))))))
-    (( check_scheduler i0)
-       (cur', prev', (re_sch', (def_pending', def_mask', (disk_pending', disk_mask', (timer_pending', timer_mask')))))).
-
-
-  
-
-
- 
- rewrite /is_I_out_done. rewrite /tI_out. simpl.
- case: f=>a0.
- case: f'=>a1. move=>->//. ssa.
- case: f' a0=>//. ssa.
- move=> HtI_out.
-
- 
- have: tI_out i = tI_out i0.
- move: H=> /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _.
- move: i=>[a[] b[] c[] d[] e f].
- move: i0=>[a'[] b'[] c'[] d'[] e' f']. 
- rewrite !pair_rewr.
- rewrite /is_I_out_done. rewrite /tI_out. simpl.
- case: f=>a0.
- case: f'=>a1. move=>->//. ssa.
- case: f' a0=>//. ssa.
- move=> HtI_out.
-
- rewrite /inspect_output.
- 
- move/rel_eqmaybe2.
- case.
- move=>[] [h0 b0] [][h1 b1][]->[]->/=[]->->.
- case: h1.
- move=>HH.
- apply rel_eqmaybe2 in HH.
- Search _ (rel (eqmaybe _)).
- have: rel (publicRel (Times THandlerOutput Bool)) l f f'. ssa.
- clear HH => HH.
- move: f f' HH=> [f b0] [f' b0']=>/=.
- case=>->->.
- case: f'.
-
- rewrite /inspect_output /check_handlers /check_scheduler.
- rewrite /is_I_out_done.
-
-
-  
-  rew
-  ssa. de v. de p. de s. de v'. de p. de s. de H0.
-  rewrite /update_I_bits'.
-  rewrite !pair_rewr.  
-  apply/rel_eqpair2.
-  simpl in H. destruct H. subst. eauto.
-  have: state_step good_to_bs (inl i) = state_step good_to_bs (inl i). simpl. rewrite /state_step.
-  Search _ (rel (eqsum_L _ _)).
-  destruct i. destruct i0. destruct H. subst. ssa. ssa.
-  left. ssa.
-  move: H H3. rewrite /ir_dis. ssa. done. de i0. done. ssa.
-  destruct i. ssa. destruct i'. ssa.
-  apply rel_eqsum_L2' in H.
-  apply out_rel_not_bot in H. subst. eauto. done.
-  subst. eauto.
-
-
-
-
-
-
-
-
-
-
-  
-
-  mrw. intros. destruct i. 2:ssa.
-  have: dis in_rel l i. ssa. clear H=>H.
-  destruct (eqVneq l \bot). subst. ssa.
-  ssa. de i. rewrite /ir_dis in H. ssa.
-
+  (*map*)
   eapply map_NI.
-
-  4: eapply maybe_NI.
-  mrw. intros. destruct i. destruct i'.
+  instantiate (1:= eqmaybe_false (eqpair (eqsum (semiprivateRel Bool) (publicRel _)) (eqmaybe_false (semiprivateRel _)))).
+  mrw. intros.
+  destruct i. destruct i'.
   rewrite !pair_rewr.
   apply rel_eqpair_R2' in H.
   destruct H. destruct H.
-  apply eqsum_L_llrr in H0 as H0'.
-  destruct H0'. destruct i0. destruct i2. ssa. ssa. ssa.
-  destruct i0. ssa. destruct i2. ssa.
+  remember H0. clear Heqr.
+  move/eqsum_split : H0. case.
+  move=>[]x0[]x1[]->[]->. auto.
+  move=>[]x0[]x1[]->[]->Hout.
   apply rel_eqmaybe_false2.
-  instantiate (1:= eqpair _ _).
-  apply rel_eqpair2. rewrite !pair_rewr. con.
-  instantiate (1:= publicRel _). (*changed from private to public*)
-  clear H0 H1. Print stateType.
+  apply rel_eqpair2. con. rewrite !pair_rewr.
 
-  destruct (eqVneq l \bot). subst. eauto.
-  apply semiprivate_not_bot' in H. subst. eauto. apply/eqP. done.
-  instantiate (1:= eqpair _ _).
-  apply rel_eqpair2. rewrite !pair_rewr. con.
-  instantiate (1:= eqmaybe_top (semiprivateRel _)).
-  apply rel_eqsum_L2' in H0.
-  clear H1.
-  destruct (eqVneq l \bot). subst. apply eqmaybe_semiprivate_bot.
+  move:H.
+  move/rel_eqpair=>[] /rel_eqpair[]//.
+  rewrite !pair_rewr.
 
-  apply  out_rel_not_bot in H0. subst. eauto. apply/eqP. done.
-  clear H.
-  apply rel_eqsum_L2' in H0.
-  destruct (eqVneq l \bot). subst. eauto.
-  apply  out_rel_not_bot in H0. subst. eauto. apply/eqP. done.
-  destruct H. destruct i0. 2:ssa. destruct i2. 2:ssa. auto.
-  mrw. intros.
-  destruct i.
-  apply dis_eqpair_R in H. destruct i0. 2:ssa.
-  have: dis in_rel l i0. ssa. clear H=>H.
+  move:Hout.
+  move/rel_eqpair=>[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] Hout _.
+  move:Hout.
+  case: x0=>a[]b[]c[]d[] e f.
+  case: x1=>a'[]b'[] c'[] d'[] e' f'.
+  rewrite !pair_rewr.
+  move/rel_eqmaybe_top. case.
+  move=>[]x'[]y'[] ->[]->.
+  rewrite /dI_out. intro. move: b0. simpl. case.
+  case. intros. subst. auto. intros. auto.
+
+  case.
+  move=>[]x'[]y'[] ->[]->. intros. simpl. de e. case.
+  move=>[]y'[] ->[]->. case. intros. subst. ssa.
+  case. move=>->->. auto.
+  case:H.
+  destruct i0;last ssa.
+  destruct i2;last ssa.
+  auto.
+
+  mrw. intros. destruct i. apply dis_eqpair_R in H. destruct i0;last ssa.
   rewrite !pair_rewr. done.
-  mrw. intros.
-  apply rel_eqsum_L2. eauto.
+
+  mrw. intros. 
+  apply rel_eqsum_L2. eapply H.  
+  
+  eapply maybe_NI.
+  eapply par_NI.
+  eapply map_NI.
+  instantiate (1:= eqpair_LR falseRel (_)).
+  mrw. intros. apply rel_eqpair in H. destruct H.
+  apply rel_eqpair_LR2. con. 2:eauto.
+  clear H0.
+  case/eqsum_split:H.
+  move=>[]x[]y[]->[]->. intros.
+  simpl in b. destruct b. destruct H. subst. eauto.
+  subst. simpl. case_if. case_if. done. done.
+  case_if. done. done.
+  move=>[]x[]y[]->[]->/publicRel_eq->/=. done.
+  mrw. intros. ssa.
+  instantiate (1:= eqmaybe_swi (publicRel _) falseRel).
+  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  destruct H. destruct H. destruct H. destruct H. destruct H0.
+  subst. apply rel_eqmaybe. eauto.
+  destruct H. destruct H. subst. auto.
+  destruct H. destruct i. ssa. destruct i'. ssa. auto.
+
+  apply swi_NI.
+  intros. left. intro. intros.
+  simpl in H. subst. ssa. intro. ssa.
+  
+  eapply maybe_NI. eapply map_NI. eauto. eauto.
+  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
+  apply out_NI.
+  
 
   apply par_NI.
+  (*map*)
 
-  eapply map_NI. 
-  4: eapply swi_NI.
-  mrw. intros.
-  move/rel_eqpair : H. case=>H0 H1.
-  apply rel_eqpair_LR2. con.
-  instantiate (1:= falseRel).
-  
-
-
-  5: { intros. left. apply falseRel_aware. move: H0. clear. ssa. de H0.
-  5: eapply maybe_NI. eauto.
-  2: { mrw. intros. move: H. instantiate (1:= publicRel _). simpl. de i. de i'. de i'. }
-  mrw. ssa. 
-
-  3: { mrw. intros. simpl in i,i'.
-       move: H. instantiate (1:= publicRel _). instantiate (1:= publicRel _). ssa. de i. de i'. de i'. }
-  mrw. intros.
-
-
-  mrw. intros.
-  destruct i. destruct i0.  destruct i'. destruct i3.
-  rewrite !pair_rewr.
-  move:H. move/rel_eqpair=>[] H0 /rel_eqpair [] H1.
-  rewrite !pair_rewr in H0 H1. rewrite !pair_rewr.
-  intros.
-  instantiate (1:= eqpair _ _). apply rel_eqpair2.
-  rewrite !pair_rewr. con.
-  instantiate (1:= semiprivateRel _). move: H0. clear.
-  intros. ssa. de H0. eauto. 2:eauto.
+  eapply map_NI.
+  instantiate (1:= eqpair_LR falseRel _).
+  mrw. intros. apply rel_eqpair in H. destruct H.
+  apply rel_eqpair_LR2. con. 
+  clear H0.
+  case/eqsum_split:H.
+  move=>[]x[]y[]->[]->. intros.
+  simpl in b. destruct b. destruct H. subst. eauto.
+  subst. simpl. case_if. case_if. done. done.
+  case_if. done. done.
+  move=>[]x[]y[]->[]->/publicRel_eq->/=. done. eauto.
   mrw. intros. ssa.
+  instantiate (1:= eqmaybe_swi (semiprivateRel _) falseRel).
+  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  destruct H. destruct H. destruct H. destruct H. destruct H0.
+  subst. apply rel_eqmaybe. eauto.
+  destruct H. destruct H. subst. auto.
+  destruct H. destruct i. ssa. destruct i'. ssa. ssa. intro. apply H0. intro. ssa. subst.
+  intro. ssa. de i'. intro. apply H. intro. ssa. intro. apply H. intro. intros. subst.
+  ssa. 
 
-  eapply swi_NI.
+  apply swi_NI.
+  intros. left. intro. intros.
+  simpl in H. subst. ssa. intro. ssa.
   
-  
-  Search _ (rel (eqsum_L _ _)).
-  clear H1.
+  eapply maybe_NI. eapply map_NI. eauto. eauto.
+  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
 
-  apply rel_eqsum_L2' in H0.
-  destruct (eqVneq l \bot). subst.
-  apply eqmaybe_semiprivate_bot.
-  apply semiprivate_not_bot' in H;eauto. subst.
-  apply eqmaybe_semiprivate_not_bot.  
+  eapply map_NI.
+  mrw. intros. apply rel_eqsum_L. eauto.
+  mrw. intros. apply dis_eqsum_L. done.
+  mrw. intros. move: H.
+  instantiate (1:= eqsum_L _ _). intros.
+  destruct i. destruct i'. apply rel_refl. ssa.
+  destruct i'. ssa.
+  apply rel_eqsum_R2' in H.
+  destruct i. destruct i0.
+  2: apply loop_NI.
+  destruct i1. destruct i2.
+  move:H. instantiate (1:=  (eqpair (semiprivateRel Bool) _)).
+  move/rel_eqpair. case. rewrite !pair_rewr.
+  intros. clear b. ssa. destruct a. ssa. subst. case_if. subst. ssa. subst. ssa.
   ssa.
-  de i0.
-  ssa. de H. subst.
-  Search _ (eqmaybe_false). (Some _)).
-  Search _ (rel (eqpair_R _ _)).  
-  4: eapply par_NI.
+
+  
+  eapply map_NI.
+  apply f_NI_id.
+  apply f_PU_id.
+
+  mrw. intros. apply rel_eqsum_L2. eauto.
+
+  apply sta_NI.
+  mrw. intros. eauto.
+  mrw. intros.
+  destruct i. destruct i'. apply rel_eqsum_L' in H.
+  ssa. de H. de H0. subst. left. ssa.
+  ssa. destruct i'. ssa. apply rel_refl.
+  mrw. intros. destruct i. apply dis_eqsum_L2 in H. ssa. ssa.
+  apply out_NI.
+  
+  apply par_NI.
+  (*map*)
+
+  eapply map_NI.
+  instantiate (1:= eqpair_LR falseRel _).
+  mrw. intros. apply rel_eqpair in H. destruct H.
+  apply rel_eqpair_LR2. con. 
+  clear H0.
+  case/eqsum_split:H.
+  move=>[]x[]y[]->[]->. intros.
+  simpl in b. destruct b. destruct H. subst. eauto.
+  subst. simpl. case_if. case_if. done. done.
+  case_if. done. done.
+  move=>[]x[]y[]->[]->/publicRel_eq->/=. done. eauto.
+  mrw. intros. ssa.
+  instantiate (1:= eqmaybe_swi (publicRel _) falseRel).
+  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  destruct H. destruct H. destruct H. destruct H. destruct H0.
+  subst. apply rel_eqmaybe. eauto.
+  destruct H. destruct H. subst. auto.
+  destruct H. destruct i. ssa. destruct i'. ssa. ssa.
+  
+  apply swi_NI.
+  intros. left. intro. intros.
+  simpl in H. subst. ssa. intro. ssa.
+  
+  eapply maybe_NI. eapply map_NI. eauto. eauto.
+  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
+
+  eapply map_NI. eauto. eauto.
+  instantiate (1:=eqpair _ _).
+  mrw. move=> l i i' /rel_eqpair[] + _.
+  instantiate (1:= publicRel _). move=>/publicRel_eq ->. ssa.
+  eapply sta_NI.
+  mrw. intros. move: H0.
+  move/publicRel_eq=>->//.
+  mrw. intros. eauto.
+  mrw. intros. auto.
+  apply out_NI.
+
+  apply par_NI.
+  (*map*)
+
+  eapply map_NI.
+  instantiate (1:= eqpair_LR (semiprivateRel _) _).
+  mrw. intros. apply rel_eqpair in H. destruct H.
+  apply rel_eqpair_LR2. con. 
+  clear H0.
+  case/eqsum_split:H.
+  move=>[]x[]y[]->[]->. intros.
+  simpl in b. destruct b. destruct H. subst. eauto. eauto.
+(*  subst. simpl. case_if. case_if. done. done.
+  case_if. done. done.*)
+  move=>[]x[]y[]->[]->/publicRel_eq->/=.
+  destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
+  instantiate (1:= eqmaybe_false (semiprivateRel _)). auto.
+  mrw. intros. ssa.
+  instantiate (1:= eqmaybe_swi (semiprivateRel _) (semiprivateRel _)).
+  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  destruct H. destruct H. destruct H. destruct H. destruct H0.
+  subst. apply rel_eqmaybe. eauto.
+  destruct H. destruct H. subst. auto.
+  destruct H. destruct i. ssa. destruct i'. ssa. ssa. de i'.
+  
+  apply swi_NI.
+  intros.
+  destruct (eqVneq l \bot). subst. right.
+  intro. intros.
+  elim: H. intros. con.
+  intros. econ. done.
+  intros. econ. 2:done. ssa.
+  left. intro. intros.
+  move/semiprivate_not_bot' : H=>->//. ssa.
+  intro. subst. rewrite eqxx in i. done.
+  intro. subst. rewrite eqxx in i. done.
+
+  apply maybe_NI.
+  eapply map_NI. eauto. eauto.
+
+  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
+
+  eapply map_NI. eauto. eauto.
+  mrw. intros.
+  move:H. instantiate (1:=eqpair (semiprivateRel _) (publicRel _)).
+  move/rel_eqpair. case=>HH _.
+  simpl in HH. destruct HH. destruct H. rewrite H0.
+  case_if. auto. auto. subst. auto.
+  
+  eapply sta_NI.
+  mrw. intros. simpl in H0. destruct H0. ssa. subst. auto.
+  mrw. intros. auto.
+  mrw. intros. auto.
+  apply out_NI.
+
+
+  apply par_NI.
+  (*map*)
+
+  eapply map_NI.
+  instantiate (1:= eqpair_LR (semiprivateRel _) _).
+  mrw. intros. apply rel_eqpair in H. destruct H.
+  apply rel_eqpair_LR2. con. 
+  clear H0.
+  case/eqsum_split:H.
+  move=>[]x[]y[]->[]->. intros.
+  simpl in b. destruct b. destruct H. subst. eauto. eauto.
+(*  subst. simpl. case_if. case_if. done. done.
+  case_if. done. done.*)
+  move=>[]x[]y[]->[]->/publicRel_eq->/=.
+  destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
+  instantiate (1:= eqmaybe_false (semiprivateRel _)). auto.
+  mrw. intros. ssa.
+  instantiate (1:= eqmaybe_swi (semiprivateRel _) (semiprivateRel _)).
+  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  destruct H. destruct H. destruct H. destruct H. destruct H0.
+  subst. apply rel_eqmaybe. eauto.
+  destruct H. destruct H. subst. auto.
+  destruct H. destruct i. ssa. destruct i'. ssa. ssa. de i'.
+  
+  apply swi_NI.
+  intros.
+  destruct (eqVneq l \bot). subst. right.
+  intro. intros.
+  elim: H. intros. con.
+  intros. econ. done.
+  intros. econ. 2:done. ssa.
+  left. intro. intros.
+  move/semiprivate_not_bot' : H=>->//. ssa.
+  intro. subst. rewrite eqxx in i. done.
+  intro. subst. rewrite eqxx in i. done.
+
+  apply maybe_NI.
+  eapply map_NI. eauto. eauto.
+
+  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
+
+  eapply map_NI. eauto. eauto.
+  mrw. intros.
+  move:H. instantiate (1:=eqpair (semiprivateRel _) (publicRel _)).
+  move/rel_eqpair. case=>HH _.
+  simpl in HH. destruct HH. destruct H. rewrite H0.
+  case_if. auto. auto. subst. auto.
+  
+  eapply sta_NI.
+  mrw. intros. simpl in H0. destruct H0. ssa. subst. auto.
+  mrw. intros. auto.
+  mrw. intros. auto.
+  apply out_NI.
+
+  (*map*) (*being public output we use the falseRel trick that we also used in other public outputting processes*)
+  eapply map_NI.
+  instantiate (1:= eqpair_LR falseRel _).
+  mrw. intros. apply rel_eqpair in H. destruct H.
+  apply rel_eqpair_LR2. con. 
+  clear H0.
+  case/eqsum_split:H.
+  move=>[]x[]y[]->[]->. intros.
+  simpl in b. destruct b. destruct H. subst. eauto.
+  subst. simpl. case_if. case_if. done. done.
+  case_if. done. done.
+  move=>[]x[]y[]->[]->/publicRel_eq->/=. done. eauto.
+  mrw. intros. ssa.
+  instantiate (1:= eqmaybe_swi (publicRel _) falseRel).
+  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  destruct H. destruct H. destruct H. destruct H. destruct H0.
+  subst. apply rel_eqmaybe. eauto.
+  destruct H. destruct H. subst. auto.
+  destruct H. destruct i. ssa. destruct i'. ssa. ssa.
+  
+  apply swi_NI.
+  intros. left. intro. intros.
+  simpl in H. subst. ssa. intro. ssa.
+  
+  eapply maybe_NI. eapply map_NI. eauto. eauto.
+  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
+
+  eapply map_NI. eauto. eauto.
+  instantiate (1:=eqpair _ _).
+  mrw. move=> l i i' /rel_eqpair[] + _.
+  instantiate (1:= publicRel _). move=>/publicRel_eq ->. ssa.
+  eapply sta_NI.
+  mrw. intros. move: H0.
+  move/publicRel_eq=>->//.
+  mrw. intros. eauto.
+  mrw. intros. auto.
+  apply out_NI.
+
+  Unshelve. all: apply publicRel.
+Qed.  
 
