@@ -606,7 +606,6 @@ Definition check_ir_count (v : [stateType]) : [stateType] :=
     | None => v
     end.
 
-(*this is composed with the finial step3 function, ensuring that the state space we need to reason about has the bool_coding constraints, i.e. defaultInterrupt pending will be true*)
 Definition timeslice_live (c : [ir_count]) := match c with | Some n => 0 < n | _ => false end.
 
 (*If timeslice is not live, we enforce that disk and default handlers are masked, and pending default is false.
