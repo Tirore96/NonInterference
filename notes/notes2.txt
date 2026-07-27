@@ -1,3 +1,0 @@
-par_swiI is incorrect, it updates state on both processes always. Should be only active process.
-
-Solution: scheduled_p, but it involves 5 combinators.

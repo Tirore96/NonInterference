@@ -1,6 +1,0 @@
-Prøvede dengang at fjerne handler for at fjerne loop og sta_swi
-
-Kan vi ikke: handler er vigtig for adequacy af model.
-loop blev ikke fjernet, vi tæller outputs og rerouter som input for at tænde/slukke switches.
-
-We don't filter input for non-scheduled processes. At any point one can write to their address space which corresponds to an input.

@@ -25,3 +25,21 @@ We need to ensure that for all overlapping cases, based on the state relation, t
 This requires us to restrict v to the subset of consistent states, for example if timeslice is live then pid is not timer interrupt. We cannot assert the shape of the state because it does not seem to be possible to enforce neither v R v' -> assert v R' assert v'.
 The only difference is optimisation. If we have one handler that is much quicker than another then we lose some time.
 To summarise. We need the timer handler to run in lock step betwen v and v' and only after this may their behavior differ. The current state cannot enforce this. It would be possible to enforce this by extending the state to track the progress of the timer interrupt but it would make the masking logic more complicated.
+
+
+
+
+Idea for moving counter to state
+
+1. Hardware Level: The Interrupt Controller (Best for Real-Time/Hardware Guarantees)
+If you want guaranteed, hard-real-time enforcement that cannot be bypassed or delayed by software execution, the counter must be implemented in the Interrupt Controller (such as the ARM GIC, RISC-V PLIC/CLIC, or x86 APIC) or a custom Hardware Interrupt Throttler block.
+
+Where: In the interrupt controller’s register space (as MMIO-mapped registers).
+
+How it works:
+
+When an interrupt is dispatched to the CPU, a hardware timer is initialized with the "time slice" value.
+
+The timer decrements while the CPU is executing in interrupt context (which the hardware can track by monitoring the interrupt acknowledgment and End-of-Interrupt (EOI) signals).
+
+If the counter reaches zero before the EOI is received, the hardware logic triggers an internal mask signal, disabling the distributor or the CPU interface from forwarding any further interrupts to the processor.

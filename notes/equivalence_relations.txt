@@ -11,6 +11,9 @@ definition (observational equivalence relation):
   an observational equivalence relation r : Eq⬫ L V over V is
   an L-indexed family of characterized equivalence relations
   over V, satisfying the following: L is a lattice, and
+  
+    ∀ ℓ, v, v' . v ∈ dis rℓ' ⇒  v' ∈ dis rℓ <=> v (rℓ) v'  (*Condition that was missing before*)
+    
     ∀ ℓ , ℓ' . ℓ ⊑ ℓ' ⇒ ∀ v, v' .
      • v (rℓ') v' ⇒ v (rℓ) v'        (ℓ' diffs more)
      • v ∈ dis rℓ' ⇒ v ∈ dis rℓ      (ℓ' sees  more)
@@ -20,13 +23,3 @@ What is missing in this, is that there should /optionally/ be a characterized eq
 
 [...] w/ a distinguished set, dis r, satisfying
     ∀ v . v ∈ dis r ⇒ ∀ v' . v r v' ⇒ v' ∈ dis r
-
-    
-  v \in dis r => v' \in dis r => v r v' 
-(that way, if dis r is empty, then nothing is unobservable; if it is non-empty, then one equivalence class is unobservable).
-
-
-
-
-EQ V P
-
