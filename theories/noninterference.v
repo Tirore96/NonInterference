@@ -18,7 +18,23 @@ Open Scope order_scope.
 
 Require Export NonInterference.theories.models.
 
-(*We start by showing that model1 is interfering*)
+(* ===================================================================
+   NonInterference — the concrete security relations and the results.
+
+   Prose companion: docs/noninterference.md (kept in sync with the
+   section banners below).  Structure:
+     4. Model interfaces : in_rel, out_rel (final_out_rel is in models.v)
+     5. model_bad is not non-interfering        (model_bad_not_NI)
+     6. model_good / wrapped are non-interfering (model_good_NI, wrapped_model_good_NI)
+     7. The state relation (stateType_rel) and the fv_NI obligation
+   Note: this file imports classical logic via theorems.v (Require Import
+   Classical), used only in swi_NI' because `aware` is not constructively
+   decidable.
+   =================================================================== *)
+
+(* --- Section 4: input relation.  in_rel = TInterrupt_rel is a CUSTOM
+   relation: ir_dis makes ONLY the disk interrupt secret, and only at bot;
+   the timer interrupt stays public.  (docs/noninterference.md §4.) --- *)
 Definition ir_dis (l : level) (ir : [TInterrupt]) := ir = DiskInterrupt /\ l = \bot.
 Definition TInterrupt_rel : myrel [TInterrupt].
   refine (@MyRel _
@@ -43,6 +59,9 @@ Defined.
 
 Definition in_rel : myrel [T_in] := TInterrupt_rel.
 
+(* out_rel: the 6-slot pool output.  Handler slots are default/NOP, disk,
+   timer: the first two are secret (eqmaybe_top privateRel), the timer slot
+   is public (it reacts only to public timer interrupts). *)
 Definition out_rel : myrel [T_out'] := eqpair (eqmaybe (publicRel _))
                                           (eqpair (eqmaybe (privateRel _))
                                              (eqpair (eqmaybe (publicRel _))
@@ -82,6 +101,11 @@ Qed.
 (*Opaque otherwise the inversion tactic take forever*)
 Opaque state_step f_si initial_state def f_proj.
 
+(* === Section 5: model_bad is not non-interfering.  Witness: a short
+   bot-trace of two public requests; insert a disk interrupt at the front
+   (secret at bot); its pending flag reschedules the disk handler, so the
+   expected second public output becomes None.  Short by necessity —
+   inversion on reductions is expensive.  (docs/noninterference.md §5.) === *)
 Lemma model_bad_not_NI : ~ NI in_rel out_rel model_bad.
 Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
@@ -195,6 +219,11 @@ Proof.
 intros. rewrite /aware. intros. ssa. subst. simpl. intro. ssa.
 Qed.
 
+(* === Section 7a: the state relation.  Classification across two bot-related
+   states: masks PUBLIC everywhere; the secret handlers' (disk, default)
+   pending bits secret via hidden_pending; cur_pid's inl handler-tag secret;
+   re_sch, ir_count (the slice), scheduler/user pid all public.
+   (docs/noninterference.md §7a.) === *)
 Definition pids_rel : myrel [pids] := eqpair (eqsum (privateRel _) (publicRel _)) (publicRel _).
 Definition hidden_pending : myrel [I_bits] := eqpair (privateRel _) (publicRel _).
 Definition public_pair : myrel [I_bits] := eqpair (publicRel _) (publicRel _).
@@ -243,6 +272,12 @@ Proof.
 Qed.
 
 
+(* === Section 7b: the composition-breakdown technique.  state_step is
+   initiate_next(bool_coding) o handler_preroutine o step1 o step0.  fv_NI_comp
+   discharges fv_NI of the composition from fv_NI of the parts; fv_NI_step_left
+   / _right lift each stage to the eqsum in_rel/out_rel event.  Cost: every
+   stage is proved over ALL related states, forgetting the reachable subset —
+   bool_coding (7c) repairs this before initiate_next.  (docs §7b.) === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
@@ -359,6 +394,10 @@ Proof.
   intros. cbv. ssa.
 Qed.
 
+(* === Section 6: model_good is non-interfering.  Assembled from the generic
+   composition theorems (par_NI, sta_NI, swi_NI, map/output-weakening) applied
+   to the concrete pool; the only non-mechanical obligation is fv_NI of the
+   state transition (section 7).  (docs/noninterference.md §6.) === *)
 Lemma model_good_NI : NI in_rel out_rel model_good.
 Proof.
   rewr;simpl;rewr;simpl.
@@ -1573,6 +1612,10 @@ Proof.
 Qed.  
 
 
+(* === Section 6 (payoff): the top result.  wrapped_model_good = map id
+   parse_output model_good; NI is obtained from model_good_NI by output
+   weakening through parse_output (out_rel-related outputs map to
+   final_out_rel-related ones).  (docs/noninterference.md §6.) === *)
 Lemma wrapped_model_good_NI : NI in_rel final_out_rel wrapped_model_good.
 Proof.
   eapply map_NI. eauto. eauto.
