@@ -314,21 +314,7 @@ done.
 Qed.
 Hint Resolve not_booleq.
 
-(*Definition privateRel (A : Ty) : myrel ([A]).
-  refine (@MyRel _
-            (fun l b => True)
-            (fun l b1 b2 => True) (*Since everything is always hidden, there the value space is an equivalence class*)
-            _
-            _
-            _
-            _).
-intros.
-done. done.
-intros. done. done.
-Defined.*)
-
-  
-Definition semiprivateRel (A : Ty) : myrel ([A]).
+Definition privateRel (A : Ty) : myrel ([A]).
   refine (@MyRel _
             (fun l b => l = \bot)
             (fun l b1 b2 => l <> \bot /\ b1 = b2 \/ l = \bot)
@@ -915,21 +901,6 @@ Definition eqmaybe_false {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply:Option_presP_false.
 Defined. 
 
-(*Fixpoint to_rel (ty : Ty): myrel [ty]:=
-      match ty as x return myrel [x] with
-    | TInput => publicRel TInput
-    | THandlerOutput => semiprivateRel THandlerOutput
-    | TTypeSyscall => semiprivateRel TTypeSyscall                                 
-    | TInterrupt => semiprivateRel TInterrupt
-    | Option t => eqmaybe (to_rel t)
-    | Times t0 t1 => eqpair_LR (to_rel t0) (to_rel t1)
-      | Sum t0 t1 => eqsum_LR (to_rel t0) (to_rel t1)
-      | Bool => boolRel
-    | ty' => publicRel ty'
-    end.*)
-
-
-    
 Ltac pc := pclearbot.
 Definition streampred (I O : Set) l (IRel : myrel I) (ORel : myrel O) (s : Stream (I + O))  := ForAll (fun x => match x with | Cons (inl x') _ => dis IRel l x' | Cons (inr x') _ => dis ORel l x' end) s.
 

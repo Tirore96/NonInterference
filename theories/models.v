@@ -166,20 +166,19 @@ Definition my_procs : forall n, Proc (my_f_I n) (my_f_O n) :=
 
 (* === 2. Process pool === *)
 
-(* process_pool n f_coopt f_initial f_I f_O f_proj f_pid f_proc =
+(* process_pool n f_initial f_I f_O f_proj f_pid f_proc =
      match n with
      | 0 =>
          map (fun i => (f_pid i.1 == 0, f_proj i.2 0)) id
-           (swi (f_initial 0) (maybe (map id (fun o => (f_coopt 0, o)) (f_proc 0))))
+           (swi (f_initial 0) (maybe (map id (fun o => (true, o)) (f_proc 0))))
      | n0.+1 =>
          par (map (fun i => (f_pid i.1 == n0.+1, f_proj i.2 n0.+1)) id
-                (swi (f_initial n0.+1) (maybe (map id (fun o => (f_coopt n0.+1, o)) (f_proc n0.+1)))))
-             (process_pool n0 f_coopt f_initial f_I f_O f_proj f_pid f_proc)
+                (swi (f_initial n0.+1) (maybe (map id (fun o => (true, o)) (f_proc n0.+1)))))
+             (process_pool n0 f_initial f_I f_O f_proj f_pid f_proc)
      end *)
 Fixpoint process_pool
   (cur_pid : Ty)
   (n : nat)
-  (f_coopt : nat -> bool)
   (f_initial : nat -> bool)
   (f_I f_O : nat -> Ty)
   (T' : Ty)
@@ -194,19 +193,17 @@ Fixpoint process_pool
       map ((fun i => (f_pid i.1 == 0, f_proj i.2 0))
              : [Times cur_pid T'] -> [Times Bool (Option (f_I 0))]) id
           (swi (f_initial 0)
-             (maybe (map id ((fun o => (f_coopt 0, o)) : [f_O 0] -> [Times Bool (f_O 0)]) (f_proc 0))))
+             (maybe (map id ((fun o => (true, o)) : [f_O 0] -> [Times Bool (f_O 0)]) (f_proc 0))))
   | n0.+1 =>
       par (map ((fun i => (f_pid i.1 == n0.+1, f_proj i.2 n0.+1))
                   : [Times cur_pid T'] -> [Times Bool (Option (f_I n0.+1))]) id
                (swi (f_initial n0.+1)
-                  (maybe (map id ((fun o => (f_coopt n0.+1, o)) : [f_O n0.+1] -> [Times Bool (f_O n0.+1)]) (f_proc n0.+1)))))
-          (@process_pool cur_pid n0 f_coopt f_initial f_I f_O T' f_proj f_pid f_proc)
+                  (maybe (map id ((fun o => (true, o)) : [f_O n0.+1] -> [Times Bool (f_O n0.+1)]) (f_proc n0.+1)))))
+          (@process_pool cur_pid n0 f_initial f_I f_O T' f_proj f_pid f_proc)
   end.
 
 Definition cur_pid := Sum Bool Nat.
 Definition initial_pid : [cur_pid] := inr 3. (*starting with low process*)
-
-Definition my_f_coopt (n : nat) : bool := true.
 
 Definition my_f_pid (pid : [cur_pid]) : [Nat] :=
   match pid with
@@ -229,8 +226,8 @@ Definition f_proj (i : [T_intermediate]) : forall n, [Option (my_f_I n)] :=
            end.
 
 (* my_process_pool =
-     process_pool 5 my_f_coopt my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid my_procs *)
-Definition my_process_pool := @process_pool cur_pid 5 my_f_coopt my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid my_procs.
+     process_pool 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid my_procs *)
+Definition my_process_pool := @process_pool cur_pid 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid my_procs.
 
 
 (* === 3. Stateful wrapper === *)
@@ -521,7 +518,7 @@ Definition model_bad : Proc T_in T_out' := @loop_sta cur_pid stateType initial_s
 Definition no_dI' : seqtype' :=   [::pub_get';                                     tI';pub_get';tI_no';tI_yes';sch_high;pr_nop'(*nop*);tI';pr_nop';tI_no';tI_yes';sch_low;pub_get'].
 Definition with_dI' : seqtype' := [::pub_get';dI';pub_get';dI_no';dI_yes';pub_get';tI';pub_get';tI_no';tI_yes';sch_high;pr_sys'(*sys*);tI';pr_nop';tI_no';tI_yes';sch_low;pub_get'].
 
-Ltac rewr := rewrite /model_bad /loop_sta /my_process_pool /process_pool /my_f_initial /low_p /my_f_coopt /alternate /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out.
+Ltac rewr := rewrite /model_bad /loop_sta /my_process_pool /process_pool /my_f_initial /low_p /alternate /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out.
 
 Ltac lsolv := try solve [ reduce_tac;reduce_tac | reduce_tac;try solve [reduce_once | econ];simpl;first (reduce_tac;reduce_tac)];simpl.
 Ltac reduce_tac2 :=
@@ -575,20 +572,6 @@ Qed.
 (* === 8. model_good === *)
 Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*mask set for everything but timer interrupt*)
 
-Definition init_ir_count : [ir_count] := Some 4.
-
-Definition good_to_bs (ir : [TInterrupt]) (b : [Bool]) : [bool_state] :=
-  let ic := ((~~b,b),((false,b),(false,~~b))) in
-  let ic' := ((~~b,b),((false,b),(false,false))) in (*this one may not touch the timer interrupt mask because it depends on scheduling the private handlers*)
-  
-  (*~~b ensures tI is masked during the time slice, this prevents infering from toggling tI mask that defaultI/diskI handler has run (which toggles all masks. So in essence, the secret handlers may run, this sets the mask of tI, if we are not finished, e.g. b = false, then we mask again. If we are done, b = true, we don't mess with the unset tI mask*)
-  (*We need ir = dI to ensure that it only runs once, which ensures that defaultI runs as the last one, this allows the termination signal to be public because the defaultI may output it*)
-  match ir with
-    | TimerInterrupt => (true,(None,ic))
-    | DiskInterrupt => (false,(None,ic'))
-  | DefaultInterrupt => (false,(None,ic'))
-  end.
-
 Definition initial_state_good : [stateType] := ((initial_pid,None),(false,(Some 0,mask_most))).
 
 Definition handler_completed (c : [ir_count]) := match c with | Some 2 | Some 4 => true | _ => false end.
@@ -630,7 +613,7 @@ Definition good_no_dI' : seqtype' :=   [::pub_get';                      tI';pub
 Definition good_with_dI' : seqtype' := [::pub_get';dI';pub_get';pub_get';tI';pub_get';tI_no';tI_yes';dI_no'      ;dI_yes'      ;defaultI_no';defaultI_yes';sch_high;pr_sys'(*sys*);tI';pr_nop';tI_no';tI_yes';defaultI_no';defaultI_yes';defaultI_no';defaultI_yes';sch_low;pub_get'].
 
 
-Ltac rewr ::= rewrite /model_bad /loop_sta /my_process_pool /process_pool /my_f_initial /low_p /my_f_coopt /alternate /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out /model_good /my_process_pool /f_si /f_proj.
+Ltac rewr ::= rewrite /model_bad /loop_sta /my_process_pool /process_pool /my_f_initial /low_p /alternate /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out /model_good /my_process_pool /f_si /f_proj.
 
 Lemma trace_good_no_dI' : forall l, Trace (publicRel _) l good_no_dI' model_good.
 Proof.  
@@ -677,7 +660,7 @@ Definition parse_output (o : [T_out']) : [T_out] :=
 Definition wrapped_model_good : Proc T_in T_out := map id parse_output model_good.
 
 (* wrapped_model_good traces *)
-Definition final_out_rel : myrel [T_out] := eqmaybe_false (eqsum (publicRel _) (semiprivateRel _)).
+Definition final_out_rel : myrel [T_out] := eqmaybe_false (eqsum (publicRel _) (privateRel _)).
 
 
 
