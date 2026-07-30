@@ -36,44 +36,74 @@ Definitions are as given in
 
 ## 1. Characterised equivalences (`cRel`): the framework and levels
 
-A `cRel` over a Coq type `A` ([`definitions.v`](../theories/definitions.v)) is a
-record whose two key fields are
+Every interface in the development carries a `cRel`
+([`definitions.v`](../theories/definitions.v)) — a level-indexed relation
+describing what an observer at each level can tell about values of that type. It
+has two key fields:
 
 ```text
 rel l x y   x and y are indistinguishable to an observer at level l
-dis l x     x is "secret" (may be varied freely) at level l
+dis l x     x is distinguished at level l — the observer may not see it,
+            so non-interference is allowed to vary it
 ```
 
-`rel l` is required to be an equivalence, and `dis` *characterises* it — hence the
-name — through the field
+Levels form a lattice; `⊥` (written `\bot`) is the least and most exposed level,
+and is the attacker. Two further fields make both `rel` and `dis` monotone
+downwards along the lattice, so a lower observer distinguishes no more than a
+higher one.
+
+The remaining field is what makes a `cRel` more than a pair of relations, and gives
+it its name. `rel l` is an equivalence, and `dis l` is required to be exactly one
+of its equivalence classes:
 
 ```text
-dis l a0 -> forall a1, dis l a1 <-> rel l a0 a1
+dis l a0  ->  forall a1, dis l a1 <-> rel l a0 a1
 ```
 
-that is, if `a0` is secret at `l` then its `rel l`-equivalence class is exactly the
-set of values secret at `l`. The remaining two fields are monotonicity: both `rel`
-and `dis` are inherited downwards along the level order, so a lower (more exposed)
-observer distinguishes no more than a higher one.
+Read left to right: once one value is distinguished at `l`, the values related to
+it are precisely the other distinguished ones. So the distinguished values form a
+single indistinguishable blob, and everything outside it is compared exactly. That
+is the "characterised" in *characterised equivalence*: `dis` is not extra
+information, it is a distinguished class of `rel`.
 
-Levels form a lattice with least element `⊥` (written `\bot`). `⊥` is the most
-exposed observer — the attacker. `NI IRel ORel p` quantifies over every level; the
-decisive case is `l = ⊥`, where secret inputs and outputs may be varied and NI
-demands that `p`'s set of traces does not change. So "`p` is non-interfering"
-means: a `⊥`-observer, watching only the public parts of `p`'s output, cannot tell
-whether a secret input was present.
+### What `NI` says
+
+```coq
+NI IRel ORel p := forall l, NI_l IRel ORel l p
+```
+
+and `NI_l` ([definitions.v:229](../theories/definitions.v)) is three clauses, all
+quantified over traces `t`, positions `n`, and using `insert n (inl i) t` to place
+an input `i` at position `n`:
+
+| clause | statement | reading |
+|---|---|---|
+| substitution | `rel IRel l i i'` → `Trace (insert n i t)` → `Trace (insert n i' t)` | swapping an input for an indistinguishable one keeps it a trace |
+| insertion | `dis IRel l i` → `Trace t` → `Trace (insert n i t)` | a distinguished input may be added anywhere |
+| deletion | `dis IRel l i` → `Trace (insert n i t)` → `Trace t` | and removed again |
+
+Traces are compared through `ORel` at level `l`, so the outputs an observer
+"sees" are only determined up to `rel ORel l`. Together the clauses say: the set of
+traces visible at `l` is unchanged by anything the observer at `l` is not supposed
+to see. The decisive instance is `l = ⊥`. Note that the counterexample for
+`model_bad` (section 5) refutes the *insertion* clause — inserting a disk interrupt
+into a legal trace does not leave a legal trace.
 
 
 ## 2. Base relations: `publicRel`, `privateRel`
 
-Throughout, **public** and **private** are precise, opposite classifications:
+Two words are used throughout, and they are not synonyms:
 
-- **public** = observable to *all* levels (compared by equality everywhere; never
-  secret).
-- **private** = *not* observable to `⊥` (secret at `⊥`, where the attacker may vary
-  it freely; public — compared by equality — at every higher level).
-- **secret** is the informal property "`dis` holds at the observer's level" — the
-  thing NI lets vary.
+- **public** / **private** classify an *interface*. A public interface is compared
+  by equality at every level and is never distinguished. A private interface is
+  distinguished at `⊥` — the attacker may vary it freely — and compared by equality
+  at every level above.
+- **distinguished** is the per-level property `dis l x`. It is what
+  non-interference is permitted to vary, and it is relative to a level: a private
+  value is distinguished at `⊥` and not distinguished anywhere else.
+
+("Secret" is used only informally, as a synonym for distinguished at the attacker's
+level.)
 
 **`publicRel A`**
 
@@ -148,19 +178,20 @@ see.
 
 ## 4. The model interfaces: `in_rel`, `out_rel`, `final_out_rel`
 
-**`in_rel : cRel [T_in]`** = `TInterrupt_rel`, a CUSTOM relation (not
-`privateRel`). Its secrecy predicate is
+**`in_rel : cRel [T_in]`** is `TInterrupt_rel`, defined directly rather than as
+`privateRel TInterrupt`, because only *one* of the interrupts is secret:
 
 ```text
 ir_dis l ir = (ir = DiskInterrupt ∧ l = ⊥)
 ```
 
-so only the disk interrupt is secret, and only at `⊥`. Unlike `privateRel` — where
-at `⊥` *every* value is secret and mutually related — here just the disk interrupt
-is free; every other interrupt (the timer interrupt in particular) stays public
-and must be matched exactly, even at `⊥`. This is deliberate: the timer is a
-public, scheduled event, so only the disk interrupt is a genuine secret input. NI
-is exactly the guarantee that its presence cannot be inferred from the output.
+Under `privateRel`, every interrupt would be distinguished at `⊥` — the timer
+included — and non-interference would then also forbid the schedule from depending
+on the timer, which the good model relies on. `TInterrupt_rel` distinguishes only
+the disk interrupt, so the timer must still be matched exactly even at `⊥`. This
+makes the theorem say the right thing: the timer is a public scheduled event, the
+disk interrupt is the secret, and it is the disk interrupt's presence that cannot
+be inferred.
 
 **`out_rel : cRel [T_out']`** (full pool output, for `model_bad` / `model_good`)
 
@@ -173,15 +204,36 @@ eqpair (eqmaybe publicRel)               public user output   (exact)
           (eqmaybe publicRel)))))        handler output       (public)
 ```
 
-The three handler-output components correspond to the three handler slots, in
-order default/NOP, disk, timer: the first two are secret, the third is public.
-That third slot is the TIMER handler: it reacts only to timer interrupts, which
-are public scheduled events (see `in_rel` above), so neither the fact that it is
-running nor what it outputs is secret. The disk slot is secret because the disk
-interrupt is; the default/NOP slot must be secret too, because it is the disk
-slot's indistinguishable partner — a slice step is filled by one or the other, and
-an observer able to tell those two slots apart could tell which. The
-public user output and the scheduler pid are public; the syscall is secret at `⊥`.
+The three handler components are the three handler slots, in order default/NOP,
+disk, timer. The timer slot is public: it reacts only to timer interrupts, which
+are public scheduled events, so neither its running nor its output is secret. The
+disk slot is private because the disk interrupt is, and the default/NOP slot must
+be private too — it is the disk slot's indistinguishable partner, since a slice
+step is filled by one or the other and an observer able to tell those two slots
+apart could tell which ran.
+
+**The choice of `eqmaybe` variant is where scheduling secrecy lives, and it differs
+between the handlers and the private user process.** Both carry `privateRel`
+payloads, but:
+
+```text
+sys slot  eqmaybe     privateRel    None is PUBLIC
+                                    → that high_p produced an output is visible;
+                                      only Syscall-versus-NOP is hidden
+
+dfl, dsk  eqmaybe_top privateRel    None is distinguished at ⊥
+                                    → at the attacker's level, a handler output is
+                                      indistinguishable from no output at all, so
+                                      *whether the handler ran* is hidden too
+```
+
+That difference is the formal content of "the leak is in the scheduling". For
+`high_p` it suffices to hide the value, because when it runs is public anyway. For
+the two secret handlers it is precisely the *fact of running* — the scheduling —
+that must be hidden, and `eqmaybe_top` is what hides it: it lets `Some o` at a step
+be related to `None`, so a run of the disk handler and a step where nothing
+happened are the same observation. Section 6 shows the proof obligation this
+creates.
 
 **`final_out_rel : cRel [T_out]`** (user-visible output, for `wrapped_model_good`)
 
@@ -220,10 +272,6 @@ returns to the public process, but the first displaced output is already enough.
 `model_good` escapes this because a handler runs only at fixed, publicly determined
 slice boundaries rather than immediately on arrival of its interrupt.
 
-> **On the length of the counterexample.** The proof drives the trace by
-> `inversion` on the reduction relation, which is expensive, so the witness is kept
-> as short as the argument allows.
-
 
 ## 6. `model_good` and `wrapped_model_good` are non-interfering
 
@@ -258,18 +306,112 @@ than taking them as given. This is why the interface relations of section 4 have
 the shape they do: `out_rel`'s nest of `eqpair`s is what `par_NI` imposes on a pool
 output, and its `eqmaybe`s are what `swi_NI` imposes on a gated slot.
 
-For these models every layer is mechanical except the `fv_NI` side conditions of
-`sta_NI` — the requirement that the state relation be preserved by the state
-transition. That is the one substantial obligation, and it is section 7.
+Two of these layers carry real content for our models. `sta_NI`'s `fv_NI` side
+conditions are section 7. `swi_NI`'s side condition is the rest of this section.
 
-> The generic theorems in [`theories/theorems.v`](../theories/theorems.v) are a
-> mechanisation of results from separate prior work, not a contribution of this
-> development; only their statements are used here.
+### 6a. Gating a slot: why `falseRel`, and where obliviousness is needed
+
+Every pool slot is gated by a `swi` whose bit says "is this slot the currently
+selected pid". The bit is computed by mapping the current pid through `my_f_pid`
+and comparing it with the slot index, so the `cRel` chosen for that Bool decides
+what an observer learns from the gate. `swi_NI` demands, at every level:
+
+```coq
+aware BRel true l  \/  oblivious (eqpair_R BRel ORel) p l
+```
+
+`aware BRel true l` says a value related to `true` must *be* `true` and must not be
+distinguished — the observer can trust the gate. `oblivious ORel p l` says the
+opposite kind of thing about the gated process: every output it can ever produce is
+distinguished at `l`, so the observer learns nothing from it either way.
+
+**The `falseRel` trick, for slots whose identity is public.** `falseRel`
+([definitions.v:261](../theories/definitions.v)) is equality on booleans, with
+`dis l b := ~~ b /\ l = ⊥` — that is, `false` is the distinguished value, and only
+at `⊥`. It is well-formed as a `cRel` precisely because `false` is the *only*
+distinguished value, so it forms a single class (section 1).
+
+This is the right relation for a public slot. Deriving the gate bit from a pid
+maps every id other than this slot's to `false`, and `false` being distinguished is
+what lets that map preserve distinguishedness — a distinguished pid goes to a
+distinguished bool. Meanwhile `true` is never distinguished, so
+`falseRel_aware : forall l, aware falseRel true l`
+([noninterference.v:218](../theories/noninterference.v)) holds at *every* level, and
+`swi_NI`'s obligation is discharged by the left disjunct outright.
+
+**Where that is not available.** The two secret handlers cannot use it: whether
+they are running is exactly what must be hidden (section 4). Their proofs instead
+split on the level:
+
+| slot | process | `swi_NI` obligation discharged by |
+|---|---|---|
+| 5 | `low_p`, public | `aware`, at every level |
+| 4 | `high_p`, private | `aware`, at every level |
+| 3 | scheduler | `aware`, at every level |
+| 0 | timer handler | `aware`, at every level |
+| 2 | default/NOP handler | `oblivious` at `⊥`; `aware` above |
+| 1 | disk handler | `oblivious` at `⊥`; `aware` above |
+
+Two things are worth reading off this table. First, the private user process
+`high_p` uses the *same* `aware` argument as the public one — its secrecy is
+carried entirely by the `privateRel` payload inside `eqmaybe_swi`, not by the gate.
+The split is not public-versus-private; it is "everything except the two secret
+handlers".
+
+Second, obliviousness is needed *only at the attacker's level*. Above `⊥`,
+`privateRel` collapses to equality, so the handler's gate is trustworthy and the
+`aware` branch applies as usual. At `⊥` the proof builds an `ObliviousTrace`,
+whose every output step must satisfy `dis ORel l o` — which holds because the
+handler slots were classified `eqmaybe_top privateRel`, making both `Some o` and
+`None` distinguished there. This is the point where the classification chosen in
+section 4 pays for itself: had those slots been `eqmaybe privateRel`, `None` would
+be public, obliviousness would fail, and there would be no way to hide that the
+handler ran.
+
+> The generic theorems in [`theories/theorems.v`](../theories/theorems.v)
+> mechanise results from separate prior work; the mechanisation replaces the
+> original coinductive definitions with inductive ones (`oblivious` above is one
+> such), which avoids constructing streams throughout the proofs.
 
 
 ## 7. The state relation and `fv_NI` — the hard part
 
-### 7a. `stateType_rel`: which state fields are public, which secret
+### 7a. What constrains the classification
+
+`stateType_rel` assigns a classification to every field of the global state, and in
+isolation that assignment would look arbitrary — nothing stops one writing down any
+relation at all. What pins it down is that `sta_NI` needs **two** side conditions on
+the state update, and they push in opposite directions:
+
+```coq
+fv_NI IRel VRel VRel f  :=  rel IRel l i i' -> rel VRel l v v' ->
+                            rel VRel l (f i v) (f i' v')
+f_EP  IRel VRel f       :=  dis IRel l i -> rel VRel l (f i v) v
+```
+
+`fv_NI` says the update maps related states to related states. `f_EP` — *equivalence
+preserving* — says something stronger and less obvious: if the **input** is
+distinguished at `l`, the update must leave the state where it was, up to `rel
+VRel l`. An input the observer may not see must not visibly move the state.
+
+These two squeeze the classification from both sides:
+
+- **`f_EP` forces fields written by a secret input to be private.** A disk
+  interrupt is distinguished at `⊥`, and `step0` responds by setting the disk
+  pending bit. For `f_EP` to hold, the resulting state must still be `⊥`-related to
+  the original — so the disk pending bit *cannot* be public. The same argument
+  covers the default handler's pending bit.
+- **`fv_NI` forces fields that decide control flow to be public.** `initiate_next`
+  branches on the mask bits; if two `⊥`-related states could disagree there, they
+  would take different branches and produce unrelated states. So the masks must be
+  compared by equality.
+
+Both constraints must hold simultaneously, which is why the interrupt controller is
+classified *per bit* rather than wholesale: `hidden_pending` pairs a **private
+pending** bit with a **public mask** bit. That pairing is not a stylistic choice —
+it is the only assignment satisfying both obligations.
+
+### 7b. `stateType_rel`: the resulting classification
 
 ```text
 stateType_rel : cRel [stateType]
@@ -302,7 +444,7 @@ So across two `⊥`-related states, the masks, the slice, the scheduler/user pid
 `re_sch` must match; only the secret handlers' pending bits and the handler bit
 inside `cur_pid` may differ.
 
-### 7b. `fv_NI` and the composition-breakdown technique
+### 7c. `fv_NI` and the composition-breakdown technique
 
 `fv_NI IRel ORel VRel f` := for all `l`, all inputs `i ~ i'` (`rel IRel`) and all
 states `v ~ v'` (`rel VRel`), the outputs are related:
@@ -335,7 +477,7 @@ state_step good_preroutine bool_coding  =
      (good_preroutine)                        ir_count / masks ⇒ agrees
    initiate_next(bool_coding) step_right      THE HARD ONE: related states must
                                               pick the SAME branch of "what runs
-                                              next" — see 7c
+                                              next" — see 7d
 ```
 
 The gain is that each stage becomes a self-contained goal. The price is that each
@@ -345,7 +487,7 @@ reachable set of states the earlier stage actually produces, and every stage mus
 then hold even for states that never arise together in a real run. Section 7c is
 how that is recovered.
 
-### 7c. `bool_coding`: re-establishing the forgotten invariant
+### 7d. `bool_coding`: re-establishing the forgotten invariant
 
 The reachable invariant that matters (good model; the substance is in
 [`models.md` §8](models.md), `bool_coding` note): while the time slice is live, the
@@ -384,7 +526,7 @@ its own. A richer model with several secret interrupts would need a correspondin
 richer indistinguishability argument.
 
 **(b) Same-length handler execution.** Every handler runs for the same fixed number
-of output steps. This is what lets all masks be public (7a): because handlers
+of output steps. This is what lets all masks be public (7b): because handlers
 finish on public time-slice boundaries rather than after a secret-dependent number
 of steps, the mask bits never encode secret timing, so they can safely be compared
 by equality.

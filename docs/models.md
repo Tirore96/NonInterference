@@ -92,7 +92,7 @@ The whole development ends by proving `NI` of `wrapped_model_good`.
 
 These are the leaf processes that populate the pool.
 
-**`low_p : Proc Unit TPublicOutput`**
+**`low_p : Proc Empty TPublicOutput`**
 
 ```coq
 low_p = out GetRequest
@@ -145,7 +145,7 @@ at 1), and the output adds 2, so the emitted pid alternates 2, 3, 2, 3, ... i.e.
 `high_p` then `low_p`. Its input type is `Empty`: the scheduler never consumes
 input, it only proposes the next process id.
 
-**`I_handler : Proc Unit THandlerOutput`** (`handler_type`)
+**`I_handler : Proc Empty THandlerOutput`** (`handler_type`)
 
 ```coq
 I_handler =
@@ -160,10 +160,10 @@ controller (section 4). Its state cell toggles 0/1 (starting at 0) and the emitt
 value is read off the *updated* cell: `Notify` when it is 0, `Nothing` otherwise.
 So each activation emits `Nothing` then `Notify` — a fixed *two* output steps,
 signalling completion with `Notify`. Keeping every handler identical and
-fixed-length is central to the good model (section 8); the input type is kept as
-`Unit` so the one definition can serve all three.
+fixed-length is central to the good model (section 8). Its input type is `Empty`:
+a handler is driven entirely by the interrupt controller and never consumes input.
 
-**`unit_proc : Proc Unit Unit`**
+**`unit_proc : Proc Empty Unit`**
 
 ```coq
 unit_proc = out tt
@@ -176,19 +176,41 @@ Padding for unused pool slots (indices ≥ 6).
 
 | slot | process | input | output |
 |---|---|---|---|
-| 0 | timer-interrupt handler | `Unit` | `THandlerOutput` |
-| 1 | disk-interrupt handler | `Unit` | `THandlerOutput` |
-| 2 | default handler | `Unit` | `THandlerOutput` |
+| 0 | timer-interrupt handler | `Empty` | `THandlerOutput` |
+| 1 | disk-interrupt handler | `Empty` | `THandlerOutput` |
+| 2 | default handler | `Empty` | `THandlerOutput` |
 | 3 | scheduler | `Empty` | `Nat` |
 | 4 | `high_p` | `THandlerOutput` | `TTypeSyscall` |
-| 5 | `low_p` | `Unit` | `TPublicOutput` |
-| ≥6 | padding | `Unit` | `Unit` |
+| 5 | `low_p` | `Empty` | `TPublicOutput` |
+| ≥6 | padding | `Empty` | `Unit` |
 
-`my_procs n : Proc (my_f_I n) (my_f_O n)` is just the dispatch: slots 0–2 are the
-three interrupt handlers, 3 the scheduler, 4 `high_p`, 5 `low_p`, and everything
-else `unit_proc`. Slots 0–2 are separate handlers that share the one process
-definition `I_handler`; they are distinguished only by their own pending/mask bits
-and by how the surrounding state drives them.
+Only slot 4 has a non-`Empty` input: `high_p` is the one process that consumes
+anything, namely the disk handler's `Notify`. Every other slot is driven purely by
+being scheduled.
+
+**The pool is built from a process *function*.** `process_pool` (section 2) is
+generic in a family `f_proc : forall n, Proc (f_I n) (f_O n)`, and recurses over
+slot indices — so the family must be a *total* function on `nat`, defined before
+the pool can be instantiated:
+
+```coq
+my_procs n : Proc (my_f_I n) (my_f_O n) =
+  match n with
+  | 0 | 1 | 2 => I_handler
+  | 3 => scheduler
+  | 4 => high_p
+  | 5 => low_p
+  | _ => unit_proc
+  end
+```
+
+`unit_proc` exists only to make this total. The pool proper is slots `0..5`;
+nothing above 5 is ever selected, and the padding branch is present because
+`my_procs` must have a value everywhere, not because the system has more processes.
+
+Slots 0, 1 and 2 are three *separate* handlers that share the single definition
+`I_handler`. What distinguishes them is not their code but their own pending and
+mask bits in the interrupt controller (section 4), and which interrupt sets them.
 
 
 ## 2. Process pool
@@ -246,7 +268,7 @@ index equals the current pid advances and emits; all others emit `None`.
   `inr 0` as well as of both `inl` ids. Its purpose is to delimit which ids are
   secret values, so that the state relation can classify them in one place
   (`eqsum privateRel publicRel`) and the proof can case-split on the tag. Section
-  [`noninterference.md` §7a](noninterference.md) makes that classification precise,
+  [`noninterference.md` §7b](noninterference.md) makes that classification precise,
   and §6 there shows where the case split is used.
 - `initial_pid = inr 3` (`my_f_pid = 5`, i.e. start in the public process `low_p`)
 - `my_f_initial n = (n == my_f_pid initial_pid)` (only the start slot is open)
