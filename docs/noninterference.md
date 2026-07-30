@@ -204,11 +204,16 @@ input but not with it. Concretely:
 - Insert a disk interrupt at the FRONT of the trace. This is legal at `⊥` because
   the disk interrupt is secret there (`ir_dis`), so NI requires the trace set to be
   unchanged by the insertion.
-- Consuming the interrupt sets the disk pending flag. After the next public
-  output, that pending flag causes the disk handler to be scheduled — so the step
-  where we expected the SECOND public output instead runs the handler.
-- The `⊥`-observer sees the difference directly: the public output component is
-  `None` where the interrupt-free trace produced `pub_get'`.
+- Consuming the interrupt sets the disk pending flag. The first public output still
+  goes through — `initiate_next` runs on output events, so the newly scheduled
+  handler only takes effect from the next step — and then the disk handler runs for
+  its full two steps (`Nothing`, `Notify`) before control returns to the displaced
+  public process.
+- So the step where we expected the SECOND public output is the handler's first
+  step instead, and the `⊥`-observer sees it directly: the public output component
+  is `None` where the interrupt-free trace produced `pub_get'`. That is already
+  enough to refute NI, which is why the witness needs only two public outputs even
+  though the displacement lasts two steps.
 
 So a secret input has changed the public projection of the trace: NI fails. (The
 good model avoids this precisely because the disk handler runs on fixed, public

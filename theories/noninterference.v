@@ -103,8 +103,9 @@ Opaque state_step f_si initial_state def f_proj.
 
 (* === Section 5: model_bad is not non-interfering.  Witness: a short
    bot-trace of two public requests; insert a disk interrupt at the front
-   (secret at bot); its pending flag reschedules the disk handler, so the
-   expected second public output becomes None.  Short by necessity —
+   (secret at bot); its pending flag reschedules the disk handler, which then
+   runs its full two steps, so the expected second public output becomes None.
+   Two public outputs suffice to refute NI.  Short by necessity —
    inversion on reductions is expensive.  (docs/noninterference.md §5.) === *)
 Lemma model_bad_not_NI : ~ NI in_rel out_rel model_bad.
 Proof.

@@ -14,30 +14,37 @@ theorem.
 ## The argument in one picture
 
 The leak in `model_bad` is a **scheduling** leak. A disk interrupt makes the disk
-handler run *right away*, displacing whichever process was scheduled. The
-attacker cannot see the handler itself — the handler's own output slot is secret,
-so `Some _` there is indistinguishable from `None`. But it can see the slot where
-the public process's output should have been, and that slot now reads `None`:
+handler run *right away*, displacing whichever process was scheduled. Every
+handler runs for exactly **two** output steps — `Nothing` then `Notify` — so two
+steps of the public schedule are consumed before control is handed back to the
+process that was displaced.
+
+The attacker never sees the handler run. In the full pool output the handler has
+its own slot and that slot is secret, so `Some _` there is indistinguishable from
+`None`; in the user-visible output the handler's slot does not exist at all. What
+the attacker *can* see is the public process's slot, and for those two steps it
+reads `None`:
 
 ```text
    model_bad — the attacker's view of the same run, without and with a disk interrupt
 
-     step                 1      2      3
-     no disk interrupt   Get    Get    Get
-     disk interrupt      Get     ·     Get
-                                 ▲
-                                 └─ a public output was due here, but the disk
-                                    handler was scheduled instead. The missing
-                                    output is what betrays the secret interrupt.
+     step                 1      2      3      4
+     no disk interrupt   Get    Get    Get    Get
+     disk interrupt      Get     ·      ·     Get
+                                └──┬──┘        │
+                       the disk handler's two   └─ control handed back to the
+                       steps; two public          public process, which resumes
+                       outputs that were due
+                       never arrive
 ```
 
 Nothing about this depends on *which* process was displaced: had the disk
-interrupt landed on the private process instead, the same displacement — and the
-same visible gap in the schedule — would occur.
+interrupt landed on the private process instead, the same two-step displacement —
+and the same visible gap in the schedule — would occur.
 
-`model_good` closes the leak by never letting a secret interrupt change *when*
-anything runs. Handlers only run inside a fixed, public time slice, and each takes
-the same number of steps, so a secret handler run merely takes the place of the
+The good design closes the leak by never letting a secret interrupt change *when*
+anything runs. Handlers run only inside a fixed, public time slice, and all take
+the same two steps, so a secret handler run merely takes the place of the
 NOP-handler filler that would otherwise occupy the slice. The public schedule is
 identical either way:
 
@@ -48,6 +55,13 @@ identical either way:
                  same length ⇒ scheduling depends only on public data
                             ⇒ NON-INTERFERING
 ```
+
+This comes in two versions, and the distinction matters for what is being claimed:
+`model_good` is proved non-interfering on the **full pool output**, where handler
+and scheduler slots are still visible but security-classified, and
+`wrapped_model_good` on the **user-visible output**, where `parse_output` has
+erased everything but the public output and the syscall. The second is the
+headline result; the first is what it is built from.
 
 ## Threat model
 

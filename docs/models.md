@@ -520,9 +520,9 @@ appear. In `model_bad` a handler pair sits wherever its interrupt happened to be
 serviced — `[dI_n dI_y]` lands immediately after the interrupt, in the middle of
 the public output stream, so every public output after it is pushed two steps
 later. Since the handler's own slot is secret but the public slot is not, the
-attacker cannot see the handler run, only its effect on the public stream: an
-output that fails to arrive when it was due — a `None` in slot 1 where a `Get`
-belonged. That is the leak.
+attacker cannot see the handler run, only its effect on the public stream: two
+consecutive steps where an output was due and `None` arrives instead. That is the
+leak.
 
 Contrast `good_with_dI'` (section 9): there, a handler pair *only ever* appears
 inside the fixed time slice, following a timer `Notify`, and a secret handler run
