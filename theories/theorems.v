@@ -332,7 +332,7 @@ Proof.
     simpl in HTp. inv HTp. eapply reduceO_det in Hred. 2: apply H1. destruct Hred. subst. assumption.
 Qed.
 
-(* Structural helpers for the NI proof (both straightforward, left Admitted). *)
+(* Structural helpers for the NI proof; both straightforward inductions. *)
 Lemma projIl_insert_inv : forall (V I O : Ty) (v : [V]) (T : seq ([Times V I] + [Times V O])) n i t,
     projIl T = insert n (inl i) t -> exists w T'', T = insert n (inl (w, i)) T'' /\ projIl T'' = t.
 Proof.

@@ -74,7 +74,7 @@ Definition T_out := Option (Sum TPublicOutput TTypeSyscall).
 
 (* low_p = out GetRequest *)
 
-Definition low_p := @out Unit TPublicOutput GetRequest.
+Definition low_p := @out Empty TPublicOutput GetRequest.
 
 
 (* alternate x y z pred =
@@ -109,7 +109,7 @@ Definition scheduler : Proc Empty Nat :=
        1                                      (*will start scheduling the high process*)
        (out (O := Unit) tt)).
 
-Definition handler_type := Proc Unit THandlerOutput.
+Definition handler_type := Proc Empty THandlerOutput.
 
 (* I_handler =
      map id (fun o => if o.1 == 0 then Notify else Nothing)
@@ -122,15 +122,17 @@ Definition I_handler : handler_type :=
        0
        (out (O := Unit) tt)).
 
+(* Only the secret user process consumes input (the disk handler's Notify).
+   Every other slot is input-free, which the interface records as [Empty]. *)
 Definition my_f_I (n : nat) :=
   match n with
-  | 0 => Unit (*tI*)
-  | 1 => Unit (*dI*)
-  | 2 => Unit (*defaultI*)
-  | 3 => Empty (*scheduler*)         
+  | 0 => Empty (*tI*)
+  | 1 => Empty (*dI*)
+  | 2 => Empty (*defaultI*)
+  | 3 => Empty (*scheduler*)
   | 4 => THandlerOutput (*high*)
-  | 5 => Unit (*low*)
-  | _ => Unit (*padding*)           
+  | 5 => Empty (*low*)
+  | _ => Empty (*padding*)
   end.
 
 Definition my_f_O (n : nat) :=
@@ -145,7 +147,7 @@ Definition my_f_O (n : nat) :=
   end.
 
 (* unit_proc = out tt *)
-Definition unit_proc : Proc Unit Unit := out (O := Unit) tt.
+Definition unit_proc : Proc Empty Unit := out (O := Unit) tt.
 
 (* -- Indexed family of processes -- *)
 Definition my_procs : forall n, Proc (my_f_I n) (my_f_O n) :=
