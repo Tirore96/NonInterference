@@ -88,11 +88,12 @@ process was displaced — interrupting the secret process produces the same gap 
 the schedule.
 
 `model_good` closes it by making the *timing* of handler execution independent of
-which interrupts arrived. Handlers run only inside a fixed time slice whose length
-is derived from the public timer interrupt, all handlers take the same two steps,
-and a default "NOP" handler fills any part of the slice that no real interrupt
-claims. A secret handler run therefore replaces a NOP run rather than displacing a
-user process, and the public schedule is identical either way.
+which interrupts arrived. Handlers run only inside a time slice of fixed length,
+which is started when the **timer** handler completes — a public event, since the
+timer interrupt is public. All handlers take the same two steps, and a default
+"NOP" handler fills any part of the slice that no real interrupt claims. A secret
+handler run therefore replaces a NOP run rather than displacing a user process, and
+the public schedule is identical either way.
 
 ## Results
 
@@ -119,13 +120,12 @@ differ in two definitions, and that difference is the whole security story.
 | **When a handler stops** | when it emits its **secret** `Notify` — *secret-driven* | at a fixed **public** time-slice boundary — *slice-driven* |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
 | **Non-interfering?** | **No** (`model_bad_not_NI`) | **Yes** (`model_good_NI`) |
-| **Why** | completion timing leaks the secret interrupt via scheduling | scheduling depends only on the public slice, so the secret never shows |
+| **Why** | a handler runs as soon as its interrupt is serviced, so a secret interrupt displaces the scheduled process and the gap is visible | handlers run only within the public slice, replacing NOP filler, so the schedule is unchanged |
 
-The mask bits are classified public, which is what forces handlers to be
-fixed-length: a secret-dependent run time would show up in when the masks toggle.
-All three handlers are therefore the same process, two output steps long, and the
-slice is a whole number of those runs. A real system would reach a fixed length by
-padding.
+Handlers must all run for the same length of time, or the schedule would again
+depend on which interrupt arrived. The three handler slots therefore reuse a single
+process definition, `I_handler`, two output steps long, and the slice is sized to a
+whole number of those runs. A real system would reach a fixed length by padding.
 
 ## Glossary
 

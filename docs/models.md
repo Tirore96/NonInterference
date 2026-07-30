@@ -112,12 +112,10 @@ alternate x y z pred =
            (out z))))
 ```
 
-A constant inner process `out z` drives a one-bit accumulator `v`. The
-accumulator latches to `true` as soon as an input satisfies `pred`, and is
-cleared once per cycle by the loop feedback (the `inr` branch). The outer `map`
-reads the tag: a cycle in which `pred` fired outputs `x`, otherwise `y`. In short,
 `alternate` emits `x` when it has seen a `pred`-matching input since it last
-fired, and `y` otherwise.
+fired, and `y` otherwise. The one-bit accumulator latches to `true` as soon as an
+input satisfies `pred`, the loop feedback clears it once per cycle, and the outer
+`map` reads the resulting tag.
 
 **`high_p : Proc THandlerOutput TTypeSyscall`**
 
@@ -127,9 +125,12 @@ high_p = alternate Syscall NOP tt (fun i => i == Notify)
 
 The secret user-space process. It issues a `Syscall` in any cycle where it
 received a `Notify` (which, in the wiring of section 3, is the disk-interrupt
-handler telling it a disk event occurred), and a harmless `NOP` otherwise.
-Whether `high_p` issues a `Syscall` is therefore secret-dependent — this is the
-behaviour the good model must keep from leaking.
+handler telling it a disk event occurred), and a harmless `NOP` otherwise. Which
+of the two it emits is therefore secret-dependent — but that is not itself the
+leak: both are classified secret, so the attacker cannot tell a `Syscall` from a
+`NOP` (see [`noninterference.md` §4](noninterference.md)). What must not leak is
+the *scheduling*: when a secret interrupt is serviced, and hence which process is
+running at which step.
 
 **`scheduler : Proc Empty Nat`**
 
@@ -230,30 +231,36 @@ index equals the current pid advances and emits; all others emit `None`.
 
 **Concrete instantiation.**
 
-- `cur_pid = Sum Bool Nat` — an `inl b` names an interrupt-handler pid, an `inr n`
-  a scheduler / user pid. (The `Sum` split is what lets the state relation keep
-  the *tag* public — whether a handler is running — while making the handler's
-  identity secret; see [`noninterference.md` §7a](noninterference.md).)
-- `my_f_pid : cur_pid -> Nat` (which slot a pid selects):
+- `cur_pid = Sum Bool Nat` — process ids, split so that the `inl` side holds
+  **exactly the two secret ids** and the `inr` side everything public:
 
-  | pid | slot | pid | slot |
-  |---|---|---|---|
-  | `inl true` | 1 (disk handler) | `inr 1` | 3 (scheduler) |
-  | `inl false` | 2 (default handler) | `inr 2` | 4 (`high_p`) |
-  | `inr 0` | 0 (timer interrupt) | `inr 3` | 5 (`low_p`) |
+  | pid | selects slot | | pid | selects slot |
+  |---|---|---|---|---|
+  | `inl true` | 1, disk handler | | `inr 1` | 3, scheduler |
+  | `inl false` | 2, default/NOP handler | | `inr 2` | 4, `high_p` |
+  | | | | `inr 0` | 0, timer handler |
+  | | | | `inr 3` | 5, `low_p` |
 
+  Note the timer handler is `inr 0`, on the public side: it is a handler, but not a
+  secret one. The split is not "handler versus not" — `is_handler_pid` is true of
+  `inr 0` as well as of both `inl` ids. Its purpose is to delimit which ids are
+  secret values, so that the state relation can classify them in one place
+  (`eqsum privateRel publicRel`) and the proof can case-split on the tag. Section
+  [`noninterference.md` §7a](noninterference.md) makes that classification precise,
+  and §6 there shows where the case split is used.
 - `initial_pid = inr 3` (`my_f_pid = 5`, i.e. start in the public process `low_p`)
 - `my_f_initial n = (n == my_f_pid initial_pid)` (only the start slot is open)
-- `T_intermediate = Option THandlerOutput`
-- `f_proj i n` — route the shared payload to slots:
+- `f_proj i n` routes the shared payload — of type `Option THandlerOutput` — to the
+  slots:
 
   ```coq
   f_proj i n = match n with 4 => i | _ => None end
   ```
 
-  Only slot 4 (`high_p`) receives the shared payload `i` (the disk handler's
-  output); every other slot receives `None`.
-- `my_process_pool = process_pool 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid my_procs` — the six-slot pool (indices 0..5).
+  Only slot 4 (`high_p`) receives the payload `i` (the disk handler's output);
+  every other slot receives `None`, which is the whole reason those slots can
+  declare their input type as `Empty`.
+- `my_process_pool = process_pool 5 my_f_initial my_f_I my_f_O (Option THandlerOutput) f_proj my_f_pid my_procs` — the six-slot pool (indices 0..5).
 
 
 ## 3. Stateful wrapper
@@ -426,7 +433,7 @@ six-slot tuple, and exactly one slot is `Some` at a time. The slot order is the
 | # | slot | carries | constant that sets it | classified |
 |---|---|---|---|---|
 | 1 | `pub` | public user output (`low_p`) | `low_out x` | public |
-| 2 | `sys` | syscall (`high_p`) | `high_out x` | secret |
+| 2 | `sys` | `high_p`'s output — `Syscall` or `NOP` | `high_out x` | secret |
 | 3 | `pid` | scheduled pid | `sch_o x` | public |
 | 4 | `dfl` | default/NOP handler output | `defaultI_o x` | secret |
 | 5 | `dsk` | disk handler output | `dI_o x` | secret |
@@ -489,12 +496,14 @@ model_bad = loop_sta initial_state (state_step bad_preroutine id) def
 
 (`bool_coding` is `id`: the bad model does no time-slice bookkeeping.)
 
-**Why it leaks.** Because a handler ends exactly when it emits its secret `Notify`
-and unmasking is driven by that event, the *timing* of mask changes — and hence
-which process runs next — depends on secret handler behaviour. An observer
-watching scheduling can therefore infer the presence of a secret (e.g. disk)
-interrupt. This is precisely what `model_bad_not_NI` witnesses (see
-[`noninterference.md` §5](noninterference.md)).
+**Why it leaks.** Nothing here constrains *when* a handler runs. All masks start
+clear, so as soon as an interrupt is serviced its handler is scheduled, and it runs
+for its two output steps in place of whichever process was running. A secret disk
+interrupt thus moves every subsequent public output two steps later. The handler's
+own output is secret and the attacker cannot see it, but the public process's
+output slot is not, and for those two steps it is empty — an output that was due
+and did not arrive. That is what `model_bad_not_NI` turns into a counterexample
+(see [`noninterference.md` §5](noninterference.md)).
 
 ### The leak, in the model's own traces
 
