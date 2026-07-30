@@ -660,12 +660,12 @@ Definition parse_output (o : [T_out']) : [T_out] :=
 Definition wrapped_model_good : Proc T_in T_out := map id parse_output model_good.
 
 (* wrapped_model_good traces *)
-Definition final_out_rel : myrel [T_out] := eqmaybe_false (eqsum (publicRel _) (privateRel _)).
+Definition final_out_rel : cRel [T_out] := eqmaybe_false (eqsum (publicRel _) (privateRel _)).
 
 
 
 Definition map_tr (I O O' : Ty) (f : [O] -> [O']) (s : seq ([I] + [O])) := seq.map (fun x => match x with | inl x' => inl x' | inr y => inr (f y) end) s.
-Lemma Trace_map : forall (A B B' : Ty) (p : Proc A B) (f : [B] -> [B']) (s : seq ([A] + [B])) (BRel : myrel [B]) (BRel' : myrel [B']) l,
+Lemma Trace_map : forall (A B B' : Ty) (p : Proc A B) (f : [B] -> [B']) (s : seq ([A] + [B])) (BRel : cRel [B]) (BRel' : cRel [B']) l,
     f_NI BRel BRel' f ->
     Trace BRel l s p -> Trace BRel' l (map_tr f s) (map id f p).
 Proof.  

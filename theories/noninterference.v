@@ -36,8 +36,8 @@ Require Export NonInterference.theories.models.
    relation: ir_dis makes ONLY the disk interrupt secret, and only at bot;
    the timer interrupt stays public.  (docs/noninterference.md §4.) --- *)
 Definition ir_dis (l : level) (ir : [TInterrupt]) := ir = DiskInterrupt /\ l = \bot.
-Definition TInterrupt_rel : myrel [TInterrupt].
-  refine (@MyRel _
+Definition TInterrupt_rel : cRel [TInterrupt].
+  refine (@CRel _
             ir_dis
             (fun l ir ir' => ir = ir' \/ ir_dis l ir /\ ir_dis l ir')
             _
@@ -57,19 +57,19 @@ Definition TInterrupt_rel : myrel [TInterrupt].
 Defined.  
 
 
-Definition in_rel : myrel [T_in] := TInterrupt_rel.
+Definition in_rel : cRel [T_in] := TInterrupt_rel.
 
 (* out_rel: the 6-slot pool output.  Handler slots are default/NOP, disk,
    timer: the first two are secret (eqmaybe_top privateRel), the timer slot
    is public (it reacts only to public timer interrupts). *)
-Definition out_rel : myrel [T_out'] := eqpair (eqmaybe (publicRel _))
+Definition out_rel : cRel [T_out'] := eqpair (eqmaybe (publicRel _))
                                           (eqpair (eqmaybe (privateRel _))
                                              (eqpair (eqmaybe (publicRel _))
                                                 (eqpair (eqmaybe_top ((privateRel _)))
                                                    (eqpair (eqmaybe_top (privateRel _))
                                                       (eqmaybe (publicRel _)))))).
 
-Lemma Trace_imp : forall (A B : Ty) (p : Proc A B) (s : seq ([A] + [B])) l (BRel BRel' : myrel [B]), (forall x y, rel BRel l x y -> rel BRel' l x y) -> Trace BRel l s p -> Trace BRel' l s p.
+Lemma Trace_imp : forall (A B : Ty) (p : Proc A B) (s : seq ([A] + [B])) l (BRel BRel' : cRel [B]), (forall x y, rel BRel l x y -> rel BRel' l x y) -> Trace BRel l s p -> Trace BRel' l s p.
 Proof.  
   intros.
   elim : H0 H;ssa.
@@ -133,13 +133,13 @@ Proof.
   exfalso. ssa. destruct i'. ssa. ssa.
 Qed.
 
-Lemma eqsum_llrr  (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B])  l i i' : rel (eqsum ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
+Lemma eqsum_llrr  (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B])  l i i' : rel (eqsum ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
 Proof.
   intros. destruct i. destruct i'. ssa.
   exfalso. ssa. destruct i'. ssa. ssa.
 Qed.
 
-Lemma eqsum_split (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l i0 i1 : rel (eqsum ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
+Lemma eqsum_split (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l i0 i1 : rel (eqsum ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
                                                                                                               exists i0' i1', (i0 = inr i0' /\ i1 = inr i1' /\ rel BRel l i0' i1').
 Proof.
   intros. apply eqsum_llrr in H as H'. destruct H'.
@@ -221,15 +221,16 @@ Qed.
 
 (* === Section 7a: the state relation.  Classification across two bot-related
    states: masks PUBLIC everywhere; the secret handlers' (disk, default)
-   pending bits secret via hidden_pending; cur_pid's inl handler-tag secret;
+   pending bits secret via hidden_pending; cur_pid's inl/inr tag PUBLIC but the
+   bool inside inl (which handler) secret;
    re_sch, ir_count (the slice), scheduler/user pid all public.
    (docs/noninterference.md §7a.) === *)
-Definition pids_rel : myrel [pids] := eqpair (eqsum (privateRel _) (publicRel _)) (publicRel _).
-Definition hidden_pending : myrel [I_bits] := eqpair (privateRel _) (publicRel _).
-Definition public_pair : myrel [I_bits] := eqpair (publicRel _) (publicRel _).
-Definition ic_rel : myrel [ic] := eqpair hidden_pending (eqpair hidden_pending public_pair).
-Definition bool_state_rel : myrel [bool_state] := eqpair (publicRel _) (eqpair (publicRel _) ic_rel).
-Definition stateType_rel : myrel [stateType] := eqpair pids_rel bool_state_rel.
+Definition pids_rel : cRel [pids] := eqpair (eqsum (privateRel _) (publicRel _)) (publicRel _).
+Definition hidden_pending : cRel [I_bits] := eqpair (privateRel _) (publicRel _).
+Definition public_pair : cRel [I_bits] := eqpair (publicRel _) (publicRel _).
+Definition ic_rel : cRel [ic] := eqpair hidden_pending (eqpair hidden_pending public_pair).
+Definition bool_state_rel : cRel [bool_state] := eqpair (publicRel _) (eqpair (publicRel _) ic_rel).
+Definition stateType_rel : cRel [stateType] := eqpair pids_rel bool_state_rel.
 
 
 Lemma stateType_rel_not_bot : forall i i' l, l <> \bot -> rel stateType_rel l i i' -> i = i'.
@@ -255,7 +256,7 @@ Proof.
   ssa. de H. move: H H0. rewrite /ir_dis. ssa. subst. done.
 Qed.
 
-Lemma sta_comp : forall (I V O : Ty) (IRel : myrel [I]) (VRel : myrel [V]) (ORel : myrel [O]) (f f' : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V])
+Lemma sta_comp : forall (I V O : Ty) (IRel : cRel [I]) (VRel : cRel [V]) (ORel : cRel [O]) (f f' : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V])
                         (v : [V]) (p : Proc (Times V I) O),
     fv_NI ORel VRel VRel g ->
     fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
@@ -278,13 +279,13 @@ Qed.
    / _right lift each stage to the eqsum in_rel/out_rel event.  Cost: every
    stage is proved over ALL related states, forgetting the reachable subset —
    bool_coding (7c) repairs this before initiate_next.  (docs §7b.) === *)
-Lemma fv_NI_comp : forall (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f f' : [I]  -> [V] ->  [V]),
+Lemma fv_NI_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
 intros. move: H H0. rewrite /fv_NI. ssa.
 Qed.
 
-Lemma f_EP_comp : forall (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f f' : [I]  -> [V] ->  [V]),
+Lemma f_EP_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
     f_EP IRel VRel f -> f_EP IRel VRel f' -> f_EP IRel VRel (fun i => (f' i) \o (f i)).
 Proof.
 intros. move: H H0. rewrite /f_EP. ssa. eauto.

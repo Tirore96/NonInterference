@@ -76,8 +76,8 @@ Ltac coseq_tac_in l H := rewrite (coseq_match l) /= in H.
 Definition order (b1 b2 : level) := b1 <= b2.
 
 
-Record myrel (A : Set) :=
-        MyRel {
+Record cRel (A : Set) :=
+        CRel {
            dis : level -> A -> Prop;
            rel : level -> A -> A -> Prop;
            equiv : forall l, Equivalence (rel l);
@@ -208,7 +208,7 @@ Ltac match_dd_o :=
    repeat (match_dd_once;eauto).
 
 
-Inductive Trace (I O : Ty) (ORel : myrel [O]) (l : level) : list ([I] + [O]) -> Proc I O -> Prop :=
+Inductive Trace (I O : Ty) (ORel : cRel [O]) (l : level) : list ([I] + [O]) -> Proc I O -> Prop :=
 | TR0 p : Trace ORel l nil p
 | TR1 p i p' t : reduceI p i p' -> Trace ORel l t p' -> Trace ORel l (inl i::t) p
 | TR2 p o' o p' t : reduceO p o' p' -> rel ORel l o' o -> Trace ORel l t p' -> Trace ORel l (inr o::t) p.
@@ -226,17 +226,17 @@ Fixpoint remove (A : Set) (n : nat) (l : seq A) :=
   | n'.+1 => if l is a::l' then a::(remove n' l') else nil
   end.
 
-Definition NI_l (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (l : level) (p : Proc I O) : Prop :=
+Definition NI_l (I O : Ty) (IRel : cRel [I]) (ORel : cRel [O]) (l : level) (p : Proc I O) : Prop :=
   (forall t i i' n, rel IRel l i i' -> Trace ORel l (insert n (inl i) t) p -> Trace ORel l (insert n (inl i') t) p) /\
   (forall t i n, dis IRel l i -> Trace ORel l t p -> Trace ORel l (insert n (inl i) t) p) /\
   (forall t i n, dis IRel l i -> Trace ORel l (insert n (inl i) t) p -> Trace ORel l t p).
 
 
-Definition NI (I O : Ty) (IRel : myrel [I]) (ORel : myrel [O]) (p : Proc I O) := forall l, NI_l IRel ORel l p.
+Definition NI (I O : Ty) (IRel : cRel [I]) (ORel : cRel [O]) (p : Proc I O) := forall l, NI_l IRel ORel l p.
 
 
-(*Definition boolRel : myrel ([Bool]).
-  refine (@MyRel _
+(*Definition boolRel : cRel ([Bool]).
+  refine (@CRel _
             (fun l (b : [Bool]) => b \/ l = \bot)
             (fun l b1 b2 => b1 = b2 \/  (b1 \/ l = \bot) /\ (b2 \/ l = \bot))
             _
@@ -258,8 +258,8 @@ intros. con. intros. de H. de H.
 de H0. de a0.
 Defined.*)
 
-Definition falseRel : myrel ([Bool]).
-  refine (@MyRel _
+Definition falseRel : cRel ([Bool]).
+  refine (@CRel _
             (fun l (b : [Bool]) => ~~ b /\ l = \bot)
             (fun l b1 b2 => b1 = b2)
             _
@@ -272,8 +272,8 @@ Definition falseRel : myrel ([Bool]).
   intros. subst. ssa.
 Defined.
 
-Definition publicRel (A : Ty) : myrel ([A]).
-  refine (@MyRel _
+Definition publicRel (A : Ty) : cRel ([A]).
+  refine (@CRel _
             (fun l b => False)
             (fun l b1 b2 => b1 = b2)
             _
@@ -287,8 +287,8 @@ eauto.
 intros. done.
 Defined.
 
-(*Definition toPublicRel (A : Ty) (ARel : myrel [A]) : myrel ([A]).
-  refine (@MyRel _
+(*Definition toPublicRel (A : Ty) (ARel : cRel [A]) : cRel ([A]).
+  refine (@CRel _
             (fun l b => False)
             (rel ARel)
             _
@@ -314,8 +314,8 @@ done.
 Qed.
 Hint Resolve not_booleq.
 
-Definition privateRel (A : Ty) : myrel ([A]).
-  refine (@MyRel _
+Definition privateRel (A : Ty) : cRel ([A]).
+  refine (@CRel _
             (fun l b => l = \bot)
             (fun l b1 b2 => l <> \bot /\ b1 = b2 \/ l = \bot)
             _
@@ -334,8 +334,8 @@ Definition privateRel (A : Ty) : myrel ([A]).
 Defined.
 
 
-Definition eqpair {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
+Definition eqpair {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  refine (@CRel _ 
             (fun (l : level) _ => False)
             (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
             _
@@ -368,8 +368,8 @@ done.
 done.
 Defined.
 
-Definition eqpair_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
+Definition eqpair_LR {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  refine (@CRel _ 
             (fun (l : level) io => dis IRel l (fst io) /\ dis ORel l (snd io))
             (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
             _
@@ -403,8 +403,8 @@ Definition eqpair_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([
     de ORel. apply/i0;eauto.
 Defined.
 
-Definition eqpair_L {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
+Definition eqpair_L {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  refine (@CRel _ 
             (fun (l : level) io => dis IRel l (fst io))
             (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ dis IRel l (fst io1) /\ dis IRel l (fst io2))
             _
@@ -456,8 +456,8 @@ Definition eqpair_L {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
     ssa.
 Defined.
 
-Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
+Definition eqpair_R {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  refine (@CRel _ 
             (fun (l : level) io => dis ORel l (snd io))
             (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ dis ORel l (snd io1) /\ dis ORel l (snd io2))
             _
@@ -508,8 +508,8 @@ Definition eqpair_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([T
     case. ssa.
 Defined.
 
-(*Definition eqpair_REQ {I O : Ty} (def : [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
+(*Definition eqpair_REQ {I O : Ty} (def : [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  refine (@CRel _ 
             (fun (l : level) io => fst io = def /\ dis ORel l (snd io))
             (fun l io1 io2 => rel (publicRel _) l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ fst io1 = fst io2 /\ dis ORel l (snd io1) /\ dis ORel l (snd io2))
             _
@@ -556,16 +556,16 @@ Defined.
     ssa.
 Defined.*)
 
-Lemma dis_rel_dis : forall (I : Ty) (IRel : myrel [I]) l x y, dis IRel l x -> rel IRel l x y -> dis IRel l y.
+Lemma dis_rel_dis : forall (I : Ty) (IRel : cRel [I]) l x y, dis IRel l x -> rel IRel l x y -> dis IRel l y.
 Proof.
   intros. de IRel. apply/i;eauto.
 Qed.
-Lemma dis_rel_dis2 : forall (I : Ty) (IRel : myrel [I]) l x y, dis IRel l x -> rel IRel l y x -> dis IRel l y.
+Lemma dis_rel_dis2 : forall (I : Ty) (IRel : cRel [I]) l x y, dis IRel l x -> rel IRel l y x -> dis IRel l y.
 Proof.
   intros. de IRel. apply/i;eauto.
   move:(equiv0 l)=> [] _ Hsym _. apply/Hsym. auto.
 Qed.
-Lemma dis_dis_rel : forall (I : Ty) (IRel : myrel [I]) l x y, dis IRel l x -> dis IRel l y -> rel IRel l x y.
+Lemma dis_dis_rel : forall (I : Ty) (IRel : cRel [I]) l x y, dis IRel l x -> dis IRel l y -> rel IRel l x y.
 Proof.
   intros. de IRel;eauto. apply/i;eauto.
 Qed.
@@ -575,8 +575,8 @@ Hint Resolve dis_rel_dis dis_rel_dis2 dis_dis_rel.
 
 
 
-(*Definition eqpair_OR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Times I O]).
-  refine (@MyRel _ 
+(*Definition eqpair_OR {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  refine (@CRel _ 
             (fun (l : level) io => dis IRel l (fst io) \/ dis ORel l (snd io))
             (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/
                                 (dis IRel l (fst io1) \/ dis ORel l (snd io1)) /\
@@ -629,8 +629,8 @@ Hint Resolve dis_rel_dis dis_rel_dis2 dis_dis_rel.
          de H.
 Defined.*)
 
-Lemma eqsum_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
-  refine (@MyRel _ 
+Lemma eqsum_LR {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
+  refine (@CRel _ 
             (fun (l : level) io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end)
             (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
                                             | inr o1,inr o2 => rel ORel l o1 o2
@@ -681,8 +681,8 @@ Lemma eqsum_LR {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I 
     de a1. eauto.
 Defined.
 
-Lemma eqsum_L {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
-  refine (@MyRel _ 
+Lemma eqsum_L {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
+  refine (@CRel _ 
             (fun (l : level) io => match io with | inl i => dis IRel l i | inr _ => False  end)
             (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
                                             | inr o1,inr o2 => rel ORel l o1 o2
@@ -719,8 +719,8 @@ Lemma eqsum_L {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O
     de IRel. apply/i1;eauto.
 Defined.
 
-Lemma eqsum_R {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
-  refine (@MyRel _ 
+Lemma eqsum_R {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
+  refine (@CRel _ 
             (fun (l : level) io => match io with | inl _ => False | inr o => dis ORel l o end)
             (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
                                             | inr o1,inr o2 => rel ORel l o1 o2
@@ -759,8 +759,8 @@ Defined.
 
 
 
-Lemma eqsum {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) : myrel ([Sum I O]).
-  refine (@MyRel _ 
+Lemma eqsum {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
+  refine (@CRel _ 
             (fun (l : level) io => False)
             (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
                                             | inr o1,inr o2 => rel ORel l o1 o2
@@ -798,39 +798,39 @@ Defined.
 Definition levelPred := level -> Prop.
 Definition presP (P:levelPred) := forall x0 x1, order x0 x1 -> P x0 -> P x1.
 
-Lemma rel_refl : forall (A : Ty) (ARel : myrel [A]) l x, rel ARel l x x.
+Lemma rel_refl : forall (A : Ty) (ARel : cRel [A]) l x, rel ARel l x x.
 Proof.
   intros. de ARel. move:(equiv0 l). case. eauto.
 Qed.
-Lemma rel_sym : forall A (ARel : myrel A) l x y, rel ARel l x y -> rel ARel l y x.
+Lemma rel_sym : forall A (ARel : cRel A) l x y, rel ARel l x y -> rel ARel l y x.
   Proof.
     intros. destruct ARel;ssa.
     move: (equiv0 l). case. ssa.
   Qed.
 
-Lemma rel_trans : forall A (ARel : myrel A) l x y z, rel ARel l x y -> rel ARel l y z -> rel ARel l x z.
+Lemma rel_trans : forall A (ARel : cRel A) l x y z, rel ARel l x y -> rel ARel l y z -> rel ARel l x z.
   Proof.
     intros. destruct ARel;ssa.
     move: (equiv0 l). case. ssa. eauto.
   Qed.
 
-Lemma myrel_rule1 : forall (A : Ty) (ARel : myrel [A]) l0 l1, order l0 l1 -> forall a0 a1 : [A], rel ARel l1 a0 a1 -> rel ARel l0 a0 a1.
+Lemma cRel_rule1 : forall (A : Ty) (ARel : cRel [A]) l0 l1, order l0 l1 -> forall a0 a1 : [A], rel ARel l1 a0 a1 -> rel ARel l0 a0 a1.
 Proof. intros. de ARel. eauto.
 Qed.
 
-Lemma myrel_rule2 : forall (A : Ty) (ARel : myrel [A]), forall l0 l1 : level, order l0 l1 -> forall a : [A], dis ARel l1 a -> dis ARel l0 a.
+Lemma cRel_rule2 : forall (A : Ty) (ARel : cRel [A]), forall l0 l1 : level, order l0 l1 -> forall a : [A], dis ARel l1 a -> dis ARel l0 a.
 Proof. intros. de ARel. eauto.
 Qed.
 
-Lemma myrel_rule3 : forall (A : Ty) (ARel : myrel [A]), forall (l : level) (a0 : [A]), dis ARel l a0 -> forall a1 : [A], dis ARel l a1 <-> rel ARel l a0 a1.
+Lemma cRel_rule3 : forall (A : Ty) (ARel : cRel [A]), forall (l : level) (a0 : [A]), dis ARel l a0 -> forall a1 : [A], dis ARel l a1 <-> rel ARel l a0 a1.
 Proof. intros. de ARel. 
 Qed.
 
-Hint Resolve rel_refl rel_sym rel_trans myrel_rule1 myrel_rule2 myrel_rule3.
-Definition eqmaybe_dis {V : Ty} (P: levelPred) (VRel : myrel [V]) l (v : [Option V]) := if v is Some v' then dis VRel l v' else ~ P l.
-Definition eqmaybe_aux {V : Ty} (P: levelPred) (VRel : myrel [V]) : presP P -> myrel ([Option V]).
+Hint Resolve rel_refl rel_sym rel_trans cRel_rule1 cRel_rule2 cRel_rule3.
+Definition eqmaybe_dis {V : Ty} (P: levelPred) (VRel : cRel [V]) l (v : [Option V]) := if v is Some v' then dis VRel l v' else ~ P l.
+Definition eqmaybe_aux {V : Ty} (P: levelPred) (VRel : cRel [V]) : presP P -> cRel ([Option V]).
 intros.  
-    refine (@MyRel _
+    refine (@CRel _
             (fun l v => eqmaybe_dis P VRel l v)
             (fun l b1 b2 => match b1,b2 with
                             | Some v1,Some v2 => rel VRel l v1 v2
@@ -867,10 +867,10 @@ Definition Option_presP : presP (fun _ => True).
   rewrite /presP. eauto.
 Qed.
 
-Definition aware (V : Ty) (VRel : myrel [V]) (v : [V]) : levelPred
+Definition aware (V : Ty) (VRel : cRel [V]) (v : [V]) : levelPred
   := fun l => (forall v', rel VRel l v v' -> v = v' /\ ~ dis VRel l v').
 
-Definition Option_presP_swi (BRel : myrel [Bool]) : presP (fun l => aware BRel true l).
+Definition Option_presP_swi (BRel : cRel [Bool]) : presP (fun l => aware BRel true l).
   rewrite /presP. intros. destruct BRel. move: H0. rewrite /aware. ssa.
   have: rel0 x0 true v'. eauto. move/H0. ssa.
   have: rel0 x0 true v'. eauto. move/H0. ssa. eauto.
@@ -885,41 +885,41 @@ Definition Option_presP_top : presP (fun l => l <> \bot).
   rewrite /presP. intros. subst. rewrite /order in H. intro. subst. apply/H0.  rewrite lex0 in H. by apply/eqP.
 Qed.
 
-Definition eqmaybe {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
+Definition eqmaybe {V : Ty} (VRel : cRel [V]) : cRel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply: Option_presP.
 Defined.
 
-Definition eqmaybe_top {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
+Definition eqmaybe_top {V : Ty} (VRel : cRel [V]) : cRel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply: Option_presP_top.
 Defined.
 
-Definition eqmaybe_swi {V : Ty} (VRel : myrel [V]) (BRel : myrel [Bool]) : myrel ([Option V]).
+Definition eqmaybe_swi {V : Ty} (VRel : cRel [V]) (BRel : cRel [Bool]) : cRel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply: Option_presP_swi. apply BRel.
 Defined. 
 
-Definition eqmaybe_false {V : Ty} (VRel : myrel [V]) : myrel ([Option V]).
+Definition eqmaybe_false {V : Ty} (VRel : cRel [V]) : cRel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply:Option_presP_false.
 Defined. 
 
 Ltac pc := pclearbot.
-Definition streampred (I O : Set) l (IRel : myrel I) (ORel : myrel O) (s : Stream (I + O))  := ForAll (fun x => match x with | Cons (inl x') _ => dis IRel l x' | Cons (inr x') _ => dis ORel l x' end) s.
+Definition streampred (I O : Set) l (IRel : cRel I) (ORel : cRel O) (s : Stream (I + O))  := ForAll (fun x => match x with | Cons (inl x') _ => dis IRel l x' | Cons (inr x') _ => dis ORel l x' end) s.
 
-Lemma rel_eq : forall (I : Set) (IRel : myrel I) (x : I) l, rel IRel l x x.
+Lemma rel_eq : forall (I : Set) (IRel : cRel I) (x : I) l, rel IRel l x x.
 Proof.
   intros. de IRel. ssa.
   move: (equiv0 l). case. move=> Hr _ _. apply Hr.
 Qed.
 Hint Resolve rel_eq.
 
-Inductive ObliviousTrace {I O : Ty} (ORel : myrel [O]) (l : level) : seq ([I] + [O]) -> Prop :=
+Inductive ObliviousTrace {I O : Ty} (ORel : cRel [O]) (l : level) : seq ([I] + [O]) -> Prop :=
  | OT_nil : ObliviousTrace ORel l nil
  | OT_cons_in i s :  ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inl i)::s)
  | OT_cons_out o s :  dis ORel l o -> ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inr o)::s).
 
-Definition oblivious  {I O : Ty} (ORel : myrel [O]) (p : Proc I O)  (l : level) :=
+Definition oblivious  {I O : Ty} (ORel : cRel [O]) (p : Proc I O)  (l : level) :=
   forall s, Trace ORel l s p -> ObliviousTrace ORel l s.
 
-Definition aware_or_oblivious  {I O : Ty} (ORel : myrel [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware ORel o l \/ oblivious ORel p l.
+Definition aware_or_oblivious  {I O : Ty} (ORel : cRel [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware ORel o l \/ oblivious ORel p l.
 
 
 Lemma zerol : 0 < 0 = false.
@@ -1005,81 +1005,81 @@ Ltac reduce_tac_v :=
    repeat first [reduce_once_v;first try econ | swi_instans].
 
 
-Definition f_NI {I O :Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall (l : level) (i i' : [I]), rel IRel l i i' -> rel ORel l (f i) (f i').
-Definition f_PU {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O]) := forall l (i : [I]), dis IRel l i -> dis ORel l (f i).
-Definition f_NI_PU {I O : Ty} (IRel : myrel [I]) (ORel : myrel [O]) (f : [I] -> [O])  := f_NI IRel ORel f /\ f_PU IRel ORel f.
-Definition fv_NI (I O V: Ty) (IRel : myrel [I]) (ORel : myrel [O]) (VRel : myrel [V])  (f : [I] -> [V] -> [O]) := forall l (i i' : [I]), rel IRel l i i' -> forall (v v' : [V]), rel VRel l v v' -> rel ORel l (f i v) (f i' v').
-Definition f_EP (I V: Ty) (IRel : myrel [I]) (VRel : myrel [V]) (f : [I] -> [V] -> [V]) := forall l i, dis IRel l i -> forall v, rel VRel l (f i v) v. (*equivalence preserving*)
+Definition f_NI {I O :Ty} (IRel : cRel [I]) (ORel : cRel [O]) (f : [I] -> [O]) := forall (l : level) (i i' : [I]), rel IRel l i i' -> rel ORel l (f i) (f i').
+Definition f_PU {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) (f : [I] -> [O]) := forall l (i : [I]), dis IRel l i -> dis ORel l (f i).
+Definition f_NI_PU {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) (f : [I] -> [O])  := f_NI IRel ORel f /\ f_PU IRel ORel f.
+Definition fv_NI (I O V: Ty) (IRel : cRel [I]) (ORel : cRel [O]) (VRel : cRel [V])  (f : [I] -> [V] -> [O]) := forall l (i i' : [I]), rel IRel l i i' -> forall (v v' : [V]), rel VRel l v v' -> rel ORel l (f i v) (f i' v').
+Definition f_EP (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f : [I] -> [V] -> [V]) := forall l i, dis IRel l i -> forall v, rel VRel l (f i v) v. (*equivalence preserving*)
 
 
  (*fixed typo in paper: In conclusion, replaced I with Bool * I  *)
-Lemma rel_eqpair : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+Lemma rel_eqpair : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, rel (eqpair ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
 Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, 
+Lemma rel_eqpair2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, 
     rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2 -> rel (eqpair ARel BRel) l a b.
 Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair_R2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 a2 /\ rel BRel l b1 b2 \/ dis BRel l b1 /\ dis BRel l b2 -> rel (eqpair_R ARel BRel) l (a1,b1) (a2,b2).
+Lemma rel_eqpair_R2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a1 a2 b1 b2,  rel ARel l a1 a2 /\ rel BRel l b1 b2 \/ dis BRel l b1 /\ dis BRel l b2 -> rel (eqpair_R ARel BRel) l (a1,b1) (a2,b2).
 Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair_R2' : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2, rel (eqpair_R ARel BRel) l (a1,a2) (b1,b2) -> rel ARel l a1 b1 /\ rel BRel l a2 b2  \/ dis BRel l a2 /\ dis BRel l b2.
+Lemma rel_eqpair_R2' : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a1 a2 b1 b2, rel (eqpair_R ARel BRel) l (a1,a2) (b1,b2) -> rel ARel l a1 b1 /\ rel BRel l a2 b2  \/ dis BRel l a2 /\ dis BRel l b2.
 Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair_L2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 a2 /\ rel BRel l b1 b2 \/ dis ARel l a1 /\ dis ARel l a2 -> rel (eqpair_L ARel BRel) l (a1,b1) (a2,b2).
+Lemma rel_eqpair_L2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a1 a2 b1 b2,  rel ARel l a1 a2 /\ rel BRel l b1 b2 \/ dis ARel l a1 /\ dis ARel l a2 -> rel (eqpair_L ARel BRel) l (a1,b1) (a2,b2).
 Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair_L2' : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2, rel (eqpair_L ARel BRel) l (a1,b1) (a2,b2) -> rel ARel l a1 a2 /\ rel BRel l b1 b2  \/ dis ARel l a1 /\ dis ARel l a2.
+Lemma rel_eqpair_L2' : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a1 a2 b1 b2, rel (eqpair_L ARel BRel) l (a1,b1) (a2,b2) -> rel ARel l a1 a2 /\ rel BRel l b1 b2  \/ dis ARel l a1 /\ dis ARel l a2.
 Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair_LR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, rel (eqpair_LR ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
+Lemma rel_eqpair_LR : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, rel (eqpair_LR ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
 Proof.
   ssa.
 Qed.
 
-Lemma rel_eqpair_LR2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a1 a2 b1 b2,  rel ARel l a1 b1 /\ rel BRel l a2 b2 -> rel (eqpair_LR ARel BRel) l (a1,a2) (b1,b2).
+Lemma rel_eqpair_LR2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a1 a2 b1 b2,  rel ARel l a1 b1 /\ rel BRel l a2 b2 -> rel (eqpair_LR ARel BRel) l (a1,a2) (b1,b2).
 Proof.
   ssa.
 Qed.
 
-Lemma dis_eqpair_R : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis (eqpair_R ARel BRel) l (a,b) -> dis BRel l b.
+Lemma dis_eqpair_R : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, dis (eqpair_R ARel BRel) l (a,b) -> dis BRel l b.
 Proof.  
   intros. ssa.
 Qed.
 
-Lemma dis_eqpair_R2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis BRel l b -> dis (eqpair_R ARel BRel) l (a,b).
+Lemma dis_eqpair_R2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, dis BRel l b -> dis (eqpair_R ARel BRel) l (a,b).
 Proof.  
   intros. ssa.
 Qed.
 
-Lemma dis_eqpair_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis (eqpair_L ARel BRel) l (a,b) -> dis ARel l a.
+Lemma dis_eqpair_L : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, dis (eqpair_L ARel BRel) l (a,b) -> dis ARel l a.
 Proof.  
   intros. ssa.
 Qed.
 
-Lemma dis_eqpair_L2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis ARel l a -> dis (eqpair_L ARel BRel) l (a,b).
+Lemma dis_eqpair_L2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, dis ARel l a -> dis (eqpair_L ARel BRel) l (a,b).
 Proof.  
   intros. ssa.
 Qed.
 
-Lemma dis_eqpair_LR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis (eqpair_LR ARel BRel) l (a,b) -> dis ARel l a /\ dis BRel l b.
+Lemma dis_eqpair_LR : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, dis (eqpair_LR ARel BRel) l (a,b) -> dis ARel l a /\ dis BRel l b.
 Proof.  
   intros. ssa.
 Qed.
 
-Lemma dis_eqpair_LR2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l a b, dis ARel l a /\ dis BRel l b -> dis (eqpair_LR ARel BRel) l (a,b).
+Lemma dis_eqpair_LR2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, dis ARel l a /\ dis BRel l b -> dis (eqpair_LR ARel BRel) l (a,b).
 Proof.  
   intros. ssa.
   Qed.
@@ -1096,107 +1096,107 @@ Hint Resolve (*f_NI_eq*) f_NI_id f_PU_id.
 Ltac mrw := rewrite /f_NI /f_PU /fv_NI /f_EP.
 
 
-Lemma f_NI_snd_eqpair : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair ARel BRel) BRel snd. 
+Lemma f_NI_snd_eqpair : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]), f_NI (eqpair ARel BRel) BRel snd. 
 Proof.
 mrw. ssa.
 Qed.
 
-Lemma f_NI_snd_eqpair_LR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]), f_NI (eqpair_LR ARel BRel) BRel snd. 
+Lemma f_NI_snd_eqpair_LR : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]), f_NI (eqpair_LR ARel BRel) BRel snd. 
 Proof.
 mrw. ssa.
 Qed.
 
 Hint Resolve f_NI_snd_eqpair f_NI_snd_eqpair_LR: tempdb.
 
-Lemma rel_eqsum_LR : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum_LR ARel BRel) l (inl a1) (inl a2). 
+Lemma rel_eqsum_LR : forall (A B : Ty) (a1 a2 : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel ARel l a1 a2 -> rel (eqsum_LR ARel BRel) l (inl a1) (inl a2). 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_LR2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel BRel l b1 b2 -> rel (eqsum_LR ARel BRel) l (inr b1) (inr b2). 
+Lemma rel_eqsum_LR2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel BRel l b1 b2 -> rel (eqsum_LR ARel BRel) l (inr b1) (inr b2). 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_LR' : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,rel (eqsum_LR ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
+Lemma rel_eqsum_LR' : forall (A B : Ty) (a1 a2 : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l,rel (eqsum_LR ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_LR2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel (eqsum_LR ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Lemma rel_eqsum_LR2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel (eqsum_LR ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum_LR : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis ARel l a -> dis (eqsum_LR ARel BRel) l (inl a). 
+Lemma dis_eqsum_LR : forall (A B : Ty) (a : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l, dis ARel l a -> dis (eqsum_LR ARel BRel) l (inl a). 
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum_LR' : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,  dis (eqsum_LR ARel BRel) l (inl a) -> dis ARel l a. 
+Lemma dis_eqsum_LR' : forall (A B : Ty) (a : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l,  dis (eqsum_LR ARel BRel) l (inl a) -> dis ARel l a. 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum ARel BRel) l (inl a1) (inl a2). 
+Lemma rel_eqsum : forall (A B : Ty) (a1 a2 : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel ARel l a1 a2 -> rel (eqsum ARel BRel) l (inl a1) (inl a2). 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel BRel l b1 b2 -> rel (eqsum ARel BRel) l (inr b1) (inr b2). 
+Lemma rel_eqsum2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel BRel l b1 b2 -> rel (eqsum ARel BRel) l (inr b1) (inr b2). 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum' : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,rel (eqsum ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
+Lemma rel_eqsum' : forall (A B : Ty) (a1 a2 : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l,rel (eqsum ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel (eqsum ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Lemma rel_eqsum2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel (eqsum ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_L : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum_L ARel BRel) l (inl a1) (inl a2). 
+Lemma rel_eqsum_L : forall (A B : Ty) (a1 a2 : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel ARel l a1 a2 -> rel (eqsum_L ARel BRel) l (inl a1) (inl a2). 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_L2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel BRel l b1 b2 -> rel (eqsum_L ARel BRel) l (inr b1) (inr b2). 
+Lemma rel_eqsum_L2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel BRel l b1 b2 -> rel (eqsum_L ARel BRel) l (inr b1) (inr b2). 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_L' : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,rel (eqsum_L ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
+Lemma rel_eqsum_L' : forall (A B : Ty) (a1 a2 : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l,rel (eqsum_L ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_L2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel (eqsum_L ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Lemma rel_eqsum_L2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel (eqsum_L ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum_L : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis ARel l a -> dis (eqsum_L ARel BRel) l (inl a). 
+Lemma dis_eqsum_L : forall (A B : Ty) (a : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l, dis ARel l a -> dis (eqsum_L ARel BRel) l (inl a). 
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum_L2 : forall (A B : Ty) (a : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis (eqsum_L ARel BRel) l (inl a) -> dis ARel l a. 
+Lemma dis_eqsum_L2 : forall (A B : Ty) (a : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l, dis (eqsum_L ARel BRel) l (inl a) -> dis ARel l a. 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_R : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel ARel l a1 a2 -> rel (eqsum_R ARel BRel) l (inl a1) (inl a2). 
+Lemma rel_eqsum_R : forall (A B : Ty) (a1 a2 : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel ARel l a1 a2 -> rel (eqsum_R ARel BRel) l (inl a1) (inl a2). 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_R2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel BRel l b1 b2 -> rel (eqsum_R ARel BRel) l (inr b1) (inr b2). 
+Lemma rel_eqsum_R2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel BRel l b1 b2 -> rel (eqsum_R ARel BRel) l (inr b1) (inr b2). 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_R' : forall (A B : Ty) (a1 a2 : [A]) (ARel : myrel [A]) (BRel : myrel [B]) l,rel (eqsum_R ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
+Lemma rel_eqsum_R' : forall (A B : Ty) (a1 a2 : [A]) (ARel : cRel [A]) (BRel : cRel [B]) l,rel (eqsum_R ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_R2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, rel (eqsum_R ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Lemma rel_eqsum_R2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, rel (eqsum_R ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum_R : forall (A B : Ty) (b : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis BRel l b -> dis (eqsum_R ARel BRel) l (inr b). 
+Lemma dis_eqsum_R : forall (A B : Ty) (b : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, dis BRel l b -> dis (eqsum_R ARel BRel) l (inr b). 
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum_R2 : forall (A B : Ty) (b : [B]) (ARel : myrel [A]) (BRel : myrel [B]) l, dis (eqsum_R ARel BRel) l (inr b) -> dis BRel l b. 
+Lemma dis_eqsum_R2 : forall (A B : Ty) (b : [B]) (ARel : cRel [A]) (BRel : cRel [B]) l, dis (eqsum_R ARel BRel) l (inr b) -> dis BRel l b. 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqpair_to_L : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l x y, rel (eqpair ARel BRel) l x y -> rel (eqpair_L ARel BRel) l x y.
+Lemma rel_eqpair_to_L : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l x y, rel (eqpair ARel BRel) l x y -> rel (eqpair_L ARel BRel) l x y.
 Proof.
   ssa.
 Qed.
@@ -1210,11 +1210,11 @@ Qed.
 
 Definition pair_rewr := (simp_pair1,simp_pair2).
 
-Lemma rel_eqmaybe : forall (A : Ty) (ARel : myrel [A]) l x y, rel ARel l x y -> rel (eqmaybe ARel) l (Some x) (Some y).
+Lemma rel_eqmaybe : forall (A : Ty) (ARel : cRel [A]) l x y, rel ARel l x y -> rel (eqmaybe ARel) l (Some x) (Some y).
 Proof. ssa.
 Qed.
 
-(*Lemma rel_eqpair_OR : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l x0 x1 y0 y1,
+(*Lemma rel_eqpair_OR : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l x0 x1 y0 y1,
     rel (eqpair_OR ARel BRel) l (x0,x1) (y0,y1) -> rel ARel l x0 y0 /\ rel BRel l x1 y1 \/ (dis ARel l x0 \/ dis BRel l x1) /\ (dis ARel l y0 \/ dis BRel l y1).  
 Proof. ssa.
 Qed.*)
@@ -1237,7 +1237,7 @@ Ltac temp_tac := (match reverse goal with
                   end                      
                   ;subst;ssa).
 
-Lemma rel_eqmaybe_top_aux : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe_top ARel) l x y -> match x,y with
+Lemma rel_eqmaybe_top_aux : forall (A : Ty) (ARel : cRel [A]) l x y, rel (eqmaybe_top ARel) l x y -> match x,y with
                                                                                                       | Some x', Some y' => rel ARel l x' y'
                                                                                                       | Some x', None => l = \bot /\ dis ARel l x'
                                                                                                       | None, Some y' => l = \bot /\ dis ARel l y'
@@ -1250,7 +1250,7 @@ Proof.
   temp_tac.
 Qed.
 
-Lemma rel_eqmaybe_top : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe_top ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+Lemma rel_eqmaybe_top : forall (A : Ty) (ARel : cRel [A]) l x y, rel (eqmaybe_top ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
                                                                                                     (exists x', x = Some x' /\ y = None /\ l = \bot /\ dis ARel l x') \/
                                                                                                     (exists y', x = None /\ y = Some y' /\ l = \bot /\ dis ARel l y') \/ x = None /\ y = None.
 Proof.
@@ -1259,16 +1259,16 @@ Proof.
   de y. right. right. econ. econ. eauto.
 Qed.
 
-Lemma rel_eqmaybe_top2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel ARel l x y -> rel (eqmaybe_top ARel) l (Some x) (Some y).
+Lemma rel_eqmaybe_top2 : forall (A : Ty) (ARel : cRel [A]) l x y, rel ARel l x y -> rel (eqmaybe_top ARel) l (Some x) (Some y).
 Proof. ssa.
 Qed.
 
-Lemma rel_eqmaybe_false2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel ARel l x y -> rel (eqmaybe_false ARel) l (Some x) (Some y).
+Lemma rel_eqmaybe_false2 : forall (A : Ty) (ARel : cRel [A]) l x y, rel ARel l x y -> rel (eqmaybe_false ARel) l (Some x) (Some y).
 Proof. ssa.
 Qed.
 
 
-Lemma rel_eqmaybe_aux : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe ARel) l x y -> match x,y with
+Lemma rel_eqmaybe_aux : forall (A : Ty) (ARel : cRel [A]) l x y, rel (eqmaybe ARel) l x y -> match x,y with
                                                                                               | Some x', Some y' => rel ARel l x' y'
                                                                                               | Some x', None => dis ARel l x'
                                                                                               | None, Some y' => dis ARel l y'
@@ -1281,7 +1281,7 @@ Proof.
   temp_tac.
 Qed.
 
-Lemma rel_eqmaybe2 : forall (A : Ty) (ARel : myrel [A]) l x y, rel (eqmaybe ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+Lemma rel_eqmaybe2 : forall (A : Ty) (ARel : cRel [A]) l x y, rel (eqmaybe ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
                                                                                              x = None /\ y = None.
 Proof.
   intros.
@@ -1290,7 +1290,7 @@ Proof.
   de y.
 Qed.
 
-Lemma rel_eqmaybe_swi2 : forall (A : Ty) (ARel : myrel [A]) (BRel : myrel [Bool]) l x y, rel (eqmaybe_swi ARel BRel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+Lemma rel_eqmaybe_swi2 : forall (A : Ty) (ARel : cRel [A]) (BRel : cRel [Bool]) l x y, rel (eqmaybe_swi ARel BRel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
                                                                                                                                 (x = None /\ y = None) \/ (eqmaybe_dis (aware BRel true) ARel l x /\ eqmaybe_dis (aware BRel true) ARel l y).
 Proof.
   intros.
@@ -1299,17 +1299,17 @@ Proof.
   de y.
 Qed.
 
-Lemma dis_eqmaybe : forall (A : Ty) (ARel : myrel [A]) l v, dis (eqmaybe ARel) l v -> exists v', v = Some v' /\ dis ARel l v'.
+Lemma dis_eqmaybe : forall (A : Ty) (ARel : cRel [A]) l v, dis (eqmaybe ARel) l v -> exists v', v = Some v' /\ dis ARel l v'.
 Proof.
   intros. ssa. de v. econ. eauto.
 Qed.
 
-Lemma dis_eqmaybe2 : forall (A : Ty) (ARel : myrel [A]) l x, dis ARel l x -> dis (eqmaybe ARel) l (Some x). 
+Lemma dis_eqmaybe2 : forall (A : Ty) (ARel : cRel [A]) l x, dis ARel l x -> dis (eqmaybe ARel) l (Some x). 
 Proof.
   intros. ssa. 
 Qed.
 
-Lemma dis_eqmaybe_false2 : forall (A : Ty) (ARel : myrel [A]) l x, dis ARel l x -> dis (eqmaybe_false ARel) l (Some x). 
+Lemma dis_eqmaybe_false2 : forall (A : Ty) (ARel : cRel [A]) l x, dis ARel l x -> dis (eqmaybe_false ARel) l (Some x). 
 Proof.
   intros. ssa. 
 Qed.    
@@ -1317,7 +1317,7 @@ Qed.
 Definition is_inl (A B : Set) (x : A + B) := if x is inl _ then true else false.
 Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
 
-Lemma dis_eqsum_LR2 : forall (A B : Ty) (ARel : myrel [A]) (BRel : myrel [B]) l b, dis BRel l b -> dis (eqsum_LR ARel BRel) l (inr b).
+Lemma dis_eqsum_LR2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l b, dis BRel l b -> dis (eqsum_LR ARel BRel) l (inr b).
 Proof. intros. ssa.
 Qed.
 

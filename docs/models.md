@@ -11,7 +11,7 @@ instead every process is given in the lightweight notation (the `@`/`Ty`
 annotations erased) together with its intended meaning. Where the Coq source uses
 a name we keep it, so the two can be read side by side.
 
-> The non-interference argument itself — the security relations (myrels), the
+> The non-interference argument itself — the security relations (`cRel`s), the
 > input/output relations chosen for each model, and the state-relation proof — is
 > documented separately in [`noninterference.md`](noninterference.md) (companion
 > to [`theories/noninterference.v`](../theories/noninterference.v)). This file
@@ -157,12 +157,12 @@ I_handler =
 The process *definition* shared by the timer, disk and default handlers. It is
 not one handler: slots 0, 1 and 2 are three separate handlers that happen to
 reuse this definition, each with its own pending and mask bits in the interrupt
-controller (section 4). Its state cell toggles 0/1 (starting at 0), and it emits
-`Notify` exactly on the step where the cell is 0 and `Nothing` otherwise — so each
-handler takes a fixed *two* output steps per activation and signals completion
-with `Notify`. Keeping every handler identical and fixed-length is central to the
-good model (section 8); the input type is kept as `Unit` so the one definition can
-serve all three.
+controller (section 4). Its state cell toggles 0/1 (starting at 0) and the emitted
+value is read off the *updated* cell: `Notify` when it is 0, `Nothing` otherwise.
+So each activation emits `Nothing` then `Notify` — a fixed *two* output steps,
+signalling completion with `Notify`. Keeping every handler identical and
+fixed-length is central to the good model (section 8); the input type is kept as
+`Unit` so the one definition can serve all three.
 
 **`unit_proc : Proc Unit Unit`**
 
@@ -233,8 +233,9 @@ index equals the current pid advances and emits; all others emit `None`.
 **Concrete instantiation.**
 
 - `cur_pid = Sum Bool Nat` — an `inl b` names an interrupt-handler pid, an `inr n`
-  a scheduler / user pid. (The `Sum` split lets the state relation treat the two
-  secret handler pids together; see section 8.)
+  a scheduler / user pid. (The `Sum` split is what lets the state relation keep
+  the *tag* public — whether a handler is running — while making the handler's
+  identity secret; see [`noninterference.md` §7a](noninterference.md).)
 - `my_f_pid : cur_pid -> Nat` (which slot a pid selects):
 
   | pid | slot | pid | slot |
@@ -382,7 +383,7 @@ state_step ... i  =  initiate_next(bool_coding) ∘ handler_preroutine
     else let v := bc v in                     (* apply time-slice logic *)
          if first_ready v is Some ir then initiate_handler ir v
          else if is_handler_pid v
-              then if re_sch v then initiate_scheduler v
+              then if get_re_sch v then initiate_scheduler v
                                else initiate_prev_pid v
               else v                           (* stay in user space *)
   ```
@@ -420,11 +421,44 @@ T_out' = (Option TPublicOutput,                  (* full pool output, in slot or
 T_out  = Option (Sum TPublicOutput TTypeSyscall) (* external view: user output only  *)
 ```
 
-The rest of section 6 in the source is just named constants for the two example
-traces — inputs (`dI'`, `tI'`, ...) and outputs (`low_out`, `high_out`, `sch_o`,
-the per-interrupt handler outputs, and their `Notify`/`Nothing` variants) — used
-to state `trace_..._dI'` lemmas that exhibit concrete runs of each model. They
-carry no design content beyond making the traces readable.
+**The `T_out'` slot map.** Every output of `model_bad` and `model_good` is a
+six-slot tuple, and exactly one slot is `Some` at a time. The slot order is the
+*reverse* of the pool index (section 1), so reading left to right:
+
+| # | slot | carries | constant that sets it | classified |
+|---|---|---|---|---|
+| 1 | `pub` | public user output (`low_p`) | `low_out x` | public |
+| 2 | `sys` | syscall (`high_p`) | `high_out x` | secret |
+| 3 | `pid` | scheduled pid | `sch_o x` | public |
+| 4 | `dfl` | default/NOP handler output | `defaultI_o x` | secret |
+| 5 | `dsk` | disk handler output | `dI_o x` | secret |
+| 6 | `tmr` | timer handler output | `tI_o x` | public |
+
+(The "classified" column is the `out_rel` classification, established in
+[`noninterference.md` §4](noninterference.md); it is listed here because the trace
+tables below are unreadable without it.)
+
+The remaining constants name the specific tuples the example traces use, so those
+traces read as vocabulary rather than as nested pairs. Inputs:
+
+| constant | is |
+|---|---|
+| `dI'` | the disk interrupt (the secret input) |
+| `tI'` | the timer interrupt (public) |
+
+Outputs:
+
+| constant | is | slot |
+|---|---|---|
+| `pub_get'` | `low_out GetRequest` | `pub` |
+| `pr_sys'` / `pr_nop'` | `high_out Syscall` / `high_out NOP` | `sys` |
+| `sch_high` / `sch_low` | `sch_o 2` / `sch_o 3` (i.e. `high_p` / `low_p`) | `pid` |
+| `defaultI_no'` / `defaultI_yes'` | `defaultI_o Nothing` / `defaultI_o Notify` | `dfl` |
+| `dI_no'` / `dI_yes'` | `dI_o Nothing` / `dI_o Notify` | `dsk` |
+| `tI_no'` / `tI_yes'` | `tI_o Nothing` / `tI_o Notify` | `tmr` |
+
+Recall from section 1 that a handler activation is always `Nothing` then `Notify`,
+so a `_no'`/`_yes'` pair in a trace is one complete handler run.
 
 
 ## 7. `model_bad`
@@ -463,6 +497,41 @@ which process runs next — depends on secret handler behaviour. An observer
 watching scheduling can therefore infer the presence of a secret (e.g. disk)
 interrupt. This is precisely what `model_bad_not_NI` witnesses (see
 [`noninterference.md` §5](noninterference.md)).
+
+### The leak, in the model's own traces
+
+`no_dI'` and `with_dI'` are two runs of `model_bad`, both proved to be traces
+(`trace_no_dI'`, `trace_with_dI'`). Written out with the §6 vocabulary — inputs
+marked `·like this·`, and recall that a `_no'`/`_yes'` pair is one complete handler
+run:
+
+```text
+no_dI'    Get  ·tI·  Get  [tI_n tI_y]  sch  NOP  ·tI·  NOP  [tI_n tI_y]  sch  Get
+with_dI'  Get  ·dI·  Get  [dI_n dI_y]  Get  ·tI·  Get  [tI_n tI_y]  sch  Sys  ...
+                          └─────┬────┘
+                          the disk handler runs as soon as the interrupt is
+                          serviced, between two public outputs — no slice
+                          contains it
+```
+
+These are two independent runs, not an NI witness pair (the timer arrives at
+different points in each). The structural point is *where* a handler run can
+appear. In `model_bad` a handler pair sits wherever its interrupt happened to be
+serviced — `[dI_n dI_y]` lands immediately after the interrupt, in the middle of
+the public output stream, so every public output after it is pushed two steps
+later. Since the handler's own slot is secret but the public slot is not, the
+attacker cannot see the handler run, only its effect on the public stream: an
+output that fails to arrive when it was due — a `None` in slot 1 where a `Get`
+belonged. That is the leak.
+
+Contrast `good_with_dI'` (section 9): there, a handler pair *only ever* appears
+inside the fixed time slice, following a timer `Notify`, and a secret handler run
+takes the place of a default/NOP pair rather than displacing a public output.
+
+(The formal counterexample does not use `with_dI'`. `model_bad_not_NI` takes the
+short trace `[Get; Get]` and inserts a disk interrupt at the front, then shows the
+second `Get` can no longer occur — see
+[`noninterference.md` §5](noninterference.md).)
 
 
 ## 8. `model_good`
@@ -625,30 +694,53 @@ model_good = loop_sta initial_state_good
                       my_process_pool f_si
 ```
 
-### Worked example: `model_good`'s full output tuple, and its `wrapped_model_good` projection
+A concrete run of `model_good`, and what survives the `wrapped_model_good`
+projection, is worked through in section 9.
 
-Every `model_good` output is a 6-slot tuple over `T_out'` (section 6). Reading the
-slots left to right:
 
-```text
-( pub , sys , pid , dfl , dsk , tmr )
-    │     │     │     │     │     └── timer   handler output   (public)
-    │     │     │     │     └──────── disk    handler output   (secret)
-    │     │     │     └────────────── default/NOP handler output (secret)
-    │     │     └──────────────────── scheduler pid            (public)
-    │     └────────────────────────── syscall                 (secret)
-    └──────────────────────────────── public user output      (public)
+## 9. `wrapped_model_good`
+
+`model_good` still exposes the whole pool output (`T_out'`), including handler and
+scheduler activity. The final model hides all of that, exposing only what a
+user-space observer sees.
+
+```coq
+parse_output o =
+  match o with
+  | (Some public, _)        => Some (inl public)   (* public user output *)
+  | (None, (Some prv, _))   => Some (inr prv)       (* the high syscall *)
+  | _                       => None
+  end
 ```
 
-`parse_output` (section 9) keeps only two of these: `pub` (re-tagged `inl`) or
-`sys` (re-tagged `inr`); every other slot — and any all-`None` tuple — projects to
-`None`.
+Project the full output down to the user-visible channel: a public output, or the
+secret process's syscall, or nothing. Of the six `T_out'` slots (section 6) only two
+survive — `pub` (re-tagged `inl`) and `sys` (re-tagged `inr`); every other slot, and
+any all-`None` tuple, projects to `None`.
+
+```coq
+wrapped_model_good = map id parse_output model_good : Proc T_in T_out
+```
+
+```coq
+final_out_rel = eqmaybe_false (eqsum publicRel privateRel)
+```
+
+The output relation used by the top theorem: the public component is compared
+exactly, the syscall component is treated as secret.
+
+`wrapped_model_good_NI` proves `NI in_rel final_out_rel wrapped_model_good` — the
+payoff: with the good model's fixed-length, masked handling, the presence of a
+secret (disk) interrupt is invisible in the user-space output. The proof itself is
+documented in [`noninterference.md`](noninterference.md).
+
+### Worked example: the projection in action
 
 Below is the concrete run `good_with_dI'` (a disk interrupt arrives at step 2),
-read top-to-bottom. The left block is `model_good`'s tuple; to the right of the
-double bar is the single value `wrapped_model_good` emits for that step.
-Legend: `·` = `None`, `Nth` = `Nothing`, `Nfy` = `Notify`, `hi`/`lo` = scheduler
-pids.
+read top-to-bottom. The left block is `model_good`'s full six-slot tuple, in the
+§6 slot order; to the right of the double bar is the single value
+`wrapped_model_good` emits for that step. Legend: `·` = `None`, `Nth` = `Nothing`,
+`Nfy` = `Notify`, `hi`/`lo` = scheduler pids.
 
 ```text
 step  in   pub   sys   pid   dfl   dsk   tmr   ║  wrapped
@@ -682,51 +774,25 @@ step  in   pub   sys   pid   dfl   dsk   tmr   ║  wrapped
 Two things a reader can see:
 
 - Everything `wrapped_model_good` emits comes from just the `pub` and `sys` slots.
-  All handler activity (steps 7–13, 17–23) and the scheduler pids sit in slots
-  that `parse_output` erases, so on the wrapped side they are uniformly `·`.
+  The handler steps (7–12, 17–22) and the scheduler pids (13, 23) sit in slots that
+  `parse_output` erases, so on the wrapped side they are uniformly `·`.
 - The secret disk interrupt does run the (secret) disk handler — steps 9–10 — but
-  it lands inside the fixed time slice, taking the place of one of the default/NOP
-  handler runs that otherwise fill the slice (compare `good_no_dI'`, where steps
-  7–13 are all timer/default filler and no `dI` input appears). The block of hidden
-  handler steps is the same length either way, so the public scheduling skeleton
-  (`tI ... hi ... lo ... pub_get`) stays aligned. The only surviving output
-  difference is at step 14, `Sys` vs `NOP`: whether the secret user process issues
-  a syscall. Both the disk input and the syscall output are secret-classified (see
+  it lands *inside* the fixed time slice, taking the place of one of the
+  default/NOP handler runs that would otherwise fill it. Each slice here is six
+  hidden handler steps long, `tmr,tmr` followed by two handler activations, and
+  that is true of both slices in this run and of `good_no_dI'` alike: with the
+  disk interrupt the pair at steps 9–10 is `dsk`, without it, `dfl`. So the public
+  skeleton around the slice (`tI` … `hi` … `lo` … `Get`) is unchanged by the
+  secret input; only which of two secret slots carries the handler output moves.
+  The one further difference the disk interrupt causes downstream is at step 14,
+  `Sys` rather than `NOP` — whether the secret user process issues a syscall.
+  Both the disk input and the syscall output are secret-classified (see
   [`noninterference.md`](noninterference.md)), so at the attacker's level the two
   runs are indistinguishable — which is exactly what `wrapped_model_good_NI`
-  (section 9) proves in general.
+  proves in general.
 
-
-## 9. `wrapped_model_good`
-
-`model_good` still exposes the whole pool output (`T_out'`), including handler and
-scheduler activity. The final model hides all of that, exposing only what a
-user-space observer sees.
-
-```coq
-parse_output o =
-  match o with
-  | (Some public, _)        => Some (inl public)   (* public user output *)
-  | (None, (Some prv, _))   => Some (inr prv)       (* the high syscall *)
-  | _                       => None
-  end
-```
-
-Project the full output down to the user-visible channel: a public output, or the
-secret process's syscall, or nothing.
-
-```coq
-wrapped_model_good = map id parse_output model_good : Proc T_in T_out
-```
-
-```coq
-final_out_rel = eqmaybe_false (eqsum publicRel privateRel)
-```
-
-The output relation used by the top theorem: the public component is compared
-exactly, the syscall component is treated as secret.
-
-`wrapped_model_good_NI` proves `NI in_rel final_out_rel wrapped_model_good` — the
-payoff: with the good model's fixed-length, masked handling, the presence of a
-secret (disk) interrupt is invisible in the user-space output. The proof itself is
-documented in [`noninterference.md`](noninterference.md).
+  (`good_no_dI'` and `good_with_dI'` are two independent illustrative runs, not an
+  NI witness pair: they also differ in how many idle public steps precede the
+  first timer interrupt, which is a free choice of the example. The relevant
+  comparison is the shape of the slice, not a step-by-step alignment of the two
+  lemmas.)

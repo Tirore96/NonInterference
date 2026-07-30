@@ -4,9 +4,9 @@
 
 **Purpose.** [`models.md`](models.md) explains WHAT the three models are. This
 file explains WHY the good model is non-interfering and the bad one is not, stated
-in terms of the security relations (myrels): which relation each interface
-carries, what "public" and "secret" mean formally, and the one genuinely hard
-proof obligation — that the state relation is preserved by the state transition
+in terms of the security relations (`cRel`s, *characterised equivalences*): which
+relation each interface carries, what "public" and "secret" mean formally, and the
+one genuinely hard proof obligation — that the state relation is preserved by the state transition
 (`fv_NI`), which is where the compositional structure of `state_step` and
 `bool_coding` earn their keep.
 
@@ -23,7 +23,7 @@ Everything here is read off the definitions in
 
 ## Contents
 
-1. [Security relations (myrels): the framework and levels](#1-security-relations-myrels-the-framework-and-levels)
+1. [Characterised equivalences (`cRel`): the framework and levels](#1-characterised-equivalences-crel-the-framework-and-levels)
 2. [Base relations: `publicRel`, `privateRel`](#2-base-relations-publicrel-privaterel)
 3. [Composite relations](#3-composite-relations)
 4. [The model interfaces: `in_rel`, `out_rel`, `final_out_rel`](#4-the-model-interfaces-in_rel-out_rel-final_out_rel)
@@ -33,9 +33,9 @@ Everything here is read off the definitions in
 8. [Model limitations](#8-model-limitations)
 
 
-## 1. Security relations (myrels): the framework and levels
+## 1. Characterised equivalences (`cRel`): the framework and levels
 
-A `myrel` over a Coq type `A` ([`definitions.v`](../theories/definitions.v)) is a
+A `cRel` over a Coq type `A` ([`definitions.v`](../theories/definitions.v)) is a
 record whose two key fields are
 
 ```text
@@ -43,9 +43,17 @@ rel l x y   x and y are indistinguishable to an observer at level l
 dis l x     x is "secret" (may be varied freely) at level l
 ```
 
-tied by the invariant `dis l a0 -> (dis l a1 <-> rel l a0 a1)` — a secret value's
-indistinguishability class is exactly the other secret values. (The remaining
-record fields are monotonicity/equivalence obligations.)
+`rel l` is required to be an equivalence, and `dis` *characterises* it — hence the
+name — through the field
+
+```text
+dis l a0 -> forall a1, dis l a1 <-> rel l a0 a1
+```
+
+that is, if `a0` is secret at `l` then its `rel l`-equivalence class is exactly the
+set of values secret at `l`. The remaining two fields are monotonicity: both `rel`
+and `dis` are inherited downwards along the level order, so a lower (more exposed)
+observer distinguishes no more than a higher one.
 
 Levels form a lattice with least element `⊥` (written `\bot`). `⊥` is the most
 exposed observer — the attacker. `NI IRel ORel p` quantifies over every level; the
@@ -90,7 +98,7 @@ input carries a stricter custom relation (see `in_rel` in section 4).
 
 ## 3. Composite relations
 
-**`eqpair IRel ORel : myrel [Times I O]`** — relate pairs componentwise:
+**`eqpair IRel ORel : cRel [Times I O]`** — relate pairs componentwise:
 `(a,b) ~ (a',b')` iff `a ~ a'` and `b ~ b'`.
 
 **`eqpair_LR` / `eqpair_R`** — variants of `eqpair` that differ only in when the
@@ -109,10 +117,11 @@ eqpair_R   the pair is secret at l iff the RIGHT component is secret at l
 the switch/handler pairs: when a component is secret, the pair as a whole may be
 varied, so two related states can carry different values there.
 
-**`eqsum IRel ORel : myrel [Sum I O]`** — relate a `Sum` tag-by-tag: `inl a ~
-inl a'` iff `a ~ a'` (by `IRel`); `inr b ~ inr b'` iff `b ~ b'` (by `ORel`); an
-`inl` is never related to an `inr` (except degenerately at `⊥`, via the base
-relation involved).
+**`eqsum IRel ORel : cRel [Sum I O]`** — relate a `Sum` tag-by-tag: `inl a ~
+inl a'` iff `a ~ a'` (by `IRel`); `inr b ~ inr b'` iff `b ~ b'` (by `ORel`). An
+`inl` is never related to an `inr`, at any level, and the sum itself is never
+secret (`dis = False`) regardless of the component relations — so the *tag* is
+always public, even when the payload underneath is not.
 
 **`eqmaybe VRel` and variants (`eqmaybe_top` / `eqmaybe_false` / `eqmaybe_swi`)** —
 relate `Option` values. On `Some`/`Some` they defer to `VRel`; the only difference
@@ -130,10 +139,15 @@ eqmaybe_swi   P l = aware BRel  those who are "aware" per a Bool relation BRel
                                 can see None; used to gate a switch branch.
 ```
 
+The mixed case follows from the characterisation (section 1): `Some v ~ None` at
+`l` iff *both* are secret at `l`, i.e. iff `¬P l` and `dis VRel l v`. So `None` can
+stand in for `Some v` exactly when `v` is itself a secret the observer may not
+see.
+
 
 ## 4. The model interfaces: `in_rel`, `out_rel`, `final_out_rel`
 
-**`in_rel : myrel [T_in]`** = `TInterrupt_rel`, a CUSTOM relation (not
+**`in_rel : cRel [T_in]`** = `TInterrupt_rel`, a CUSTOM relation (not
 `privateRel`). Its secrecy predicate is
 
 ```text
@@ -147,7 +161,7 @@ and must be matched exactly, even at `⊥`. This is deliberate: the timer is a
 public, scheduled event, so only the disk interrupt is a genuine secret input. NI
 is exactly the guarantee that its presence cannot be inferred from the output.
 
-**`out_rel : myrel [T_out']`** (full pool output, for `model_bad` / `model_good`)
+**`out_rel : cRel [T_out']`** (full pool output, for `model_bad` / `model_good`)
 
 ```text
 eqpair (eqmaybe publicRel)               public user output   (exact)
@@ -162,11 +176,13 @@ The three handler-output components correspond to the three handler slots, in
 order default/NOP, disk, timer: the first two are secret, the third is public.
 That third slot is the TIMER handler: it reacts only to timer interrupts, which
 are public scheduled events (see `in_rel` above), so neither the fact that it is
-running nor what it outputs is secret. The disk and default handlers, by contrast,
-react to the secret disk-interrupt state, so their outputs are secret at `⊥`. The
+running nor what it outputs is secret. The disk slot is secret because the disk
+interrupt is; the default/NOP slot must be secret too, because it is the disk
+slot's indistinguishable partner — a slice step is filled by one or the other, and
+an observer able to tell those two slots apart could tell which. The
 public user output and the scheduler pid are public; the syscall is secret at `⊥`.
 
-**`final_out_rel : myrel [T_out]`** (user-visible output, for `wrapped_model_good`)
+**`final_out_rel : cRel [T_out]`** (user-visible output, for `wrapped_model_good`)
 
 ```text
 eqmaybe_false (eqsum publicRel privateRel)
@@ -216,10 +232,32 @@ is obtained from `model_good_NI` by pushing the output through `parse_output`
 `final_out_rel`-related ones).
 
 `model_good_NI` is assembled from the generic composition theorems for the process
-algebra — `par_NI` (pool), `sta_NI` (the stateful wrapper), `swi_NI` (the per-slot
-switch), `map`/output-weakening — applied to the concrete processes of
-[`models.md`](models.md). All of that is mechanical except one obligation: that the
-global state relation is preserved by the state transition. That is section 7.
+algebra, applied to the concrete processes of [`models.md`](models.md). There is one
+theorem per constructor, and the proof of `model_good_NI` is essentially the term
+`model_good` read outside-in with each layer discharged by its theorem:
+
+| layer of `model_good` | theorem | what it gives you |
+|---|---|---|
+| the outer `map inl (inr_or_def def)` and every interface rewiring | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
+| `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output relations must coincide |
+| `sta` (the global state cell) | `sta_NI` / `sta_NI'` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates — **this is where section 7 is discharged** |
+| `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_false IRel) ORel (maybe p)` |
+| `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
+| `swi` (gating each slot on/off) | `swi_NI` / `swi_NI'` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level |
+| the leaves (`out o`) | `out_NI` | a constant process is trivially non-interfering |
+| `parse_output` on top of `model_good` | `map_NI` again | output weakening, giving `wrapped_model_good_NI` |
+
+Two things to read off the table. First, each theorem *derives* the composite's
+relations from its parts' rather than taking them as given — which is why the
+concrete relations of section 4 look the way they do: `out_rel`'s nest of `eqpair`s
+is the shape `par_NI` forces on a pool output, and its `eqmaybe`s are what
+`swi_NI` forces on a gated slot. Second, every one of these is mechanical for our
+models *except* the `fv_NI` side conditions of `sta_NI`. That is the one genuinely
+hard obligation, and it is section 7.
+
+> The generic theorems in [`theories/theorems.v`](../theories/theorems.v) are a
+> mechanisation of results from separate prior work, not a contribution of this
+> development; only their statements are used here.
 
 
 ## 7. The state relation and `fv_NI` — the hard part
@@ -227,7 +265,7 @@ global state relation is preserved by the state transition. That is section 7.
 ### 7a. `stateType_rel`: which state fields are public, which secret
 
 ```text
-stateType_rel : myrel [stateType]
+stateType_rel : cRel [stateType]
   = eqpair pids_rel bool_state_rel
     pids_rel       = eqpair (eqsum privateRel publicRel) publicRel
     bool_state_rel = eqpair publicRel (eqpair publicRel ic_rel)
@@ -245,13 +283,17 @@ Reading off the security classification of the state (the `stateType` layout is 
 - **pending bits of the two secret handlers (disk, default): secret**
   (`hidden_pending` pairs a private pending with a public mask); the timer
   handler's controller pair is public (`public_pair`).
-- **`cur_pid`:** the secret-handler tag (the `inl` branch of the `Sum Bool Nat`) is
-  secret; the user/scheduler pid (`inr`) is public. **`prev_pid`:** public.
+- **`cur_pid`** (`Sum Bool Nat`, under `eqsum privateRel publicRel`): the `inl`/`inr`
+  *tag* is public — `eqsum` never relates an `inl` to an `inr` (section 3), so
+  whether a handler is running at all is visible. What is secret is the `Bool`
+  *inside* the `inl`: at `⊥` `inl true` and `inl false` are related, so an observer
+  cannot tell the disk handler from the default/NOP handler. The user/scheduler pid
+  (`inr n`) is public. **`prev_pid`:** public.
 - **`re_sch` and `ir_count`** (the time slice): public.
 
 So across two `⊥`-related states, the masks, the slice, the scheduler/user pid and
-`re_sch` must match; only the secret handlers' pending bits and the secret
-`cur_pid` tag may differ.
+`re_sch` must match; only the secret handlers' pending bits and the handler bit
+inside `cur_pid` may differ.
 
 ### 7b. `fv_NI` and the composition-breakdown technique
 
@@ -323,9 +365,10 @@ mask bits (which decide the branch) agree.
 
 ## 8. Model limitations
 
-Two deliberate simplifications keep the NI proof tractable. Both are genuine
-limitations of the model, not of the technique, and both could in principle be
-lifted at the cost of a harder `fv_NI` (section 7).
+Two deliberate simplifications keep the NI proof tractable. Both (a) and (b) are
+genuine limitations of the model, not of the technique, and both could in principle
+be lifted at the cost of a harder `fv_NI` (section 7); (c) collects the remaining
+modelling choices.
 
 **(a) Only one secret interrupt.** The model has a single secret interrupt — the
 disk interrupt. The NOP (default) handler is present purely for privacy: it exists
@@ -351,3 +394,16 @@ public mask toggles). Then `v` and `v'` could take DIFFERENT branches in
 substantially harder. That trade-off — flexibility of execution time against the
 difficulty of the final-stage `fv_NI` — is the reason the model fixes handler
 length.
+
+**(c) Further modelling choices, baked in rather than argued for.** These are not
+known to be security-relevant, but a reader should see them:
+
+- **One output step per selection.** In `process_pool` each slot's output is tagged
+  with the constant `true`, which closes its switch after a single output. Every
+  process is therefore cooperative and advances exactly one step per selection;
+  preemption within a step is not modelled ([`models.md` §2](models.md)).
+- **No interrupt nesting.** All masks are set while a handler runs, so a handler can
+  never itself be interrupted. A design permitting nesting is out of scope.
+- **Fixed sizes.** The pool is six slots and the time slice is `Some 4` — exactly
+  two handler activations. Nothing in the argument turns on the specific numbers,
+  but neither is it stated for a general slice length.
