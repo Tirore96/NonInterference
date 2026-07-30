@@ -159,8 +159,8 @@ make
 
 This compiles the four-file chain in dependency order
 (`definitions → theorems → models → noninterference`). The build requires Rocq/Coq
-9.0.1 with `mathcomp`, `paco`, `deriving`, `Equations` and `HB` (Hierarchy
-Builder); see [`_CoqProject`](_CoqProject).
+9.0.1 with `mathcomp`, `deriving` and `HB` (Hierarchy Builder); see
+[`_CoqProject`](_CoqProject).
 
 ## Repository map
 

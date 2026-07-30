@@ -3,13 +3,11 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Require Import RelationClasses.
-From Paco Require Import paco.
 From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
 From HB Require Import structures.
 From deriving Require Import deriving.
 Require Import Stdlib.Program.Equality.
-From Equations Require Import Equations.
 Require Import Stdlib.Classes.DecidableClass.
 
 Import Order.TTheory.
@@ -908,7 +906,10 @@ Proof.
   - intros n. destruct n; simpl; tauto.
   - intros a t0 IH n. destruct n; simpl.
     + tauto.
-    + destruct a; simpl; intuition.
+    + destruct (IH n) as [Hfwd Hbwd].
+      destruct a; simpl.
+      * split; auto.
+      * split; intros [H1 H2]; split; auto.
 Qed.
 
 Lemma oblivious_NI_l : forall (I O : Ty) (IRel : cRel [I]) (ORel : cRel [O]) (p : Proc I O) l,

@@ -4,14 +4,11 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Require Import RelationClasses.
-From Paco Require Import paco.
 From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
-Require Import Streams.
 From HB Require Import structures.
 From deriving Require Import deriving.
 Require Import Coq.Program.Equality.
-From Equations Require Import Equations.
 Require Import Stdlib.Classes.DecidableClass.
 
 Import Order.TTheory.
@@ -66,12 +63,6 @@ Ltac case_if := match goal with
                 | [ |- context[if ?X then _ else _ ]] => let H := fresh in destruct X eqn:H
 
                 end; try (move=>->).
-
-Lemma coseq_match : forall {A : Type} (g : Stream A), g = match g with | Cons a b => Cons a b end.  
-Proof. move => A[] //=. Qed. 
-
-Ltac coseq_tac l := rewrite (coseq_match l) /=. 
-Ltac coseq_tac_in l H := rewrite (coseq_match l) /= in H.
 
 Definition order (b1 b2 : level) := b1 <= b2.
 
@@ -900,9 +891,6 @@ Defined.
 Definition eqmaybe_false {V : Ty} (VRel : cRel [V]) : cRel ([Option V]).
   apply:eqmaybe_aux. apply VRel. apply:Option_presP_false.
 Defined. 
-
-Ltac pc := pclearbot.
-Definition streampred (I O : Set) l (IRel : cRel I) (ORel : cRel O) (s : Stream (I + O))  := ForAll (fun x => match x with | Cons (inl x') _ => dis IRel l x' | Cons (inr x') _ => dis ORel l x' end) s.
 
 Lemma rel_eq : forall (I : Set) (IRel : cRel I) (x : I) l, rel IRel l x x.
 Proof.

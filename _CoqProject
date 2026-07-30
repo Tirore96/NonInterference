@@ -3,6 +3,6 @@
 -arg "-w -all"
 
 theories/definitions.v
-theories/models.v
 theories/theorems.v
+theories/models.v
 theories/noninterference.v
