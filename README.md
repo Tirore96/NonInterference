@@ -43,9 +43,25 @@ Everything below refers to these. All three are in
 | `model_good` | the same full pool output | the fixed design; non-interfering |
 | `wrapped_model_good` | only the user-visible channel: a public output or a syscall, everything else erased | `model_good` behind a projection; the headline result |
 
-`model_bad` and `model_good` differ in exactly two definitions. Proving them at the
-full pool output — where the attacker sees more than a real one would — is what
-makes the final result follow by weakening the output.
+`model_bad` and `model_good` differ in exactly two definitions. The difference
+between the two *outputs* is what `wrapped_model_good` adds — one emits a tuple with
+a slot per process, the other keeps only the user-visible channel:
+
+```text
+  model_good, one output step        wrapped_model_good, the same step
+  ( · , · , · , · , Notify , · )  ──▶  ·          disk handler ran: erased
+  ( Get , · , · , · , · , · )     ──▶  Get        public output: kept
+  ( · , Syscall , · , · , · , · ) ──▶  Syscall    syscall: kept
+    │   │   │   │     │     │
+    │   │   │   └─────┴─────┴── the three handler slots ─┐
+    │   │   └── scheduler pid ─────────────────────────── these never survive
+    │   └── syscall (secret)
+    └── public output
+```
+
+Proving non-interference at the full pool output — where the attacker sees more
+than a real one ever would — is what makes the user-visible result follow by
+weakening the output relation.
 
 ## Threat model
 

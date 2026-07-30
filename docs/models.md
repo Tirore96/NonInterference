@@ -42,12 +42,22 @@ Defined in sections 7–9 below.
 ## 0. Preliminaries: the process algebra
 
 Everything below is built from a small process calculus (defined in
-[`theories/definitions.v`](../theories/definitions.v)). A process has type
-`Proc I O`, where the interface types `I` and `O` are drawn from an inductive
-`Ty` (Nat, Bool, Unit, Times, Option, Sum, ...) and `[t]` denotes the ordinary
-Coq type that `t : Ty` encodes. Indexing interfaces by the inductive `Ty` rather
-than by `Set` is what lets the proofs invert reductions; the cost is the explicit
-type annotations in the source, which is exactly what this document strips away.
+[`theories/definitions.v`](../theories/definitions.v)). The calculus and its
+non-interference theorems are due to Bauer et al., *Composing Security Policies in
+Timed Systems* ([POST
+2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf));
+mechanising them is part of the contribution of this development. The
+mechanisation departs from the paper in one respect: **definitions the paper gives
+coinductively are given inductively here** — `oblivious`, for instance, is stated
+over the traces a process admits rather than over an infinite stream. The proofs
+are substantially simpler for it, since they never have to construct streams.
+
+A process has type `Proc I O`, where the interface types `I` and `O` are drawn from
+an inductive `Ty` (Nat, Bool, Unit, Times, Option, Sum, ...) and `[t]` denotes the
+ordinary Coq type that `t : Ty` encodes. Indexing interfaces by the inductive `Ty`
+rather than by `Set` is what lets the proofs invert reductions; the cost is the
+explicit type annotations in the source, which is exactly what this document strips
+away.
 
 A process runs by alternating input steps and output steps. There are seven
 constructors:
@@ -287,9 +297,11 @@ index equals the current pid advances and emits; all others emit `None`.
 
 ## 3. Stateful wrapper
 
-The pool consumes `(cur_pid, T')` and produces a big product of slot outputs. The
-wrapper closes it into a single reactive process `Proc T_in T_out'` by adding
-global state and a feedback loop.
+The pool consumes `(cur_pid, T')` and produces a big product of slot outputs. On
+its own it has no state and no way to drive itself. `loop_sta` closes it into a
+single self-driving process `Proc T_in T_out'` by adding the global state and a
+feedback loop. (This is the *stateful wrapper* of the construction; it is unrelated
+to `wrapped_model_good`, which is a projection applied at the very end.)
 
 **`loop_sta state f_I def p f_si : Proc T_in T_out`**
 
@@ -301,7 +313,7 @@ loop_sta state f_I def p f_si =
         (map f_si inr (maybe p)))))
 ```
 
-where `inr_or_def def x = (if x is inr x' then x' else def)`. From the inside out:
+From the inside out:
 
 - `maybe p` runs the pool, idling on `None`;
 - `map f_si inr` turns each pool result into the pool's *next* input via `f_si`
@@ -310,13 +322,14 @@ where `inr_or_def def x = (if x is inr x' then x' else def)`. From the inside ou
 - `sta f_I ... state` holds the global model state and advances it by `f_I` on
   every event (external input or fed-back output);
 - `loop` ties the output back to the input, so the system self-drives;
-- the outer `map inl (inr_or_def def)` presents external inputs on the left and
-  projects the looped value back out, substituting `def` when there is no genuine
-  external output yet.
+- the outer `map` presents external inputs on the left, and on the way out applies
+  `inr_or_def def x = if x is inr x' then x' else def` — projecting the looped
+  value back out, and substituting `def` when there is no genuine external output
+  yet.
 
 In the models, `f_I` is `state_step ...` (section 5) and `f_si` routes the pool:
 
-**`f_si (v, event) : Option (cur_pid * T_intermediate)`**
+**`f_si (v, event) : Option (cur_pid * Option THandlerOutput)`**
 
 ```coq
 f_si si = if si.2 is inr o then Some (get_cur_pid si.1, dI_out o) else None
@@ -338,16 +351,18 @@ stateType = Times pids bool_state
 
 with the pieces:
 
-- **`cur_pid`** — the pid whose slot is currently live.
-- **`prev_pid`** — the user pid to return to after handlers finish (`Option Nat`).
-- **`re_sch`** — "reschedule" flag: set when control should go to the scheduler
-  rather than back to the interrupted process.
-- **`ir_count`** — the handler time-slice counter (`Option Nat`): `None` =
-  disabled, `Some n` = `n` handler output-steps remain in the current slice,
-  `Some 0` = slice over, hand back to user space.
-- **`ic`** — the interrupt controller: three `(pending, mask)` bit-pairs, one each
-  for the default, disk and timer interrupts. `pending` = an interrupt of this
-  kind has arrived and awaits service; `mask` = service is currently blocked.
+| field | type | meaning |
+|---|---|---|
+| `cur_pid` | `Sum Bool Nat` | the pid whose slot is currently live (section 2) |
+| `prev_pid` | `Option Nat` | the user pid to return to once handlers finish |
+| `re_sch` | `Bool` | reschedule flag: control should go to the scheduler rather than back to the interrupted process |
+| `ir_count` | `Option Nat` | the handler time-slice counter |
+| `ic` | `Times I_bits (Times I_bits I_bits)` | the interrupt controller: one `I_bits` per interrupt, in order default, disk, timer |
+| `I_bits` | `Times pending mask` | `pending : Bool` — an interrupt of this kind has arrived and awaits service; `mask : Bool` — service is currently blocked |
+
+The counter reads `None` when disabled, `Some n` when `n` handler output-steps
+remain in the current slice, and `Some 0` when the slice is over and control should
+return to user space.
 
 The file then defines the obvious getters/setters (`get_cur_pid`, `update_I_mask`,
 ...), the boolean helpers `set_masks` / `unset_masks` / `masks_set` (all-masked is
@@ -358,34 +373,6 @@ base time-slice untouched.
 A handler is *selectable* for an interrupt kind iff it is pending and not masked
 (`I_ready`), and `first_ready` picks the highest-priority ready one in the fixed
 order timer > disk > default.
-
-**Implementation realism: why the counter lives in the state (the interrupt
-controller), not in the handler.** In earlier versions the "two steps to complete"
-counter lived inside the handler process. It has been moved into the global state,
-as part of `ic` (the interrupt controller). This mirrors how real hardware would
-enforce a time slice, and the following argues it is implementable rather than a
-modelling artefact:
-
-- **Hardware level — the interrupt controller.** For a guaranteed, hard-real-time
-  bound that software cannot bypass or delay, the counter belongs in the interrupt
-  controller (ARM GIC, RISC-V PLIC/CLIC, x86 APIC) or a small custom "interrupt
-  throttler" block, held in the controller's MMIO register space. When an
-  interrupt is dispatched to the CPU a hardware timer is loaded with the
-  time-slice value. It decrements while the CPU executes in interrupt context
-  (which the hardware tracks via the interrupt-acknowledge and End-of-Interrupt
-  signals). If the counter reaches zero before EOI, the hardware raises an
-  internal mask signal that stops the distributor / CPU interface from forwarding
-  further interrupts to the processor.
-- **Model correspondence.** Each interrupt kind registers a `pending` bit when its
-  interrupt is input to the system; the `mask` decides whether a pending interrupt
-  is actually activated. The check happens during an *output* step, updating
-  `cur_pid` to the appropriate handler. Handlers are prioritised (timer before
-  disk). While a handler runs all masks are set, so no interrupt nests. When a
-  handler completes we unmask and re-check for another ready handler — this is the
-  controller being consulted at the end of a CPU clock cycle. If none is ready we
-  check the reschedule flag: if set, control passes to the scheduler; if clear,
-  `cur_pid` is restored to `prev_pid`, the user process that was interrupted.
-
 
 ## 5. State transitions
 
@@ -565,33 +552,23 @@ handler run, not compared step by step.)
 *The security-critical instantiation.*
 
 The good model keeps the entire generic structure of section 5 and changes only
-`handler_preroutine` and `bool_coding` so that secret interrupts can be serviced
-without their presence showing up in scheduling. The headline changes (relative to
-`model_bad`) are:
+`handler_preroutine` and `bool_coding`, so that a secret interrupt can be serviced
+without its presence showing up in the schedule. Two things change relative to
+`model_bad`:
 
-1. All masks start set except the timer interrupt, so secret (disk/default)
-   handlers cannot be observed starting or stopping on their own account.
-2. A fixed time slice replaces "run until the handler says it's done": the counter
-   `ir_count` (in the interrupt controller, section 4) is loaded when the timer
-   interrupt handler *completes* and counts down over output steps. The slice —
-   not the secret handler output — decides when handlers stop.
-3. Every handler is the same process and takes the same time to complete (two
-   outputs, as in section 1), and a NOP handler keeps some handler always running
-   within the slice. So the slice always ends the same way, whichever secret
-   handlers actually ran.
+1. **All masks start set except the timer's.** A secret handler can therefore never
+   be started merely because its interrupt arrived; the only interrupt that can be
+   serviced from rest is the public timer.
+2. **A fixed time slice replaces "run until the handler says it is done".** The
+   counter `ir_count` is loaded when the timer handler *completes* and counts down
+   over output steps. What ends a handler's turn is the slice, not the handler's own
+   secret output.
 
-**Design rationale** (summary; the full security argument is in
-[`noninterference.md`](noninterference.md)). The good model never infers handler
-completion from secret output. Each handler always takes two output steps to
-signal completion (a real system would reach this fixed length by padding
-execution time), and a fixed time slice — started when the timer handler completes
-— bounds how long handlers run, so scheduling depends only on the public slice,
-not on which secret handlers ran. All masks are public; that is exactly why the
-runtime must be fixed — with a variable runtime, watching the (public) masks
-toggle would reveal when a secret handler finished. Because the runtime is fixed
-and derived from the public slice, mask changes fall on public boundaries rather
-than tracking secret behaviour. [`noninterference.md`](noninterference.md) makes
-this precise in terms of the security relations.
+Both models already give every handler the same two-step runtime (section 1). What
+the good model adds is that handlers may run *only* inside the slice, and that the
+NOP handler fills any part of the slice no real interrupt claims — so a slice
+containing a disk handler run and a slice containing only filler have the same
+shape.
 
 **Definitions** (each with its security rationale).
 
@@ -621,38 +598,16 @@ counter to `Some 4`. When the timer handler has completed, the time slice begins
 Loading 4 steps into the slice means that two complete executions of handlers can
 take place before the slice ends.
 
-**`handler_completed`**
+**The slice, and the masks it drives.** Three definitions read the counter and
+decide the masks. Taken together they are easier to see as one table than as three
+signatures:
 
 ```coq
 handler_completed c = (c is Some 2 or Some 4)
-```
 
-*What it does:* a predicate on the counter marking the step boundaries at which a
-handler has just finished its fixed-length run. If the time slice is 4, then it is
-the timer handler that has just completed; if the time slice is 2 then it is the
-disk or default handler that has just completed. In both scenarios we want to
-disable the masks of the disk and default handler, while leaving the timer mask
-on. The final case where the time slice is `Some 0` is a different case where we
-want to disable only the timer mask.
-
-*As a small aside,* it would be possible to unmask timer interrupts during the
-time slice, but this would reset the time slice, possibly while the disk/nop
-handler was mid-execution, which can cause `handler_completed` to no longer sync
-with the completion of handlers. We opt for the simpler of the two approaches.
-
-**`check_handler_completed`**
-
-```coq
 check_handler_completed v =
   if handler_completed (ir_count v) then set_tI (unset_masks v) else v
-```
 
-*What it does:* at those boundaries, unmask everything and re-set the timer mask.
-The rationale for the masking is explained above.
-
-**`check_ir_count`**
-
-```coq
 check_ir_count v =
   match ir_count v with
   | Some n.+1 => update_ir_count v (Some n)                 (* tick down *)
@@ -661,9 +616,30 @@ check_ir_count v =
   end
 ```
 
-*What it does:* decrement the slice each step; when it hits `Some 0`, end the
-slice — mask the secret interrupts, unmask the timer, and disable the counter
-(`None`). Here we treat the `Some 0` case where we only unmask timer interrupts.
+Since every handler runs for two steps, a slice of 4 is exactly two handler runs,
+and the counter hits an even value precisely when one of them has just finished:
+
+```text
+  ir_count    what just happened            masks after this step
+  ────────────────────────────────────────────────────────────────────────
+  Some 4  ──▶ timer handler completed  ──▶  disk + NOP unmasked, timer masked
+                (slice starts)                 │
+  Some 3  ──▶ (mid-run)                ──▶    unchanged
+                                              ▼
+  Some 2  ──▶ a disk/NOP handler       ──▶  disk + NOP unmasked, timer masked
+                completed                      │   (so the second run can start)
+  Some 1  ──▶ (mid-run)                ──▶    unchanged
+                                              ▼
+  Some 0  ──▶ slice over                ──▶  disk + NOP masked, timer unmasked,
+                                              counter disabled (None)
+```
+
+The two boundaries `Some 4` and `Some 2` are the ones `handler_completed` marks,
+and at both the secret handlers are the ones left runnable — that is
+`check_handler_completed`. The `Some 0` case is the mirror image and belongs to
+`check_ir_count`: it closes the slice by masking the secret handlers and unmasking
+the timer, so the only interrupt that can be serviced next is the public one that
+starts the next slice.
 
 **`good_preroutine`**
 
@@ -698,21 +674,27 @@ bool_coding v =
 controller pattern (parameterised by whether the slice is live) into the state,
 then forces the default mask to equal the disk mask.
 
-The purpose of this definition is directly tied to the earlier point that the
-compositional definition of state transitions has the drawback of forgetting the
-effect made at the previous stage. The time slice is derived from the timer
-interrupt, which means it is public information and so must be equal across two
-executions. If the time slice is live then the nop handler's pending bit is true,
-the nop and disk handler masks are false and the timer handler mask is true. This
-is an invariant. Since we forget it from the function-composition trick, we bake
-the invariant in using `bool_coding`. This is used to restrict the state space we
-need to reason about in `good_preroutine`, which uses `bool_coding` during its
-computation of the next state. Another invariant that `bool_coding` helps us
-"remember" is that the disk and nop masks are synced: they are always
-toggled/untoggled together, so `bool_coding` updates the default mask to
-correspond to the disk mask, which has no effect for a state that satisfies the
-invariant — but it lets us assume it when reasoning about non-interference of the
-`sta` construct.
+*Why it is needed.* Two facts hold of every state the model can actually reach:
+
+```text
+(i)  slice live  ⇒  NOP pending, NOP and disk unmasked, timer masked
+(ii) the NOP and disk masks are always toggled together
+```
+
+Both are invariants, and neither is available to the proof. Writing `state_step` as
+a composition of independent stages (section 5) buys tractability at the cost of
+forgetting what the previous stage established, so each stage must be proved for
+*every* pair of related states, including ones that never arise. `bool_coding` puts
+the two facts back: it ORs in the controller pattern for (i), and forces the
+default mask to equal the disk mask for (ii). On any reachable state both are
+no-ops. Stated unconditionally, they let `initiate_next` be analysed on a state
+space narrow enough for the argument to go through.
+
+The pattern is parameterised by `timeslice_live`, which reads only `ir_count` — a
+public field — so it is the same across two related executions. That is what makes
+this legitimate rather than question-begging, and it is where the fact that the
+slice is started by the *public* timer handler does real work.
+[`noninterference.md` §7d](noninterference.md) gives the proof-side account.
 
 ```coq
 model_good = loop_sta initial_state_good
@@ -815,6 +797,56 @@ are classified secret ([`noninterference.md` §4](noninterference.md)), so at th
 attacker's level the two runs are indistinguishable — which is what
 `wrapped_model_good_NI` proves in general.
 
-(As with the `model_bad` traces, `good_no_dI'` and `good_with_dI'` are independent
-examples: they also differ in how many idle public steps precede the first timer
-interrupt. It is the shape of the slice that carries the point.)
+
+## Where to go next
+
+That is the whole construction. What it does *not* say is why any of it is secure:
+nothing above defines what an attacker can observe, and the claims made in passing
+— that a slot is public, that the pid split matters, that a handler run must be
+indistinguishable from filler — are stated but not made precise.
+
+That is the subject of [`noninterference.md`](noninterference.md): the security
+relation carried by each interface, the counterexample for `model_bad`, how the
+generic theorems compose to prove `model_good`, and the one substantial obligation
+(`fv_NI`) that the compositional structure of `state_step` and `bool_coding` exist
+to make tractable.
+
+## Appendix: asides and alternatives
+
+None of this is needed to follow the models; it records design questions a reader
+may reasonably ask.
+
+### Why the slice counter lives in the interrupt controller, not in the handler
+ In earlier versions the "two steps to complete"
+counter lived inside the handler process. It has been moved into the global state,
+as part of `ic` (the interrupt controller). This mirrors how real hardware would
+enforce a time slice, and the following argues it is implementable rather than a
+modelling artefact:
+
+- **Hardware level — the interrupt controller.** For a guaranteed, hard-real-time
+  bound that software cannot bypass or delay, the counter belongs in the interrupt
+  controller (ARM GIC, RISC-V PLIC/CLIC, x86 APIC) or a small custom "interrupt
+  throttler" block, held in the controller's MMIO register space. When an
+  interrupt is dispatched to the CPU a hardware timer is loaded with the
+  time-slice value. It decrements while the CPU executes in interrupt context
+  (which the hardware tracks via the interrupt-acknowledge and End-of-Interrupt
+  signals). If the counter reaches zero before EOI, the hardware raises an
+  internal mask signal that stops the distributor / CPU interface from forwarding
+  further interrupts to the processor.
+- **Model correspondence.** Each interrupt kind registers a `pending` bit when its
+  interrupt is input to the system; the `mask` decides whether a pending interrupt
+  is actually activated. The check happens during an *output* step, updating
+  `cur_pid` to the appropriate handler. Handlers are prioritised (timer before
+  disk). While a handler runs all masks are set, so no interrupt nests. When a
+  handler completes we unmask and re-check for another ready handler — this is the
+  controller being consulted at the end of a CPU clock cycle. If none is ready we
+  check the reschedule flag: if set, control passes to the scheduler; if clear,
+  `cur_pid` is restored to `prev_pid`, the user process that was interrupted.
+
+### Could the timer be left unmasked during the slice?
+
+It would be possible to unmask timer interrupts during the time slice, but a timer
+interrupt arriving mid-slice would reset the slice — possibly while the disk or NOP
+handler was still mid-execution — and `handler_completed` would then no longer be
+in step with the actual completion of handlers. The model takes the simpler of the
+two approaches and keeps the timer masked until the slice ends.
