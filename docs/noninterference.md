@@ -2,15 +2,16 @@
 
 *Prose companion to [`theories/noninterference.v`](../theories/noninterference.v).*
 
-**Purpose.** [`models.md`](models.md) explains WHAT the three models are. This
-file explains WHY the good model is non-interfering and the bad one is not, stated
-in terms of the security relations (`cRel`s, *characterised equivalences*): which
-relation each interface carries, what "public" and "secret" mean formally, and the
-one genuinely hard proof obligation — that the state relation is preserved by the state transition
-(`fv_NI`), which is where the compositional structure of `state_step` and
-`bool_coding` earn their keep.
+Where [`models.md`](models.md) describes the three models, this document gives the
+security argument: the relations the proof is stated in, the classification each
+interface receives, and how the two results are proved. It covers what "public" and
+"private" mean formally, how the counterexample for the bad model is built, how the
+generic theorems compose to give the good one, and the single substantial proof
+obligation — that the state relation survives the state transition (`fv_NI`), which
+is what the compositional structure of `state_step` and the auxiliary `bool_coding`
+exist to make manageable.
 
-Everything here is read off the definitions in
+Definitions are as given in
 [`theories/definitions.v`](../theories/definitions.v) and
 [`theories/noninterference.v`](../theories/noninterference.v).
 
@@ -196,32 +197,32 @@ left (exact) or the secret syscall on the right (secret at `⊥`).
 
 `model_bad_not_NI : ~ NI in_rel out_rel model_bad`.
 
-The witness exhibits one `⊥`-trace that `model_bad` admits without the secret
-input but not with it. Concretely:
+Non-interference requires, among other things, that inserting a secret input
+anywhere in a trace leaves it a trace. The counterexample refutes that clause with
+a two-step trace:
 
-- Take a trace the process admits that contains two outputs from the public user
-  process (a run of two ordinary public requests).
-- Insert a disk interrupt at the FRONT of the trace. This is legal at `⊥` because
-  the disk interrupt is secret there (`ir_dis`), so NI requires the trace set to be
-  unchanged by the insertion.
-- Consuming the interrupt sets the disk pending flag. The first public output still
-  goes through — `initiate_next` runs on output events, so the newly scheduled
-  handler only takes effect from the next step — and then the disk handler runs for
-  its full two steps (`Nothing`, `Notify`) before control returns to the displaced
-  public process.
-- So the step where we expected the SECOND public output is the handler's first
-  step instead, and the `⊥`-observer sees it directly: the public output component
-  is `None` where the interrupt-free trace produced `pub_get'`. That is already
-  enough to refute NI, which is why the witness needs only two public outputs even
-  though the displacement lasts two steps.
+1. Start from `[pub_get'; pub_get']` — two ordinary requests from the public user
+   process, which `model_bad` admits.
+2. Insert a disk interrupt at the front. The insertion is permitted because the
+   disk interrupt is secret at `⊥` (`ir_dis`), so non-interference demands the
+   result still be a trace.
+3. It is not. Consuming the interrupt sets the disk pending bit. The first
+   `pub_get'` still goes through, because `initiate_next` runs on output events and
+   the newly scheduled handler only takes effect from the following step. That
+   following step belongs to the disk handler, so the second `pub_get'` cannot
+   occur: the public output slot carries `None` where the interrupt-free trace
+   carried `pub_get'`.
 
-So a secret input has changed the public projection of the trace: NI fails. (The
-good model avoids this precisely because the disk handler runs on fixed, public
-slice boundaries rather than in immediate response to the interrupt.)
+A secret input has changed what the `⊥`-observer can see, so `model_bad` is not
+non-interfering. The disk handler goes on to run its second step before control
+returns to the public process, but the first displaced output is already enough.
 
-> **Note on counterexample length.** The witness deliberately uses a short trace:
-> the proof drives it by `inversion` on the reduction relation, which is expensive,
-> so a long trace would be impractical to discharge.
+`model_good` escapes this because a handler runs only at fixed, publicly determined
+slice boundaries rather than immediately on arrival of its interrupt.
+
+> **On the length of the counterexample.** The proof drives the trace by
+> `inversion` on the reduction relation, which is expensive, so the witness is kept
+> as short as the argument allows.
 
 
 ## 6. `model_good` and `wrapped_model_good` are non-interfering
@@ -236,12 +237,12 @@ is obtained from `model_good_NI` by pushing the output through `parse_output`
 (output weakening: `parse_output` maps `out_rel`-related outputs to
 `final_out_rel`-related ones).
 
-`model_good_NI` is assembled from the generic composition theorems for the process
-algebra, applied to the concrete processes of [`models.md`](models.md). There is one
-theorem per constructor, and the proof of `model_good_NI` is essentially the term
-`model_good` read outside-in with each layer discharged by its theorem:
+`model_good_NI` is assembled from the generic composition theorems, applied to the
+concrete processes of [`models.md`](models.md). There is one theorem per
+constructor of the calculus, so the proof follows the structure of the term
+`model_good` itself, discharging one layer at a time from the outside in:
 
-| layer of `model_good` | theorem | what it gives you |
+| layer of `model_good` | theorem | what it gives |
 |---|---|---|
 | the outer `map inl (inr_or_def def)` and every interface rewiring | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
 | `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output relations must coincide |
@@ -252,13 +253,14 @@ theorem per constructor, and the proof of `model_good_NI` is essentially the ter
 | the leaves (`out o`) | `out_NI` | a constant process is trivially non-interfering |
 | `parse_output` on top of `model_good` | `map_NI` again | output weakening, giving `wrapped_model_good_NI` |
 
-Two things to read off the table. First, each theorem *derives* the composite's
-relations from its parts' rather than taking them as given — which is why the
-concrete relations of section 4 look the way they do: `out_rel`'s nest of `eqpair`s
-is the shape `par_NI` forces on a pool output, and its `eqmaybe`s are what
-`swi_NI` forces on a gated slot. Second, every one of these is mechanical for our
-models *except* the `fv_NI` side conditions of `sta_NI`. That is the one genuinely
-hard obligation, and it is section 7.
+Each theorem *derives* the composite's relations from those of its parts rather
+than taking them as given. This is why the interface relations of section 4 have
+the shape they do: `out_rel`'s nest of `eqpair`s is what `par_NI` imposes on a pool
+output, and its `eqmaybe`s are what `swi_NI` imposes on a gated slot.
+
+For these models every layer is mechanical except the `fv_NI` side conditions of
+`sta_NI` — the requirement that the state relation be preserved by the state
+transition. That is the one substantial obligation, and it is section 7.
 
 > The generic theorems in [`theories/theorems.v`](../theories/theorems.v) are a
 > mechanisation of results from separate prior work, not a contribution of this
@@ -336,11 +338,12 @@ state_step good_preroutine bool_coding  =
                                               next" — see 7c
 ```
 
-- **Benefit:** each stage is a self-contained `fv_NI` goal.
-- **Cost — and this is the crux:** each stage is proved over ALL pairs of related
-  states, so it may not assume that its input came from the previous stage. The
-  composition forgets the restricted, reachable subset the earlier stage produces.
-  Every stage must therefore hold for states that never actually arise together.
+The gain is that each stage becomes a self-contained goal. The price is that each
+stage is proved over *all* pairs of related states and so cannot assume its input
+came from the stage before it. Splitting the composition discards the restricted,
+reachable set of states the earlier stage actually produces, and every stage must
+then hold even for states that never arise together in a real run. Section 7c is
+how that is recovered.
 
 ### 7c. `bool_coding`: re-establishing the forgotten invariant
 
@@ -370,10 +373,9 @@ mask bits (which decide the branch) agree.
 
 ## 8. Model limitations
 
-Two deliberate simplifications keep the NI proof tractable. Both (a) and (b) are
-genuine limitations of the model, not of the technique, and both could in principle
-be lifted at the cost of a harder `fv_NI` (section 7); (c) collects the remaining
-modelling choices.
+Two simplifications keep the proof tractable. Both are limitations of the model
+rather than of the technique, and either could be lifted at the cost of a harder
+`fv_NI` (section 7). A third group collects the remaining modelling choices.
 
 **(a) Only one secret interrupt.** The model has a single secret interrupt — the
 disk interrupt. The NOP (default) handler is present purely for privacy: it exists
@@ -400,8 +402,8 @@ substantially harder. That trade-off — flexibility of execution time against t
 difficulty of the final-stage `fv_NI` — is the reason the model fixes handler
 length.
 
-**(c) Further modelling choices, baked in rather than argued for.** These are not
-known to be security-relevant, but a reader should see them:
+**(c) Further modelling choices.** These are built into the construction rather
+than argued for, and nothing here claims they are without consequence:
 
 - **One output step per selection.** In `process_pool` each slot's output is tagged
   with the constant `true`, which closes its switch after a single output. Every

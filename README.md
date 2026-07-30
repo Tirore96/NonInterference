@@ -1,134 +1,153 @@
 # NonInterference
 
-A Rocq/Coq development proving **non-interference** for a small model of an
-operating system with interrupt handling: a secret (disk) interrupt cannot be
-inferred by an attacker who observes only user-visible output. It contrasts a
-baseline design that *leaks* the secret through scheduling with a "good" design
-whose handling *provably* does not.
+A Rocq/Coq development proving **non-interference** for a model of an operating
+system that handles interrupts. One interrupt — the disk interrupt — is secret;
+the theorem says an attacker watching the system's output cannot tell whether it
+occurred.
 
-The work is built on a small process calculus (`Proc I O`) and a lattice of
-security levels; the security condition is stated relationally (per-interface
-*characterised equivalences*, `cRel`) and the top result is a machine-checked `NI`
-theorem.
+The interesting part is that a naive interrupt handler *does* leak it, and not
+through any data it computes: it leaks through **scheduling**. Servicing a secret
+interrupt takes CPU time away from the process that was running, and the resulting
+gap in that process's output is visible. The development formalises both designs —
+the one that leaks and one that does not — and proves each claim.
 
-## The argument in one picture
+Both designs are expressed in a small process calculus, `Proc I O`, whose
+interfaces carry the security classification; non-interference is then a property
+of a closed term in that calculus. The calculus and its generic non-interference
+theorems are reused from prior work — the contribution here is the OS models and
+their proofs.
 
-The leak in `model_bad` is a **scheduling** leak. A disk interrupt makes the disk
-handler run *right away*, displacing whichever process was scheduled. Every
-handler runs for exactly **two** output steps — `Nothing` then `Notify` — so two
-steps of the public schedule are consumed before control is handed back to the
-process that was displaced.
+## The system being modelled
 
-The attacker never sees the handler run. In the full pool output the handler has
-its own slot and that slot is secret, so `Some _` there is indistinguishable from
-`None`; in the user-visible output the handler's slot does not exist at all. What
-the attacker *can* see is the public process's slot, and for those two steps it
-reads `None`:
+A process pool of six slots, driven by a global state and a feedback loop:
+
+| slot | process | |
+|---|---|---|
+| 0, 1, 2 | timer, disk and default interrupt handlers | each runs for exactly two output steps, emitting `Nothing` then `Notify` |
+| 3 | round-robin scheduler | proposes which user process runs next |
+| 4 | `high_p`, the secret user process | issues a `Syscall` if the disk handler notified it, otherwise `NOP` |
+| 5 | `low_p`, the public user process | repeatedly issues `GetRequest` |
+
+Exactly one slot runs per step, chosen by the current pid. The global state holds a
+`(pending, mask)` bit pair per interrupt — an interrupt is serviced when it is
+pending and unmasked — plus a time-slice counter used by the good design.
+
+## The three models
+
+Everything below refers to these. All three are in
+[`theories/models.v`](theories/models.v).
+
+| Model | Output it exposes | |
+|---|---|---|
+| `model_bad` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
+| `model_good` | the same full pool output | the fixed design; non-interfering |
+| `wrapped_model_good` | only the user-visible channel: a public output or a syscall, everything else erased | `model_good` behind a projection; the headline result |
+
+`model_bad` and `model_good` differ in exactly two definitions. Proving them at the
+full pool output — where the attacker sees more than a real one would — is what
+makes the final result follow by weakening the output.
+
+## Threat model
+
+The attacker is `⊥`, the least and most exposed level of a security lattice. Each
+interface classifies its values: **public** values must agree exactly at every
+level, **private** values are free at `⊥` and public above it (see the
+[glossary](#glossary)).
+
+The disk interrupt is the only secret input. The timer interrupt is public — it is
+a scheduled event the attacker may as well know about, and the good design is
+allowed to let scheduling depend on it. `NI in_rel out_rel p` is the standard
+condition: inserting, removing, or varying secret inputs does not change the set of
+traces an observer can see, at any level.
+
+## The leak
+
+A disk interrupt makes the disk handler run immediately, displacing whichever
+process was scheduled. The handler runs for two output steps, then control returns
+to the displaced process.
+
+The attacker never sees the handler run: in the full pool output the handler's slot
+is classified secret, and in the user-visible output that slot does not exist at
+all. What the attacker sees is the *public* process's slot, which for those two
+steps carries nothing:
 
 ```text
-   model_bad — the attacker's view of the same run, without and with a disk interrupt
+   model_bad, the attacker's view of one run, without and with a disk interrupt
 
      step                 1      2      3      4
      no disk interrupt   Get    Get    Get    Get
      disk interrupt      Get     ·      ·     Get
-                                └──┬──┘        │
-                       the disk handler's two   └─ control handed back to the
-                       steps; two public          public process, which resumes
-                       outputs that were due
-                       never arrive
+                                └──┬──┘        └─ the displaced process resumes
+                       the disk handler runs here; two public
+                       outputs that were due never arrive
 ```
 
-Nothing about this depends on *which* process was displaced: had the disk
-interrupt landed on the private process instead, the same two-step displacement —
-and the same visible gap in the schedule — would occur.
+Two public requests are enough to refute non-interference, and that is exactly the
+counterexample `model_bad_not_NI` constructs. The leak does not depend on which
+process was displaced — interrupting the secret process produces the same gap in
+the schedule.
 
-The good design closes the leak by never letting a secret interrupt change *when*
-anything runs. Handlers run only inside a fixed, public time slice, and all take
-the same two steps, so a secret handler run merely takes the place of the
-NOP-handler filler that would otherwise occupy the slice. The public schedule is
-identical either way:
-
-```text
-   model_bad   : a handler starts on arrival and stops when it emits its secret
-                 "Notify" ⇒ scheduling and mask timing depend on the secret ⇒ LEAKS
-   model_good  : handlers run only within a fixed, public time slice, all of the
-                 same length ⇒ scheduling depends only on public data
-                            ⇒ NON-INTERFERING
-```
-
-This comes in two versions, and the distinction matters for what is being claimed:
-`model_good` is proved non-interfering on the **full pool output**, where handler
-and scheduler slots are still visible but security-classified, and
-`wrapped_model_good` on the **user-visible output**, where `parse_output` has
-erased everything but the public output and the syscall. The second is the
-headline result; the first is what it is built from.
-
-## Threat model
-
-The attacker is the least — most exposed — security level `⊥`; every interface of
-the model classifies its values as **public** or **private** relative to that
-lattice (see the glossary below). The only genuine secret input is the disk
-interrupt; the timer interrupt is a public, scheduled event, and the model is
-free to let scheduling depend on it. `NI ... p` says: varying or
-inserting/removing secret inputs never changes the set of traces an observer at
-any level can see — in particular, the `⊥`-observer cannot tell whether a disk
-interrupt occurred.
+`model_good` closes it by making the *timing* of handler execution independent of
+which interrupts arrived. Handlers run only inside a fixed time slice whose length
+is derived from the public timer interrupt, all handlers take the same two steps,
+and a default "NOP" handler fills any part of the slice that no real interrupt
+claims. A secret handler run therefore replaces a NOP run rather than displacing a
+user process, and the public schedule is identical either way.
 
 ## Results
 
-Three machine-checked theorems (in
-[`theories/noninterference.v`](theories/noninterference.v)):
+Three machine-checked theorems, in
+[`theories/noninterference.v`](theories/noninterference.v):
 
 | Theorem | Statement | Meaning |
 |---|---|---|
-| `model_bad_not_NI` | `~ NI in_rel out_rel model_bad` | The baseline model **leaks**: a secret disk interrupt is observable. |
-| `model_good_NI` | `NI in_rel out_rel model_good` | The good model is non-interfering on the full pool output. |
-| `wrapped_model_good_NI` | `NI in_rel final_out_rel wrapped_model_good` | The final model is non-interfering on the **user-visible** output — the headline result. |
+| `model_bad_not_NI` | `~ NI in_rel out_rel model_bad` | The naive design leaks: a secret disk interrupt is observable. |
+| `model_good_NI` | `NI in_rel out_rel model_good` | The fixed design is non-interfering even on the full pool output. |
+| `wrapped_model_good_NI` | `NI in_rel final_out_rel wrapped_model_good` | It is therefore non-interfering on the user-visible output — the headline result. |
 
 ## `model_bad` vs `model_good` at a glance
 
-Both models share the entire generic structure (process pool, stateful wrapper,
-state layout, and three of the four `state_step` stages). They differ in exactly
-two places — `handler_preroutine` and `bool_coding` — and that difference is the
-whole security story.
+The two models share their entire structure — the process pool, the stateful
+wrapper, the state layout, and three of the four state-transition stages. They
+differ in two definitions, and that difference is the whole security story.
 
 | | `model_bad` | `model_good` |
 |---|---|---|
 | **`handler_preroutine`** | `bad_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `good_preroutine` = `check_ir_count ∘ check_handler_completed ∘ initiate_ir`: reload the slice on a timer `Notify`, unmask at fixed boundaries, tick the slice |
-| **`bool_coding`** | `id` (no bookkeeping) | `bool_coding`: bake the reachable time-slice invariant back in; force the default mask to equal the disk mask |
+| **`bool_coding`** | `id` (no bookkeeping) | `bool_coding`: restore the time-slice invariant; force the default mask to equal the disk mask |
 | **Initial masks / counter** | all masks clear; counter `None` (disabled) | all masks set except the timer; counter `Some 0` |
 | **When a handler stops** | when it emits its **secret** `Notify` — *secret-driven* | at a fixed **public** time-slice boundary — *slice-driven* |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
 | **Non-interfering?** | **No** (`model_bad_not_NI`) | **Yes** (`model_good_NI`) |
 | **Why** | completion timing leaks the secret interrupt via scheduling | scheduling depends only on the public slice, so the secret never shows |
 
-Because all masks are **public**, handler run-time must be **fixed** (a
-variable, secret-dependent run-time would leak through the public masks as they
-toggle). The good model fixes every handler at two output steps — all three
-handlers are the same process, `I_handler` — and sizes the time slice to a whole
-number of those runs; a real system would reach that fixed length by padding.
+The mask bits are classified public, which is what forces handlers to be
+fixed-length: a secret-dependent run time would show up in when the masks toggle.
+All three handlers are therefore the same process, two output steps long, and the
+slice is a whole number of those runs. A real system would reach a fixed length by
+padding.
 
 ## Glossary
 
-The definitive, formal versions of these — the actual `dis` and `rel` bodies — are
-in [`docs/noninterference.md` §2](docs/noninterference.md).
+Formal definitions — the actual `dis` and `rel` bodies — are in
+[`docs/noninterference.md` §2](docs/noninterference.md).
 
 | Term | Meaning |
 |---|---|
-| `⊥` (`\bot`) | The attacker: the least, most-exposed observer level. |
+| `⊥` (`\bot`) | The attacker: the least, most exposed level of the lattice. |
 | **public** | Observable to all levels; compared by equality; never secret. (`publicRel`) |
-| **private** | Not observable to `⊥` (secret at `⊥`, public above). (`privateRel`) |
-| **secret** | Informal property "`dis` holds at the observer's level" — the thing NI lets vary. |
-| **default / NOP handler** | The same thing: pool slot 2. Present only for privacy, as the indistinguishable partner of the disk handler; it has no interrupt of its own. |
+| **private** | Not observable to `⊥` — free there, public above. (`privateRel`) |
+| **secret** | Said of a value the observer at its level may not see, so non-interference lets it vary. |
+| **default / NOP handler** | Pool slot 2. It has no interrupt of its own; it exists to fill the time slice, so that a slice with a disk interrupt looks like one without. |
 | **`cRel`** | A *characterised equivalence*: a per-type security relation carrying both `rel` (level-indexed indistinguishability, an equivalence) and `dis` (secrecy), where `dis l` picks out exactly one `rel l`-equivalence class. |
 
 ## Logical foundations
 
-The development is constructive except for one import of classical logic —
+The development is constructive except for one import of classical logic,
 `Require Import Classical` at [`theories/theorems.v:739`](theories/theorems.v). The
-law of excluded middle is used only in the switch non-interference lemma
-`swi_NI'`, because the `aware` predicate is not constructively decidable (a
-decision procedure could replace it).
+law of excluded middle is used only in the switch non-interference lemma `swi_NI'`,
+because the `aware` predicate is not constructively decidable; a decision procedure
+would remove the need for it.
 
 ## Building
 
@@ -140,8 +159,8 @@ make
 
 This compiles the four-file chain in dependency order
 (`definitions → theorems → models → noninterference`). The build requires Rocq/Coq
-9.0.1 with `mathcomp`, `paco`, `deriving`, `Equations`, and `HB`
-(Hierarchy Builder); see [`_CoqProject`](_CoqProject).
+9.0.1 with `mathcomp`, `paco`, `deriving`, `Equations` and `HB` (Hierarchy
+Builder); see [`_CoqProject`](_CoqProject).
 
 ## Repository map
 
@@ -149,14 +168,15 @@ This compiles the four-file chain in dependency order
 |---|---|
 | [`theories/definitions.v`](theories/definitions.v) | The process calculus (`Proc I O`), traces, `NI`, and the security relations (`publicRel`, `privateRel`, `eqpair`/`eqsum`/`eqmaybe` and variants, `fv_NI`). |
 | [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor (`out_NI`, `map_NI`, `sta_NI`, `swi_NI`, `par_NI`, `loop_NI`, `maybe_NI`). These mechanise results from separate prior work; they are used here, not contributed. |
-| [`theories/models.v`](theories/models.v) | The three concrete models and everything they are built from. |
-| [`theories/noninterference.v`](theories/noninterference.v) | The concrete `in_rel`/`out_rel`/state relations and the three theorems above. |
+| [`theories/models.v`](theories/models.v) | The three models and everything they are built from. |
+| [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state relations, and the three theorems above. |
 | [`docs/models.md`](docs/models.md) | **What the models are** — long-form companion to `models.v`. |
-| [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering** — the `cRel`s, the interface relations, and the `fv_NI` proof, companion to `noninterference.v`. |
+| [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering** — the security relations and the proof, companion to `noninterference.v`. |
 
 ## Where to read next
 
-- To understand the **models**, start with [`docs/models.md`](docs/models.md).
-- To understand the **proof** — the security relations and the one hard obligation
-  (`fv_NI`, closure of the state relation under the state transition) — read
-  [`docs/noninterference.md`](docs/noninterference.md).
+- For the **models** — every process, the state layout, and the design rationale
+  behind the good model — read [`docs/models.md`](docs/models.md).
+- For the **proof** — the security relations, how the generic theorems compose, and
+  the one hard obligation (`fv_NI`, closure of the state relation under the state
+  transition) — read [`docs/noninterference.md`](docs/noninterference.md).
