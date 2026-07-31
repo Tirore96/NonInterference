@@ -96,8 +96,8 @@ Two words are used throughout, and they are not synonyms:
 
 - **public** / **private** classify an *interface*. A public interface is compared
   by equality at every level and is never distinguished. A private interface is
-  distinguished at `⊥` — the attacker may vary it freely — and compared by equality
-  at every level above.
+  distinguished at `⊥` — where any two of its values are related, so an observer
+  there cannot tell them apart — and compared by equality at every level above.
 - **distinguished** is the per-level property `dis l x`. It is what
   non-interference is permitted to vary, and it is relative to a level: a private
   value is distinguished at `⊥` and not distinguished anywhere else.
@@ -121,8 +121,10 @@ dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨ (l = ⊥)
 ```
 
 A private value is secret exactly at `⊥` (there any two values are related and
-both count as `dis`) and public — compared by equality — at every higher level.
-This is the "secret channel": at the attacker level `⊥` the value is free. The
+every value counts as `dis`) and public — compared by equality — at every higher
+level. This is the "secret channel": at `⊥` the relation is total, so no two
+values are distinguishable and non-interference permits the value to be inserted,
+removed or replaced without an observer at `⊥` being able to notice. The
 syscall output and the secret handler outputs carry this relation; the interrupt
 input carries a stricter custom relation (see `in_rel` in section 4).
 

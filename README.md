@@ -51,21 +51,33 @@ Everything below refers to these. All three are in
 | `model_sliced` | the same full pool output | the fixed design; non-interfering |
 | `model_sliced_userview` | only the user-visible channel: a public output or a syscall, everything else erased | `model_sliced` behind a projection; the headline result |
 
-`model_immediate` and `model_sliced` differ in exactly two definitions. The difference
-between the two *outputs* is what `model_sliced_userview` adds — one emits a tuple with
-a slot per process, the other keeps only the user-visible channel:
+The three differ along two independent axes, and it helps to keep them apart.
+
+**Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
+interface, same pool, same state layout. They differ in exactly two definitions
+(`handler_preroutine` and `bool_coding`, tabulated
+[below](#model_immediate-vs-model_sliced-at-a-glance)), and that difference is the
+whole security story: one leaks, the other does not.
+
+**Axis 2: observation — `model_sliced` vs `model_sliced_userview`.** Same
+behaviour; they are literally the same process. `model_sliced_userview` is
+`model_sliced` with a projection on its output,
+`map id parse_output model_sliced`, which discards everything except the
+user-visible channel. Below, `·` is `None` and `Nfy` is `Notify`:
 
 ```text
-  model_sliced, one output step        model_sliced_userview, the same step
-  ( · , · , · , · , Notify , · )  ──▶  ·          disk handler ran: erased
-  ( Get , · , · , · , · , · )     ──▶  Get        public output: kept
-  ( · , Syscall , · , · , · , · ) ──▶  Syscall    syscall: kept
-    │   │   │   │     │     │
-    │   │   │   └─────┴─────┴── the three handler slots ─┐
-    │   │   └── scheduler pid ─────────────────────────── these never survive
-    │   └── syscall (secret)
-    └── public output
+                     pub     sys     pid     dfl     dsk     tmr         parse_output
+  public output   (  Get  ,   ·   ,   ·   ,   ·   ,   ·   ,   ·   )  --->   Get
+  disk handler    (   ·   ,   ·   ,   ·   ,   ·   ,  Nfy  ,   ·   )  --->   ·
+  syscall         (   ·   ,  Sys  ,   ·   ,   ·   ,   ·   ,   ·   )  --->   Sys
+  scheduler       (   ·   ,   ·   ,   4   ,   ·   ,   ·   ,   ·   )  --->   ·
+                    '-----------'   '---------------------------'
+                    kept            discarded: scheduler and handler activity
 ```
+
+Exactly one slot is `Some` per step, so each row above is one output step, not
+four parallel events. `model_immediate` emits the same six-slot tuple as
+`model_sliced` — the diagram is about the projection, not about the leak.
 
 Proving non-interference at the full pool output — where the attacker sees more
 than a real one ever would — is what makes the user-visible result follow by
@@ -75,7 +87,8 @@ weakening the output relation.
 
 The attacker is `⊥`, the least and most exposed level of a security lattice. Each
 interface classifies its values: **public** values must agree exactly at every
-level, **private** values are free at `⊥` and public above it (see the
+level, at `⊥` any two **private** values are related, so an observer there cannot tell
+them apart, while above `⊥` they too must agree exactly (see the
 [glossary](#glossary)).
 
 The disk interrupt is the only secret input. The timer interrupt is public — it is
@@ -96,14 +109,15 @@ all. What the attacker sees is the *public* process's slot, which for those two
 steps carries nothing:
 
 ```text
-   model_immediate, the attacker's view of one run, without and with a disk interrupt
+   model_immediate: the attacker's view of one run, without and with a disk interrupt
 
-     step                 1      2      3      4
-     no disk interrupt   Get    Get    Get    Get
-     disk interrupt      Get     ·      ·     Get
-                                └──┬──┘        └─ the displaced process resumes
-                       the disk handler runs here; two public
-                       outputs that were due never arrive
+     step                    1      2      3      4
+     no disk interrupt      Get    Get    Get    Get
+     with disk interrupt    Get     ·      ·     Get
+                                    '------'      '-- the displaced process resumes here
+                                       |
+       the disk handler runs here: the two public outputs that were
+       due at steps 2 and 3 never arrive
 ```
 
 Two public requests are enough to refute non-interference, and that is exactly the
@@ -189,7 +203,7 @@ Formal definitions — the actual `dis` and `rel` bodies — are in
 |---|---|
 | `⊥` (`\bot`) | The attacker: the least, most exposed level of the lattice. |
 | **public** | Observable to all levels; compared by equality; never secret. (`publicRel`) |
-| **private** | Not observable to `⊥` — free there, public above. (`privateRel`) |
+| **private** | At `⊥`, any two values are related, so an observer there cannot distinguish them; above `⊥`, compared by equality like a public value. (`privateRel`) |
 | **secret** | Said of a value the observer at its level may not see, so non-interference lets it vary. |
 | **default / NOP handler** | Pool slot 2. It has no interrupt of its own; it exists to fill the time slice, so that a slice with a disk interrupt looks like one without. |
 | **`cRel`** | A *characterised equivalence*: a per-type security relation carrying both `rel` (level-indexed indistinguishability, an equivalence) and `dis` (secrecy), where `dis l` picks out exactly one `rel l`-equivalence class. |
