@@ -214,7 +214,7 @@ slot indices — so the family must be a *total* function on `nat`, defined befo
 the pool can be instantiated:
 
 ```coq
-slot_procs p_pub p_priv p_sched n : Proc (my_f_I n) (my_f_O Opub Opriv n) =
+slot_procs runtime p_pub p_priv p_sched n : Proc (my_f_I n) (my_f_O Opub Opriv n) =
   match n with
   | 0 | 1 | 2 => I_handler runtime
   | 3 => p_sched
@@ -223,7 +223,7 @@ slot_procs p_pub p_priv p_sched n : Proc (my_f_I n) (my_f_O Opub Opriv n) =
   | _ => unit_proc
   end
 
-my_procs = slot_procs low_p high_p scheduler
+my_procs = slot_procs handler_runtime low_p high_p scheduler
 ```
 
 `unit_proc` exists only to make this total. The pool proper is slots `0..5`;
@@ -653,8 +653,8 @@ handler_completed runtime c =
   | None   => false
   end
 
-check_handler_completed v =
-  if handler_completed (ir_count v) then set_tI (unset_masks v) else v
+check_handler_completed runtime v =
+  if handler_completed runtime (ir_count v) then set_tI (unset_masks v) else v
 
 check_ir_count v =
   match ir_count v with
@@ -778,12 +778,13 @@ survive — `pub` (re-tagged `inl`) and `sys` (re-tagged `inr`); every other slo
 any all-`None` tuple, projects to `None`.
 
 ```coq
-model_sliced_userview p_pub p_priv p_sched =
-  map id parse_output (model_sliced p_pub p_priv p_sched) : Proc T_in (T_out Opub Opriv)
+model_sliced_userview runtime runs p_pub p_priv p_sched =
+  map id parse_output (model_sliced runtime runs p_pub p_priv p_sched)
+    : Proc T_in (T_out Opub Opriv)
 ```
 
 ```coq
-final_out_rel = eqmaybe_false (eqsum publicRel privateRel)
+final_out_rel Opub Opriv = eqmaybe_false (eqsum (publicRel Opub) (privateRel Opriv))
 ```
 
 The output relation used by the top theorem: the public component is compared
