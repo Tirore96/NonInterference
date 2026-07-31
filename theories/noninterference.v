@@ -413,9 +413,9 @@ Qed.
 
 (* Slot 5, the public user process.  Its output slot is public, so it may
    emit anything as long as it emits it unconditionally. *)
-Lemma low_p_NI : forall (IRel : cRel [Empty]), NI IRel (publicRel TPublicOutput) low_p.
+Lemma low_p_NI : NI (publicRel Empty) (publicRel TPublicOutput) low_p.
 Proof.
-  intros. apply out_NI.
+  apply out_NI.
 Qed.
 
 (* Slot 4, the secret user process.  Both its input (the disk handler's
@@ -457,9 +457,8 @@ Proof.
 Qed.
 
 (* Slot 3, the scheduler.  Its output -- the pid it picks -- is public. *)
-Lemma scheduler_NI : forall (IRel : cRel [Empty]), NI IRel (publicRel Nat) scheduler.
+Lemma scheduler_NI : NI (publicRel Empty) (publicRel Nat) scheduler.
 Proof.
-  intros.
   eapply map_NI. eauto. eauto.
   instantiate (1:=eqpair _ _).
   mrw. move=> l i i' /rel_eqpair[] + _.
@@ -500,9 +499,9 @@ Variable p_pub : Proc Empty Opub.
 Variable p_priv : Proc THandlerOutput Opriv.
 Variable p_sched : Proc Empty Nat.
 
-Hypothesis p_pub_NI : forall IRel : cRel [Empty], NI IRel (publicRel Opub) p_pub.
+Hypothesis p_pub_NI : NI (publicRel Empty) (publicRel Opub) p_pub.
 Hypothesis p_priv_NI : NI (privateRel THandlerOutput) (privateRel Opriv) p_priv.
-Hypothesis p_sched_NI : forall IRel : cRel [Empty], NI IRel (publicRel Nat) p_sched.
+Hypothesis p_sched_NI : NI (publicRel Empty) (publicRel Nat) p_sched.
 
 Lemma model_sliced_NI : NI in_rel (out_rel Opub Opriv) (model_sliced p_pub p_priv p_sched).
 Proof.

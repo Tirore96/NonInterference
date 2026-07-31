@@ -285,9 +285,9 @@ forall (Opub Opriv : Ty)
        (p_pub : Proc Empty Opub)
        (p_priv : Proc THandlerOutput Opriv)
        (p_sched : Proc Empty Nat),
-  (forall IRel, NI IRel (publicRel Opub) p_pub) ->
+  NI (publicRel Empty) (publicRel Opub) p_pub ->
   NI (privateRel THandlerOutput) (privateRel Opriv) p_priv ->
-  (forall IRel, NI IRel (publicRel Nat) p_sched) ->
+  NI (publicRel Empty) (publicRel Nat) p_sched ->
   NI in_rel (out_rel Opub Opriv)       (model_sliced p_pub p_priv p_sched)
   /\ NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched)
 ```
