@@ -5,8 +5,8 @@
 Where [`models.md`](models.md) describes the three models, this document gives the
 security argument: the relations the proof is stated in, the classification each
 interface receives, and how the two results are proved. It covers what "public" and
-"private" mean formally, how the counterexample for the bad model is built, how the
-generic theorems compose to give the good one, and the single substantial proof
+"private" mean formally, how the counterexample for `model_immediate` is built, how the
+generic theorems compose to give `model_sliced`, and the single substantial proof
 obligation — that the state relation survives the state transition (`fv_NI`), which
 is what the compositional structure of `state_step` and the auxiliary `bool_coding`
 exist to make manageable.
@@ -28,8 +28,8 @@ Definitions are as given in
 2. [Base relations: `publicRel`, `privateRel`](#2-base-relations-publicrel-privaterel)
 3. [Composite relations](#3-composite-relations)
 4. [The model interfaces: `in_rel`, `out_rel`, `final_out_rel`](#4-the-model-interfaces-in_rel-out_rel-final_out_rel)
-5. [`model_bad` is not non-interfering](#5-model_bad-is-not-non-interfering)
-6. [`model_good` and `wrapped_model_good` are non-interfering](#6-model_good-and-wrapped_model_good-are-non-interfering)
+5. [`model_immediate` is not non-interfering](#5-model_immediate-is-not-non-interfering)
+6. [`model_sliced` and `model_sliced_userview` are non-interfering](#6-model_sliced-and-model_sliced_userview-are-non-interfering)
 7. [The state relation and `fv_NI` — the hard part](#7-the-state-relation-and-fv_ni--the-hard-part)
 8. [Model limitations](#8-model-limitations)
 
@@ -86,7 +86,7 @@ Traces are compared through `ORel` at level `l`, so the outputs an observer
 "sees" are only determined up to `rel ORel l`. Together the clauses say: the set of
 traces visible at `l` is unchanged by anything the observer at `l` is not supposed
 to see. The decisive instance is `l = ⊥`. Note that the counterexample for
-`model_bad` (section 5) refutes the *insertion* clause — inserting a disk interrupt
+`model_immediate` (section 5) refutes the *insertion* clause — inserting a disk interrupt
 into a legal trace does not leave a legal trace.
 
 
@@ -187,13 +187,13 @@ ir_dis l ir = (ir = DiskInterrupt ∧ l = ⊥)
 
 Under `privateRel`, every interrupt would be distinguished at `⊥` — the timer
 included — and non-interference would then also forbid the schedule from depending
-on the timer, which the good model relies on. `TInterrupt_rel` distinguishes only
+on the timer, which `model_sliced` relies on. `TInterrupt_rel` distinguishes only
 the disk interrupt, so the timer must still be matched exactly even at `⊥`. This
 makes the theorem say the right thing: the timer is a public scheduled event, the
 disk interrupt is the secret, and it is the disk interrupt's presence that cannot
 be inferred.
 
-**`out_rel : cRel [T_out']`** (full pool output, for `model_bad` / `model_good`)
+**`out_rel : cRel [T_out']`** (full pool output, for `model_immediate` / `model_sliced`)
 
 ```text
 eqpair (eqmaybe publicRel)               public user output   (exact)
@@ -235,7 +235,7 @@ be related to `None`, so a run of the disk handler and a step where nothing
 happened are the same observation. Section 6 shows the proof obligation this
 creates.
 
-**`final_out_rel : cRel [T_out]`** (user-visible output, for `wrapped_model_good`)
+**`final_out_rel : cRel [T_out]`** (user-visible output, for `model_sliced_userview`)
 
 ```text
 eqmaybe_false (eqsum publicRel privateRel)
@@ -245,52 +245,52 @@ Only the user-visible channel survives `parse_output`: a public user output on t
 left (exact) or the secret syscall on the right (secret at `⊥`).
 
 
-## 5. `model_bad` is not non-interfering
+## 5. `model_immediate` is not non-interfering
 
-`model_bad_not_NI : ~ NI in_rel out_rel model_bad`.
+`model_immediate_not_NI : ~ NI in_rel out_rel model_immediate`.
 
 Non-interference requires, among other things, that inserting a secret input
 anywhere in a trace leaves it a trace. The counterexample refutes that clause with
 a two-step trace:
 
-1. Start from `[pub_get'; pub_get']` — two ordinary requests from the public user
-   process, which `model_bad` admits.
+1. Start from `[out_get'; out_get']` — two ordinary requests from the public user
+   process, which `model_immediate` admits.
 2. Insert a disk interrupt at the front. The insertion is permitted because the
    disk interrupt is secret at `⊥` (`ir_dis`), so non-interference demands the
    result still be a trace.
 3. It is not. Consuming the interrupt sets the disk pending bit. The first
-   `pub_get'` still goes through, because `initiate_next` runs on output events and
+   `out_get'` still goes through, because `initiate_next` runs on output events and
    the newly scheduled handler only takes effect from the following step. That
-   following step belongs to the disk handler, so the second `pub_get'` cannot
+   following step belongs to the disk handler, so the second `out_get'` cannot
    occur: the public output slot carries `None` where the interrupt-free trace
-   carried `pub_get'`.
+   carried `out_get'`.
 
-A secret input has changed what the `⊥`-observer can see, so `model_bad` is not
+A secret input has changed what the `⊥`-observer can see, so `model_immediate` is not
 non-interfering. The disk handler goes on to run its second step before control
 returns to the public process, but the first displaced output is already enough.
 
-`model_good` escapes this because a handler runs only at fixed, publicly determined
+`model_sliced` escapes this because a handler runs only at fixed, publicly determined
 slice boundaries rather than immediately on arrival of its interrupt.
 
 
-## 6. `model_good` and `wrapped_model_good` are non-interfering
+## 6. `model_sliced` and `model_sliced_userview` are non-interfering
 
 ```text
-model_good_NI         : NI in_rel out_rel model_good.
-wrapped_model_good_NI : NI in_rel final_out_rel wrapped_model_good.
+model_sliced_NI         : NI in_rel out_rel model_sliced.
+model_sliced_userview_NI : NI in_rel final_out_rel model_sliced_userview.
 ```
 
-`wrapped_model_good = map id parse_output model_good`, and `wrapped_model_good_NI`
-is obtained from `model_good_NI` by pushing the output through `parse_output`
+`model_sliced_userview = map id parse_output model_sliced`, and `model_sliced_userview_NI`
+is obtained from `model_sliced_NI` by pushing the output through `parse_output`
 (output weakening: `parse_output` maps `out_rel`-related outputs to
 `final_out_rel`-related ones).
 
-`model_good_NI` is assembled from the generic composition theorems, applied to the
+`model_sliced_NI` is assembled from the generic composition theorems, applied to the
 concrete processes of [`models.md`](models.md). There is one theorem per
 constructor of the calculus, so the proof follows the structure of the term
-`model_good` itself, discharging one layer at a time from the outside in:
+`model_sliced` itself, discharging one layer at a time from the outside in:
 
-| layer of `model_good` | theorem | what it gives |
+| layer of `model_sliced` | theorem | what it gives |
 |---|---|---|
 | the outer `map inl (inr_or_def def)` and every interface rewiring | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
 | `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output relations must coincide |
@@ -299,7 +299,7 @@ constructor of the calculus, so the proof follows the structure of the term
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
 | `swi` (gating each slot on/off) | `swi_NI` / `swi_NI'` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level |
 | the leaves (`out o`) | `out_NI` | a constant process is trivially non-interfering |
-| `parse_output` on top of `model_good` | `map_NI` again | output weakening, giving `wrapped_model_good_NI` |
+| `parse_output` on top of `model_sliced` | `map_NI` again | output weakening, giving `model_sliced_userview_NI` |
 
 Each theorem *derives* the composite's relations from those of its parts rather
 than taking them as given. This is why the interface relations of section 4 have
@@ -448,11 +448,11 @@ inside `cur_pid` may differ.
 
 `fv_NI IRel ORel VRel f` := for all `l`, all inputs `i ~ i'` (`rel IRel`) and all
 states `v ~ v'` (`rel VRel`), the outputs are related:
-`rel ORel l (f i v) (f i' v')`. The core obligation for the good model is
+`rel ORel l (f i v) (f i' v')`. The core obligation for `model_sliced` is
 
 ```text
 fv_NI (eqsum in_rel out_rel) stateType_rel stateType_rel
-      (state_step good_preroutine bool_coding)
+      (state_step sliced_preroutine bool_coding)
 ```
 
 — `stateType_rel` is closed under the state transition. `state_step` is a
@@ -463,7 +463,7 @@ composition from `fv_NI` of the parts. Combined with
 goal per stage:
 
 ```text
-state_step good_preroutine bool_coding  =
+state_step sliced_preroutine bool_coding  =
     initiate_next(bool_coding) ∘ handler_preroutine ∘ step1 ∘ step0
                     │                    │              │       │
    ─────────────────┴────────────────────┴──────────────┴───────┴───────────────
@@ -474,7 +474,7 @@ state_step good_preroutine bool_coding  =
    step1 (output)            step_right       scheduler pid is public, so the
                                               cur_pid update agrees
    handler_preroutine        step_right       slice bookkeeping reads only public
-     (good_preroutine)                        ir_count / masks ⇒ agrees
+     (sliced_preroutine)                        ir_count / masks ⇒ agrees
    initiate_next(bool_coding) step_right      THE HARD ONE: related states must
                                               pick the SAME branch of "what runs
                                               next" — see 7d
@@ -489,7 +489,7 @@ how that is recovered.
 
 ### 7d. `bool_coding`: re-establishing the forgotten invariant
 
-The reachable invariant that matters (good model; the substance is in
+The reachable invariant that matters (`model_sliced`; the substance is in
 [`models.md` §8](models.md), `bool_coding` note): while the time slice is live, the
 NOP (default) handler's pending bit is true, the disk and NOP masks are false and
 the timer mask is true; and the disk and NOP masks are always toggled together

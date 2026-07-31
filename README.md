@@ -39,16 +39,16 @@ Everything below refers to these. All three are in
 
 | Model | Output it exposes | |
 |---|---|---|
-| `model_bad` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
-| `model_good` | the same full pool output | the fixed design; non-interfering |
-| `wrapped_model_good` | only the user-visible channel: a public output or a syscall, everything else erased | `model_good` behind a projection; the headline result |
+| `model_immediate` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
+| `model_sliced` | the same full pool output | the fixed design; non-interfering |
+| `model_sliced_userview` | only the user-visible channel: a public output or a syscall, everything else erased | `model_sliced` behind a projection; the headline result |
 
-`model_bad` and `model_good` differ in exactly two definitions. The difference
-between the two *outputs* is what `wrapped_model_good` adds — one emits a tuple with
+`model_immediate` and `model_sliced` differ in exactly two definitions. The difference
+between the two *outputs* is what `model_sliced_userview` adds — one emits a tuple with
 a slot per process, the other keeps only the user-visible channel:
 
 ```text
-  model_good, one output step        wrapped_model_good, the same step
+  model_sliced, one output step        model_sliced_userview, the same step
   ( · , · , · , · , Notify , · )  ──▶  ·          disk handler ran: erased
   ( Get , · , · , · , · , · )     ──▶  Get        public output: kept
   ( · , Syscall , · , · , · , · ) ──▶  Syscall    syscall: kept
@@ -88,7 +88,7 @@ all. What the attacker sees is the *public* process's slot, which for those two
 steps carries nothing:
 
 ```text
-   model_bad, the attacker's view of one run, without and with a disk interrupt
+   model_immediate, the attacker's view of one run, without and with a disk interrupt
 
      step                 1      2      3      4
      no disk interrupt   Get    Get    Get    Get
@@ -99,11 +99,11 @@ steps carries nothing:
 ```
 
 Two public requests are enough to refute non-interference, and that is exactly the
-counterexample `model_bad_not_NI` constructs. The leak does not depend on which
+counterexample `model_immediate_not_NI` constructs. The leak does not depend on which
 process was displaced — interrupting the secret process produces the same gap in
 the schedule.
 
-`model_good` closes it by making the *timing* of handler execution independent of
+`model_sliced` closes it by making the *timing* of handler execution independent of
 which interrupts arrived. Handlers run only inside a time slice of fixed length,
 which is started when the **timer** handler completes — a public event, since the
 timer interrupt is public. All handlers take the same two steps, and a default
@@ -118,24 +118,24 @@ Three machine-checked theorems, in
 
 | Theorem | Statement | Meaning |
 |---|---|---|
-| `model_bad_not_NI` | `~ NI in_rel out_rel model_bad` | The naive design leaks: a secret disk interrupt is observable. |
-| `model_good_NI` | `NI in_rel out_rel model_good` | The fixed design is non-interfering even on the full pool output. |
-| `wrapped_model_good_NI` | `NI in_rel final_out_rel wrapped_model_good` | It is therefore non-interfering on the user-visible output — the headline result. |
+| `model_immediate_not_NI` | `~ NI in_rel out_rel model_immediate` | The naive design leaks: a secret disk interrupt is observable. |
+| `model_sliced_NI` | `NI in_rel out_rel model_sliced` | The fixed design is non-interfering even on the full pool output. |
+| `model_sliced_userview_NI` | `NI in_rel final_out_rel model_sliced_userview` | It is therefore non-interfering on the user-visible output — the headline result. |
 
-## `model_bad` vs `model_good` at a glance
+## `model_immediate` vs `model_sliced` at a glance
 
 The two models share their entire structure — the process pool, the stateful
 wrapper, the state layout, and three of the four state-transition stages. They
 differ in two definitions, and that difference is the whole security story.
 
-| | `model_bad` | `model_good` |
+| | `model_immediate` | `model_sliced` |
 |---|---|---|
-| **`handler_preroutine`** | `bad_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `good_preroutine` = `check_ir_count ∘ check_handler_completed ∘ initiate_ir`: reload the slice on a timer `Notify`, unmask at fixed boundaries, tick the slice |
+| **`handler_preroutine`** | `immediate_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_preroutine` = `check_ir_count ∘ check_handler_completed ∘ initiate_ir`: reload the slice on a timer `Notify`, unmask at fixed boundaries, tick the slice |
 | **`bool_coding`** | `id` (no bookkeeping) | `bool_coding`: restore the time-slice invariant; force the default mask to equal the disk mask |
 | **Initial masks / counter** | all masks clear; counter `None` (disabled) | all masks set except the timer; counter `Some 0` |
 | **When a handler stops** | when it emits its **secret** `Notify` — *secret-driven* | at a fixed **public** time-slice boundary — *slice-driven* |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
-| **Non-interfering?** | **No** (`model_bad_not_NI`) | **Yes** (`model_good_NI`) |
+| **Non-interfering?** | **No** (`model_immediate_not_NI`) | **Yes** (`model_sliced_NI`) |
 | **Why** | a handler runs as soon as its interrupt is serviced, so a secret interrupt displaces the scheduled process and the gap is visible | handlers run only within the public slice, replacing NOP filler, so the schedule is unchanged |
 
 Handlers must all run for the same length of time, or the schedule would again
@@ -192,7 +192,7 @@ This compiles the four-file chain in dependency order
 ## Where to read next
 
 - For the **models** — every process, the state layout, and the design rationale
-  behind the good model — read [`docs/models.md`](docs/models.md).
+  behind the sliced design — read [`docs/models.md`](docs/models.md).
 - For the **proof** — the security relations, how the generic theorems compose, and
   the one hard obligation (`fv_NI`, closure of the state relation under the state
   transition) — read [`docs/noninterference.md`](docs/noninterference.md).

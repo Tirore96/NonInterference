@@ -16,7 +16,7 @@ Open Scope order_scope.
 Require Export NonInterference.theories.theorems.
 
 (* This file defines the process-scheduling models studied in the paper: three
-   processes over interrupt inputs, culminating in [wrapped_model_good], the
+   processes over interrupt inputs, culminating in [model_sliced_userview], the
    model proved non-interfering in noninterference.v.  The type abbreviations
    below ([T_in], [T_out'], [T_out]) fix the input/output interfaces. *)
 
@@ -36,17 +36,17 @@ Definition T_out := Option (Sum TPublicOutput TTypeSyscall).
 (* =================================================================
    The three models (real Coq names, defined in sections 7-9 below):
 
-     model_bad          : Proc T_in T_out'
+     model_immediate          : Proc T_in T_out'
        Normal interrupt handling: interrupts an attacker should not
        know about leak through scheduling.
 
-     model_good         : Proc T_in T_out'
+     model_sliced         : Proc T_in T_out'
        Interrupt masking is controlled so that secret interrupts can
        be received without leaking.  Shows every process-pool output
        (user space, scheduler and all handlers).
 
-     wrapped_model_good : Proc T_in T_out
-       The final model: a wrapper around model_good exposing only the
+     model_sliced_userview : Proc T_in T_out
+       The final model: a wrapper around model_sliced exposing only the
        user-space outputs.
 
    Contents:
@@ -56,9 +56,9 @@ Definition T_out := Option (Sum TPublicOutput TTypeSyscall).
      4. Model state
      5. State transitions
      6. Trace vocabulary
-     7. model_bad
-     8. model_good
-     9. wrapped_model_good
+     7. model_immediate
+     8. model_sliced
+     9. model_sliced_userview
    ================================================================= *)
 
 (* A note on notation.  Processes have type [Proc I O] where I and O range over
@@ -233,27 +233,27 @@ Definition my_process_pool := @process_pool cur_pid 5 my_f_initial my_f_I my_f_O
 
 Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x' else def.
 (*We define a stateful wrapper that will be wrapped around the process pool*)
-(* loop_sta state f_I def p f_si =
+(* reactive_system state state_update def p pool_input =
      map inl (inr_or_def def)
        (loop (map id snd
-         (sta f_I (fun _ v => v) state
-           (map f_si inr (maybe p))))) *)
-Definition loop_sta
+         (sta state_update (fun _ v => v) state
+           (map pool_input inr (maybe p))))) *)
+Definition reactive_system
   (cur_pid stateType : Ty)           
   (state : [stateType])
   (T_in T_out T' : Ty)                
-  (f_I : [Sum T_in T_out] -> [stateType] -> [stateType])
+  (state_update : [Sum T_in T_out] -> [stateType] -> [stateType])
   (def : [T_out])
   (p : Proc (Times cur_pid T') T_out)
-  (f_si : [Times stateType (Sum T_in T_out)] -> [Option (Times cur_pid T')])
+  (pool_input : [Times stateType (Sum T_in T_out)] -> [Option (Times cur_pid T')])
   : Proc T_in T_out :=
   (@map T_in (Sum T_in T_out) (Sum T_in T_out) T_out inl (inr_or_def def)
                           (@loop (Sum T_in T_out)
                              (@map _ _ (Times _ _) _
                                 id snd
-                                (@sta _ _ stateType f_I (fun _ v => v) state
+                                (@sta _ _ stateType state_update (fun _ v => v) state
                                    (@map (Times stateType (Sum _ _ ))
-                                      (Option (Times cur_pid T')) _ (Sum T_in T_out) f_si inr (maybe p)))))).
+                                      (Option (Times cur_pid T')) _ (Sum T_in T_out) pool_input inr (maybe p)))))).
 
 
 (* === 4. Model state === *)
@@ -442,25 +442,25 @@ Definition defaultI_o x : [T_out'] := (None,(None,(None,(Some x,(None,None))))).
 Definition dI_o x : [T_out'] := (None,(None,(None,(None,(Some x,None))))).
 Definition tI_o x : [T_out'] := (None,(None,(None,(None,(None,Some x))))).
 
-Definition tI_yes' : Tsum' :=  inr (tI_o (Notify)).
-Definition tI_no' : Tsum' :=  inr (tI_o (Nothing)).
+Definition tmr_done' : Tsum' :=  inr (tI_o (Notify)).
+Definition tmr_step' : Tsum' :=  inr (tI_o (Nothing)).
 
-Definition dI_yes' : Tsum' :=  inr (dI_o (Notify)).
-Definition dI_no' : Tsum' :=  inr (dI_o (Nothing)).
+Definition dsk_done' : Tsum' :=  inr (dI_o (Notify)).
+Definition dsk_step' : Tsum' :=  inr (dI_o (Nothing)).
 
-Definition pub_get' : Tsum' := inr (low_out GetRequest).
-Definition pr_nop' : Tsum' := inr (high_out NOP).
-Definition pr_sys' : Tsum' := inr (high_out Syscall).
+Definition out_get' : Tsum' := inr (low_out GetRequest).
+Definition out_nop' : Tsum' := inr (high_out NOP).
+Definition out_syscall' : Tsum' := inr (high_out Syscall).
 
-Definition sch_low : Tsum' := inr (sch_o 3).
-Definition sch_high : Tsum' := inr (sch_o 2).
+Definition sched_pub' : Tsum' := inr (sch_o 3).
+Definition sched_priv' : Tsum' := inr (sch_o 2).
 
-Definition defaultI_no' : Tsum' :=  inr (defaultI_o (Nothing)).
-Definition defaultI_yes' : Tsum' :=  inr (defaultI_o (Notify)).
+Definition nop_step' : Tsum' :=  inr (defaultI_o (Nothing)).
+Definition nop_done' : Tsum' :=  inr (defaultI_o (Notify)).
 
-Definition pub_get : [Tsum] := inr (Some (inl (GetRequest))).
-Definition pr_nop : [Tsum] := inr (Some (inr NOP)).
-Definition pr_sys : [Tsum] := inr (Some (inr Syscall)).
+Definition out_get : [Tsum] := inr (Some (inl (GetRequest))).
+Definition out_nop : [Tsum] := inr (Some (inr NOP)).
+Definition out_syscall : [Tsum] := inr (Some (inr Syscall)).
 Definition w_None : [Tsum] := inr None.
 Definition tI : [Tsum] := inl TimerInterrupt.
 Definition dI : [Tsum] := inl DiskInterrupt.
@@ -471,7 +471,7 @@ Definition seqtype := seq ([T_in] + [T_out]).
 
 
 
-(* === 7. model_bad === *)
+(* === 7. model_immediate === *)
 
 Definition false_I_bits : [I_bits] := (false,false).
 Definition false_ic : [ic] := ((false,false),(false_I_bits,false_I_bits)).
@@ -499,25 +499,25 @@ Definition is_I_out_done (o : [T_out']) : [Option TInterrupt] :=
   else if default_I_out o is Some Notify then Some DefaultInterrupt
   else None.  
 
-Definition bad_preroutine (o : [T_out']) (v : [stateType])  :=
+Definition immediate_preroutine (o : [T_out']) (v : [stateType])  :=
   if is_I_out_done o is Some ir then let v := unset_masks v in if ir is TimerInterrupt then update_re_sch v true else v else v.
 
 Definition def : [ T_out' ]  := (None,(None,(None,(None,(None,None))))).
 
 (*discards input from the inner process, only allowed to affect bit in ic, not pid*)
-Definition f_si (si : [Times stateType (Sum T_in T_out')]) : [Option (Times cur_pid T_intermediate)] :=
+Definition pool_input (si : [Times stateType (Sum T_in T_out')]) : [Option (Times cur_pid T_intermediate)] :=
   if si.2 is inr o then Some (get_cur_pid si.1, dI_out o) else None.
 
-(* model_bad = loop_sta initial_state (state_step bad_preroutine id) def my_process_pool f_si *)
-Definition model_bad : Proc T_in T_out' := @loop_sta cur_pid stateType initial_state T_in T_out' T_intermediate (state_step bad_preroutine id) def my_process_pool f_si.
+(* model_immediate = reactive_system initial_state (state_step immediate_preroutine id) def my_process_pool pool_input *)
+Definition model_immediate : Proc T_in T_out' := @reactive_system cur_pid stateType initial_state T_in T_out' T_intermediate (state_step immediate_preroutine id) def my_process_pool pool_input.
 
 
 
-(* model_bad traces *)
-Definition no_dI' : seqtype' :=   [::pub_get';                                     tI';pub_get';tI_no';tI_yes';sch_high;pr_nop'(*nop*);tI';pr_nop';tI_no';tI_yes';sch_low;pub_get'].
-Definition with_dI' : seqtype' := [::pub_get';dI';pub_get';dI_no';dI_yes';pub_get';tI';pub_get';tI_no';tI_yes';sch_high;pr_sys'(*sys*);tI';pr_nop';tI_no';tI_yes';sch_low;pub_get'].
+(* model_immediate traces *)
+Definition immediate_no_dI' : seqtype' :=   [::out_get';                                     tI';out_get';tmr_step';tmr_done';sched_priv';out_nop'(*nop*);tI';out_nop';tmr_step';tmr_done';sched_pub';out_get'].
+Definition immediate_with_dI' : seqtype' := [::out_get';dI';out_get';dsk_step';dsk_done';out_get';tI';out_get';tmr_step';tmr_done';sched_priv';out_syscall'(*sys*);tI';out_nop';tmr_step';tmr_done';sched_pub';out_get'].
 
-Ltac rewr := rewrite /model_bad /loop_sta /my_process_pool /process_pool /my_f_initial /low_p /alternate /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out.
+Ltac rewr := rewrite /model_immediate /reactive_system /my_process_pool /process_pool /my_f_initial /low_p /alternate /high_p /pool_input /tI_o /I_handler /f_proj /scheduler /low_out.
 
 Ltac lsolv := try solve [ reduce_tac;reduce_tac | reduce_tac;try solve [reduce_once | econ];simpl;first (reduce_tac;reduce_tac)];simpl.
 Ltac reduce_tac2 :=
@@ -531,7 +531,7 @@ Ltac sta_state_reduce :=
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.                                                                                                             
 
-Lemma trace_no_dI' : forall l, Trace (publicRel _) l no_dI' model_bad.
+Lemma trace_immediate_no_dI' : forall l, Trace (publicRel _) l immediate_no_dI' model_immediate.
 Proof.  
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -549,7 +549,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.
 
-Lemma trace_with_dI' : forall l, Trace (publicRel _) l with_dI' model_bad.
+Lemma trace_immediate_with_dI' : forall l, Trace (publicRel _) l immediate_with_dI' model_immediate.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -568,10 +568,10 @@ Qed.
 
 
 
-(* === 8. model_good === *)
+(* === 8. model_sliced === *)
 Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*mask set for everything but timer interrupt*)
 
-Definition initial_state_good : [stateType] := ((initial_pid,None),(false,(Some 0,mask_most))).
+Definition initial_state_sliced : [stateType] := ((initial_pid,None),(false,(Some 0,mask_most))).
 
 Definition handler_completed (c : [ir_count]) := match c with | Some 2 | Some 4 => true | _ => false end.
 
@@ -602,19 +602,19 @@ Definition bool_coding v := let b := timeslice_live (get_ir_count v) in
                             let m := get_I_mask v DiskInterrupt in
                             update_I_mask v DefaultInterrupt m.
 
-Definition good_preroutine (o : [T_out']) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed \o (initiate_ir o). (*\o (unset_handler_masks o)*) 
+Definition sliced_preroutine (o : [T_out']) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed \o (initiate_ir o). (*\o (unset_handler_masks o)*) 
 
-(* model_good = loop_sta initial_state_good (state_step good_preroutine bool_coding) def my_process_pool f_si *)
-Definition model_good := @loop_sta cur_pid stateType initial_state_good T_in T_out' T_intermediate (state_step good_preroutine bool_coding) def my_process_pool f_si.
+(* model_sliced = reactive_system initial_state_sliced (state_step sliced_preroutine bool_coding) def my_process_pool pool_input *)
+Definition model_sliced := @reactive_system cur_pid stateType initial_state_sliced T_in T_out' T_intermediate (state_step sliced_preroutine bool_coding) def my_process_pool pool_input.
 
-(* model_good traces *)
-Definition good_no_dI' : seqtype' :=   [::pub_get';                      tI';pub_get';tI_no';tI_yes';defaultI_no';defaultI_yes';defaultI_no';defaultI_yes';sch_high;pr_nop'(*nop*);tI';pr_nop';tI_no';tI_yes';defaultI_no';defaultI_yes';defaultI_no';defaultI_yes';sch_low;pub_get'].
-Definition good_with_dI' : seqtype' := [::pub_get';dI';pub_get';pub_get';tI';pub_get';tI_no';tI_yes';dI_no'      ;dI_yes'      ;defaultI_no';defaultI_yes';sch_high;pr_sys'(*sys*);tI';pr_nop';tI_no';tI_yes';defaultI_no';defaultI_yes';defaultI_no';defaultI_yes';sch_low;pub_get'].
+(* model_sliced traces *)
+Definition sliced_no_dI' : seqtype' :=   [::out_get';                      tI';out_get';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_priv';out_nop'(*nop*);tI';out_nop';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_pub';out_get'].
+Definition sliced_with_dI' : seqtype' := [::out_get';dI';out_get';out_get';tI';out_get';tmr_step';tmr_done';dsk_step'      ;dsk_done'      ;nop_step';nop_done';sched_priv';out_syscall'(*sys*);tI';out_nop';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_pub';out_get'].
 
 
-Ltac rewr ::= rewrite /model_bad /loop_sta /my_process_pool /process_pool /my_f_initial /low_p /alternate /high_p /f_si /tI_o /I_handler /f_proj /scheduler /low_out /model_good /my_process_pool /f_si /f_proj.
+Ltac rewr ::= rewrite /model_immediate /reactive_system /my_process_pool /process_pool /my_f_initial /low_p /alternate /high_p /pool_input /tI_o /I_handler /f_proj /scheduler /low_out /model_sliced /my_process_pool /pool_input /f_proj.
 
-Lemma trace_good_no_dI' : forall l, Trace (publicRel _) l good_no_dI' model_good.
+Lemma trace_sliced_no_dI' : forall l, Trace (publicRel _) l sliced_no_dI' model_sliced.
 Proof.  
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -629,7 +629,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.
 
-Lemma trace_good_with_dI' : forall l, Trace (publicRel _) l good_with_dI' model_good.
+Lemma trace_sliced_with_dI' : forall l, Trace (publicRel _) l sliced_with_dI' model_sliced.
 Proof.  
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -647,7 +647,7 @@ Qed.
 
 
 
-(* === 9. wrapped_model_good === *)
+(* === 9. model_sliced_userview === *)
 Definition parse_output (o : [T_out']) : [T_out] :=
   match o with
   | (Some public,_) => Some (inl public)
@@ -656,9 +656,9 @@ Definition parse_output (o : [T_out']) : [T_out] :=
   end.
 
 
-Definition wrapped_model_good : Proc T_in T_out := map id parse_output model_good.
+Definition model_sliced_userview : Proc T_in T_out := map id parse_output model_sliced.
 
-(* wrapped_model_good traces *)
+(* model_sliced_userview traces *)
 Definition final_out_rel : cRel [T_out] := eqmaybe_false (eqsum (publicRel _) (privateRel _)).
 
 
@@ -675,26 +675,26 @@ Proof.
 Qed.
 
 
-Definition good_no_dI : seqtype :=   [::pub_get;                      tI;pub_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;pr_nop(*nop*);tI;pr_nop;w_None;w_None;w_None;w_None;w_None;w_None;w_None;pub_get].
-Definition good_with_dI : seqtype := [::pub_get;dI;pub_get;pub_get;tI;pub_get;w_None;w_None;w_None      ;w_None      ;w_None;w_None;w_None;pr_sys(*sys*);tI;pr_nop;w_None;w_None;w_None;w_None;w_None;w_None;w_None;pub_get].
+Definition good_no_dI : seqtype :=   [::out_get;                      tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_nop(*nop*);tI;out_nop;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_get].
+Definition good_with_dI : seqtype := [::out_get;dI;out_get;out_get;tI;out_get;w_None;w_None;w_None      ;w_None      ;w_None;w_None;w_None;out_syscall(*sys*);tI;out_nop;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_get].
 
-Lemma good_no_dI_eq : map_tr parse_output good_no_dI' = good_no_dI.
+Lemma good_no_dI_eq : map_tr parse_output sliced_no_dI' = good_no_dI.
 Proof. ssa. Qed.
 
-Lemma good_with_dI_eq : map_tr parse_output good_with_dI' = good_with_dI.
+Lemma good_with_dI_eq : map_tr parse_output sliced_with_dI' = good_with_dI.
 Proof. ssa. Qed.
 
-Lemma trace_no_dI : forall l, Trace (publicRel _) l good_no_dI wrapped_model_good.
+Lemma trace_no_dI : forall l, Trace (publicRel _) l good_no_dI model_sliced_userview.
 Proof.
   intros. rewrite -good_no_dI_eq. eapply Trace_map.
-  2:eapply trace_good_no_dI'.
+  2:eapply trace_sliced_no_dI'.
   mrw. ssa. subst. done.
 Qed.
 
-Lemma trace_with_dI : forall l, Trace (publicRel _) l good_with_dI wrapped_model_good.
+Lemma trace_with_dI : forall l, Trace (publicRel _) l good_with_dI model_sliced_userview.
 Proof.
   intros. rewrite -good_with_dI_eq. eapply Trace_map.
-  2:eapply trace_good_with_dI'.
+  2:eapply trace_sliced_with_dI'.
   mrw. ssa. subst. done.
 Qed.  
 
