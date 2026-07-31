@@ -553,6 +553,11 @@ than argued for, and nothing here claims they are without consequence:
   preemption within a step is not modelled ([`models.md` §2](models.md)).
 - **No interrupt nesting.** All masks are set while a handler runs, so a handler can
   never itself be interrupted. A design permitting nesting is out of scope.
-- **Fixed sizes.** The pool is six slots and the time slice is `Some 4` — exactly
-  two handler activations. Nothing in the argument turns on the specific numbers,
-  but neither is it stated for a general slice length.
+- **The slice length is a constant, not a parameter.** What the design actually
+  requires is that the slice be a **multiple of the handler runtime**, so that it
+  ends on a handler boundary and `handler_completed` stays in step with the
+  handlers. The model fixes the runtime at 2 and the slice at 4 — two handler runs —
+  and `handler_completed` accordingly *enumerates* the boundaries (`Some 2`,
+  `Some 4`) rather than computing them. Nothing in the security argument turns on
+  those particular numbers, but the general statement is not what has been proved.
+- **Fixed pool size.** Six slots, of which the last is padding.
