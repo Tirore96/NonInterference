@@ -332,13 +332,13 @@ single self-driving process `Proc T_in T_out'` by adding the global state and a
 feedback loop. (This is the *stateful wrapper* of the construction; it is unrelated
 to `model_sliced_userview`, which is a projection applied at the very end.)
 
-**`reactive_system state f_I def p pool_input : Proc T_in T_out`**
+**`reactive_system state state_update def p pool_input : Proc T_in T_out`**
 
 ```coq
-reactive_system state f_I def p pool_input =
+reactive_system state state_update def p pool_input =
   map inl (inr_or_def def)
     (loop (map id snd
-      (sta f_I (fun _ v => v) state
+      (sta state_update (fun _ v => v) state
         (map pool_input inr (maybe p)))))
 ```
 
@@ -348,15 +348,16 @@ From the inside out:
 - `map pool_input inr` turns each pool result into the pool's *next* input via `pool_input`
   (which reads the global state and the current event), tagging it `inr` for the
   feedback channel;
-- `sta f_I ... state` holds the global model state and advances it by `f_I` on
-  every event (external input or fed-back output);
+- `sta state_update ... state` holds the global model state and advances it by
+  `state_update` on every event (external input or fed-back output);
 - `loop` ties the output back to the input, so the system self-drives;
 - the outer `map` presents external inputs on the left, and on the way out applies
   `inr_or_def def x = if x is inr x' then x' else def` — projecting the looped
   value back out, and substituting `def` when there is no genuine external output
   yet.
 
-In the models, `f_I` is `state_step ...` (section 5) and `pool_input` routes the pool:
+In the models, `state_update` is `state_step ...` (section 5) and `pool_input`
+routes the pool:
 
 **`pool_input (v, event) : Option (cur_pid * Option THandlerOutput)`**
 
@@ -580,10 +581,6 @@ In `model_sliced` a handler run can appear in only one place: inside the fixed t
 slice, after a timer `Notify`. A secret handler run there takes the place of a
 default/NOP run instead of displacing a user process. Section 9 shows that run in
 full.
-
-(The two traces above are independent examples rather than a matched pair — the
-timer arrives at a different point in each — so they are read for the shape of the
-handler run, not compared step by step.)
 
 
 ## 8. `model_sliced`
