@@ -431,7 +431,7 @@ VRel l`. An input the observer may not see must not visibly move the state.
 These two squeeze the classification from both sides:
 
 - **`f_EP` forces fields written by a secret input to be private.** A disk
-  interrupt is distinguished at `⊥`, and `step0` responds by setting the disk
+  interrupt is distinguished at `⊥`, and `record_pending` responds by setting the disk
   pending bit. For `f_EP` to hold, the resulting state must still be `⊥`-related to
   the original — so the disk pending bit *cannot* be public. The same argument
   covers the default handler's pending bit.
@@ -498,20 +498,19 @@ goal per stage:
 
 ```text
 state_step sliced_preroutine bool_coding  =
-    initiate_next(bool_coding) ∘ handler_preroutine ∘ step1 ∘ step0
-                    │                    │              │       │
-   ─────────────────┴────────────────────┴──────────────┴───────┴───────────────
-   stage                     lifted by        per-stage fv_NI obligation
-   ─────────────────────────────────────────────────────────────────────────────
-   step0 (input)             step_left        arriving interrupt sets a pending
-                                              bit; related in ⇒ related states
-   step1 (output)            step_right       scheduler pid is public, so the
-                                              cur_pid update agrees
-   handler_preroutine        step_right       slice bookkeeping reads only public
-     (sliced_preroutine)                        ir_count / masks ⇒ agrees
-   initiate_next(bool_coding) step_right      THE HARD ONE: related states must
-                                              pick the SAME branch of "what runs
-                                              next" — see 7d
+    initiate_next(bool_coding) o handler_preroutine o apply_schedule o record_pending
+
+   stage                        lifted by    per-stage fv_NI obligation
+   ---------------------------------------------------------------------------------
+   record_pending (input)       step_left    arriving interrupt sets a pending bit;
+                                             related inputs give related states
+   apply_schedule (output)      step_right   scheduler pid is public, so the
+                                             cur_pid update agrees
+   handler_preroutine           step_right   slice bookkeeping reads only the public
+     (sliced_preroutine)                     ir_count and masks, so it agrees
+   initiate_next(bool_coding)   step_right   THE HARD ONE: related states must pick
+                                             the SAME branch of "what runs next"
+                                             -- see 7d
 ```
 
 The gain is that each stage becomes a self-contained goal. The price is that each

@@ -406,16 +406,16 @@ order timer > disk > default.
 
 ## 5. State transitions
 
-`f_I` in `reactive_system` is `state_step handler_preroutine bool_coding`, applied once
-per event. It is the composition of four stages (right to left):
+`state_update` in `reactive_system` is `state_step handler_preroutine bool_coding`,
+applied once per event. It is the composition of four stages (right to left):
 
 ```coq
 state_step ... i  =  initiate_next(bool_coding) ∘ handler_preroutine
-                     ∘ step1 ∘ step0        (each guarded by the event i)
+                     ∘ apply_schedule ∘ record_pending    (each guarded by the event i)
 ```
 
-- **`step0`** — on an external interrupt input, set that interrupt's `pending` bit.
-- **`step1`** — on a scheduler output (a bare `Nat` in the pool output), set
+- **`record_pending`** — on an external interrupt input, set that interrupt's `pending` bit.
+- **`apply_schedule`** — on a scheduler output (a bare `Nat` in the pool output), set
   `cur_pid` to the scheduled pid (`check_scheduler` / `is_sch_out`).
 - **`handler_preroutine`** — model-specific; the two models differ here
   and only here plus in `bool_coding` (sections 7 and 8).
@@ -439,7 +439,7 @@ state_step ... i  =  initiate_next(bool_coding) ∘ handler_preroutine
   on inputs — which matters for the equivalence proof.)
 
 **Why `state_step` is a composition.** `state_step` is deliberately written as a
-chain of independent stages (`step0`, `step1`, `handler_preroutine`,
+chain of independent stages (`record_pending`, `apply_schedule`, `handler_preroutine`,
 `initiate_next`) rather than as one monolithic update, so each stage can be
 reasoned about on its own. This is what makes the central proof obligation
 tractable — but it also means each stage is analysed over all states, forgetting

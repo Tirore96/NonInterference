@@ -287,7 +287,7 @@ Qed.
 
 
 (* === Section 7b: the composition-breakdown technique.  state_step is
-   initiate_next(bool_coding) o handler_preroutine o step1 o step0.  fv_NI_comp
+   initiate_next(bool_coding) o handler_preroutine o apply_schedule o record_pending.  fv_NI_comp
    discharges fv_NI of the composition from fv_NI of the parts; fv_NI_step_left
    / _right lift each stage to the eqsum in_rel/out_rel event.  Cost: every
    stage is proved over ALL related states, forgetting the reachable subset —
@@ -525,14 +525,14 @@ Proof.
   case/rel_eqpair: H;eauto.
   instantiate (1:= stateType_rel).
 
-  (*state update: This part is long. Involves step0, step1, step2*)
+  (*state update: This part is long. Involves record_pending, apply_schedule and the two preroutine stages*)
   apply sta_NI.
   mrw;eauto.
 
   apply fv_NI_comp.
 
-  (*step0*)
-  rewrite /step0.
+  (*record_pending*)
+  rewrite /record_pending.
   apply fv_NI_step_left.
 
   mrw. intros.
@@ -564,8 +564,8 @@ Proof.
 
   apply fv_NI_comp.
 
-  (*step1*)
-  rewrite /step1.
+  (*apply_schedule*)
+  rewrite /apply_schedule.
   apply fv_NI_step_right. rewrite /check_scheduler.
 
   mrw. intros.
@@ -604,7 +604,7 @@ Proof.
   move=>[]->[]->//.
 
 
-  (*step1*)
+  (*apply_schedule*)
   apply fv_NI_comp.
   
   apply fv_NI_step_right.
@@ -1363,7 +1363,7 @@ Proof.
   
   apply f_EP_comp.
 
-  rewrite /step0.
+  rewrite /record_pending.
   mrw. intro.
   intro. destruct i.
   intro. have: dis in_rel l i. ssa. clear H=>H.
@@ -1381,7 +1381,7 @@ Proof.
   ssa.
 
   apply f_EP_comp.
-  rewrite /step1.
+  rewrite /apply_schedule.
   mrw. intros.
   destruct i. have: (step_right (@check_scheduler _ _) (inl i) v) = v. done. move=>->//.
   ssa.

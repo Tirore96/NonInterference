@@ -402,7 +402,9 @@ Definition step_right (Opub Opriv : Ty) (f : [T_out' Opub Opriv] -> [stateType] 
   | inr o => f o v
   end.
 
-Definition step0 (Opub Opriv : Ty) := @step_left Opub Opriv (fun i v => update_I_pending v i true).
+(* An arriving interrupt is recorded as pending; whether it is serviced is
+   decided later, by [initiate_next]. *)
+Definition record_pending (Opub Opriv : Ty) := @step_left Opub Opriv (fun i v => update_I_pending v i true).
 
 Definition is_sch_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
   match o with
@@ -412,7 +414,11 @@ Definition is_sch_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
 Definition check_scheduler (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType])  :=
   if is_sch_out o is Some n then update_cur_pid v (inr n) else v.
 
-Definition step1 (Opub Opriv : Ty) := step_right (@check_scheduler Opub Opriv).
+(* A scheduler output installs the pid it names as the current one.  Note this
+   reads the scheduler slot only -- the user slots are inspected for None-ness and
+   nothing more (see [is_sch_out]), which is what keeps the state transition
+   independent of what userspace does. *)
+Definition apply_schedule (Opub Opriv : Ty) := step_right (@check_scheduler Opub Opriv).
 
 Definition nat_to_cur_pid (n : nat) : [cur_pid ] :=
   match n with
@@ -467,7 +473,7 @@ Definition initiate_next (bool_coding :  [stateType] -> [stateType]) :  [stateTy
 
 
 Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (bool_coding : [stateType] -> [stateType]) (i : [Sum T_in (T_out' Opub Opriv)]) : [stateType] -> [stateType] :=
-  (@step_right Opub Opriv (fun i => initiate_next bool_coding) i) \o (step_right handler_preroutine i) \o (step1 i) \o (step0 i).
+  (@step_right Opub Opriv (fun i => initiate_next bool_coding) i) \o (step_right handler_preroutine i) \o (apply_schedule i) \o (record_pending i).
 (*we wrap initiate_next in step_right even though it does not use the input to ensure we only apply this step on output updates, this is important for the last case of f_EP for initiate_next*)
 
 
