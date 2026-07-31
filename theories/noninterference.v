@@ -466,9 +466,34 @@ Qed.
 
 (* === Section 6: model_sliced is non-interfering.  Assembled from the generic
    composition theorems (par_NI, sta_NI, swi_NI, map/output-weakening) applied
-   to the concrete pool; the only non-mechanical obligation is fv_NI of the
-   state transition (section 7).  (docs/noninterference.md §6.) === *)
-Lemma model_sliced_NI : NI in_rel out_rel model_sliced.
+   to the pool; the only non-mechanical obligation is fv_NI of the state
+   transition (section 7).  (docs/noninterference.md §6.)
+
+   The result holds for *any* scheduler and any two user processes that are
+   themselves non-interfering at the classification their slot declares.  That
+   it can: [state_step] never reads a user process's output value, only whether
+   the slot produced one -- [is_sch_out] matches [(None,(None,(Some n,_)))] --
+   so no user behaviour reaches the schedule, and fv_NI, the one hard
+   obligation, does not depend on which processes fill the slots.
+
+   [low_p_NI], [high_p_NI] and [scheduler_NI] above are the instances that give
+   back the concrete system; see the corollaries at the end of the file. === *)
+
+(* The parametric proof cannot unfold its own processes, so [rewr] drops
+   /low_p /alternate /high_p /scheduler. *)
+Ltac rewr ::= rewrite /model_sliced /reactive_system /pool /process_pool /my_f_initial /slot_procs /pool_input /tI_o /I_handler /f_proj /low_out.
+
+Section Parametric.
+
+Variable p_pub : Proc Empty TPublicOutput.
+Variable p_priv : Proc THandlerOutput TTypeSyscall.
+Variable p_sched : Proc Empty Nat.
+
+Hypothesis p_pub_NI : forall IRel : cRel [Empty], NI IRel (publicRel TPublicOutput) p_pub.
+Hypothesis p_priv_NI : NI (privateRel THandlerOutput) (privateRel TTypeSyscall) p_priv.
+Hypothesis p_sched_NI : forall IRel : cRel [Empty], NI IRel (publicRel Nat) p_sched.
+
+Lemma model_sliced_NI : NI in_rel out_rel (model_sliced p_pub p_priv p_sched).
 Proof.
   rewr;simpl;rewr;simpl.
   eapply map_NI.
@@ -1430,7 +1455,7 @@ Proof.
   
   eapply maybe_NI. eapply map_NI. eauto. eauto.
   mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
-  apply low_p_NI.
+  apply p_pub_NI.
   
 
   apply par_NI.
@@ -1464,7 +1489,7 @@ Proof.
   eapply maybe_NI. eapply map_NI. eauto. eauto.
   mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
 
-  apply high_p_NI.
+  apply p_priv_NI.
   
   apply par_NI.
   (*map*)
@@ -1495,7 +1520,7 @@ Proof.
   eapply maybe_NI. eapply map_NI. eauto. eauto.
   mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
 
-  apply scheduler_NI.
+  apply p_sched_NI.
 
   apply par_NI.
   (*map*)
@@ -1647,7 +1672,7 @@ Qed.
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
    weakening through parse_output (out_rel-related outputs map to
    final_out_rel-related ones).  (docs/noninterference.md §6.) === *)
-Lemma model_sliced_userview_NI : NI in_rel final_out_rel model_sliced_userview.
+Lemma model_sliced_userview_NI : NI in_rel final_out_rel (model_sliced_userview p_pub p_priv p_sched).
 Proof.
   eapply map_NI. eauto. eauto.
   2: apply model_sliced_NI.
@@ -1664,4 +1689,21 @@ Proof.
   move=>[]x'[]y'[]->[]-> H _ _ _ _.
   apply rel_eqmaybe. ssa.
   move=>[]->[]->. auto.
+Qed.
+
+End Parametric.
+
+
+(* === The concrete system, recovered by instantiation. === *)
+Corollary model_sliced_concrete_NI : NI in_rel out_rel model_sliced_concrete.
+Proof.
+  apply model_sliced_NI.
+  apply low_p_NI. apply high_p_NI. apply scheduler_NI.
+Qed.
+
+Corollary model_sliced_userview_concrete_NI :
+  NI in_rel final_out_rel model_sliced_userview_concrete.
+Proof.
+  apply model_sliced_userview_NI.
+  apply low_p_NI. apply high_p_NI. apply scheduler_NI.
 Qed.  

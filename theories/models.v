@@ -149,18 +149,31 @@ Definition my_f_O (n : nat) :=
 (* unit_proc = out tt *)
 Definition unit_proc : Proc Empty Unit := out (O := Unit) tt.
 
-(* -- Indexed family of processes -- *)
-Definition my_procs : forall n, Proc (my_f_I n) (my_f_O n) :=
+(* -- Indexed family of processes --
+
+   The scheduler and the two user processes are parameters.  They are what
+   the mechanism is supposed to protect, not part of the mechanism, so the
+   development fixes only the handlers and the padding.  [slot_procs] places
+   each parameter at the pid [my_f_pid] assigns it: the public process
+   outermost (5), then the secret process (4), then the scheduler (3).  The
+   concrete instance used by the models below is [my_procs]. *)
+Definition slot_procs
+  (p_pub : Proc Empty TPublicOutput)           (*public user process, slot 5*)
+  (p_priv : Proc THandlerOutput TTypeSyscall)  (*secret user process, slot 4*)
+  (p_sched : Proc Empty Nat)                   (*scheduler,           slot 3*)
+  : forall n, Proc (my_f_I n) (my_f_O n) :=
   fun n => match n with
            | 0        (*timer interrupt handler*)
            | 1        (*disk interrupt handler*)
            | 2        (*default handler*)
              => I_handler
-           | 3 => scheduler
-           | 4 => high_p
-           | 5 => low_p
+           | 3 => p_sched
+           | 4 => p_priv
+           | 5 => p_pub
            | _ => unit_proc (*padding*)
            end.
+
+Definition my_procs := slot_procs low_p high_p scheduler.
 
 
 (* === 2. Process pool === *)
@@ -224,9 +237,17 @@ Definition f_proj (i : [T_intermediate]) : forall n, [Option (my_f_I n)] :=
            | _ => None  (*every other process receives nothing*)
            end.
 
-(* my_process_pool =
-     process_pool 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid my_procs *)
-Definition my_process_pool := @process_pool cur_pid 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid my_procs.
+(* pool p_pub p_priv p_sched =
+     process_pool 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid
+       (slot_procs p_pub p_priv p_sched) *)
+Definition pool
+  (p_pub : Proc Empty TPublicOutput)
+  (p_priv : Proc THandlerOutput TTypeSyscall)
+  (p_sched : Proc Empty Nat) :=
+  @process_pool cur_pid 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid
+    (slot_procs p_pub p_priv p_sched).
+
+Definition my_process_pool := pool low_p high_p scheduler.
 
 
 (* === 3. Stateful wrapper === *)
@@ -517,7 +538,7 @@ Definition model_immediate : Proc T_in T_out' := @reactive_system cur_pid stateT
 Definition immediate_no_dI' : seqtype' :=   [::out_get';                                     tI';out_get';tmr_step';tmr_done';sched_priv';out_nop'(*nop*);tI';out_nop';tmr_step';tmr_done';sched_pub';out_get'].
 Definition immediate_with_dI' : seqtype' := [::out_get';dI';out_get';dsk_step';dsk_done';out_get';tI';out_get';tmr_step';tmr_done';sched_priv';out_syscall'(*sys*);tI';out_nop';tmr_step';tmr_done';sched_pub';out_get'].
 
-Ltac rewr := rewrite /model_immediate /reactive_system /my_process_pool /process_pool /my_f_initial /low_p /alternate /high_p /pool_input /tI_o /I_handler /f_proj /scheduler /low_out.
+Ltac rewr := rewrite /model_immediate /reactive_system /my_process_pool /pool /process_pool /my_f_initial /low_p /alternate /high_p /pool_input /tI_o /I_handler /f_proj /scheduler /low_out.
 
 Ltac lsolv := try solve [ reduce_tac;reduce_tac | reduce_tac;try solve [reduce_once | econ];simpl;first (reduce_tac;reduce_tac)];simpl.
 Ltac reduce_tac2 :=
@@ -604,17 +625,30 @@ Definition bool_coding v := let b := timeslice_live (get_ir_count v) in
 
 Definition sliced_preroutine (o : [T_out']) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed \o (initiate_ir o). (*\o (unset_handler_masks o)*) 
 
-(* model_sliced = reactive_system initial_state_sliced (state_step sliced_preroutine bool_coding) def my_process_pool pool_input *)
-Definition model_sliced := @reactive_system cur_pid stateType initial_state_sliced T_in T_out' T_intermediate (state_step sliced_preroutine bool_coding) def my_process_pool pool_input.
+(* model_sliced p_pub p_priv p_sched =
+     reactive_system initial_state_sliced (state_step sliced_preroutine bool_coding)
+       def (pool p_pub p_priv p_sched) pool_input
+
+   Parametric in the scheduler and the two user processes; [model_sliced_concrete]
+   is the instance the traces below are about.  [model_immediate] stays concrete --
+   it exists to exhibit a leak, and a counterexample should be a single system. *)
+Definition model_sliced
+  (p_pub : Proc Empty TPublicOutput)
+  (p_priv : Proc THandlerOutput TTypeSyscall)
+  (p_sched : Proc Empty Nat) :=
+  @reactive_system cur_pid stateType initial_state_sliced T_in T_out' T_intermediate
+    (state_step sliced_preroutine bool_coding) def (pool p_pub p_priv p_sched) pool_input.
+
+Definition model_sliced_concrete := model_sliced low_p high_p scheduler.
 
 (* model_sliced traces *)
 Definition sliced_no_dI' : seqtype' :=   [::out_get';                      tI';out_get';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_priv';out_nop'(*nop*);tI';out_nop';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_pub';out_get'].
 Definition sliced_with_dI' : seqtype' := [::out_get';dI';out_get';out_get';tI';out_get';tmr_step';tmr_done';dsk_step'      ;dsk_done'      ;nop_step';nop_done';sched_priv';out_syscall'(*sys*);tI';out_nop';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_pub';out_get'].
 
 
-Ltac rewr ::= rewrite /model_immediate /reactive_system /my_process_pool /process_pool /my_f_initial /low_p /alternate /high_p /pool_input /tI_o /I_handler /f_proj /scheduler /low_out /model_sliced /my_process_pool /pool_input /f_proj.
+Ltac rewr ::= rewrite /model_immediate /reactive_system /my_process_pool /pool /process_pool /my_f_initial /low_p /alternate /high_p /pool_input /tI_o /I_handler /f_proj /scheduler /low_out /model_sliced_concrete /model_sliced /my_process_pool /pool /pool_input /f_proj.
 
-Lemma trace_sliced_no_dI' : forall l, Trace (publicRel _) l sliced_no_dI' model_sliced.
+Lemma trace_sliced_no_dI' : forall l, Trace (publicRel _) l sliced_no_dI' model_sliced_concrete.
 Proof.  
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -629,7 +663,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.
 
-Lemma trace_sliced_with_dI' : forall l, Trace (publicRel _) l sliced_with_dI' model_sliced.
+Lemma trace_sliced_with_dI' : forall l, Trace (publicRel _) l sliced_with_dI' model_sliced_concrete.
 Proof.  
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -656,7 +690,13 @@ Definition parse_output (o : [T_out']) : [T_out] :=
   end.
 
 
-Definition model_sliced_userview : Proc T_in T_out := map id parse_output model_sliced.
+Definition model_sliced_userview
+  (p_pub : Proc Empty TPublicOutput)
+  (p_priv : Proc THandlerOutput TTypeSyscall)
+  (p_sched : Proc Empty Nat) : Proc T_in T_out :=
+  map id parse_output (model_sliced p_pub p_priv p_sched).
+
+Definition model_sliced_userview_concrete := model_sliced_userview low_p high_p scheduler.
 
 (* model_sliced_userview traces *)
 Definition final_out_rel : cRel [T_out] := eqmaybe_false (eqsum (publicRel _) (privateRel _)).
@@ -684,14 +724,14 @@ Proof. ssa. Qed.
 Lemma good_with_dI_eq : map_tr parse_output sliced_with_dI' = good_with_dI.
 Proof. ssa. Qed.
 
-Lemma trace_no_dI : forall l, Trace (publicRel _) l good_no_dI model_sliced_userview.
+Lemma trace_no_dI : forall l, Trace (publicRel _) l good_no_dI model_sliced_userview_concrete.
 Proof.
   intros. rewrite -good_no_dI_eq. eapply Trace_map.
   2:eapply trace_sliced_no_dI'.
   mrw. ssa. subst. done.
 Qed.
 
-Lemma trace_with_dI : forall l, Trace (publicRel _) l good_with_dI model_sliced_userview.
+Lemma trace_with_dI : forall l, Trace (publicRel _) l good_with_dI model_sliced_userview_concrete.
 Proof.
   intros. rewrite -good_with_dI_eq. eapply Trace_map.
   2:eapply trace_sliced_with_dI'.
