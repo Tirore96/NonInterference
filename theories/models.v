@@ -602,10 +602,30 @@ Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*ma
 
 Definition initial_state_sliced : [stateType] := ((initial_pid,None),(false,(Some 0,mask_most))).
 
-Definition handler_completed (c : [ir_count]) := match c with | Some 2 | Some 4 => true | _ => false end.
+(* The handler runtime and the time slice.  What the design requires is that the
+   slice be a whole number of handler runs, so that it always ends on a handler
+   boundary; [handler_completed] then *computes* the boundaries rather than
+   enumerating them.  At [handler_runtime = 2] and [time_slice = 4] this is the
+   same predicate as the former [Some 2 | Some 4 => true] on every value the
+   counter can reach (the counter starts at [time_slice] and is decremented to
+   [Some 0] before being cleared). *)
+Definition handler_runtime := 2.
+Definition time_slice := 2 * handler_runtime.
+
+Definition handler_completed (c : [ir_count]) :=
+  match c with
+  | Some n => (n != 0) && (n %% handler_runtime == 0)
+  | None => false
+  end.
+
+(* Sanity: the computed test agrees with the enumeration it replaced on every
+   value the counter can reach. *)
+Lemma handler_completed_reachable n :
+  n <= time_slice -> handler_completed (Some n) = ((n == 2) || (n == 4)).
+Proof. by case: n => [|[|[|[|[|n]]]]]. Qed.
 
 Definition initiate_ir (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType]) : [stateType] :=
-  if tI_out o is Some Notify then update_ir_count v (Some 4) else v.
+  if tI_out o is Some Notify then update_ir_count v (Some time_slice) else v.
 
 Definition check_handler_completed (v : [stateType]) : [stateType] :=
   if handler_completed (get_ir_count v) then set_tI (unset_masks v) else v.

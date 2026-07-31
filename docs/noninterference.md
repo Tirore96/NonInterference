@@ -583,11 +583,16 @@ than argued for, and nothing here claims they are without consequence:
   never itself be interrupted. A design permitting nesting is out of scope.
 - **The slice length is a constant, not a parameter.** What the design actually
   requires is that the slice be a **multiple of the handler runtime**, so that it
-  ends on a handler boundary and `handler_completed` stays in step with the
-  handlers. The model fixes the runtime at 2 and the slice at 4 — two handler runs —
-  and `handler_completed` accordingly *enumerates* the boundaries (`Some 2`,
-  `Some 4`) rather than computing them. Nothing in the security argument turns on
-  those particular numbers, but the general statement is not what has been proved.
+  ends on a handler boundary. That relationship is now written down —
+  `time_slice = 2 * handler_runtime`, and `handler_completed` *computes* the
+  boundaries as the nonzero multiples of `handler_runtime` rather than enumerating
+  them — but both constants are still fixed (`handler_runtime = 2`), and the
+  handler process `I_handler` encodes its runtime separately as `%% 2`. So the
+  general statement is still not what has been proved. Nothing in the security
+  argument turns on the particular numbers: the `fv_NI` stages that read the
+  counter first establish that it is *public* (equal in both states) and then case
+  on it abstractly — `handler_completed` as an opaque boolean, the counter as
+  `None` / `Some 0` / `Some n.+1` — so no numeral is ever inspected.
 - **Fixed pool size and layout.** Six slots, of which the last is padding. The
   processes in the scheduler and user slots are parameters, but their *number* and
   *position* are not: the output projections of `models.v` §5 (`is_sch_out`,

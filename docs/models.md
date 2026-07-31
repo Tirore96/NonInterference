@@ -635,7 +635,14 @@ decide the masks. Taken together they are easier to see as one table than as thr
 signatures:
 
 ```coq
-handler_completed c = (c is Some 2 or Some 4)
+handler_runtime = 2
+time_slice      = 2 * handler_runtime
+
+handler_completed c =
+  match c with
+  | Some n => (n != 0) && (n %% handler_runtime == 0)   (* on a handler boundary *)
+  | None   => false
+  end
 
 check_handler_completed v =
   if handler_completed (ir_count v) then set_tI (unset_masks v) else v
@@ -666,7 +673,8 @@ and the counter hits an even value precisely when one of them has just finished:
                                               counter disabled (None)
 ```
 
-The two boundaries `Some 4` and `Some 2` are the ones `handler_completed` marks,
+The two boundaries `Some 4` and `Some 2` are the nonzero multiples of
+`handler_runtime`, so they are exactly the ones `handler_completed` marks,
 and at both the secret handlers are the ones left runnable — that is
 `check_handler_completed`. The `Some 0` case is the mirror image and belongs to
 `check_ir_count`: it closes the slice by masking the secret handlers and unmasking
