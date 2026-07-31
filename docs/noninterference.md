@@ -193,7 +193,8 @@ makes the theorem say the right thing: the timer is a public scheduled event, th
 disk interrupt is the secret, and it is the disk interrupt's presence that cannot
 be inferred.
 
-**`out_rel : cRel [T_out']`** (full pool output, for `model_immediate` / `model_sliced`)
+**`out_rel Opub Opriv : cRel [T_out' Opub Opriv]`** (full pool output, for
+`model_immediate` / `model_sliced`)
 
 ```text
 eqpair (eqmaybe publicRel)               public user output   (exact)
@@ -235,7 +236,8 @@ be related to `None`, so a run of the disk handler and a step where nothing
 happened are the same observation. Section 6 shows the proof obligation this
 creates.
 
-**`final_out_rel : cRel [T_out]`** (user-visible output, for `model_sliced_userview`)
+**`final_out_rel Opub Opriv : cRel [T_out Opub Opriv]`** (user-visible output, for
+`model_sliced_userview`)
 
 ```text
 eqmaybe_false (eqsum publicRel privateRel)
@@ -247,7 +249,10 @@ left (exact) or the secret syscall on the right (secret at `⊥`).
 
 ## 5. `model_immediate` is not non-interfering
 
-`model_immediate_not_NI : ~ NI in_rel out_rel model_immediate`.
+`model_immediate_not_NI : ~ NI in_rel out_relC model_immediate`.
+
+`model_immediate` is concrete throughout — a counterexample should exhibit a
+single system, so it is instantiated at the concrete user processes and alphabets.
 
 Non-interference requires, among other things, that inserting a secret input
 anywhere in a trace leaves it a trace. The counterexample refutes that clause with
@@ -275,18 +280,41 @@ slice boundaries rather than immediately on arrival of its interrupt.
 
 ## 6. `model_sliced` and `model_sliced_userview` are non-interfering
 
-```text
-model_sliced_NI         : NI in_rel out_rel model_sliced.
-model_sliced_userview_NI : NI in_rel final_out_rel model_sliced_userview.
+```coq
+forall (Opub Opriv : Ty)
+       (p_pub : Proc Empty Opub)
+       (p_priv : Proc THandlerOutput Opriv)
+       (p_sched : Proc Empty Nat),
+  (forall IRel, NI IRel (publicRel Opub) p_pub) ->
+  NI (privateRel THandlerOutput) (privateRel Opriv) p_priv ->
+  (forall IRel, NI IRel (publicRel Nat) p_sched) ->
+  NI in_rel (out_rel Opub Opriv)       (model_sliced p_pub p_priv p_sched)
+  /\ NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched)
 ```
+
+(the two conjuncts are `model_sliced_NI` and `model_sliced_userview_NI`).
 
 `model_sliced_userview = map id parse_output model_sliced`, and `model_sliced_userview_NI`
 is obtained from `model_sliced_NI` by pushing the output through `parse_output`
 (output weakening: `parse_output` maps `out_rel`-related outputs to
 `final_out_rel`-related ones).
 
+**Why the result is parametric.** The theorem is about the interrupt-and-scheduling
+mechanism, not about one system: the scheduler and both user processes are
+arbitrary, subject only to being non-interfering at the classification their slot
+declares, and their output alphabets are arbitrary too. What makes this available
+is a property of the design rather than of the proof. The state transition never
+reads a user slot's output *value* — `is_sch_out` matches
+`(None,(None,(Some n,_)))`, inspecting the two user slots only for `None`-ness — so
+no user behaviour reaches the schedule, and `fv_NI` (section 7), the one hard
+obligation, does not mention the slot processes at all. The three hypotheses are
+consumed at exactly three leaves of the assembly below, where the concrete proof
+previously used `low_p_NI`, `high_p_NI` and `scheduler_NI`. Those three lemmas
+survive as the instantiation that recovers the concrete system
+(`model_sliced_concrete_NI`, `model_sliced_userview_concrete_NI`).
+
 `model_sliced_NI` is assembled from the generic composition theorems, applied to the
-concrete processes of [`models.md`](models.md). There is one theorem per
+pool of [`models.md`](models.md). There is one theorem per
 constructor of the calculus, so the proof follows the structure of the term
 `model_sliced` itself, discharging one layer at a time from the outside in:
 
@@ -298,7 +326,7 @@ constructor of the calculus, so the proof follows the structure of the term
 | `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_false IRel) ORel (maybe p)` |
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
 | `swi` (gating each slot on/off) | `swi_NI` / `swi_NI'` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level |
-| the leaves (`out o`) | `out_NI` | a constant process is trivially non-interfering |
+| the leaves | `out_NI`, or a hypothesis | the handler and padding leaves are constant processes, so `out_NI`; the scheduler and user slots are where the three parametricity hypotheses are consumed |
 | `parse_output` on top of `model_sliced` | `map_NI` again | output weakening, giving `model_sliced_userview_NI` |
 
 Each theorem *derives* the composite's relations from those of its parts rather
@@ -560,4 +588,9 @@ than argued for, and nothing here claims they are without consequence:
   and `handler_completed` accordingly *enumerates* the boundaries (`Some 2`,
   `Some 4`) rather than computing them. Nothing in the security argument turns on
   those particular numbers, but the general statement is not what has been proved.
-- **Fixed pool size.** Six slots, of which the last is padding.
+- **Fixed pool size and layout.** Six slots, of which the last is padding. The
+  processes in the scheduler and user slots are parameters, but their *number* and
+  *position* are not: the output projections of `models.v` §5 (`is_sch_out`,
+  `tI_out`, `dI_out`, `default_I_out`) are tuple patterns that hardwire two user
+  slots before the scheduler slot. Varying the count changes the state transition
+  and so lands inside `fv_NI`.

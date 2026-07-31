@@ -21,9 +21,9 @@ Defined in sections 7–9 below.
 
 | Model | Type | What it is |
 |---|---|---|
-| `model_immediate` | `Proc T_in T_out'` | Interrupts handled the ordinary way: a handler runs as soon as its interrupt is serviced. Secret interrupts leak through scheduling. |
-| `model_sliced` | `Proc T_in T_out'` | Interrupt masking controlled so that a secret interrupt can be serviced without disturbing the public schedule. Like `model_immediate`, its output exposes every pool slot: the two user processes, the scheduler and all three handlers. |
-| `model_sliced_userview` | `Proc T_in T_out` | `model_sliced` behind a projection that keeps only the user-visible channel. This is the model the headline theorem is about. |
+| `model_immediate` | `Proc T_in T_out'C` | Interrupts handled the ordinary way: a handler runs as soon as its interrupt is serviced. Secret interrupts leak through scheduling. |
+| `model_sliced` | `Proc T_in (T_out' Opub Opriv)` | Interrupt masking controlled so that a secret interrupt can be serviced without disturbing the public schedule. Like `model_immediate`, its output exposes every pool slot: the two user processes, the scheduler and all three handlers. |
+| `model_sliced_userview` | `Proc T_in (T_out Opub Opriv)` | `model_sliced` behind a projection that keeps only the user-visible channel. This is the model the headline theorem is about. |
 
 ## Contents
 
@@ -190,13 +190,16 @@ Padding for unused pool slots (indices ≥ 6).
 | 1 | disk-interrupt handler | `Empty` | `THandlerOutput` |
 | 2 | default handler | `Empty` | `THandlerOutput` |
 | 3 | scheduler | `Empty` | `Nat` |
-| 4 | `high_p` | `THandlerOutput` | `TTypeSyscall` |
-| 5 | `low_p` | `Empty` | `TPublicOutput` |
+| 4 | secret user process | `THandlerOutput` | `Opriv` |
+| 5 | public user process | `Empty` | `Opub` |
 | ≥6 | padding | `Empty` | `Unit` |
 
-Only slot 4 has a non-`Empty` input: `high_p` is the one process that consumes
-anything, namely the disk handler's `Notify`. Every other slot is driven purely by
-being scheduled.
+Only slot 4 has a non-`Empty` input: the secret user process is the one process
+that consumes anything, namely the disk handler's `Notify`. Every other slot is
+driven purely by being scheduled.
+
+`Opub` and `Opriv` are parameters (`my_f_O Opub Opriv`), as are the processes in
+slots 3, 4 and 5 — see below.
 
 **The pool is built from a process *function*.** `process_pool` (section 2) is
 generic in a family `f_proc : forall n, Proc (f_I n) (f_O n)`, and recurses over
@@ -204,19 +207,38 @@ slot indices — so the family must be a *total* function on `nat`, defined befo
 the pool can be instantiated:
 
 ```coq
-my_procs n : Proc (my_f_I n) (my_f_O n) =
+slot_procs p_pub p_priv p_sched n : Proc (my_f_I n) (my_f_O Opub Opriv n) =
   match n with
   | 0 | 1 | 2 => I_handler
-  | 3 => scheduler
-  | 4 => high_p
-  | 5 => low_p
+  | 3 => p_sched
+  | 4 => p_priv
+  | 5 => p_pub
   | _ => unit_proc
   end
+
+my_procs = slot_procs low_p high_p scheduler
 ```
 
 `unit_proc` exists only to make this total. The pool proper is slots `0..5`;
 nothing above 5 is ever selected, and the padding branch is present because
-`my_procs` must have a value everywhere, not because the system has more processes.
+`slot_procs` must have a value everywhere, not because the system has more
+processes.
+
+**The scheduler and the two user processes are parameters.** They are what the
+mechanism is meant to protect, not part of it, so the development fixes only the
+handlers and the padding. `pool`, `model_sliced` and `model_sliced_userview` all
+take `p_pub`, `p_priv` and `p_sched`; `my_procs`, `my_process_pool`,
+`model_sliced_concrete` and `model_sliced_userview_concrete` are the instances at
+`low_p`, `high_p` and `scheduler`, and `model_immediate` is concrete throughout.
+
+**Layout invariant.** `slot_procs` puts the public process outermost (slot 5),
+then the secret process (4), then the scheduler (3), matching the pids `my_f_pid`
+assigns. This ordering is load-bearing and cannot be varied: the output
+projections of section 5 — `is_sch_out` and friends — are tuple patterns that
+hardwire *two* user slots sitting before the scheduler slot. Adding or reordering
+user slots therefore changes the state transition, and lands in the `fv_NI`
+obligation. Note also that the pool is right-associated, so the two user slots are
+leftmost but are not a subterm: there is no `par userspace system` to point at.
 
 Slots 0, 1 and 2 are three *separate* handlers that share the single definition
 `I_handler`. What distinguishes them is not their code but their own pending and
@@ -427,13 +449,19 @@ The two models are instantiations of `state_step`, differing only in
 Interfaces:
 
 ```coq
-T_in   = TInterrupt                              (* external input: an interrupt *)
-T_out' = (Option TPublicOutput,                  (* full pool output, in slot order: *)
-          Option TTypeSyscall,                    (*   public output, syscall,        *)
-          Option Nat,                             (*   scheduler pid,                 *)
-          times_on 2 THandlerOutput)              (*   the three handler outputs      *)
-T_out  = Option (Sum TPublicOutput TTypeSyscall) (* external view: user output only  *)
+T_in                = TInterrupt        (* external input: an interrupt      *)
+T_out' Opub Opriv   = (Option Opub,     (* full pool output, in slot order:  *)
+                       Option Opriv,    (*   public output, syscall,         *)
+                       Option Nat,      (*   scheduler pid,                  *)
+                       times_on 2 THandlerOutput)  (*   three handler outputs *)
+T_out Opub Opriv    = Option (Sum Opub Opriv)  (* external view: user output *)
 ```
+
+`Opub` and `Opriv` — the alphabets of the public and the secret user process — are
+parameters, for the same reason the processes are: nothing in the mechanism
+inspects a user-slot *value*, only whether the slot produced one. `T_out'C` and
+`T_outC` abbreviate the concrete instances (`TPublicOutput`, `TTypeSyscall`) used
+by `model_immediate` and by the example traces.
 
 **The `T_out'` slot map.** Every output of `model_immediate` and `model_sliced` is a
 six-slot tuple, and exactly one slot is `Some` at a time. The slot order is the
@@ -731,7 +759,8 @@ survive — `pub` (re-tagged `inl`) and `sys` (re-tagged `inr`); every other slo
 any all-`None` tuple, projects to `None`.
 
 ```coq
-model_sliced_userview = map id parse_output model_sliced : Proc T_in T_out
+model_sliced_userview p_pub p_priv p_sched =
+  map id parse_output (model_sliced p_pub p_priv p_sched) : Proc T_in (T_out Opub Opriv)
 ```
 
 ```coq

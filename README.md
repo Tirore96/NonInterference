@@ -24,9 +24,17 @@ A process pool of six slots, driven by a global state and a feedback loop:
 | slot | process | |
 |---|---|---|
 | 0, 1, 2 | timer, disk and default interrupt handlers | each runs for exactly two output steps, emitting `Nothing` then `Notify` |
-| 3 | round-robin scheduler | proposes which user process runs next |
-| 4 | `high_p`, the secret user process | issues a `Syscall` if the disk handler notified it, otherwise `NOP` |
-| 5 | `low_p`, the public user process | repeatedly issues `GetRequest` |
+| 3 | the scheduler | proposes which user process runs next |
+| 4 | the secret user process | consumes the disk handler's notifications |
+| 5 | the public user process | emits on the public channel |
+
+Slots 3, 4 and 5 are **parameters** of the development, not fixed processes: the
+results below hold for any scheduler and any two user processes that are themselves
+non-interfering at the classification their slot declares, over arbitrary output
+alphabets. The concrete instance used for the example traces is a round-robin
+scheduler, a `high_p` that issues a `Syscall` if the disk handler notified it and
+`NOP` otherwise, and a `low_p` that repeatedly issues `GetRequest`. Only the
+handlers and the padding are fixed — they are the mechanism under study.
 
 Exactly one slot runs per step, chosen by the current pid. The global state holds a
 `(pending, mask)` bit pair per interrupt — an interrupt is serviced when it is
@@ -118,9 +126,38 @@ Three machine-checked theorems, in
 
 | Theorem | Statement | Meaning |
 |---|---|---|
-| `model_immediate_not_NI` | `~ NI in_rel out_rel model_immediate` | The naive design leaks: a secret disk interrupt is observable. |
-| `model_sliced_NI` | `NI in_rel out_rel model_sliced` | The fixed design is non-interfering even on the full pool output. |
-| `model_sliced_userview_NI` | `NI in_rel final_out_rel model_sliced_userview` | It is therefore non-interfering on the user-visible output — the headline result. |
+| `model_immediate_not_NI` | `~ NI in_rel out_relC model_immediate` | The naive design leaks: a secret disk interrupt is observable. |
+| `model_sliced_NI` | `NI in_rel (out_rel Opub Opriv) (model_sliced p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler. |
+| `model_sliced_userview_NI` | `NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
+
+The two positive results are parametric. In full:
+
+```coq
+forall (Opub Opriv : Ty)
+       (p_pub : Proc Empty Opub)
+       (p_priv : Proc THandlerOutput Opriv)
+       (p_sched : Proc Empty Nat),
+  (forall IRel, NI IRel (publicRel Opub) p_pub) ->
+  NI (privateRel THandlerOutput) (privateRel Opriv) p_priv ->
+  (forall IRel, NI IRel (publicRel Nat) p_sched) ->
+  NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched)
+```
+
+So the theorem is about the interrupt-and-scheduling mechanism, not about one
+system. What makes this available is a property of the design rather than of the
+proof: the state transition never reads a user slot's output *value*, only whether
+the slot produced one (`is_sch_out` matches `(None,(None,(Some n,_)))`). No user
+behaviour reaches the schedule, so `fv_NI` — the one hard obligation — does not
+depend on which processes fill the slots.
+
+`model_sliced_concrete_NI` and `model_sliced_userview_concrete_NI` recover the
+concrete system by instantiating with `low_p_NI`, `high_p_NI` and `scheduler_NI`.
+`model_immediate` stays concrete: it exists to exhibit a leak, and a
+counterexample should be a single system.
+
+Fixed, and out of scope: the pool's *shape* and *slot count*. The output
+projections (`is_sch_out` and friends) are tuple patterns that hardwire two user
+slots before the scheduler slot, and generalising that lands inside `fv_NI`.
 
 ## `model_immediate` vs `model_sliced` at a glance
 
@@ -135,7 +172,7 @@ differ in two definitions, and that difference is the whole security story.
 | **Initial masks / counter** | all masks clear; counter `None` (disabled) | all masks set except the timer; counter `Some 0` |
 | **When a handler stops** | when it emits its **secret** `Notify` — *secret-driven* | at a fixed **public** time-slice boundary — *slice-driven* |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
-| **Non-interfering?** | **No** (`model_immediate_not_NI`) | **Yes** (`model_sliced_NI`) |
+| **Non-interfering?** | **No** (`model_immediate_not_NI`) | **Yes** (`model_sliced_NI`, for any non-interfering userspace) |
 | **Why** | a handler runs as soon as its interrupt is serviced, so a secret interrupt displaces the scheduled process and the gap is visible | handlers run only within the public slice, replacing NOP filler, so the schedule is unchanged |
 
 Handlers must all run for the same length of time, or the schedule would again
