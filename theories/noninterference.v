@@ -393,6 +393,77 @@ Proof.
   intros. cbv. ssa.
 Qed.
 
+(* === Leaf obligations for the three replaceable slots ===
+
+   The pool's userspace and scheduler slots are discharged by these three
+   facts and nothing else.  Stating them separately makes explicit what the
+   assembled proof needs of each slot: an NI process at the classification
+   its slot declares.  (docs/noninterference.md) *)
+
+(* Slot 5, the public user process.  Its output slot is public, so it may
+   emit anything as long as it emits it unconditionally. *)
+Lemma low_p_NI : forall (IRel : cRel [Empty]), NI IRel (publicRel TPublicOutput) low_p.
+Proof.
+  intros. apply out_NI.
+Qed.
+
+(* Slot 4, the secret user process.  Both its input (the disk handler's
+   [Notify]) and its output are secret. *)
+Lemma high_p_NI : NI (privateRel THandlerOutput) (privateRel TTypeSyscall) high_p.
+Proof.
+  eapply map_NI.
+  mrw. intros. apply rel_eqsum_L. eauto.
+  mrw. intros. apply dis_eqsum_L. done.
+  mrw. intros. move: H.
+  instantiate (1:= eqsum_L _ _). intros.
+  destruct i. destruct i'. apply rel_refl. ssa.
+  destruct i'. ssa.
+  apply rel_eqsum_R2' in H.
+  destruct i. destruct i0.
+  2: apply loop_NI.
+  destruct i1. destruct i2.
+  move:H. instantiate (1:=  (eqpair (privateRel Bool) _)).
+  move/rel_eqpair. case. rewrite !pair_rewr.
+  intros. clear b. ssa. destruct a. ssa. subst. case_if. subst. ssa. subst. ssa.
+  ssa.
+
+  
+  eapply map_NI.
+  apply f_NI_id.
+  apply f_PU_id.
+
+  mrw. intros. apply rel_eqsum_L2. eauto.
+
+  apply sta_NI.
+  mrw. intros. eauto.
+  mrw. intros.
+  destruct i. destruct i'. apply rel_eqsum_L' in H.
+  ssa. de H. de H0. subst. left. ssa.
+  ssa. destruct i'. ssa. apply rel_refl.
+  mrw. intros. destruct i. apply dis_eqsum_L2 in H. ssa. ssa.
+  apply out_NI.
+  Unshelve. all: exact (publicRel _).
+Qed.
+
+(* Slot 3, the scheduler.  Its output -- the pid it picks -- is public. *)
+Lemma scheduler_NI : forall (IRel : cRel [Empty]), NI IRel (publicRel Nat) scheduler.
+Proof.
+  intros.
+  eapply map_NI. eauto. eauto.
+  instantiate (1:=eqpair _ _).
+  mrw. move=> l i i' /rel_eqpair[] + _.
+  instantiate (1:= publicRel _). move=>/publicRel_eq ->. ssa.
+  eapply sta_NI.
+  mrw. intros. move: H0.
+  move/publicRel_eq=>->//.
+  mrw. intros. eauto.
+  mrw. intros. auto.
+  apply out_NI.
+  Unshelve. all: exact (publicRel _).
+Qed.
+
+
+
 (* === Section 6: model_sliced is non-interfering.  Assembled from the generic
    composition theorems (par_NI, sta_NI, swi_NI, map/output-weakening) applied
    to the concrete pool; the only non-mechanical obligation is fv_NI of the
@@ -1359,7 +1430,7 @@ Proof.
   
   eapply maybe_NI. eapply map_NI. eauto. eauto.
   mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
-  apply out_NI.
+  apply low_p_NI.
   
 
   apply par_NI.
@@ -1393,37 +1464,7 @@ Proof.
   eapply maybe_NI. eapply map_NI. eauto. eauto.
   mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
 
-  eapply map_NI.
-  mrw. intros. apply rel_eqsum_L. eauto.
-  mrw. intros. apply dis_eqsum_L. done.
-  mrw. intros. move: H.
-  instantiate (1:= eqsum_L _ _). intros.
-  destruct i. destruct i'. apply rel_refl. ssa.
-  destruct i'. ssa.
-  apply rel_eqsum_R2' in H.
-  destruct i. destruct i0.
-  2: apply loop_NI.
-  destruct i1. destruct i2.
-  move:H. instantiate (1:=  (eqpair (privateRel Bool) _)).
-  move/rel_eqpair. case. rewrite !pair_rewr.
-  intros. clear b. ssa. destruct a. ssa. subst. case_if. subst. ssa. subst. ssa.
-  ssa.
-
-  
-  eapply map_NI.
-  apply f_NI_id.
-  apply f_PU_id.
-
-  mrw. intros. apply rel_eqsum_L2. eauto.
-
-  apply sta_NI.
-  mrw. intros. eauto.
-  mrw. intros.
-  destruct i. destruct i'. apply rel_eqsum_L' in H.
-  ssa. de H. de H0. subst. left. ssa.
-  ssa. destruct i'. ssa. apply rel_refl.
-  mrw. intros. destruct i. apply dis_eqsum_L2 in H. ssa. ssa.
-  apply out_NI.
+  apply high_p_NI.
   
   apply par_NI.
   (*map*)
@@ -1454,16 +1495,7 @@ Proof.
   eapply maybe_NI. eapply map_NI. eauto. eauto.
   mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
 
-  eapply map_NI. eauto. eauto.
-  instantiate (1:=eqpair _ _).
-  mrw. move=> l i i' /rel_eqpair[] + _.
-  instantiate (1:= publicRel _). move=>/publicRel_eq ->. ssa.
-  eapply sta_NI.
-  mrw. intros. move: H0.
-  move/publicRel_eq=>->//.
-  mrw. intros. eauto.
-  mrw. intros. auto.
-  apply out_NI.
+  apply scheduler_NI.
 
   apply par_NI.
   (*map*)
