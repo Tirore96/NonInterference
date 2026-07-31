@@ -30,8 +30,16 @@ Definition times_on (n : nat) (f : nat -> Ty) := times_n n (Option \o f).
 
 
 Definition T_in := TInterrupt.
-Definition T_out' := Times (Option TPublicOutput) (Times (Option TTypeSyscall) (Times (Option Nat) (times_on 2 (fun _ => THandlerOutput)))).
-Definition T_out := Option (Sum TPublicOutput TTypeSyscall).
+(* [Opub] and [Opriv] are the alphabets of the public and the secret user
+   process.  They are parameters throughout: the mechanism never inspects a
+   user-slot value, only whether the slot produced one, so nothing below
+   depends on what fills these two positions. *)
+Definition T_out' (Opub Opriv : Ty) := Times (Option Opub) (Times (Option Opriv) (Times (Option Nat) (times_on 2 (fun _ => THandlerOutput)))).
+Definition T_out (Opub Opriv : Ty) := Option (Sum Opub Opriv).
+
+(* The concrete alphabets the models below are instantiated at. *)
+Notation T_out'C := (T_out' TPublicOutput TTypeSyscall).
+Notation T_outC := (T_out TPublicOutput TTypeSyscall).
 
 (* =================================================================
    The three models (real Coq names, defined in sections 7-9 below):
@@ -135,14 +143,14 @@ Definition my_f_I (n : nat) :=
   | _ => Empty (*padding*)
   end.
 
-Definition my_f_O (n : nat) :=
+Definition my_f_O (Opub Opriv : Ty) (n : nat) :=
   match n with
   | 0 => THandlerOutput (*tI*)
   | 1 => THandlerOutput (*dI*)
   | 2 => THandlerOutput (*defaultI*)
   | 3 => Nat (*scheduler*)         
-  | 4 => TTypeSyscall (*high*)
-  | 5 => TPublicOutput (*low*)
+  | 4 => Opriv (*high*)
+  | 5 => Opub (*low*)
   | _ => Unit (*padding*)           
   end.
 
@@ -157,11 +165,11 @@ Definition unit_proc : Proc Empty Unit := out (O := Unit) tt.
    each parameter at the pid [my_f_pid] assigns it: the public process
    outermost (5), then the secret process (4), then the scheduler (3).  The
    concrete instance used by the models below is [my_procs]. *)
-Definition slot_procs
-  (p_pub : Proc Empty TPublicOutput)           (*public user process, slot 5*)
-  (p_priv : Proc THandlerOutput TTypeSyscall)  (*secret user process, slot 4*)
-  (p_sched : Proc Empty Nat)                   (*scheduler,           slot 3*)
-  : forall n, Proc (my_f_I n) (my_f_O n) :=
+Definition slot_procs (Opub Opriv : Ty)
+  (p_pub : Proc Empty Opub)             (*public user process, slot 5*)
+  (p_priv : Proc THandlerOutput Opriv)  (*secret user process, slot 4*)
+  (p_sched : Proc Empty Nat)            (*scheduler,           slot 3*)
+  : forall n, Proc (my_f_I n) (my_f_O Opub Opriv n) :=
   fun n => match n with
            | 0        (*timer interrupt handler*)
            | 1        (*disk interrupt handler*)
@@ -240,11 +248,11 @@ Definition f_proj (i : [T_intermediate]) : forall n, [Option (my_f_I n)] :=
 (* pool p_pub p_priv p_sched =
      process_pool 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid
        (slot_procs p_pub p_priv p_sched) *)
-Definition pool
-  (p_pub : Proc Empty TPublicOutput)
-  (p_priv : Proc THandlerOutput TTypeSyscall)
+Definition pool (Opub Opriv : Ty)
+  (p_pub : Proc Empty Opub)
+  (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) :=
-  @process_pool cur_pid 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid
+  @process_pool cur_pid 5 my_f_initial my_f_I (my_f_O Opub Opriv) T_intermediate f_proj my_f_pid
     (slot_procs p_pub p_priv p_sched).
 
 Definition my_process_pool := pool low_p high_p scheduler.
@@ -366,31 +374,31 @@ Definition masks_set (v : [stateType]) :=
 
 
 (* === 5. State transitions === *)
-Definition step_left (f : [T_in] -> [stateType] -> [stateType]) : [Sum T_in T_out'] -> [stateType] -> [stateType] :=
+Definition step_left (Opub Opriv : Ty) (f : [T_in] -> [stateType] -> [stateType]) : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
   fun i v => 
   match i with
   | inl i => f i v
   | inr _ => v
   end.
 
-Definition step_right (f : [T_out'] -> [stateType] -> [stateType]) : [Sum T_in T_out'] -> [stateType] -> [stateType] :=
+Definition step_right (Opub Opriv : Ty) (f : [T_out' Opub Opriv] -> [stateType] -> [stateType]) : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
   fun i v => 
   match i with
   | inl _ => v
   | inr o => f o v
   end.
 
-Definition step0 := step_left (fun i v => update_I_pending v i true).
+Definition step0 (Opub Opriv : Ty) := @step_left Opub Opriv (fun i v => update_I_pending v i true).
 
-Definition is_sch_out (o : [T_out']) :=
+Definition is_sch_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
   match o with
   | (None,(None,(Some n,_))) => Some n
   | _ => None                                   
   end.
-Definition check_scheduler (o : [T_out']) (v : [stateType])  :=
-  if @is_sch_out o is Some n then update_cur_pid v (inr n) else v.
+Definition check_scheduler (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType])  :=
+  if is_sch_out o is Some n then update_cur_pid v (inr n) else v.
 
-Definition step1 := step_right check_scheduler.
+Definition step1 (Opub Opriv : Ty) := step_right (@check_scheduler Opub Opriv).
 
 Definition nat_to_cur_pid (n : nat) : [cur_pid ] :=
   match n with
@@ -444,24 +452,24 @@ Definition initiate_next (bool_coding :  [stateType] -> [stateType]) :  [stateTy
                           
 
 
-Definition state_step (handler_preroutine : [T_out'] -> [stateType] -> [stateType]) (bool_coding : [stateType] -> [stateType]) (i : [Sum T_in T_out']) : [stateType] -> [stateType] :=
-  (step_right (fun i => initiate_next bool_coding) i) \o (step_right handler_preroutine i) \o (step1 i) \o (step0 i).
+Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (bool_coding : [stateType] -> [stateType]) (i : [Sum T_in (T_out' Opub Opriv)]) : [stateType] -> [stateType] :=
+  (@step_right Opub Opriv (fun i => initiate_next bool_coding) i) \o (step_right handler_preroutine i) \o (step1 i) \o (step0 i).
 (*we wrap initiate_next in step_right even though it does not use the input to ensure we only apply this step on output updates, this is important for the last case of f_EP for initiate_next*)
 
 
 (* === 6. Trace vocabulary === *)
 (* Named inputs and outputs used to write the example traces for each model. *)
-Definition Tsum' := ([T_in] + [T_out'])%type.
-Definition Tsum := Sum T_in T_out. 
+Definition Tsum' := ([T_in] + [T_out'C])%type.
+Definition Tsum := Sum T_in T_outC. 
 
 Definition dI' : Tsum' := inl DiskInterrupt.
 Definition tI' : Tsum' := inl TimerInterrupt. 
-Definition low_out x : [T_out'] := (Some x,(None,(None,(None,(None,None))))).
-Definition high_out x : [T_out'] := (None,(Some x,(None,(None,(None,None))))).
-Definition sch_o x : [T_out'] := (None,(None,(Some x,(None,(None,None))))).
-Definition defaultI_o x : [T_out'] := (None,(None,(None,(Some x,(None,None))))).
-Definition dI_o x : [T_out'] := (None,(None,(None,(None,(Some x,None))))).
-Definition tI_o x : [T_out'] := (None,(None,(None,(None,(None,Some x))))).
+Definition low_out x : [T_out'C] := (Some x,(None,(None,(None,(None,None))))).
+Definition high_out x : [T_out'C] := (None,(Some x,(None,(None,(None,None))))).
+Definition sch_o x : [T_out'C] := (None,(None,(Some x,(None,(None,None))))).
+Definition defaultI_o x : [T_out'C] := (None,(None,(None,(Some x,(None,None))))).
+Definition dI_o x : [T_out'C] := (None,(None,(None,(None,(Some x,None))))).
+Definition tI_o x : [T_out'C] := (None,(None,(None,(None,(None,Some x))))).
 
 Definition tmr_done' : Tsum' :=  inr (tI_o (Notify)).
 Definition tmr_step' : Tsum' :=  inr (tI_o (Nothing)).
@@ -487,7 +495,7 @@ Definition tI : [Tsum] := inl TimerInterrupt.
 Definition dI : [Tsum] := inl DiskInterrupt.
 
 Definition seqtype' := seq Tsum'.
-Definition seqtype := seq ([T_in] + [T_out]).
+Definition seqtype := seq ([T_in] + [T_outC]).
 
 
 
@@ -498,39 +506,39 @@ Definition false_I_bits : [I_bits] := (false,false).
 Definition false_ic : [ic] := ((false,false),(false_I_bits,false_I_bits)).
 Definition initial_state : [stateType] := ((initial_pid,None),(false,(None,false_ic))).
 
-Definition tI_out (o : [T_out']) :=
+Definition tI_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
   match o with
   | (_,(_,(_,(_,(_,x))))) => x
   end.
 
 
-Definition dI_out (o : [T_out']) :=
+Definition dI_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
   match o with
   | (_,(_,(_,(_,(x,_))))) => x
   end.
 
-Definition default_I_out (o : [T_out']) :=
+Definition default_I_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
   match o with
   | (_,(_,(_,(x,(_,_))))) => x
   end.  
 
-Definition is_I_out_done (o : [T_out']) : [Option TInterrupt] :=
+Definition is_I_out_done (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [Option TInterrupt] :=
   if tI_out o is Some Notify then Some TimerInterrupt
   else if dI_out o is Some Notify then Some DiskInterrupt
   else if default_I_out o is Some Notify then Some DefaultInterrupt
   else None.  
 
-Definition immediate_preroutine (o : [T_out']) (v : [stateType])  :=
+Definition immediate_preroutine (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType])  :=
   if is_I_out_done o is Some ir then let v := unset_masks v in if ir is TimerInterrupt then update_re_sch v true else v else v.
 
-Definition def : [ T_out' ]  := (None,(None,(None,(None,(None,None))))).
+Definition def (Opub Opriv : Ty) : [ T_out' Opub Opriv ]  := (None,(None,(None,(None,(None,None))))).
 
 (*discards input from the inner process, only allowed to affect bit in ic, not pid*)
-Definition pool_input (si : [Times stateType (Sum T_in T_out')]) : [Option (Times cur_pid T_intermediate)] :=
+Definition pool_input (Opub Opriv : Ty) (si : [Times stateType (Sum T_in (T_out' Opub Opriv))]) : [Option (Times cur_pid T_intermediate)] :=
   if si.2 is inr o then Some (get_cur_pid si.1, dI_out o) else None.
 
 (* model_immediate = reactive_system initial_state (state_step immediate_preroutine id) def my_process_pool pool_input *)
-Definition model_immediate : Proc T_in T_out' := @reactive_system cur_pid stateType initial_state T_in T_out' T_intermediate (state_step immediate_preroutine id) def my_process_pool pool_input.
+Definition model_immediate : Proc T_in T_out'C := @reactive_system cur_pid stateType initial_state T_in T_out'C T_intermediate (state_step (@immediate_preroutine TPublicOutput TTypeSyscall) id) (def TPublicOutput TTypeSyscall) my_process_pool (@pool_input TPublicOutput TTypeSyscall).
 
 
 
@@ -548,7 +556,7 @@ Ltac reduce_tac2 :=
 
 Ltac sta_state_reduce :=
   match goal with
-  | |- context [(@sta (Sum T_in T_out') (Sum T_in T_out') stateType (state_step _ _) _ ?state _)] =>let reduced := eval cbv in state in
+  | |- context [(@sta (Sum T_in T_out'C) (Sum T_in T_out'C) stateType (state_step _ _) _ ?state _)] =>let reduced := eval cbv in state in
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.                                                                                                             
 
@@ -596,7 +604,7 @@ Definition initial_state_sliced : [stateType] := ((initial_pid,None),(false,(Som
 
 Definition handler_completed (c : [ir_count]) := match c with | Some 2 | Some 4 => true | _ => false end.
 
-Definition initiate_ir (o : [T_out']) (v : [stateType]) : [stateType] :=
+Definition initiate_ir (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType]) : [stateType] :=
   if tI_out o is Some Notify then update_ir_count v (Some 4) else v.
 
 Definition check_handler_completed (v : [stateType]) : [stateType] :=
@@ -623,7 +631,7 @@ Definition bool_coding v := let b := timeslice_live (get_ir_count v) in
                             let m := get_I_mask v DiskInterrupt in
                             update_I_mask v DefaultInterrupt m.
 
-Definition sliced_preroutine (o : [T_out']) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed \o (initiate_ir o). (*\o (unset_handler_masks o)*) 
+Definition sliced_preroutine (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed \o (initiate_ir o). (*\o (unset_handler_masks o)*) 
 
 (* model_sliced p_pub p_priv p_sched =
      reactive_system initial_state_sliced (state_step sliced_preroutine bool_coding)
@@ -632,12 +640,13 @@ Definition sliced_preroutine (o : [T_out']) : [stateType] -> [stateType] := chec
    Parametric in the scheduler and the two user processes; [model_sliced_concrete]
    is the instance the traces below are about.  [model_immediate] stays concrete --
    it exists to exhibit a leak, and a counterexample should be a single system. *)
-Definition model_sliced
-  (p_pub : Proc Empty TPublicOutput)
-  (p_priv : Proc THandlerOutput TTypeSyscall)
+Definition model_sliced (Opub Opriv : Ty)
+  (p_pub : Proc Empty Opub)
+  (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) :=
-  @reactive_system cur_pid stateType initial_state_sliced T_in T_out' T_intermediate
-    (state_step sliced_preroutine bool_coding) def (pool p_pub p_priv p_sched) pool_input.
+  @reactive_system cur_pid stateType initial_state_sliced T_in (T_out' Opub Opriv) T_intermediate
+    (state_step (@sliced_preroutine Opub Opriv) bool_coding) (def Opub Opriv)
+    (pool p_pub p_priv p_sched) (@pool_input Opub Opriv).
 
 Definition model_sliced_concrete := model_sliced low_p high_p scheduler.
 
@@ -682,7 +691,7 @@ Qed.
 
 
 (* === 9. model_sliced_userview === *)
-Definition parse_output (o : [T_out']) : [T_out] :=
+Definition parse_output (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [T_out Opub Opriv] :=
   match o with
   | (Some public,_) => Some (inl public)
   | (None,(Some prv,_)) => Some (inr prv)
@@ -690,16 +699,16 @@ Definition parse_output (o : [T_out']) : [T_out] :=
   end.
 
 
-Definition model_sliced_userview
-  (p_pub : Proc Empty TPublicOutput)
-  (p_priv : Proc THandlerOutput TTypeSyscall)
-  (p_sched : Proc Empty Nat) : Proc T_in T_out :=
-  map id parse_output (model_sliced p_pub p_priv p_sched).
+Definition model_sliced_userview (Opub Opriv : Ty)
+  (p_pub : Proc Empty Opub)
+  (p_priv : Proc THandlerOutput Opriv)
+  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
+  map id (@parse_output Opub Opriv) (model_sliced p_pub p_priv p_sched).
 
 Definition model_sliced_userview_concrete := model_sliced_userview low_p high_p scheduler.
 
 (* model_sliced_userview traces *)
-Definition final_out_rel : cRel [T_out] := eqmaybe_false (eqsum (publicRel _) (privateRel _)).
+Definition final_out_rel (Opub Opriv : Ty) : cRel [T_out Opub Opriv] := eqmaybe_false (eqsum (publicRel Opub) (privateRel Opriv)).
 
 
 
@@ -718,10 +727,10 @@ Qed.
 Definition good_no_dI : seqtype :=   [::out_get;                      tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_nop(*nop*);tI;out_nop;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_get].
 Definition good_with_dI : seqtype := [::out_get;dI;out_get;out_get;tI;out_get;w_None;w_None;w_None      ;w_None      ;w_None;w_None;w_None;out_syscall(*sys*);tI;out_nop;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_get].
 
-Lemma good_no_dI_eq : map_tr parse_output sliced_no_dI' = good_no_dI.
+Lemma good_no_dI_eq : map_tr (@parse_output TPublicOutput TTypeSyscall) sliced_no_dI' = good_no_dI.
 Proof. ssa. Qed.
 
-Lemma good_with_dI_eq : map_tr parse_output sliced_with_dI' = good_with_dI.
+Lemma good_with_dI_eq : map_tr (@parse_output TPublicOutput TTypeSyscall) sliced_with_dI' = good_with_dI.
 Proof. ssa. Qed.
 
 Lemma trace_no_dI : forall l, Trace (publicRel _) l good_no_dI model_sliced_userview_concrete.

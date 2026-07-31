@@ -59,12 +59,16 @@ Definition in_rel : cRel [T_in] := TInterrupt_rel.
 (* out_rel: the 6-slot pool output.  Handler slots are default/NOP, disk,
    timer: the first two are secret (eqmaybe_top privateRel), the timer slot
    is public (it reacts only to public timer interrupts). *)
-Definition out_rel : cRel [T_out'] := eqpair (eqmaybe (publicRel _))
+Definition out_rel (Opub Opriv : Ty) : cRel [T_out' Opub Opriv] := eqpair (eqmaybe (publicRel _))
                                           (eqpair (eqmaybe (privateRel _))
                                              (eqpair (eqmaybe (publicRel _))
                                                 (eqpair (eqmaybe_top ((privateRel _)))
                                                    (eqpair (eqmaybe_top (privateRel _))
                                                       (eqmaybe (publicRel _)))))).
+
+(* The alphabets the concrete models are instantiated at. *)
+Notation out_relC := (out_rel TPublicOutput TTypeSyscall).
+Notation final_out_relC := (final_out_rel TPublicOutput TTypeSyscall).
 
 Lemma Trace_imp : forall (A B : Ty) (p : Proc A B) (s : seq ([A] + [B])) l (BRel BRel' : cRel [B]), (forall x y, rel BRel l x y -> rel BRel' l x y) -> Trace BRel l s p -> Trace BRel' l s p.
 Proof.  
@@ -88,7 +92,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.   
 
-Lemma helper_trace : Trace out_rel \bot [::out_get';out_get'] model_immediate.
+Lemma helper_trace : Trace out_relC \bot [::out_get';out_get'] model_immediate.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace'.
   intros. simpl in H. subst. auto.
@@ -104,7 +108,7 @@ Opaque state_step pool_input initial_state def f_proj.
    runs its full two steps, so the expected second public output becomes None.
    Two public outputs suffice to refute NI.  Short by necessity —
    inversion on reductions is expensive.  (docs/noninterference.md §5.) === *)
-Lemma model_immediate_not_NI : ~ NI in_rel out_rel model_immediate.
+Lemma model_immediate_not_NI : ~ NI in_rel out_relC model_immediate.
 Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
@@ -125,7 +129,14 @@ Transparent pool_input initial_state def f_proj.
 
 (*The rest of the file shows nonintereference of model2 and model3*)
 
-Lemma eqsum_L_llrr l i i' : rel (eqsum_L in_rel out_rel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
+(* Everything below is parametric in the two user-slot alphabets: no part of
+   the mechanism inspects a user-slot value.  The concrete corollaries are at
+   the bottom of the file. *)
+Section Alphabets.
+
+Variable Opub Opriv : Ty.
+
+Lemma eqsum_L_llrr l i i' : rel (eqsum_L in_rel (out_rel Opub Opriv)) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
 Proof.
   intros. destruct i. destruct i'. ssa.
   exfalso. ssa. destruct i'. ssa. ssa.
@@ -188,7 +199,7 @@ Hint Resolve private_bot.
 Lemma publicRel_eq : forall (A : Ty) l x y, rel (publicRel A) l x y -> x = y.
 Proof. ssa. Qed.
 
-Lemma out_rel_not_bot : forall i i' l, l <> \bot -> rel out_rel l i i' -> i = i'.
+Lemma out_rel_not_bot : forall i i' l, l <> \bot -> rel (out_rel Opub Opriv) l i i' -> i = i'.
 Proof.
   intros.
   move:H0. move/rel_eqpair=> [] + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [].
@@ -290,7 +301,7 @@ intros. move: H H0. rewrite /f_EP. ssa. eauto.
 Qed.
 
 Lemma fv_NI_step_left : forall f,
-    fv_NI in_rel stateType_rel stateType_rel f -> fv_NI (eqsum in_rel out_rel) stateType_rel stateType_rel (step_left f).
+    fv_NI in_rel stateType_rel stateType_rel f -> fv_NI (eqsum in_rel (out_rel Opub Opriv)) stateType_rel stateType_rel (@step_left Opub Opriv f).
 Proof.
   ssa. move: H. mrw. intros.
   apply eqsum_llrr in H0 as H0'. destruct H0'. destruct H2. destruct i. destruct i'.
@@ -300,7 +311,7 @@ Proof.
 Qed.
 
 Lemma fv_NI_step_right : forall f,
-    fv_NI out_rel stateType_rel stateType_rel f -> fv_NI (eqsum in_rel out_rel) stateType_rel stateType_rel (step_right f).
+    fv_NI (out_rel Opub Opriv) stateType_rel stateType_rel f -> fv_NI (eqsum in_rel (out_rel Opub Opriv)) stateType_rel stateType_rel (@step_right Opub Opriv f).
 Proof.
   ssa. move: H. mrw. intros.
   apply eqsum_llrr in H0 as H0'. destruct H0'. destruct H2. destruct i. destruct i'.
@@ -310,13 +321,13 @@ Proof.
 Qed.
 
 Lemma f_EP_left : forall f,
-    f_EP in_rel stateType_rel f -> f_EP (eqsum in_rel out_rel) stateType_rel (step_left f).
+    f_EP in_rel stateType_rel f -> f_EP (eqsum in_rel (out_rel Opub Opriv)) stateType_rel (@step_left Opub Opriv f).
 Proof.
   ssa.
 Qed.
 
 Lemma f_EP_right : forall f,
-    f_EP out_rel stateType_rel f -> f_EP (eqsum in_rel out_rel) stateType_rel (step_right f).
+    f_EP (out_rel Opub Opriv) stateType_rel f -> f_EP (eqsum in_rel (out_rel Opub Opriv)) stateType_rel (@step_right Opub Opriv f).
 Proof.
   ssa.
 Qed.
@@ -485,19 +496,19 @@ Ltac rewr ::= rewrite /model_sliced /reactive_system /pool /process_pool /my_f_i
 
 Section Parametric.
 
-Variable p_pub : Proc Empty TPublicOutput.
-Variable p_priv : Proc THandlerOutput TTypeSyscall.
+Variable p_pub : Proc Empty Opub.
+Variable p_priv : Proc THandlerOutput Opriv.
 Variable p_sched : Proc Empty Nat.
 
-Hypothesis p_pub_NI : forall IRel : cRel [Empty], NI IRel (publicRel TPublicOutput) p_pub.
-Hypothesis p_priv_NI : NI (privateRel THandlerOutput) (privateRel TTypeSyscall) p_priv.
+Hypothesis p_pub_NI : forall IRel : cRel [Empty], NI IRel (publicRel Opub) p_pub.
+Hypothesis p_priv_NI : NI (privateRel THandlerOutput) (privateRel Opriv) p_priv.
 Hypothesis p_sched_NI : forall IRel : cRel [Empty], NI IRel (publicRel Nat) p_sched.
 
-Lemma model_sliced_NI : NI in_rel out_rel (model_sliced p_pub p_priv p_sched).
+Lemma model_sliced_NI : NI in_rel (out_rel Opub Opriv) (model_sliced p_pub p_priv p_sched).
 Proof.
   rewr;simpl;rewr;simpl.
   eapply map_NI.
-  instantiate (1:= eqsum_L in_rel out_rel). ssa. ssa.
+  instantiate (1:= eqsum_L in_rel (out_rel Opub Opriv)). ssa. ssa.
   mrw. intros.
   2:eapply loop_NI. apply eqsum_L_llrr in H as H'. destruct H'.
   destruct i. destruct i'. ssa. ssa. ssa.
@@ -1369,17 +1380,17 @@ Proof.
   apply f_EP_comp.
   rewrite /step1.
   mrw. intros.
-  destruct i. have: (step_right check_scheduler (inl i) v) = v. done. move=>->//.
+  destruct i. have: (step_right (@check_scheduler _ _) (inl i) v) = v. done. move=>->//.
   ssa.
 
   apply f_EP_comp.
   mrw. intros.
-  destruct i. have: (step_right sliced_preroutine (inl i) v) = v. done. move=>->//.
+  destruct i. have: (step_right (@sliced_preroutine _ _) (inl i) v) = v. done. move=>->//.
   ssa.
 
   mrw. intros.
   destruct i.
-  have:  (step_right (fun=> initiate_next bool_coding) (inl i) v) = v. done.
+  have:  (@step_right Opub Opriv (fun=> initiate_next bool_coding) (inl i) v) = v. done.
   move=>->. auto.
   ssa.
 
@@ -1672,7 +1683,7 @@ Qed.
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
    weakening through parse_output (out_rel-related outputs map to
    final_out_rel-related ones).  (docs/noninterference.md §6.) === *)
-Lemma model_sliced_userview_NI : NI in_rel final_out_rel (model_sliced_userview p_pub p_priv p_sched).
+Lemma model_sliced_userview_NI : NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched).
 Proof.
   eapply map_NI. eauto. eauto.
   2: apply model_sliced_NI.
@@ -1693,16 +1704,18 @@ Qed.
 
 End Parametric.
 
+End Alphabets.
+
 
 (* === The concrete system, recovered by instantiation. === *)
-Corollary model_sliced_concrete_NI : NI in_rel out_rel model_sliced_concrete.
+Corollary model_sliced_concrete_NI : NI in_rel out_relC model_sliced_concrete.
 Proof.
   apply model_sliced_NI.
   apply low_p_NI. apply high_p_NI. apply scheduler_NI.
 Qed.
 
 Corollary model_sliced_userview_concrete_NI :
-  NI in_rel final_out_rel model_sliced_userview_concrete.
+  NI in_rel final_out_relC model_sliced_userview_concrete.
 Proof.
   apply model_sliced_userview_NI.
   apply low_p_NI. apply high_p_NI. apply scheduler_NI.
