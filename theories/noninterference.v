@@ -129,12 +129,16 @@ Transparent pool_input initial_state def f_proj.
 
 (*The rest of the file shows nonintereference of model2 and model3*)
 
-(* Everything below is parametric in the two user-slot alphabets: no part of
-   the mechanism inspects a user-slot value.  The concrete corollaries are at
-   the bottom of the file. *)
-Section Alphabets.
+(* Everything below is parametric in the model's four numeric/type parameters:
+   the two user-slot alphabets (no part of the mechanism inspects a user-slot
+   value) and the handler length / slice size (no stage of the state transition
+   inspects the counter's value -- see the fv_NI stages in section 7c, which
+   establish that the counter is public and then case on it abstractly).  The
+   concrete corollaries are at the bottom of the file. *)
+Section Parameters.
 
-Variable Opub Opriv : Ty.
+Variable Opub Opriv : Ty.       (*alphabets of the public and secret user slots*)
+Variable runtime runs : nat.    (*handler length; handler runs per time slice*)
 
 Lemma eqsum_L_llrr l i i' : rel (eqsum_L in_rel (out_rel Opub Opriv)) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
 Proof.
@@ -503,7 +507,7 @@ Hypothesis p_pub_NI : NI (publicRel Empty) (publicRel Opub) p_pub.
 Hypothesis p_priv_NI : NI (privateRel THandlerOutput) (privateRel Opriv) p_priv.
 Hypothesis p_sched_NI : NI (publicRel Empty) (publicRel Nat) p_sched.
 
-Lemma model_sliced_NI : NI in_rel (out_rel Opub Opriv) (model_sliced p_pub p_priv p_sched).
+Lemma model_sliced_NI : NI in_rel (out_rel Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
   rewr;simpl;rewr;simpl.
   eapply map_NI.
@@ -647,7 +651,7 @@ Proof.
 
   move: H2=>/publicRel_eq->//.
   move=>->.
-  destruct (handler_completed (get_ir_count v')).
+  destruct (handler_completed runtime (get_ir_count v')).
 
   apply/rel_eqpair2. con. ssa.
   apply/rel_eqpair2. con. ssa.  
@@ -1384,7 +1388,7 @@ Proof.
 
   apply f_EP_comp.
   mrw. intros.
-  destruct i. have: (step_right (@sliced_preroutine _ _) (inl i) v) = v. done. move=>->//.
+  destruct i. have: (step_right (@sliced_preroutine runtime runs _ _) (inl i) v) = v. done. move=>->//.
   ssa.
 
   mrw. intros.
@@ -1682,7 +1686,7 @@ Qed.
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
    weakening through parse_output (out_rel-related outputs map to
    final_out_rel-related ones).  (docs/noninterference.md §6.) === *)
-Lemma model_sliced_userview_NI : NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched).
+Lemma model_sliced_userview_NI : NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
   eapply map_NI. eauto. eauto.
   2: apply model_sliced_NI.
@@ -1703,7 +1707,7 @@ Qed.
 
 End Parametric.
 
-End Alphabets.
+End Parameters.
 
 
 (* === The concrete system, recovered by instantiation. === *)

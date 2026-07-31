@@ -283,15 +283,17 @@ slice boundaries rather than immediately on arrival of its interrupt.
 ## 6. `model_sliced` and `model_sliced_userview` are non-interfering
 
 ```coq
-forall (Opub Opriv : Ty)
+forall (Opub Opriv : Ty) (runtime runs : nat)
        (p_pub : Proc Empty Opub)
        (p_priv : Proc THandlerOutput Opriv)
        (p_sched : Proc Empty Nat),
   NI (publicRel Empty) (publicRel Opub) p_pub ->
   NI (privateRel THandlerOutput) (privateRel Opriv) p_priv ->
   NI (publicRel Empty) (publicRel Nat) p_sched ->
-  NI in_rel (out_rel Opub Opriv)       (model_sliced p_pub p_priv p_sched)
-  /\ NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched)
+     NI in_rel (out_rel Opub Opriv)
+          (model_sliced runtime runs p_pub p_priv p_sched)
+  /\ NI in_rel (final_out_rel Opub Opriv)
+          (model_sliced_userview runtime runs p_pub p_priv p_sched)
 ```
 
 (the two conjuncts are `model_sliced_NI` and `model_sliced_userview_NI`).
@@ -304,7 +306,9 @@ is obtained from `model_sliced_NI` by pushing the output through `parse_output`
 **Why the result is parametric.** The theorem is about the interrupt-and-scheduling
 mechanism, not about one system: the scheduler and both user processes are
 arbitrary, subject only to being non-interfering at the classification their slot
-declares, and their output alphabets are arbitrary too. What makes this available
+declares; their output alphabets are arbitrary; and so are the handler length and
+the slice size, with no side condition relating them beyond the one built into
+`time_slice runtime runs = runs * runtime`. What makes this available
 is a property of the design rather than of the proof. The state transition never
 reads a user slot's output *value* — `is_sch_out` matches
 `(None,(None,(Some n,_)))`, inspecting the two user slots only for `None`-ness — so
@@ -583,18 +587,24 @@ than argued for, and nothing here claims they are without consequence:
   preemption within a step is not modelled ([`models.md` §2](models.md)).
 - **No interrupt nesting.** All masks are set while a handler runs, so a handler can
   never itself be interrupted. A design permitting nesting is out of scope.
-- **The slice length is a constant, not a parameter.** What the design actually
-  requires is that the slice be a **multiple of the handler runtime**, so that it
-  ends on a handler boundary. That relationship is now written down —
-  `time_slice = 2 * handler_runtime`, and `handler_completed` *computes* the
-  boundaries as the nonzero multiples of `handler_runtime` rather than enumerating
-  them — but both constants are still fixed (`handler_runtime = 2`), and the
-  handler process `I_handler` encodes its runtime separately as `%% 2`. So the
-  general statement is still not what has been proved. Nothing in the security
-  argument turns on the particular numbers: the `fv_NI` stages that read the
-  counter first establish that it is *public* (equal in both states) and then case
-  on it abstractly — `handler_completed` as an opaque boolean, the counter as
-  `None` / `Some 0` / `Some n.+1` — so no numeral is ever inspected.
+- **~~The slice length is a constant~~ — lifted.** The handler runtime and the
+  slice are now parameters `runtime` and `runs`, and the theorem holds for every
+  value of both, with no side condition. What the design requires — that the slice
+  be a whole number of handler runs, so that it ends on a handler boundary — is
+  structural rather than assumed: `time_slice runtime runs = runs * runtime`, and
+  `handler_completed` computes the boundaries as the nonzero multiples of
+  `runtime`. What survives as a genuine constraint is that all three handlers
+  share one `runtime`, which `slot_procs` enforces by construction.
+
+  No side condition is needed because nothing in the argument inspects a numeral:
+  the `fv_NI` stages that read the counter first establish that it is *public*
+  (equal in both states) and then case on it abstractly — `handler_completed` as
+  an opaque boolean, the counter as `None` / `Some 0` / `Some n.+1`. Degenerate
+  values are covered rather than excluded: at `runtime = 0` a handler never
+  signals completion and at `runs = 0` the slice closes immediately, and both
+  systems are still non-interfering — they simply do less. The concrete instance
+  (`handler_runtime = 2`, `slice_runs = 2`) is what the example traces are written
+  at.
 - **Fixed pool size and layout.** Six slots, of which the last is padding. The
   processes in the scheduler and user slots are parameters, but their *number* and
   *position* are not: the output projections of `models.v` §5 (`is_sch_out`,

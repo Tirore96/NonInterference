@@ -119,16 +119,30 @@ Definition scheduler : Proc Empty Nat :=
 
 Definition handler_type := Proc Empty THandlerOutput.
 
-(* I_handler =
+(* I_handler runtime =
      map id (fun o => if o.1 == 0 then Notify else Nothing)
-       (sta (fun _ v => v) (fun _ v => v.+1 %% 2) 0 (out tt)) *)
-Definition I_handler : handler_type :=
+       (sta (fun _ v => v) (fun _ v => v.+1 %% runtime) 0 (out tt))
+
+   A handler counts modulo [runtime], emitting [Nothing] while the count is
+   nonzero and [Notify] on the step that brings it back to 0 -- so it signals
+   completion exactly every [runtime] output steps.  [runtime] is a parameter;
+   what the design needs is only that every handler has the *same* one, so that
+   a secret handler's run is the same length as the NOP run it replaces.
+   ([runtime = 0] degenerates: [n %% 0 = n], so the count never returns to 0 and
+   the handler never signals completion.) *)
+Definition I_handler (runtime : nat) : handler_type :=
   map (O := Times Nat Unit) (O' := THandlerOutput) id
     (fun o => if o.1 == 0 then Notify else Nothing)
     (sta (V := Nat) (O := Unit)
-       (fun _ v => v) (fun _ v => v.+1 %% 2)
+       (fun _ v => v) (fun _ v => v.+1 %% runtime)
        0
        (out (O := Unit) tt)).
+
+(* The concrete handler length and slice: handlers two output steps long, a
+   slice of two handler runs.  These are what [model_immediate] and every
+   example trace are instantiated at. *)
+Definition handler_runtime := 2.
+Definition slice_runs := 2.
 
 (* Only the secret user process consumes input (the disk handler's Notify).
    Every other slot is input-free, which the interface records as [Empty]. *)
@@ -165,7 +179,7 @@ Definition unit_proc : Proc Empty Unit := out (O := Unit) tt.
    each parameter at the pid [my_f_pid] assigns it: the public process
    outermost (5), then the secret process (4), then the scheduler (3).  The
    concrete instance used by the models below is [my_procs]. *)
-Definition slot_procs (Opub Opriv : Ty)
+Definition slot_procs (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)             (*public user process, slot 5*)
   (p_priv : Proc THandlerOutput Opriv)  (*secret user process, slot 4*)
   (p_sched : Proc Empty Nat)            (*scheduler,           slot 3*)
@@ -174,14 +188,14 @@ Definition slot_procs (Opub Opriv : Ty)
            | 0        (*timer interrupt handler*)
            | 1        (*disk interrupt handler*)
            | 2        (*default handler*)
-             => I_handler
+             => I_handler runtime
            | 3 => p_sched
            | 4 => p_priv
            | 5 => p_pub
            | _ => unit_proc (*padding*)
            end.
 
-Definition my_procs := slot_procs low_p high_p scheduler.
+Definition my_procs := slot_procs handler_runtime low_p high_p scheduler.
 
 
 (* === 2. Process pool === *)
@@ -248,14 +262,14 @@ Definition f_proj (i : [T_intermediate]) : forall n, [Option (my_f_I n)] :=
 (* pool p_pub p_priv p_sched =
      process_pool 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid
        (slot_procs p_pub p_priv p_sched) *)
-Definition pool (Opub Opriv : Ty)
+Definition pool (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) :=
   @process_pool cur_pid 5 my_f_initial my_f_I (my_f_O Opub Opriv) T_intermediate f_proj my_f_pid
-    (slot_procs p_pub p_priv p_sched).
+    (slot_procs runtime p_pub p_priv p_sched).
 
-Definition my_process_pool := pool low_p high_p scheduler.
+Definition my_process_pool := pool handler_runtime low_p high_p scheduler.
 
 
 (* === 3. Stateful wrapper === *)
@@ -602,33 +616,32 @@ Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*ma
 
 Definition initial_state_sliced : [stateType] := ((initial_pid,None),(false,(Some 0,mask_most))).
 
-(* The handler runtime and the time slice.  What the design requires is that the
-   slice be a whole number of handler runs, so that it always ends on a handler
-   boundary; [handler_completed] then *computes* the boundaries rather than
-   enumerating them.  At [handler_runtime = 2] and [time_slice = 4] this is the
-   same predicate as the former [Some 2 | Some 4 => true] on every value the
-   counter can reach (the counter starts at [time_slice] and is decremented to
-   [Some 0] before being cleared). *)
-Definition handler_runtime := 2.
-Definition time_slice := 2 * handler_runtime.
+(* The time slice, as a whole number [runs] of handler runs.  Expressing it this
+   way rather than as an independent constant is what makes "the slice ends on a
+   handler boundary" structural instead of a side condition: [handler_completed]
+   can then *compute* the boundaries as the nonzero multiples of [runtime]. *)
+Definition time_slice (runtime runs : nat) := runs * runtime.
 
-Definition handler_completed (c : [ir_count]) :=
+Definition handler_completed (runtime : nat) (c : [ir_count]) :=
   match c with
-  | Some n => (n != 0) && (n %% handler_runtime == 0)
+  | Some n => (n != 0) && (n %% runtime == 0)
   | None => false
   end.
 
-(* Sanity: the computed test agrees with the enumeration it replaced on every
-   value the counter can reach. *)
+(* Sanity, at the concrete instance: the computed test agrees with the
+   enumeration [Some 2 | Some 4] it replaced, on every value the counter can
+   reach (the counter starts at [time_slice] and is decremented to [Some 0]
+   before being cleared). *)
 Lemma handler_completed_reachable n :
-  n <= time_slice -> handler_completed (Some n) = ((n == 2) || (n == 4)).
+  n <= time_slice handler_runtime slice_runs ->
+  handler_completed handler_runtime (Some n) = ((n == 2) || (n == 4)).
 Proof. by case: n => [|[|[|[|[|n]]]]]. Qed.
 
-Definition initiate_ir (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType]) : [stateType] :=
-  if tI_out o is Some Notify then update_ir_count v (Some time_slice) else v.
+Definition initiate_ir (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType]) : [stateType] :=
+  if tI_out o is Some Notify then update_ir_count v (Some (time_slice runtime runs)) else v.
 
-Definition check_handler_completed (v : [stateType]) : [stateType] :=
-  if handler_completed (get_ir_count v) then set_tI (unset_masks v) else v.
+Definition check_handler_completed (runtime : nat) (v : [stateType]) : [stateType] :=
+  if handler_completed runtime (get_ir_count v) then set_tI (unset_masks v) else v.
 
 Definition check_ir_count (v : [stateType]) : [stateType] :=
     match (get_ir_count v) with
@@ -651,7 +664,7 @@ Definition bool_coding v := let b := timeslice_live (get_ir_count v) in
                             let m := get_I_mask v DiskInterrupt in
                             update_I_mask v DefaultInterrupt m.
 
-Definition sliced_preroutine (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed \o (initiate_ir o). (*\o (unset_handler_masks o)*) 
+Definition sliced_preroutine (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*) 
 
 (* model_sliced p_pub p_priv p_sched =
      reactive_system initial_state_sliced (state_step sliced_preroutine bool_coding)
@@ -660,15 +673,15 @@ Definition sliced_preroutine (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [stat
    Parametric in the scheduler and the two user processes; [model_sliced_concrete]
    is the instance the traces below are about.  [model_immediate] stays concrete --
    it exists to exhibit a leak, and a counterexample should be a single system. *)
-Definition model_sliced (Opub Opriv : Ty)
+Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) :=
   @reactive_system cur_pid stateType initial_state_sliced T_in (T_out' Opub Opriv) T_intermediate
-    (state_step (@sliced_preroutine Opub Opriv) bool_coding) (def Opub Opriv)
-    (pool p_pub p_priv p_sched) (@pool_input Opub Opriv).
+    (state_step (@sliced_preroutine runtime runs Opub Opriv) bool_coding) (def Opub Opriv)
+    (pool runtime p_pub p_priv p_sched) (@pool_input Opub Opriv).
 
-Definition model_sliced_concrete := model_sliced low_p high_p scheduler.
+Definition model_sliced_concrete := model_sliced handler_runtime slice_runs low_p high_p scheduler.
 
 (* model_sliced traces *)
 Definition sliced_no_dI' : seqtype' :=   [::out_get';                      tI';out_get';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_priv';out_nop'(*nop*);tI';out_nop';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_pub';out_get'].
@@ -719,13 +732,14 @@ Definition parse_output (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [T_out Opu
   end.
 
 
-Definition model_sliced_userview (Opub Opriv : Ty)
+Definition model_sliced_userview (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
-  map id (@parse_output Opub Opriv) (model_sliced p_pub p_priv p_sched).
+  map id (@parse_output Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 
-Definition model_sliced_userview_concrete := model_sliced_userview low_p high_p scheduler.
+Definition model_sliced_userview_concrete :=
+  model_sliced_userview handler_runtime slice_runs low_p high_p scheduler.
 
 (* model_sliced_userview traces *)
 Definition final_out_rel (Opub Opriv : Ty) : cRel [T_out Opub Opriv] := eqmaybe_false (eqsum (publicRel Opub) (privateRel Opriv)).

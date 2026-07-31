@@ -155,23 +155,30 @@ at 1), and the output adds 2, so the emitted pid alternates 2, 3, 2, 3, ... i.e.
 `high_p` then `low_p`. Its input type is `Empty`: the scheduler never consumes
 input, it only proposes the next process id.
 
-**`I_handler : Proc Empty THandlerOutput`** (`handler_type`)
+**`I_handler runtime : Proc Empty THandlerOutput`** (`handler_type`)
 
 ```coq
-I_handler =
+I_handler runtime =
   map id (fun o => if o.1 == 0 then Notify else Nothing)
-    (sta (fun _ v => v) (fun _ v => v.+1 %% 2) 0 (out tt))
+    (sta (fun _ v => v) (fun _ v => v.+1 %% runtime) 0 (out tt))
 ```
 
 The process *definition* shared by the timer, disk and default handlers. It is
 not one handler: slots 0, 1 and 2 are three separate handlers that happen to
 reuse this definition, each with its own pending and mask bits in the interrupt
-controller (section 4). Its state cell toggles 0/1 (starting at 0) and the emitted
-value is read off the *updated* cell: `Notify` when it is 0, `Nothing` otherwise.
-So each activation emits `Nothing` then `Notify` — a fixed *two* output steps,
-signalling completion with `Notify`. Keeping every handler identical and
-fixed-length is central to `model_sliced` (section 8). Its input type is `Empty`:
-a handler is driven entirely by the interrupt controller and never consumes input.
+controller (section 4). Its state cell counts modulo `runtime` (starting at 0) and
+the emitted value is read off the *updated* cell: `Notify` when it is 0, `Nothing`
+otherwise. So each activation emits `runtime - 1` `Nothing`s and then a `Notify`
+that signals completion — a fixed number of output steps. Keeping every handler
+identical and fixed-length is central to `model_sliced` (section 8). Its input
+type is `Empty`: a handler is driven entirely by the interrupt controller and
+never consumes input.
+
+`runtime` is a parameter. The security argument needs only that all three
+handlers share it, not what it is; the concrete instance is `handler_runtime = 2`,
+which is what the example traces below are written at. (`runtime = 0` degenerates
+— `n %% 0 = n`, so the cell never returns to 0 and the handler never signals
+completion. Nothing breaks, the handler simply never finishes.)
 
 **`unit_proc : Proc Empty Unit`**
 
@@ -209,7 +216,7 @@ the pool can be instantiated:
 ```coq
 slot_procs p_pub p_priv p_sched n : Proc (my_f_I n) (my_f_O Opub Opriv n) =
   match n with
-  | 0 | 1 | 2 => I_handler
+  | 0 | 1 | 2 => I_handler runtime
   | 3 => p_sched
   | 4 => p_priv
   | 5 => p_pub
@@ -621,26 +628,28 @@ running by interrupting the current process is not leaking any information.
 **`initiate_ir`**
 
 ```coq
-initiate_ir o v =
-  if tI_out o is Some Notify then update_ir_count v (Some 4) else v
+initiate_ir runtime runs o v =
+  if tI_out o is Some Notify then
+    update_ir_count v (Some (time_slice runtime runs))
+  else v
 ```
 
 *What it does:* when the timer handler emits `Notify`, (re)load the time-slice
-counter to `Some 4`. When the timer handler has completed, the time slice begins.
-Loading 4 steps into the slice means that two complete executions of handlers can
-take place before the slice ends.
+counter to `Some (time_slice runtime runs)`. When the timer handler has completed,
+the time slice begins. The slice is `runs` complete handler executions long, so
+that many can take place before it ends. At the concrete instance
+(`handler_runtime = 2`, `slice_runs = 2`) that is `Some 4`.
 
 **The slice, and the masks it drives.** Three definitions read the counter and
 decide the masks. Taken together they are easier to see as one table than as three
 signatures:
 
 ```coq
-handler_runtime = 2
-time_slice      = 2 * handler_runtime
+time_slice runtime runs = runs * runtime
 
-handler_completed c =
+handler_completed runtime c =
   match c with
-  | Some n => (n != 0) && (n %% handler_runtime == 0)   (* on a handler boundary *)
+  | Some n => (n != 0) && (n %% runtime == 0)   (* on a handler boundary *)
   | None   => false
   end
 
@@ -655,8 +664,10 @@ check_ir_count v =
   end
 ```
 
-Since every handler runs for two steps, a slice of 4 is exactly two handler runs,
-and the counter hits an even value precisely when one of them has just finished:
+Because the slice is *defined* as `runs * runtime`, it always ends on a handler
+boundary, and the counter is a nonzero multiple of `runtime` precisely when a
+handler has just finished — which is what `handler_completed` tests. Below at the
+concrete instance, where a slice of 4 is two runs of a 2-step handler:
 
 ```text
   ir_count    what just happened            masks after this step
@@ -673,8 +684,8 @@ and the counter hits an even value precisely when one of them has just finished:
                                               counter disabled (None)
 ```
 
-The two boundaries `Some 4` and `Some 2` are the nonzero multiples of
-`handler_runtime`, so they are exactly the ones `handler_completed` marks,
+The two boundaries `Some 4` and `Some 2` are the nonzero multiples of `runtime`
+below the slice, so they are exactly the ones `handler_completed` marks,
 and at both the secret handlers are the ones left runnable — that is
 `check_handler_completed`. The `Some 0` case is the mirror image and belongs to
 `check_ir_count`: it closes the slice by masking the secret handlers and unmasking
@@ -858,7 +869,7 @@ None of this is needed to follow the models; it records design questions a reade
 may reasonably ask.
 
 ### Why the slice counter lives in the interrupt controller, not in the handler
- In earlier versions the "two steps to complete"
+ In earlier versions the "steps to complete"
 counter lived inside the handler process. It has been moved into the global state,
 as part of `ic` (the interrupt controller). This mirrors how real hardware would
 enforce a time slice, and the following argues it is implementable rather than a

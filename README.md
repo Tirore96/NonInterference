@@ -23,7 +23,7 @@ A process pool of six slots, driven by a global state and a feedback loop:
 
 | slot | process | |
 |---|---|---|
-| 0, 1, 2 | timer, disk and default interrupt handlers | each runs for exactly two output steps, emitting `Nothing` then `Notify` |
+| 0, 1, 2 | timer, disk and default interrupt handlers | each runs for the same fixed number of output steps, signalling completion with `Notify` |
 | 3 | the scheduler | proposes which user process runs next |
 | 4 | the secret user process | consumes the disk handler's notifications |
 | 5 | the public user process | emits on the public channel |
@@ -128,8 +128,8 @@ the schedule.
 `model_sliced` closes it by making the *timing* of handler execution independent of
 which interrupts arrived. Handlers run only inside a time slice of fixed length,
 which is started when the **timer** handler completes — a public event, since the
-timer interrupt is public. All handlers take the same two steps, and a default
-"NOP" handler fills any part of the slice that no real interrupt claims. A secret
+timer interrupt is public. All handlers take the same number of steps, and a
+default "NOP" handler fills any part of the slice that no real interrupt claims. A secret
 handler run therefore replaces a NOP run rather than displacing a user process, and
 the public schedule is identical either way.
 
@@ -141,24 +141,28 @@ Three machine-checked theorems, in
 | Theorem | Statement | Meaning |
 |---|---|---|
 | `model_immediate_not_NI` | `~ NI in_rel out_relC model_immediate` | The naive design leaks: a secret disk interrupt is observable. |
-| `model_sliced_NI` | `NI in_rel (out_rel Opub Opriv) (model_sliced p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler. |
-| `model_sliced_userview_NI` | `NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
+| `model_sliced_NI` | `NI in_rel (out_rel Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
+| `model_sliced_userview_NI` | `NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
 
 The two positive results are parametric. In full:
 
 ```coq
-forall (Opub Opriv : Ty)
+forall (Opub Opriv : Ty) (runtime runs : nat)
        (p_pub : Proc Empty Opub)
        (p_priv : Proc THandlerOutput Opriv)
        (p_sched : Proc Empty Nat),
   NI (publicRel Empty) (publicRel Opub) p_pub ->
   NI (privateRel THandlerOutput) (privateRel Opriv) p_priv ->
   NI (publicRel Empty) (publicRel Nat) p_sched ->
-  NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview p_pub p_priv p_sched)
+  NI in_rel (final_out_rel Opub Opriv)
+     (model_sliced_userview runtime runs p_pub p_priv p_sched)
 ```
 
 So the theorem is about the interrupt-and-scheduling mechanism, not about one
-system. What makes this available is a property of the design rather than of the
+system: arbitrary userspace and scheduler, arbitrary output alphabets, arbitrary
+handler length and slice size — the last two with no side condition, because
+`time_slice runtime runs = runs * runtime` makes "the slice ends on a handler
+boundary" structural rather than assumed. What makes this available is a property of the design rather than of the
 proof: the state transition never reads a user slot's output *value*, only whether
 the slot produced one (`is_sch_out` matches `(None,(None,(Some n,_)))`). No user
 behaviour reaches the schedule, so `fv_NI` — the one hard obligation — does not
@@ -191,8 +195,11 @@ differ in two definitions, and that difference is the whole security story.
 
 Handlers must all run for the same length of time, or the schedule would again
 depend on which interrupt arrived. The three handler slots therefore reuse a single
-process definition, `I_handler`, two output steps long, and the slice is sized to a
-whole number of those runs. A real system would reach a fixed length by padding.
+process definition, `I_handler runtime`, and the slice is `runs * runtime` — a
+whole number of handler runs by construction, so it always ends on a handler
+boundary. Both `runtime` and `runs` are parameters; what the argument needs is
+that the three handlers *share* a runtime, not what it is. A real system would
+reach a fixed length by padding.
 
 ## Glossary
 
