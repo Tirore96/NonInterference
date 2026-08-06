@@ -16,6 +16,7 @@ interfaces carry the security classification; non-interference is then a propert
 of a closed term in that calculus. The calculus and its generic non-interference
 theorems are reused from prior work — the contribution here is the OS models and
 their proofs.
+>>prior work, which does not include me, give a reference to the compositional non intereference paper<<
 
 ## The system being modelled
 
@@ -35,10 +36,12 @@ alphabets. The concrete instance used for the example traces is a round-robin
 scheduler, a `high_p` that issues a `Syscall` if the disk handler notified it and
 `NOP` otherwise, and a `low_p` that repeatedly issues `GetRequest`. Only the
 handlers and the padding are fixed — they are the mechanism under study.
+>> What does padding refer to here? Write this more clearly.<<
 
 Exactly one slot runs per step, chosen by the current pid. The global state holds a
 `(pending, mask)` bit pair per interrupt — an interrupt is serviced when it is
 pending and unmasked — plus a time-slice counter used by the good design.
+>> Maybe use noninterfering instead of good (good/bad was a dichotomy we used before)<<
 
 ## The three models
 
@@ -50,7 +53,7 @@ Everything below refers to these. All three are in
 | `model_immediate` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
 | `model_sliced` | the same full pool output | the fixed design; non-interfering |
 | `model_sliced_userview` | only the user-visible channel: a public output or a syscall, everything else erased | `model_sliced` behind a projection; the headline result |
-
+>>We should have a title in the third column as well<<
 The three differ along two independent axes, and it helps to keep them apart.
 
 **Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
@@ -74,7 +77,7 @@ user-visible channel. Below, `·` is `None` and `Nfy` is `Notify`:
                     '-----------'   '---------------------------'
                     kept            discarded: scheduler and handler activity
 ```
-
+>> Having parse_output above the projected output is confusing, it's a function, maybe it should be aligned with the arrow? I don't know, fix it.<<
 Exactly one slot is `Some` per step, so each row above is one output step, not
 four parallel events. `model_immediate` emits the same six-slot tuple as
 `model_sliced` — the diagram is about the projection, not about the leak.
@@ -82,7 +85,7 @@ four parallel events. `model_immediate` emits the same six-slot tuple as
 Proving non-interference at the full pool output — where the attacker sees more
 than a real one ever would — is what makes the user-visible result follow by
 weakening the output relation.
-
+>> Well, since we have a parallel composition of six processes, somewhere there will be a six tuple, that's just how output reduciton of par works. Not sure what I want you to fix here<<
 ## Threat model
 
 The attacker is `⊥`, the least and most exposed level of a security lattice. Each
@@ -96,7 +99,8 @@ a scheduled event the attacker may as well know about, and the good design is
 allowed to let scheduling depend on it. `NI in_rel out_rel p` is the standard
 condition: inserting, removing, or varying secret inputs does not change the set of
 traces an observer can see, at any level.
-
+>>The reason the timer interrupt is a public event is that it changes the schedule of public processes. It has to be public.<<
+>>We should explain that in_rel and out_rel are the interfaces we are talking about. Maybe interface is not a good word to use. The original paper calls them for L-equivalences (level indexed equivalences)<<
 ## The leak
 
 A disk interrupt makes the disk handler run immediately, displacing whichever
@@ -132,7 +136,7 @@ timer interrupt is public. All handlers take the same number of steps, and a
 default "NOP" handler fills any part of the slice that no real interrupt claims. A secret
 handler run therefore replaces a NOP run rather than displacing a user process, and
 the public schedule is identical either way.
-
+>>handler execution still depends on timer interrupt, it the disk interrupt that now has no power to interrupt user processes<<
 ## Results
 
 Three machine-checked theorems, in
@@ -143,7 +147,7 @@ Three machine-checked theorems, in
 | `model_immediate_not_NI` | `~ NI in_rel out_relC model_immediate` | The naive design leaks: a secret disk interrupt is observable. |
 | `model_sliced_NI` | `NI in_rel (out_rel Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
 | `model_sliced_userview_NI` | `NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
-
+>>handler length and slice length have not been explained yet<<
 The two positive results are parametric. In full:
 
 ```coq
@@ -162,11 +166,14 @@ So the theorem is about the interrupt-and-scheduling mechanism, not about one
 system: arbitrary userspace and scheduler, arbitrary output alphabets, arbitrary
 handler length and slice size — the last two with no side condition, because
 `time_slice runtime runs = runs * runtime` makes "the slice ends on a handler
-boundary" structural rather than assumed. What makes this available is a property of the design rather than of the
+boundary" structural rather than assumed.
+
+What makes this available is a property of the design rather than of the
 proof: the state transition never reads a user slot's output *value*, only whether
 the slot produced one (`is_sch_out` matches `(None,(None,(Some n,_)))`). No user
 behaviour reaches the schedule, so `fv_NI` — the one hard obligation — does not
 depend on which processes fill the slots.
+>>We should cut the paragraph above<<
 
 `model_sliced_concrete_NI` and `model_sliced_userview_concrete_NI` recover the
 concrete system by instantiating with `low_p_NI`, `high_p_NI` and `scheduler_NI`.
@@ -176,9 +183,10 @@ counterexample should be a single system.
 Fixed, and out of scope: the pool's *shape* and *slot count*. The output
 projections (`is_sch_out` and friends) are tuple patterns that hardwire two user
 slots before the scheduler slot, and generalising that lands inside `fv_NI`.
+>>Cut paragraph above<<
 
 ## `model_immediate` vs `model_sliced` at a glance
-
+>>This entire section should be in the models file<<
 The two models share their entire structure — the process pool, the stateful
 wrapper, the state layout, and three of the four state-transition stages. They
 differ in two definitions, and that difference is the whole security story.
@@ -202,7 +210,7 @@ that the three handlers *share* a runtime, not what it is. A real system would
 reach a fixed length by padding.
 
 ## Glossary
-
+>>This section should probably be cut. We need to explain cRel somewhere, probably in the noninterference file, but we don't need the full glossary<<
 Formal definitions — the actual `dis` and `rel` bodies — are in
 [`docs/noninterference.md` §2](docs/noninterference.md).
 
@@ -219,10 +227,10 @@ Formal definitions — the actual `dis` and `rel` bodies — are in
 
 The development is constructive except for one import of classical logic,
 `Require Import Classical` at [`theories/theorems.v:739`](theories/theorems.v). The
-law of excluded middle is used only in the switch non-interference lemma `swi_NI'`,
+law of excluded middle is used only in the switch non-interference lemma `swi_NI`,
 because the `aware` predicate is not constructively decidable; a decision procedure
 would remove the need for it.
-
+>>Reader has not been introduced to aware, say something like "because a premise of the theorem uses a definition `aware` which is not decidable, ......"<<
 ## Building
 
 From the repository root:
@@ -246,7 +254,8 @@ This compiles the four-file chain in dependency order
 | [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state relations, and the three theorems above. |
 | [`docs/models.md`](docs/models.md) | **What the models are** — long-form companion to `models.v`. |
 | [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering** — the security relations and the proof, companion to `noninterference.v`. |
-
+>>Remove things in parenthesis from here<<
+>>We mention prior work, throw a reference<<
 ## Where to read next
 
 - For the **models** — every process, the state layout, and the design rationale
