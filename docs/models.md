@@ -43,8 +43,8 @@ Defined in sections 7–9 below.
 
 Everything below is built from a small process calculus (defined in
 [`theories/definitions.v`](../theories/definitions.v)). The calculus and its
-non-interference theorems are due to Bauer et al., *Composing Security Policies in
-Timed Systems* ([POST
+non-interference theorems are due to Rafnsson et al., *Timing-Sensitive
+Noninterference through Composition* ([POST
 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf));
 mechanising them is part of the contribution of this development. The
 mechanisation departs from the paper in one respect: **definitions the paper gives

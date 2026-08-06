@@ -14,8 +14,8 @@ the one that leaks and one that does not — and proves each claim.
 Both designs are expressed in a small process calculus, `Proc I O`, whose
 interfaces carry the security classification; non-interference is then a property
 of a closed term in that calculus. The calculus and its generic non-interference
-theorems are not ours: they are due to Bauer et al., *Composing Security Policies
-in Timed Systems*,
+theorems are not ours: they are due to Rafnsson et al., *Timing-Sensitive
+Noninterference through Composition*,
 [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf).
 The contribution here is the OS models and their proofs, together with the
 mechanisation of that paper's theorems.
@@ -37,10 +37,7 @@ non-interfering at the classification their slot declares, over arbitrary output
 alphabets. The concrete instance used for the example traces is a round-robin
 scheduler, a `high_p` that issues a `Syscall` if the disk handler notified it and
 `NOP` otherwise, and a `low_p` that repeatedly issues `GetRequest`. Only the
-interrupt handlers are fixed — they are the mechanism under study. (The pool is
-indexed by a *total* function on slot numbers, so indices past the six live slots
-are filled by an inert process that is never scheduled. That filler is an artefact
-of totality, not a component of the system.)
+interrupt handlers are fixed — they are the mechanism under study.
 
 Exactly one slot runs per step, chosen by the current pid. The global state holds a
 `(pending, mask)` bit pair per interrupt — an interrupt is serviced when it is
@@ -86,12 +83,10 @@ Exactly one slot is `Some` per step, so each row above is one output step, not
 four parallel events. `model_immediate` emits the same six-slot tuple as
 `model_sliced` — the diagram is about the projection, not about the leak.
 
-The six-slot tuple is not a modelling decision: a parallel composition of six
-processes reduces to one component per process, so a tuple of that shape is simply
-what `par` produces. The decision is *where* non-interference is proved — at that
-tuple, where the attacker sees every slot including handler and scheduler activity,
-rather than only after `parse_output` has erased them. The user-visible result then
-follows by weakening the output relation.
+Non-interference is proved at both observations. Proving it at the six-slot tuple
+is just what a statement about a parallel composition looks like, and it is the
+stronger claim: the attacker sees every slot, including handler and scheduler
+activity. The user-visible result then follows by weakening the output relation.
 
 ## Threat model
 
@@ -102,9 +97,9 @@ them apart, while above `⊥` they too must agree exactly (the formal definition
 in [`docs/noninterference.md` §2](docs/noninterference.md)).
 
 The disk interrupt is the only secret input. The timer interrupt is public, and has
-to be: it changes the schedule of the public processes, so its effect is visible to
-an observer at `⊥` by construction. Non-interference must therefore permit the
-schedule to depend on it.
+to be: it changes the schedule of the user space processes, and that schedule is
+public, so its effect is visible to an observer at `⊥` by construction.
+Non-interference must therefore permit the schedule to depend on it.
 
 `NI in_rel out_rel p` is the standard condition: inserting, removing, or varying
 secret inputs does not change the set of traces an observer can see, at any level.
@@ -222,7 +217,7 @@ This compiles the four-file chain in dependency order
 | Path | What it is |
 |---|---|
 | [`theories/definitions.v`](theories/definitions.v) | The process calculus, traces, `NI`, and the security relations. |
-| [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Bauer et al., *Composing Security Policies in Timed Systems*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); they are used here, not contributed. |
+| [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); they are used here, not contributed. |
 | [`theories/models.v`](theories/models.v) | The three models and everything they are built from. |
 | [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state relations, and the three theorems above. |
 | [`docs/models.md`](docs/models.md) | **What the models are** — long-form companion to `models.v`. |
