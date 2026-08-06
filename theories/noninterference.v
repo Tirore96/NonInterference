@@ -21,7 +21,7 @@ Require Export NonInterference.theories.models.
    Prose companion: docs/noninterference.md (kept in sync with the
    section banners below).  Structure:
      4. Model interfaces : in_rel, out_rel (final_out_rel is in models.v)
-     5. model_immediate is not non-interfering        (model_immediate_not_NI)
+     5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
      7. The state relation (stateType_rel) and the fv_NI obligation
    Note: this file imports classical logic via theorems.v (Require Import
@@ -78,7 +78,7 @@ Proof.
   econ;eauto.
 Qed.
 
-Lemma helper_trace' : Trace (publicRel _) \bot [::out_get';out_get'] model_immediate.
+Lemma helper_trace' : Trace (publicRel _) \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
     rewr;simpl;rewr;simpl;rewr;simpl;rewr.
     (first [econ;[idtac | econ | idtac] | econ];
@@ -92,7 +92,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.   
 
-Lemma helper_trace : Trace out_relC \bot [::out_get';out_get'] model_immediate.
+Lemma helper_trace : Trace out_relC \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace'.
   intros. simpl in H. subst. auto.
@@ -100,15 +100,15 @@ Qed.
 
 
 (*Opaque otherwise the inversion tactic take forever*)
-Opaque state_step pool_input initial_state def f_proj.
+Opaque state_step pool_input initial_state_immediate def f_proj.
 
-(* === Section 5: model_immediate is not non-interfering.  Witness: a short
+(* === Section 5: model_immediate_concrete is not non-interfering.  Witness: a short
    bot-trace of two public requests; insert a disk interrupt at the front
    (secret at bot); its pending flag reschedules the disk handler, which then
    runs its full two steps, so the expected second public output becomes None.
    Two public outputs suffice to refute NI.  Short by necessity —
    inversion on reductions is expensive.  (docs/noninterference.md §5.) === *)
-Lemma model_immediate_not_NI : ~ NI in_rel out_relC model_immediate.
+Lemma model_immediate_not_NI : ~ NI in_rel out_relC model_immediate_concrete.
 Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
@@ -124,7 +124,7 @@ Proof.
   move: H9. clear. simpl. ssa.
 Qed.
 
-Transparent pool_input initial_state def f_proj.
+Transparent pool_input initial_state_immediate def f_proj.
 
 
 (*The rest of the file shows nonintereference of model2 and model3*)
@@ -262,7 +262,7 @@ Proof.
 Qed.
 
 
-Transparent state_step pool_input initial_state def f_proj.
+Transparent state_step pool_input initial_state_immediate def f_proj.
 
 Lemma in_rel_eq i i0 l : rel in_rel l i i0 -> i = i0.
 Proof.
@@ -495,7 +495,7 @@ Qed.
 
 (* The parametric proof cannot unfold its own processes, so [rewr] drops
    /low_p /alternate /high_p /scheduler. *)
-Ltac rewr ::= rewrite /model_sliced /reactive_system /pool /process_pool /my_f_initial /slot_procs /pool_input /tI_o /I_handler /f_proj /low_out.
+Ltac rewr ::= rewrite /model_sliced /model /reactive_system /pool /process_pool /my_f_initial /slot_procs /pool_input /tI_o /I_handler /f_proj /low_out.
 
 Section Parametric.
 
