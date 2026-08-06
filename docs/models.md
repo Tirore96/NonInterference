@@ -754,6 +754,31 @@ A concrete run of `model_sliced`, and what survives the `model_sliced_userview`
 projection, is worked through in section 9.
 
 
+### `model_immediate` vs `model_sliced` at a glance
+
+The two models share their entire structure — the process pool, the stateful
+wrapper, the state layout, and three of the four state-transition stages. They
+differ in two definitions, and that difference is the whole security story.
+
+| | `model_immediate` | `model_sliced` |
+|---|---|---|
+| **`handler_preroutine`** | `immediate_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_preroutine` = `check_ir_count ∘ check_handler_completed ∘ initiate_ir`: reload the slice on a timer `Notify`, unmask at fixed boundaries, tick the slice |
+| **`bool_coding`** | `id` (no bookkeeping) | `bool_coding`: restore the time-slice invariant; force the default mask to equal the disk mask |
+| **Initial masks / counter** | all masks clear; counter `None` (disabled) | all masks set except the timer; counter `Some 0` |
+| **When a handler stops** | when it emits its **secret** `Notify` — *secret-driven* | at a fixed **public** time-slice boundary — *slice-driven* |
+| **What mask changes track** | secret handler behaviour | public slice boundaries |
+| **Non-interfering?** | **No** (`model_immediate_not_NI`) | **Yes** (`model_sliced_NI`, for any non-interfering userspace) |
+| **Why** | a handler runs as soon as its interrupt is serviced, so a secret interrupt displaces the scheduled process and the gap is visible | handlers run only within the public slice, replacing NOP filler, so the schedule is unchanged |
+
+Handlers must all run for the same length of time, or the schedule would again
+depend on which interrupt arrived. The three handler slots therefore reuse a single
+process definition, `I_handler runtime`, and the slice is `runs * runtime` — a
+whole number of handler runs by construction, so it always ends on a handler
+boundary. Both `runtime` and `runs` are parameters; what the argument needs is
+that the three handlers *share* a runtime, not what it is. A real system would
+reach a fixed length by padding.
+
+
 ## 9. `model_sliced_userview`
 
 `model_sliced` still exposes the whole pool output (`T_out'`), including handler and
