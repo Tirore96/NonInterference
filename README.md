@@ -58,9 +58,10 @@ Everything below refers to these. All three are in
 The three differ along two independent axes, and it helps to keep them apart.
 
 **Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
-interface, same pool, same state layout. They differ in exactly two definitions
-(`handler_preroutine` and `bool_coding`, tabulated in
-[`docs/models.md` §8](docs/models.md)), and that difference is the whole security
+interface, same pool, same state layout. Both are the *same* generic definition,
+`model`, at a different triple of arguments — the initial state,
+`handler_preroutine`, and `bool_coding`, tabulated in
+[`docs/models.md` §8](docs/models.md) — and that difference is the whole security
 story: one leaks, the other does not.
 
 **Axis 2: observation — `model_sliced` vs `model_sliced_userview`.** Same
@@ -164,7 +165,7 @@ Three machine-checked theorems, in
 
 | Theorem | Statement | Meaning |
 |---|---|---|
-| `model_immediate_not_NI` | `~ NI in_rel out_relC model_immediate` | The naive design leaks: a secret disk interrupt is observable. |
+| `model_immediate_not_NI` | `~ NI in_rel out_relC model_immediate_concrete` | The naive design leaks: a secret disk interrupt is observable. |
 | `model_sliced_NI` | `NI in_rel (out_rel Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
 | `model_sliced_userview_NI` | `NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
 
@@ -196,8 +197,9 @@ boundary" structural rather than assumed.
 
 `model_sliced_concrete_NI` and `model_sliced_userview_concrete_NI` recover the
 concrete system by instantiating with `low_p_NI`, `high_p_NI` and `scheduler_NI`.
-`model_immediate` stays concrete: it exists to exhibit a leak, and a
-counterexample should be a single system.
+`model_immediate` is parametric in the same way, but the counterexample is stated
+at the concrete instance `model_immediate_concrete`: exhibiting a leak needs one
+system, not all of them.
 
 ## Logical foundations
 

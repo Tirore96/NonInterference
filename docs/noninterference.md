@@ -251,10 +251,12 @@ left (exact) or the secret syscall on the right (secret at `⊥`).
 
 ## 5. `model_immediate` is not non-interfering
 
-`model_immediate_not_NI : ~ NI in_rel out_relC model_immediate`.
+`model_immediate_not_NI : ~ NI in_rel out_relC model_immediate_concrete`.
 
-`model_immediate` is concrete throughout — a counterexample should exhibit a
-single system, so it is instantiated at the concrete user processes and alphabets.
+`model_immediate` is parametric like `model_sliced`, but a counterexample should
+exhibit a single system, so the refutation is stated at `model_immediate_concrete`
+— the instance at the concrete user processes, scheduler and alphabets
+([`models.md` §10](models.md)).
 
 Non-interference requires, among other things, that inserting a secret input
 anywhere in a trace leaves it a trace. The counterexample refutes that clause with
@@ -458,7 +460,7 @@ stateType_rel : cRel [stateType]
 ```
 
 Reading off the security classification of the state (the `stateType` layout is in
-[`models.md` §4](models.md)):
+[`models.md` §5](models.md)):
 
 - **masks: PUBLIC everywhere.** This is the formal content of "all masks are
   public": every mask bit sits under `publicRel`, so it must agree across two
@@ -490,7 +492,7 @@ fv_NI (eqsum in_rel out_rel) stateType_rel stateType_rel
 ```
 
 — `stateType_rel` is closed under the state transition. `state_step` is a
-composition ([`models.md` §5](models.md)), and `fv_NI_comp` discharges `fv_NI` of a
+composition ([`models.md` §6](models.md)), and `fv_NI_comp` discharges `fv_NI` of a
 composition from `fv_NI` of the parts. Combined with
 `fv_NI_step_left` / `fv_NI_step_right` (which lift a stage to the
 `eqsum in_rel/out_rel` event), the obligation splits into one small, independent
@@ -523,7 +525,7 @@ how that is recovered.
 ### 7d. `bool_coding`: re-establishing the forgotten invariant
 
 The reachable invariant that matters (`model_sliced`; the substance is in
-[`models.md` §8](models.md), `bool_coding` note): while the time slice is live, the
+[`models.md` §8b](models.md), `bool_coding` note): while the time slice is live, the
 NOP (default) handler's pending bit is true, the disk and NOP masks are false and
 the timer mask is true; and the disk and NOP masks are always toggled together
 (kept in sync).
@@ -583,7 +585,7 @@ than argued for, and nothing here claims they are without consequence:
 - **One output step per selection.** In `process_pool` each slot's output is tagged
   with the constant `true`, which closes its switch after a single output. Every
   process is therefore cooperative and advances exactly one step per selection;
-  preemption within a step is not modelled ([`models.md` §2](models.md)).
+  preemption within a step is not modelled ([`models.md` §3](models.md)).
 - **No interrupt nesting.** All masks are set while a handler runs, so a handler can
   never itself be interrupted. A design permitting nesting is out of scope.
 - **~~The slice length is a constant~~ — lifted.** The handler runtime and the
