@@ -53,7 +53,7 @@ Everything below refers to these. All three are in
 |---|---|---|
 | `model_immediate` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
 | `model_sliced` | the same full pool output | the fixed design; non-interfering |
-| `model_sliced_userview` | only the user-visible channel: a public output or a syscall, everything else erased | `model_sliced` behind a projection; the headline result |
+| `model_sliced_userview` | only what the two user space processes emit: a public output or a syscall, every other slot erased | `model_sliced` behind a projection; the headline result |
 
 The three differ along two independent axes, and it helps to keep them apart.
 
@@ -66,8 +66,8 @@ story: one leaks, the other does not.
 **Axis 2: observation — `model_sliced` vs `model_sliced_userview`.** Same
 behaviour; they are literally the same process. `model_sliced_userview` is
 `model_sliced` with a projection on its output,
-`map id parse_output model_sliced`, which discards everything except the
-user-visible channel. Below, `·` is `None` and `Nfy` is `Notify`:
+`map id parse_output model_sliced`, which erases every slot but the two user space
+processes. Below, `·` is `None` and `Nfy` is `Notify`:
 
 ```text
                      pub     sys     pid     dfl     dsk     tmr      parse_output
@@ -90,24 +90,33 @@ activity. The user-visible result then follows by weakening the output relation.
 
 ## Threat model
 
-The attacker is `⊥`, the least and most exposed level of a security lattice. Each
-interface classifies its values: **public** values must agree exactly at every
-level, at `⊥` any two **private** values are related, so an observer there cannot tell
-them apart, while above `⊥` they too must agree exactly (the formal definitions are
-in [`docs/noninterference.md` §2](docs/noninterference.md)).
+The attacker is an observer at `⊥`, the bottom of a security lattice: the higher the
+level, the more it sees, so `⊥` sees the least. Each level comes with two notions,
+and every classification in the development is expressed with them.
+
+- Two values are **indistinguishable** at level `l` when the level's equivalence
+  relates them: the observer receives one of them but cannot tell which.
+- A value is **unobservable** at `l` when the observer does not see the event at
+  all, so it can be inserted or removed without the observer noticing.
+
+A **public** value is observable at every level and indistinguishable only from
+itself. A **private** value is unobservable at `⊥`, where all private values are
+therefore indistinguishable; above `⊥` it is observable and values must agree
+exactly. (Formally, `publicRel` and `privateRel`, in
+[`docs/noninterference.md` §2](docs/noninterference.md).)
 
 The disk interrupt is the only secret input. The timer interrupt is public, and has
 to be: it changes the schedule of the user space processes, and that schedule is
 public, so its effect is visible to an observer at `⊥` by construction.
 Non-interference must therefore permit the schedule to depend on it.
 
-`NI in_rel out_rel p` is the standard condition: inserting, removing, or varying
-secret inputs does not change the set of traces an observer can see, at any level.
-The classification lives in `in_rel` and `out_rel`. Each is a **level-indexed
-equivalence** — the *L-equivalences* of the original paper — one on the input type
-and one on the output type, saying which values an observer at level `l` is able to
-tell apart. Every claim made above about what is public or secret is a statement
-about those two relations; they are given in
+`NI in_rel out_rel p` is then the standard condition: at every level, inserting or
+removing inputs that are unobservable there, or swapping inputs that are
+indistinguishable there, leaves the traces that observer can see unchanged. The
+classification lives entirely in `in_rel` and `out_rel` — one **level-indexed
+equivalence** (the *L-equivalences* of the original paper) on the input type and one
+on the output type. Every claim made above about what is public or secret is a
+statement about those two relations; they are given in
 [`docs/noninterference.md` §4](docs/noninterference.md).
 
 ## The leak

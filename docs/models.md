@@ -23,7 +23,7 @@ Defined in sections 7–9 below.
 |---|---|---|
 | `model_immediate` | `Proc T_in T_out'C` | Interrupts handled the ordinary way: a handler runs as soon as its interrupt is serviced. Secret interrupts leak through scheduling. |
 | `model_sliced` | `Proc T_in (T_out' Opub Opriv)` | Interrupt masking controlled so that a secret interrupt can be serviced without disturbing the public schedule. Like `model_immediate`, its output exposes every pool slot: the two user processes, the scheduler and all three handlers. |
-| `model_sliced_userview` | `Proc T_in (T_out Opub Opriv)` | `model_sliced` behind a projection that keeps only the user-visible channel. This is the model the headline theorem is about. |
+| `model_sliced_userview` | `Proc T_in (T_out Opub Opriv)` | `model_sliced` behind a projection of the pool's output that erases every slot but the two user space processes. This is the model the headline theorem is about. |
 
 ## Contents
 
@@ -52,12 +52,15 @@ coinductively are given inductively here** — `oblivious`, for instance, is sta
 over the traces a process admits rather than over an infinite stream. The proofs
 are substantially simpler for it, since they never have to construct streams.
 
-A process has type `Proc I O`, where the interface types `I` and `O` are drawn from
-an inductive `Ty` (Nat, Bool, Unit, Times, Option, Sum, ...) and `[t]` denotes the
-ordinary Coq type that `t : Ty` encodes. Indexing interfaces by the inductive `Ty`
-rather than by `Set` is what lets the proofs invert reductions; the cost is the
-explicit type annotations in the source, which is exactly what this document strips
-away.
+A process has type `Proc I O`, where `I` and `O` are its input and output
+interfaces.
+
+> **Why interfaces are not just types.** `I` and `O` are drawn from an inductive
+> `Ty` (`Nat`, `Bool`, `Unit`, `Times`, `Option`, `Sum`, ...), and `[t]` interprets a
+> `t : Ty` as the `Set` it encodes. Going through `Ty` rather than through `Set`
+> directly is what makes reductions invertible, which the negative result needs: to
+> refute non-interference one must show a trace is *not* accepted. The cost is the
+> explicit annotations in the source, which this document strips away.
 
 A process runs by alternating input steps and output steps. There are seven
 constructors:
@@ -86,19 +89,14 @@ constructors:
   input `Some i` steps `p` on `i`. Outputs pass through unchanged.
   (`Proc I O → Proc (Option I) O`)
 
-Two derived notions used throughout:
-
-- **`Trace ORel l s p`** — `s` is a legal input/output sequence of `p`, where each
-  output is compared to the trace's label through the relation `ORel` at security
-  level `l`.
-- **`NI IRel ORel p`** — non-interference: at every level, inserting/removing or
-  swapping level-indistinguishable inputs leaves the set of traces unchanged — an
-  observer at level `l` cannot tell such inputs apart from `p`'s outputs.
-
-The whole development ends by proving `NI` of `model_sliced_userview`.
+The whole development ends by proving `NI` of `model_sliced_userview`. What `Trace`
+and `NI` mean, and the equivalences they are indexed by, are in
+[`noninterference.md` §1](noninterference.md).
 
 
 ## 1. Userspace processes, scheduler and interrupt handler
+>>We should rewrite the way we define the models in coq (and therefore also in the doc). I want to move the presentation to start with only what is necessary to give the parametric definition that is shared across both models. This means postponing user space processes and scheduler. It also means side by side definition of the parameters that differ across the models (initial state and parts of the transition function). The general definition should be instantiated to give parametric good and parametric bad (don't use those names). We can then define user space processes and scheduler, instantiating both parametric processes, and show adequacy by the traces they accept.
+This is a significant change, and will also affect the presentaiton in this markdown.
 
 These are the leaf processes that populate the pool.
 
