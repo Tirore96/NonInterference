@@ -670,9 +670,10 @@ counterexample `model_immediate_not_NI`, are stated at.
 ## 11. Adequacy: the example traces
 
 Each design is exercised on two runs of the concrete system — one with no disk
-interrupt, one with a disk interrupt arriving at the same point — and each run is
-proved to be an accepted trace. Reading the two runs of a design against each other
-is what exhibits its behaviour.
+interrupt, one with a disk interrupt — and each run is proved to be an accepted
+trace. Reading a design's two runs against each other is what exhibits its
+behaviour, so both are shown aligned, with `≠` marking every row on which they
+differ.
 
 Every output is a six-slot tuple with exactly one slot `Some` at a time. The slot
 order is the *reverse* of the pool index of section 2:
@@ -688,37 +689,36 @@ order is the *reverse* of the pool index of section 2:
 
 The last column is the classification `out_rel` gives each slot
 ([`noninterference.md` §4](noninterference.md)); the tables below are read against
-it. In them, `·` is `None`, `Nth` is `Nothing` and `Nfy` is `Notify` — and since a
-handler activation is always `Nothing` then `Notify`, an `Nth`/`Nfy` pair is exactly
-one complete handler run.
+it. In them a row is one step, named by the slot it fills: `·` is `None`, `Nth` is
+`Nothing`, `Nfy` is `Notify`, and `sch hi` / `sch lo` are scheduler outputs naming
+the secret and the public process. Since a handler activation is always `Nothing`
+then `Notify`, an `Nth`/`Nfy` pair is exactly one complete handler run.
 
 ### `model_immediate`: the leak
 
-`trace_immediate_no_dI'` and `trace_immediate_with_dI'`, aligned against each other.
-Inputs are `dI` and `tI`; `sch hi` / `sch lo` are scheduler outputs naming the secret
-and public process.
+`trace_immediate_no_dI'` against `trace_immediate_with_dI'`.
 
 ```text
-  no disk interrupt     with disk interrupt
-  ───────────────────────────────────────────────
-  Get                   Get
-                        dI                  ← secret input
-                        Get
-                        dsk  Nth            ← the disk handler runs here, wherever its
-                        dsk  Nfy              interrupt happened to be serviced
-                        Get
-  tI                    tI
-  Get                   Get
-  tmr  Nth              tmr  Nth
-  tmr  Nfy              tmr  Nfy
-  sch  hi               sch  hi
-  NOP                   Sys                 ← the secret process reacts
-  tI                    tI
-  NOP                   NOP
-  tmr  Nth              tmr  Nth
-  tmr  Nfy              tmr  Nfy
-  sch  lo               sch  lo
-  Get                   Get
+  no disk interrupt        with disk interrupt
+  ──────────────────────────────────────────────
+  Get                      Get
+                           dI                     ← secret input
+                           Get
+                           dsk  Nth               ← the disk handler runs immediately, wherever
+                           dsk  Nfy                 its interrupt happened to be serviced
+                           Get
+  tI                       tI
+  Get                      Get
+  tmr  Nth                 tmr  Nth
+  tmr  Nfy                 tmr  Nfy
+  sch  hi                  sch  hi
+  NOP                   ≠  Sys                    ← the secret process reacts
+  tI                       tI
+  NOP                      NOP
+  tmr  Nth                 tmr  Nth
+  tmr  Nfy                 tmr  Nfy
+  sch  lo                  sch  lo
+  Get                      Get
 ```
 
 What this shows is *where* a handler run may appear. In `model_immediate` it appears
@@ -729,59 +729,62 @@ but its effect — steps on which a public output was due and nothing arrived.
 `model_immediate_not_NI` ([`noninterference.md` §5](noninterference.md)) turns that
 into a counterexample using a trace of just two public requests.
 
-In `model_sliced` a handler run can appear in only one place: inside the fixed slice,
-after a timer `Notify`.
+### `model_sliced`: the same two runs, and the projection
 
-### `model_sliced`, and the projection in action
-
-`sliced_with_dI'`, a disk interrupt arriving at step 2. The left block is
-`model_sliced`'s full six-slot tuple; to the right of the double bar is the single
-value `model_sliced_userview` emits for that step.
+`trace_sliced_no_dI'` against `trace_sliced_with_dI'`, in the same layout. The extra
+column is what `model_sliced_userview` emits for that step, i.e. the row under
+`parse_output`.
 
 ```text
-step  in  pub  sys  pid  dfl  dsk  tmr  ║  wrapped
-────────────────────────────────────────╫──────────
-   1      Get   ·    ·    ·    ·    ·   ║  Get
-   2  dI   ·    ·    ·    ·    ·    ·   ║  dI
-   3      Get   ·    ·    ·    ·    ·   ║  Get
-   4      Get   ·    ·    ·    ·    ·   ║  Get
-   5  tI   ·    ·    ·    ·    ·    ·   ║  tI
-   6      Get   ·    ·    ·    ·    ·   ║  Get
-   7       ·    ·    ·    ·    ·   Nth  ║  ·
-   8       ·    ·    ·    ·    ·   Nfy  ║  ·
-   9       ·    ·    ·    ·   Nth   ·   ║  ·
-  10       ·    ·    ·    ·   Nfy   ·   ║  ·
-  11       ·    ·    ·   Nth   ·    ·   ║  ·
-  12       ·    ·    ·   Nfy   ·    ·   ║  ·
-  13       ·    ·    hi   ·    ·    ·   ║  ·
-  14       ·   Sys   ·    ·    ·    ·   ║  Sys
-  15  tI   ·    ·    ·    ·    ·    ·   ║  tI
-  16       ·   NOP   ·    ·    ·    ·   ║  NOP
-  17       ·    ·    ·    ·    ·   Nth  ║  ·
-  18       ·    ·    ·    ·    ·   Nfy  ║  ·
-  19       ·    ·    ·   Nth   ·    ·   ║  ·
-  20       ·    ·    ·   Nfy   ·    ·   ║  ·
-  21       ·    ·    ·   Nth   ·    ·   ║  ·
-  22       ·    ·    ·   Nfy   ·    ·   ║  ·
-  23       ·    ·    lo   ·    ·    ·   ║  ·
-  24      Get   ·    ·    ·    ·    ·   ║  Get
+  no disk interrupt        with disk interrupt   user view
+  ──────────────────────────────────────────────────────────
+  Get                      Get                   Get
+                           dI                    dI          ← secret input: nothing happens, the disk
+                           Get                   Get           interrupt is masked until a slice opens
+                           Get                   Get
+  tI                       tI                    tI
+  Get                      Get                   Get
+  tmr  Nth                 tmr  Nth              ·
+  tmr  Nfy                 tmr  Nfy              ·
+  dfl  Nth              ≠  dsk  Nth              ·           ┐ the slice: two handler runs, and the
+  dfl  Nfy              ≠  dsk  Nfy              ·           │ whole difference between the two runs
+  dfl  Nth                 dfl  Nth              ·           │ is that the disk handler takes the
+  dfl  Nfy                 dfl  Nfy              ·           ┘ place of the first NOP run
+  sch  hi                  sch  hi               ·
+  NOP                   ≠  Sys                   NOP / Sys   ← both secret, so indistinguishable at ⊥
+  tI                       tI                    tI
+  NOP                      NOP                   NOP
+  tmr  Nth                 tmr  Nth              ·
+  tmr  Nfy                 tmr  Nfy              ·
+  dfl  Nth                 dfl  Nth              ·           ┐
+  dfl  Nfy                 dfl  Nfy              ·           │ second slice, identical in both runs
+  dfl  Nth                 dfl  Nth              ·           │
+  dfl  Nfy                 dfl  Nfy              ·           ┘
+  sch  lo                  sch  lo               ·
+  Get                      Get                   Get
 ```
 
-Two things stand out.
+Three things stand out, and they are the whole argument in miniature.
 
-**The projection erases most of the run.** Only `pub` and `sys` survive. The handler
-steps (7–12, 17–22) and the scheduled pids (13, 23) fall in slots `parse_output`
-discards, so the wrapped column is uniformly `·` across them.
+**A handler run can appear in only one place.** Compare with `model_immediate`
+above, where the disk handler ran the moment its interrupt was serviced. Here the
+disk interrupt arrives and *nothing happens*: it is masked, so it is merely recorded
+as pending, and the public process carries on emitting. Only when the timer handler
+completes does a slice open, and only inside that slice may a handler run.
 
-**The secret interrupt does not move the public schedule.** The disk handler does run
-— steps 9–10 — but inside the slice, in place of a default/NOP run. Each slice is six
-hidden steps: the timer handler, then two further handler runs. That holds of both
-slices here and of `sliced_no_dI'`: with a disk interrupt the pair at steps 9–10 is
-`dsk`, without one it is `dfl`. The public skeleton around the slice — `tI`, the
-scheduled pid, the resumed `Get` — is unchanged. The only other trace of the
-interrupt is step 14, `Sys` instead of `NOP`, the secret user process reacting to the
-notification. Both the disk input and the syscall output are classified secret, so at
-the attacker's level the two runs are indistinguishable — which is what
+**Inside the slice, the disk handler substitutes for a NOP run.** That is the only
+structural difference between the two runs — the `≠` at the first of the two handler
+runs. It is a substitution, not an insertion: the slice is `runs * runtime` steps
+either way, so the run with a secret interrupt is exactly as long, and the public
+skeleton around it — the timer handler, the scheduled pid, the resumed `Get` — is
+identical. The second slice, where no interrupt is waiting, is `dfl` in both.
+
+**The projection erases the substitution entirely.** Both `dsk` and `dfl` sit in
+slots `parse_output` discards, so the user view column is `·` on every handler step
+and on every scheduled pid, in both runs alike. The only surviving difference is the
+secret process reacting to its notification, `NOP` against `Sys` — and both of those
+are classified secret, so an observer at `⊥` cannot tell them apart. Nothing the
+attacker can see distinguishes the two runs, which is what
 `model_sliced_userview_NI` proves in general.
 
 
@@ -797,43 +800,3 @@ relation carried by each interface, the counterexample for `model_immediate`, ho
 generic theorems compose to prove `model_sliced`, and the one substantial obligation
 (`fv_NI`) that the compositional structure of `state_step` and `bool_coding` exist to
 make tractable.
-
-
-## Appendix: asides and alternatives
-
-None of this is needed to follow the models; it records design questions a reader may
-reasonably ask.
-
-### Why the slice counter lives in the interrupt controller, not in the handler
-
-In earlier versions the "steps to complete" counter lived inside the handler process.
-It has been moved into the global state, as part of `ic`. This mirrors how real
-hardware would enforce a time slice, and the following argues it is implementable
-rather than a modelling artefact:
-
-- **Hardware level — the interrupt controller.** For a guaranteed, hard-real-time
-  bound that software cannot bypass or delay, the counter belongs in the interrupt
-  controller (ARM GIC, RISC-V PLIC/CLIC, x86 APIC) or a small custom "interrupt
-  throttler" block, held in the controller's MMIO register space. When an interrupt
-  is dispatched to the CPU a hardware timer is loaded with the time-slice value. It
-  decrements while the CPU executes in interrupt context (which the hardware tracks
-  via the interrupt-acknowledge and End-of-Interrupt signals). If the counter reaches
-  zero before EOI, the hardware raises an internal mask signal that stops the
-  distributor / CPU interface from forwarding further interrupts to the processor.
-- **Model correspondence.** Each interrupt kind registers a `pending` bit when its
-  interrupt is input to the system; the `mask` decides whether a pending interrupt is
-  actually activated. The check happens during an *output* step, updating `cur_pid`
-  to the appropriate handler. Handlers are prioritised (timer before disk). While a
-  handler runs all masks are set, so no interrupt nests. When a handler completes we
-  unmask and re-check for another ready handler — this is the controller being
-  consulted at the end of a CPU clock cycle. If none is ready we check the reschedule
-  flag: if set, control passes to the scheduler; if clear, `cur_pid` is restored to
-  `prev_pid`, the user process that was interrupted.
-
-### Could the timer be left unmasked during the slice?
-
-It would be possible to unmask timer interrupts during the time slice, but a timer
-interrupt arriving mid-slice would reset the slice — possibly while the disk or NOP
-handler was still mid-execution — and `handler_completed` would then no longer be in
-step with the actual completion of handlers. The model takes the simpler of the two
-approaches and keeps the timer masked until the slice ends.
