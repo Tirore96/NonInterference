@@ -216,24 +216,51 @@ equals the current pid advances and emits; all others emit `None`.
 the two userspace processes, and all four enter through one argument only, `f_proc`.
 Everything else can be fixed now:
 
-| parameter | fixed to | decides |
-|---|---|---|
-| `cur_pid` | `Sum Bool Nat` | the type of pids, split private / public (below) |
-| `n` | `5` | six slots, `0..5` |
-| `f_pid` | `fun pid => match pid with inl true => 1 \| inl false => 2 \| inr 0 => 0 \| inr 1 => 3 \| inr 2 => 4 \| inr 3 => 5 \| inr n => n end` | which slot a pid selects |
-| `f_initial` | `fun n => n == 5` | slot 5 alone starts open: the pool begins in the public user process |
-| `f_I` | `fun n => match n with 4 => THandlerOutput \| _ => Empty end` | only slot 4 takes an input |
-| `f_O` | `fun n => match n with 0\|1\|2 => THandlerOutput \| 3 => Nat \| 4 => Opriv \| 5 => Opub \| _ => Unit end` | what each slot emits |
-| `T'` | `Option THandlerOutput` | one handler output, broadcast alongside the pid |
-| `f_proj` | `fun i n => if n == 4 then i else None` | only slot 4 receives it, which is why every other slot can declare its input `Empty`. In the source this is a `match` on `n`, not an `if`: the result type `[Option (f_I n)]` varies with `n`, so it typechecks as a dependent pattern match |
-| `f_proc` | `slot_procs runtime p_pub p_priv p_sched` | **the only opening left**: the slot processes of section 2 |
-
 ```coq
 pool runtime p_pub p_priv p_sched =
-  process_pool cur_pid 5 my_f_initial my_f_I (my_f_O Opub Opriv) T_intermediate
-               f_proj my_f_pid (slot_procs runtime p_pub p_priv p_sched)
-    : Proc (Times cur_pid T_intermediate) (T_out' Opub Opriv)
+  process_pool cur_pid n f_initial f_I f_O T' f_proj f_pid f_proc
+    : Proc (Times cur_pid T') (T_out' Opub Opriv)
+  where
+    cur_pid   = Sum Bool Nat           (* pids, split private / public *)
+    n         = 5                      (* six slots, 0..5 *)
+    T'        = Option THandlerOutput  (* one handler output, broadcast with the pid *)
+    f_proc    = slot_procs runtime p_pub p_priv p_sched
+    f_initial = fun n => n == 5        (* slot 5 alone starts open *)
+
+    f_pid     = fun pid => match pid with
+                           | inl true  => 1     (* disk handler    *)
+                           | inl false => 2     (* default handler *)
+                           | inr 0     => 0     (* timer handler   *)
+                           | inr 1     => 3     (* scheduler       *)
+                           | inr 2     => 4     (* private user    *)
+                           | inr 3     => 5     (* public user     *)
+                           | inr n     => n
+                           end
+
+    f_I       = fun n => match n with
+                         | 4 => THandlerOutput  (* only slot 4 takes an input *)
+                         | _ => Empty
+                         end
+
+    f_O       = fun n => match n with
+                         | 0 | 1 | 2 => THandlerOutput
+                         | 3         => Nat
+                         | 4         => Opriv
+                         | 5         => Opub
+                         | _         => Unit
+                         end
+
+    f_proj    = fun i n => match n with
+                           | 4 => i             (* only slot 4 receives the payload *)
+                           | _ => None
+                           end
 ```
+
+`f_proj` is why every other slot can declare its input `Empty`: it hands them `None`,
+and `maybe` turns that into an idle step. It has to be a `match` rather than the
+`if n == 4 then i else None` it looks like, because the result type `[Option (f_I n)]`
+varies with `n` — only in the `4` branch is it `Option THandlerOutput`. It typechecks
+as a dependent pattern match.
 
 The one choice worth a second look is the `cur_pid` split: the `inl` side holds
 **exactly the two private pids**, the disk and default handlers, and the `inr` side
