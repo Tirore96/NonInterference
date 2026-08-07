@@ -182,8 +182,9 @@ selected.
 
 ## 3. Process pool
 
-The pool wires slots `0..n` into one process, each gated by a switch so that only
-the slot matching the current pid is live.
+`process_pool` is a generic procedure for building a pool: it wires slots `0..n` into
+one process, each gated by a switch so that only the slot matching the current pid is
+live. Both models are built from a single instantiation of it.
 
 ```coq
 process_pool cur_pid n f_initial f_I f_O T' f_proj f_pid f_proc =
@@ -211,24 +212,31 @@ computes the switch bit `f_pid cur_pid == k` and the slot's payload `f_proj T' k
 slot outputs, each wrapped in `Option`. The net effect: exactly the slot whose index
 equals the current pid advances and emits; all others emit `None`.
 
-**Instantiation.** `pool` is `process_pool` at these nine arguments:
+**Instantiation.** What has to stay open is the userspace processes and the
+scheduler, and they enter through one argument only, `f_proc`. Everything else can be
+fixed now:
 
-| parameter | instantiated to | what supplying it decides |
+| parameter | fixed to | what fixing it decides |
 |---|---|---|
-| `cur_pid` | `Sum Bool Nat` | the type of process ids |
+| `cur_pid` | `Sum Bool Nat` | the type of process ids, split private / public (below) |
 | `n` | `5` | six slots, `0..5` |
-| `f_initial` | `my_f_initial` | which slot's switch starts open |
 | `f_I`, `f_O` | `my_f_I`, `my_f_O Opub Opriv` | the slot interfaces of section 2 |
-| `T'` | `T_intermediate = Option THandlerOutput` | the type of the payload broadcast alongside the pid |
-| `f_proj` | `f_proj` | which slots that payload actually reaches |
-| `f_pid` | `my_f_pid` | which slot a given pid selects |
-| `f_proc` | `slot_procs runtime p_pub p_priv p_sched` | the slot processes of section 2 |
+| `f_pid` | `my_f_pid` | which slot a pid selects (below) |
+| `f_initial` | `fun n => n == 5` | slot 5 is the only switch that starts open, so the pool begins in the public user process |
+| `T'` | `Option THandlerOutput` | one handler output, broadcast alongside the pid |
+| `f_proj` | `fun i n => match n with 4 => i \| _ => None end` | only slot 4 receives it — which is why every other slot can declare its input `Empty`, since `f_proj` hands them `None` and `maybe` turns that into an idle step |
+| `f_proc` | `slot_procs runtime p_pub p_priv p_sched` | **the only opening left**: the slot processes of section 2, with the scheduler and the two user processes still parameters |
 
-Three of these carry the design decisions.
+```coq
+pool runtime p_pub p_priv p_sched =
+  process_pool cur_pid 5 my_f_initial my_f_I (my_f_O Opub Opriv) T_intermediate
+               f_proj my_f_pid (slot_procs runtime p_pub p_priv p_sched)
+    : Proc (Times cur_pid T_intermediate) (T_out' Opub Opriv)
+```
 
-**`cur_pid := Sum Bool Nat`** splits the ids so that the `inl` side holds **exactly
-the two private ids** and the `inr` side everything public. `my_f_pid` maps them onto
-slots:
+Two of these are worth a second look. **`f_pid`** maps a pid to the slot it selects,
+and the `cur_pid` split puts **exactly the two private ids** on the `inl` side and
+everything public on the `inr` side:
 
 | pid | selects slot | | pid | selects slot |
 |---|---|---|---|---|
@@ -238,38 +246,12 @@ slots:
 | | | | `inr 3` | 5, public user process |
 
 The timer handler is `inr 0`, on the public side: it is a handler, but not a private
-one. The point of splitting on this line rather than "handler versus not" is that the
-state relation can then classify the whole id in one place, as
-`eqsum privateRel publicRel`, and the proof can case-split on the tag
-([`noninterference.md` §7b](noninterference.md)).
+one. Splitting on this line rather than "handler versus not" is what lets the state
+relation classify a whole pid in one place, as `eqsum privateRel publicRel`, with the
+proof case-splitting on the tag ([`noninterference.md` §7b](noninterference.md)).
 
-**`f_initial := my_f_initial`** opens exactly the slot named by the starting pid,
-
-```coq
-initial_pid   = inr 3                              (* the public user process *)
-my_f_initial n = (n == my_f_pid initial_pid)
-```
-
-so the pool begins with the public user process live and every other switch closed.
-
-**`f_proj := f_proj`** routes the payload. The pool broadcasts one `T'` to every
-slot, but only slot 4 is meant to receive anything:
-
-```coq
-f_proj i n = match n with 4 => i | _ => None end
-```
-
-which is the whole reason every other slot can declare its input type `Empty` —
-`f_proj` hands them `None`, and `maybe` turns that into an idle step.
-
-Putting it together:
-
-```coq
-pool runtime p_pub p_priv p_sched =
-  process_pool cur_pid 5 my_f_initial my_f_I (my_f_O Opub Opriv) T_intermediate
-               f_proj my_f_pid (slot_procs runtime p_pub p_priv p_sched)
-    : Proc (Times cur_pid T_intermediate) (T_out' Opub Opriv)
-```
+**`f_initial`** is written in the source as `fun n => n == my_f_pid initial_pid` with
+`initial_pid = inr 3`; since `my_f_pid (inr 3) = 5`, that is the `n == 5` above.
 
 
 ## 4. Stateful wrapper
