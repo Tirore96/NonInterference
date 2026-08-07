@@ -770,14 +770,17 @@ Three things stand out, and they are the whole argument in miniature.
 above, where the disk handler ran the moment its interrupt was serviced. Here the
 disk interrupt arrives and *nothing happens*: it is masked, so it is merely recorded
 as pending, and the public process carries on emitting. Only when the timer handler
-completes does a slice open, and only inside that slice may a handler run.
+completes does a slice open, and only inside that slice may a handler run. (Those
+three leading rows are why the two runs have different lengths. They are two
+separately chosen accepted traces, lined up from the timer onward to make the slice
+structure legible — not the pair of runs the theorem quantifies over.)
 
 **Inside the slice, the disk handler substitutes for a NOP run.** That is the only
 structural difference between the two runs — the `≠` at the first of the two handler
 runs. It is a substitution, not an insertion: the slice is `runs * runtime` steps
-either way, so the run with a secret interrupt is exactly as long, and the public
-skeleton around it — the timer handler, the scheduled pid, the resumed `Get` — is
-identical. The second slice, where no interrupt is waiting, is `dfl` in both.
+long either way, so it neither grows nor shrinks, and the public skeleton around it —
+the timer handler, the scheduled pid, the resumed `Get` — is identical. The second
+slice, where no interrupt is waiting, is `dfl` in both.
 
 **The projection erases the substitution entirely.** Both `dsk` and `dfl` sit in
 slots `parse_output` discards, so the user view column is `·` on every handler step
