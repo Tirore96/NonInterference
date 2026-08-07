@@ -220,55 +220,72 @@ Everything else can be fixed now:
 pool runtime p_pub p_priv p_sched =
   process_pool cur_pid n f_initial f_I f_O T' f_proj f_pid f_proc
     : Proc (Times cur_pid T') (T_out' Opub Opriv)
-  where
-    cur_pid   = Sum Bool Nat           (* pids, split private / public *)
-    n         = 5                      (* six slots, 0..5 *)
-    T'        = Option THandlerOutput  (* one handler output, broadcast with the pid *)
-    f_proc    = slot_procs runtime p_pub p_priv p_sched
-    f_initial = fun n => n == 5        (* slot 5 alone starts open *)
-
-    f_pid     = fun pid => match pid with
-                           | inl true  => 1     (* disk handler    *)
-                           | inl false => 2     (* default handler *)
-                           | inr 0     => 0     (* timer handler   *)
-                           | inr 1     => 3     (* scheduler       *)
-                           | inr 2     => 4     (* private user    *)
-                           | inr 3     => 5     (* public user     *)
-                           | inr n     => n
-                           end
-
-    f_I       = fun n => match n with
-                         | 4 => THandlerOutput  (* only slot 4 takes an input *)
-                         | _ => Empty
-                         end
-
-    f_O       = fun n => match n with
-                         | 0 | 1 | 2 => THandlerOutput
-                         | 3         => Nat
-                         | 4         => Opriv
-                         | 5         => Opub
-                         | _         => Unit
-                         end
-
-    f_proj    = fun i n => match n with
-                           | 4 => i             (* only slot 4 receives the payload *)
-                           | _ => None
-                           end
 ```
 
-`f_proj` is why every other slot can declare its input `Empty`: it hands them `None`,
-and `maybe` turns that into an idle step. It has to be a `match` rather than the
-`if n == 4 then i else None` it looks like, because the result type `[Option (f_I n)]`
-varies with `n` — only in the `4` branch is it `Option THandlerOutput`. It typechecks
-as a dependent pattern match.
+The alphabets `Opub` and `Opriv` are `pool`'s own parameters, fixed by whichever
+`p_pub` and `p_priv` it is given. The nine arguments are these.
 
-The one choice worth a second look is the `cur_pid` split: the `inl` side holds
+**Pids, size, and the processes.**
+
+```coq
+cur_pid   = Sum Bool Nat           (* pids, split private / public *)
+n         = 5                      (* six slots, 0..5 *)
+T'        = Option THandlerOutput  (* one handler output, broadcast with the pid *)
+f_proc    = slot_procs runtime p_pub p_priv p_sched
+
+f_pid     = fun pid => match pid with
+                       | inl true  => 1     (* disk handler    *)
+                       | inl false => 2     (* default handler *)
+                       | inr 0     => 0     (* timer handler   *)
+                       | inr 1     => 3     (* scheduler       *)
+                       | inr 2     => 4     (* private user    *)
+                       | inr 3     => 5     (* public user     *)
+                       | inr n     => n
+                       end
+
+f_initial = fun n => n == 5        (* slot 5 alone starts open *)
+```
+
+The `cur_pid` split is the one choice here worth a second look: the `inl` side holds
 **exactly the two private pids**, the disk and default handlers, and the `inr` side
 everything public — including the timer handler, which is `inr 0`. It is a handler,
 but not a private one, so the split is not "handler versus not". Drawing it on this
 line is what lets the state relation classify a whole pid in one place, as
 `eqsum privateRel publicRel`, with the proof case-splitting on the tag
 ([`noninterference.md` §7b](noninterference.md)).
+
+**The slot interfaces**, tabulated in section 2. `f_O` is parameterised by the two
+alphabets — this is where `Opub` and `Opriv` enter the pool's output type:
+
+```coq
+f_I            = fun n => match n with
+                          | 4 => THandlerOutput  (* only slot 4 takes an input *)
+                          | _ => Empty
+                          end
+
+f_O Opub Opriv = fun n => match n with
+                          | 0 | 1 | 2 => THandlerOutput
+                          | 3         => Nat
+                          | 4         => Opriv
+                          | 5         => Opub
+                          | _         => Unit
+                          end
+```
+
+**Routing the payload.**
+
+```coq
+f_proj = fun i n => match n with
+                    | 4 => i            (* only slot 4 receives it *)
+                    | _ => None
+                    end
+```
+
+This is why every other slot can declare its input `Empty`: `f_proj` hands them
+`None`, and `maybe` turns that into an idle step. It has to be a `match` rather than
+the `if n == 4 then i else None` it looks like, because the result type
+`[Option (f_I n)]` varies with `n` — only in the `4` branch is it
+`Option THandlerOutput`. It typechecks as a dependent pattern match.
 
 
 ## 4. Stateful wrapper
