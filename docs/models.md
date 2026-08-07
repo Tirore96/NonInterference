@@ -212,20 +212,21 @@ computes the switch bit `f_pid cur_pid == k` and the slot's payload `f_proj T' k
 slot outputs, each wrapped in `Option`. The net effect: exactly the slot whose index
 equals the current pid advances and emits; all others emit `None`.
 
-**Instantiation.** What has to stay open is the userspace processes and the
-scheduler, and they enter through one argument only, `f_proc`. Everything else can be
-fixed now:
+**Instantiation.** What has to stay open is the handler runtime, the scheduler and
+the two userspace processes, and all four enter through one argument only, `f_proc`.
+Everything else can be fixed now:
 
-| parameter | fixed to | what fixing it decides |
+| parameter | fixed to | decides |
 |---|---|---|
-| `cur_pid` | `Sum Bool Nat` | the type of process ids, split private / public (below) |
+| `cur_pid` | `Sum Bool Nat` | the type of pids, split private / public (below) |
 | `n` | `5` | six slots, `0..5` |
-| `f_I`, `f_O` | `my_f_I`, `my_f_O Opub Opriv` | the slot interfaces of section 2 |
-| `f_pid` | `my_f_pid` | which slot a pid selects (below) |
-| `f_initial` | `fun n => n == 5` | slot 5 is the only switch that starts open, so the pool begins in the public user process |
+| `f_pid` | `fun pid => match pid with inl true => 1 \| inl false => 2 \| inr 0 => 0 \| inr 1 => 3 \| inr 2 => 4 \| inr 3 => 5 \| inr n => n end` | which slot a pid selects |
+| `f_initial` | `fun n => n == 5` | slot 5 alone starts open: the pool begins in the public user process |
+| `f_I` | `fun n => match n with 4 => THandlerOutput \| _ => Empty end` | only slot 4 takes an input |
+| `f_O` | `fun n => match n with 0\|1\|2 => THandlerOutput \| 3 => Nat \| 4 => Opriv \| 5 => Opub \| _ => Unit end` | what each slot emits |
 | `T'` | `Option THandlerOutput` | one handler output, broadcast alongside the pid |
-| `f_proj` | `fun i n => match n with 4 => i \| _ => None end` | only slot 4 receives it — which is why every other slot can declare its input `Empty`, since `f_proj` hands them `None` and `maybe` turns that into an idle step |
-| `f_proc` | `slot_procs runtime p_pub p_priv p_sched` | **the only opening left**: the slot processes of section 2, with the scheduler and the two user processes still parameters |
+| `f_proj` | `fun i n => if n == 4 then i else None` | only slot 4 receives it, which is why every other slot can declare its input `Empty`. In the source this is a `match` on `n`, not an `if`: the result type `[Option (f_I n)]` varies with `n`, so it typechecks as a dependent pattern match |
+| `f_proc` | `slot_procs runtime p_pub p_priv p_sched` | **the only opening left**: the slot processes of section 2 |
 
 ```coq
 pool runtime p_pub p_priv p_sched =
@@ -234,24 +235,13 @@ pool runtime p_pub p_priv p_sched =
     : Proc (Times cur_pid T_intermediate) (T_out' Opub Opriv)
 ```
 
-Two of these are worth a second look. **`f_pid`** maps a pid to the slot it selects,
-and the `cur_pid` split puts **exactly the two private ids** on the `inl` side and
-everything public on the `inr` side:
-
-| pid | selects slot | | pid | selects slot |
-|---|---|---|---|---|
-| `inl true` | 1, disk handler | | `inr 0` | 0, timer handler |
-| `inl false` | 2, default/NOP handler | | `inr 1` | 3, scheduler |
-| | | | `inr 2` | 4, private user process |
-| | | | `inr 3` | 5, public user process |
-
-The timer handler is `inr 0`, on the public side: it is a handler, but not a private
-one. Splitting on this line rather than "handler versus not" is what lets the state
-relation classify a whole pid in one place, as `eqsum privateRel publicRel`, with the
-proof case-splitting on the tag ([`noninterference.md` §7b](noninterference.md)).
-
-**`f_initial`** is written in the source as `fun n => n == my_f_pid initial_pid` with
-`initial_pid = inr 3`; since `my_f_pid (inr 3) = 5`, that is the `n == 5` above.
+The one choice worth a second look is the `cur_pid` split: the `inl` side holds
+**exactly the two private pids**, the disk and default handlers, and the `inr` side
+everything public — including the timer handler, which is `inr 0`. It is a handler,
+but not a private one, so the split is not "handler versus not". Drawing it on this
+line is what lets the state relation classify a whole pid in one place, as
+`eqsum privateRel publicRel`, with the proof case-splitting on the tag
+([`noninterference.md` §7b](noninterference.md)).
 
 
 ## 4. Stateful wrapper
