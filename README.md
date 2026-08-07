@@ -49,7 +49,7 @@ design.
 Everything below refers to these. All three are in
 [`theories/models.v`](theories/models.v).
 
-| Model | Output it exposes | Role |
+| Model | Output it exposes | |
 |---|---|---|
 | `model_immediate` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
 | `model_sliced` | the same full pool output | the fixed design; non-interfering |
@@ -123,8 +123,9 @@ statement about those two relations; they are given in
 ## The leak
 
 A disk interrupt makes the disk handler run immediately, displacing whichever
-process was scheduled. The handler runs for two output steps, then control returns
-to the displaced process.
+process was scheduled. The handler runs for its full length, then control returns
+to the displaced process. Below, and in the counterexample, that length is two
+output steps — the concrete instance of the parameter `runtime`.
 
 The attacker never sees the handler run: in the full pool output the handler's slot
 is classified secret, and in the user-visible output that slot does not exist at
@@ -229,7 +230,7 @@ This compiles the four-file chain in dependency order
 |---|---|
 | [`theories/definitions.v`](theories/definitions.v) | The process calculus, traces, `NI`, and the security relations. |
 | [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); they are used here, not contributed. |
-| [`theories/models.v`](theories/models.v) | The three models and everything they are built from. |
+| [`theories/models.v`](theories/models.v) | In three parts: the skeleton both designs share, ending in the generic `model`; the two designs, as `model` at two triples of arguments; and one concrete system, with the example traces. |
 | [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state relations, and the three theorems above. |
 | [`docs/models.md`](docs/models.md) | **What the models are** — long-form companion to `models.v`. |
 | [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering** — the security relations and the proof, companion to `noninterference.v`. |
