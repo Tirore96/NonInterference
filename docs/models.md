@@ -731,37 +731,39 @@ into a counterexample using a trace of just two public requests.
 
 ### `model_sliced`: the same two runs, and the projection
 
-`trace_sliced_no_dI'` against `trace_sliced_with_dI'`, in the same layout. The extra
-column is what `model_sliced_userview` emits for that step, i.e. the row under
-`parse_output`.
+`trace_sliced_no_dI'` against `trace_sliced_with_dI'`, in the same layout. Each run
+now carries its own `user view` column — the sequence `model_sliced_userview` emits,
+i.e. that run under `parse_output`. They are two distinct traces, and the point of
+the theorem is that they are *indistinguishable* at `⊥`, not that they are equal.
 
 ```text
-  no disk interrupt        with disk interrupt   user view
-  ──────────────────────────────────────────────────────────
-  Get                      Get                   Get
-                           dI                    dI          ← secret input: nothing happens, the disk
-                           Get                   Get           interrupt is masked until a slice opens
-                           Get                   Get
-  tI                       tI                    tI
-  Get                      Get                   Get
-  tmr  Nth                 tmr  Nth              ·
-  tmr  Nfy                 tmr  Nfy              ·
-  dfl  Nth              ≠  dsk  Nth              ·           ┐ the slice: two handler runs, and the
-  dfl  Nfy              ≠  dsk  Nfy              ·           │ whole difference between the two runs
-  dfl  Nth                 dfl  Nth              ·           │ is that the disk handler takes the
-  dfl  Nfy                 dfl  Nfy              ·           ┘ place of the first NOP run
-  sch  hi                  sch  hi               ·
-  NOP                   ≠  Sys                   NOP / Sys   ← both secret, so indistinguishable at ⊥
-  tI                       tI                    tI
-  NOP                      NOP                   NOP
-  tmr  Nth                 tmr  Nth              ·
-  tmr  Nfy                 tmr  Nfy              ·
-  dfl  Nth                 dfl  Nth              ·           ┐
-  dfl  Nfy                 dfl  Nfy              ·           │ second slice, identical in both runs
-  dfl  Nth                 dfl  Nth              ·           │
-  dfl  Nfy                 dfl  Nfy              ·           ┘
-  sch  lo                  sch  lo               ·
-  Get                      Get                   Get
+  no disk interrupt      with disk interrupt
+  output     user view   output     user view
+  ─────────────────────────────────────────────────────
+  Get        Get         Get        Get
+                         dI         dI         ← secret input: nothing happens, the disk
+                         Get        Get          interrupt is masked until a slice opens
+                         Get        Get
+  tI         tI          tI         tI
+  Get        Get         Get        Get
+  tmr  Nth   ·           tmr  Nth   ·
+  tmr  Nfy   ·           tmr  Nfy   ·
+  dfl  Nth   ·        ≠  dsk  Nth   ·          ┐ the slice: two handler runs, and the
+  dfl  Nfy   ·        ≠  dsk  Nfy   ·          │ whole difference between the two runs
+  dfl  Nth   ·           dfl  Nth   ·          │ is that the disk handler takes the
+  dfl  Nfy   ·           dfl  Nfy   ·          ┘ place of the first NOP run
+  sch  hi    ·           sch  hi    ·
+  NOP        NOP      ≠  Sys        Sys        ← the only surviving difference; both secret,
+  tI         tI          tI         tI           so indistinguishable at ⊥
+  NOP        NOP         NOP        NOP
+  tmr  Nth   ·           tmr  Nth   ·
+  tmr  Nfy   ·           tmr  Nfy   ·
+  dfl  Nth   ·           dfl  Nth   ·          ┐
+  dfl  Nfy   ·           dfl  Nfy   ·          │ second slice, identical in both runs
+  dfl  Nth   ·           dfl  Nth   ·          │
+  dfl  Nfy   ·           dfl  Nfy   ·          ┘
+  sch  lo    ·           sch  lo    ·
+  Get        Get         Get        Get
 ```
 
 Three things stand out, and they are the whole argument in miniature.
@@ -783,12 +785,12 @@ the timer handler, the scheduled pid, the resumed `Get` — is identical. The se
 slice, where no interrupt is waiting, is `dfl` in both.
 
 **The projection erases the substitution entirely.** Both `dsk` and `dfl` sit in
-slots `parse_output` discards, so the user view column is `·` on every handler step
-and on every scheduled pid, in both runs alike. The only surviving difference is the
-secret process reacting to its notification, `NOP` against `Sys` — and both of those
-are classified secret, so an observer at `⊥` cannot tell them apart. Nothing the
-attacker can see distinguishes the two runs, which is what
-`model_sliced_userview_NI` proves in general.
+slots `parse_output` discards, so each run's user view is `·` on every handler step
+and every scheduled pid. Comparing the two view columns against each other, the only
+place they differ at all is the secret process reacting to its notification, `NOP`
+against `Sys` — and both of those are classified secret, so an observer at `⊥` cannot
+tell them apart. The two views are therefore different sequences that no attacker can
+separate, which is exactly what `model_sliced_userview_NI` proves in general.
 
 
 ## Where to go next
