@@ -82,12 +82,13 @@ constructors:
   input `Some i` steps `p` on `i`. Outputs pass through unchanged.
   (`Proc I O → Proc (Option I) O`)
 
-> **Why interfaces are not just types.** `I` and `O` are drawn from an inductive
-> `Ty` (`Nat`, `Bool`, `Unit`, `Times`, `Option`, `Sum`, ...), and `[t]` interprets a
-> `t : Ty` as the `Set` it encodes. Going through `Ty` rather than through `Set`
-> directly is what makes reductions invertible, which the negative result needs: to
-> refute non-interference one must show a trace is *not* accepted. The cost is the
-> explicit annotations in the source, which this document strips away.
+> **Why interfaces are not just types.** In the mechanisation `I` and `O` are not
+> Coq `Set`s but are drawn from an inductive `Ty` (`Nat`, `Bool`, `Unit`, `Times`,
+> `Option`, `Sum`, ...), with `[t]` interpreting a `t : Ty` as the `Set` it encodes.
+> Going through `Ty` rather than through `Set` directly is what makes reductions
+> invertible, which the negative result needs: to refute non-interference one must
+> show a trace is *not* accepted. The cost is the explicit annotations in the source,
+> which this document strips away.
 
 The whole development ends by proving `NI` of `model_sliced_userview`. What `Trace`
 and `NI` mean, and the equivalences they are indexed by, are in
@@ -105,10 +106,10 @@ model runtime init handler_preroutine bool_coding p_pub p_priv p_sched =
       : Proc T_in (T_out' Opub Opriv)
 ```
 
-An operating system as a single process: a **pool** of cooperating processes
-(section 3) — three interrupt handlers, a scheduler, two user processes — closed
-into a self-driving whole by a **stateful wrapper** (section 4) that threads the
-global state and decides, on every step, whose turn it is (sections 5 and 6).
+An operating system as a single process: a **process pool** (section 3) — three
+interrupt handlers, a scheduler, two user processes — closed into a self-driving
+whole by a **stateful wrapper** (section 4) that threads the global state and
+decides, on every step, whose turn it is (sections 5 and 6).
 
 It consumes interrupts and emits one tuple per step holding every slot's output.
 Nothing in it is committed to a security design: that is entirely the job of the
@@ -121,11 +122,10 @@ Sections 2 to 6 define each piece, bottom-up.
 
 ## 2. Interrupt handler and slot map
 
-The only leaf process the mechanism itself fixes is the interrupt handler. The
-scheduler and the two user processes are parameters — they are what the mechanism
-is meant to protect, not part of it — and are supplied in section 10.
+The only leaf process the generic model itself fixes is the interrupt handler. The
+scheduler and the two user processes are parameters, supplied in section 10.
 
-**`I_handler runtime : Proc Empty THandlerOutput`** (`handler_type`)
+**`I_handler runtime : Proc Empty THandlerOutput`**
 
 ```coq
 I_handler runtime =
@@ -154,7 +154,7 @@ finishes.)
 | 1 | disk-interrupt handler | `Empty` | `THandlerOutput` |
 | 2 | default handler | `Empty` | `THandlerOutput` |
 | 3 | scheduler (parameter `p_sched`) | `Empty` | `Nat` |
-| 4 | secret user process (`p_priv`) | `THandlerOutput` | `Opriv` |
+| 4 | private user process (`p_priv`) | `THandlerOutput` | `Opriv` |
 | 5 | public user process (`p_pub`) | `Empty` | `Opub` |
 | ≥6 | padding, `unit_proc = out tt` | `Empty` | `Unit` |
 
@@ -168,24 +168,16 @@ slot_procs runtime p_pub p_priv p_sched n =
 ```
 
 `Opub` and `Opriv`, the alphabets the two user processes emit over, are parameters
-for the same reason the processes are: nothing in the mechanism inspects a user-slot
-*value*, only whether the slot produced one (section 6).
+for the same reason the processes are: nothing in the generic model inspects a
+user-slot *value*, only whether the slot produced one (section 6).
 
 Slots 0, 1 and 2 are three *separate* handlers reusing one definition; what
 distinguishes them is their own pending and mask bits in the interrupt controller
 (section 5), and which interrupt sets them. Only slot 4 has a non-`Empty` input:
-the secret user process is the one process that consumes anything, namely the disk
+the private user process is the one process that consumes anything, namely the disk
 handler's `Notify`. `process_pool` recurses over slot indices, so the family must be
 total on `nat`; `unit_proc` exists only for that, and nothing above 5 is ever
 selected.
-
-**Layout invariant.** The public process is outermost (slot 5), then the secret
-process (4), then the scheduler (3), matching the pids `my_f_pid` assigns. This
-ordering cannot be varied: the output accessors of section 6 are tuple patterns
-that hardwire *two* user slots sitting before the scheduler slot, so adding or
-reordering user slots changes the state transition and lands in the `fv_NI`
-obligation. The pool is also right-associated, so the two user slots are leftmost
-but not a subterm — there is no `par userspace system` to point at.
 
 
 ## 3. Process pool
@@ -194,7 +186,7 @@ The pool wires slots `0..n` into one process, each gated by a switch so that onl
 the slot matching the current pid is live.
 
 ```coq
-process_pool n f_initial f_I f_O f_proj f_pid f_proc =
+process_pool cur_pid n f_initial f_I f_O T' f_proj f_pid f_proc =
   match n with
   | 0 =>
       map (fun i => (f_pid i.1 == 0, f_proj i.2 0)) id
@@ -219,34 +211,65 @@ computes the switch bit `f_pid cur_pid == k` and the slot's payload `f_proj T' k
 slot outputs, each wrapped in `Option`. The net effect: exactly the slot whose index
 equals the current pid advances and emits; all others emit `None`.
 
-**Instantiation.** `cur_pid = Sum Bool Nat` — process ids, split so the `inl` side
-holds **exactly the two secret ids** and the `inr` side everything public:
+**Instantiation.** `pool` is `process_pool` at these nine arguments:
+
+| parameter | instantiated to | what supplying it decides |
+|---|---|---|
+| `cur_pid` | `Sum Bool Nat` | the type of process ids |
+| `n` | `5` | six slots, `0..5` |
+| `f_initial` | `my_f_initial` | which slot's switch starts open |
+| `f_I`, `f_O` | `my_f_I`, `my_f_O Opub Opriv` | the slot interfaces of section 2 |
+| `T'` | `T_intermediate = Option THandlerOutput` | the type of the payload broadcast alongside the pid |
+| `f_proj` | `f_proj` | which slots that payload actually reaches |
+| `f_pid` | `my_f_pid` | which slot a given pid selects |
+| `f_proc` | `slot_procs runtime p_pub p_priv p_sched` | the slot processes of section 2 |
+
+Three of these carry the design decisions.
+
+**`cur_pid := Sum Bool Nat`** splits the ids so that the `inl` side holds **exactly
+the two private ids** and the `inr` side everything public. `my_f_pid` maps them onto
+slots:
 
 | pid | selects slot | | pid | selects slot |
 |---|---|---|---|---|
 | `inl true` | 1, disk handler | | `inr 0` | 0, timer handler |
 | `inl false` | 2, default/NOP handler | | `inr 1` | 3, scheduler |
-| | | | `inr 2` | 4, secret user process |
+| | | | `inr 2` | 4, private user process |
 | | | | `inr 3` | 5, public user process |
 
-The timer handler is `inr 0`, on the public side: it is a handler, but not a secret
-one. The split is not "handler versus not" — `is_handler_pid` is true of `inr 0` as
-well as of both `inl` ids. Its purpose is to delimit which ids are secret values, so
-the state relation can classify them in one place (`eqsum privateRel publicRel`) and
-the proof can case-split on the tag ([`noninterference.md`
-§7b](noninterference.md)).
+The timer handler is `inr 0`, on the public side: it is a handler, but not a private
+one. The point of splitting on this line rather than "handler versus not" is that the
+state relation can then classify the whole id in one place, as
+`eqsum privateRel publicRel`, and the proof can case-split on the tag
+([`noninterference.md` §7b](noninterference.md)).
 
-The rest: `initial_pid = inr 3`, so the system starts in the public user process;
-`my_f_initial n = (n == my_f_pid initial_pid)` opens only that slot; and `f_proj`
-routes the shared payload, of type `Option THandlerOutput`, to slot 4 alone —
+**`f_initial := my_f_initial`** opens exactly the slot named by the starting pid,
+
+```coq
+initial_pid   = inr 3                              (* the public user process *)
+my_f_initial n = (n == my_f_pid initial_pid)
+```
+
+so the pool begins with the public user process live and every other switch closed.
+
+**`f_proj := f_proj`** routes the payload. The pool broadcasts one `T'` to every
+slot, but only slot 4 is meant to receive anything:
 
 ```coq
 f_proj i n = match n with 4 => i | _ => None end
 ```
 
-— which is the whole reason every other slot can declare its input type `Empty`.
-`pool runtime p_pub p_priv p_sched` is `process_pool` at 5 with these, i.e. the
-six-slot pool.
+which is the whole reason every other slot can declare its input type `Empty` —
+`f_proj` hands them `None`, and `maybe` turns that into an idle step.
+
+Putting it together:
+
+```coq
+pool runtime p_pub p_priv p_sched =
+  process_pool cur_pid 5 my_f_initial my_f_I (my_f_O Opub Opriv) T_intermediate
+               f_proj my_f_pid (slot_procs runtime p_pub p_priv p_sched)
+    : Proc (Times cur_pid T_intermediate) (T_out' Opub Opriv)
+```
 
 
 ## 4. Stateful wrapper
@@ -264,22 +287,32 @@ reactive_system state state_update def p pool_input =
 ```
 
 From the inside out: `maybe p` runs the pool, idling on `None`; `map pool_input inr`
-turns each pool result into the pool's *next* input, tagging it `inr` for the
-feedback channel; `sta state_update ... state` holds the global state and advances it
-on every event, external input or fed-back output; `loop` ties output back to input;
-and the outer `map` presents external inputs on the left and, on the way out, applies
+rewires it at both ends — on an input step `pool_input` builds the pool's input, and
+on an output step `inr` tags the pool's output for the feedback channel; `sta
+state_update ... state` holds the global state and advances it on every event,
+external input or fed-back output; `loop` ties output back to input; and the outer
+`map` presents external inputs on the left and, on the way out, applies
 `inr_or_def def x = if x is inr x' then x' else def`, substituting `def` — the
 all-`None` tuple — when there is no genuine external output yet.
 
-`state_update` is `state_step ...` (section 6), and `pool_input` routes the pool:
+`state_update` is `state_step ...` (section 6). `pool_input` decides, from the state
+and the event that just occurred, whether the pool steps at all and on what:
 
 ```coq
 pool_input (v, event) = if event is inr o then Some (get_cur_pid v, dI_out o) else None
 ```
 
-On a pool output it feeds back the current pid together with the disk handler's
-output component — the wire that delivers a disk `Notify` to the secret user
-process.
+Its result is the *optional* input of `maybe p`, so the two branches mean:
+
+- **`event = inl i`, an external interrupt** → `None`, so the pool idles. An arriving
+  interrupt does not advance any process; it is only recorded in the state, by
+  `record_pending` (section 6).
+- **`event = inr o`, a fed-back pool output** → `Some (pid, payload)`. The `pid` is
+  `get_cur_pid v`, which selects the slot that runs next — this is how the state's
+  scheduling decision reaches the pool. The `payload` is `dI_out o`, the disk
+  handler's slot from the output just produced, which `f_proj` (section 3) delivers
+  to slot 4 alone. That is the wire carrying a disk `Notify` to the private user
+  process.
 
 
 ## 5. Model state
@@ -310,19 +343,12 @@ ready one, in the fixed order timer > disk > default.
 
 ## 6. State transitions
 
-First, the accessors that read a pool output: `tI_out` / `dI_out` / `default_I_out`
-pick out the three handler slots, `is_I_out_done` reports which handler (if any) just
-emitted `Notify`, and `is_sch_out` matches the scheduler slot. Note what `is_sch_out`
-does *not* do: it matches `(None, (None, (Some n, _)))`, so the two user slots are
-inspected for `None`-ness and nothing more. No stage below ever reads a user-slot
-*value*, which is why the state transition is independent of what userspace does.
-
-`state_update` is `state_step handler_preroutine bool_coding`, applied once per
-event and composed of four stages (right to left):
+The `state_update` threaded by `reactive_system` is a composition of four stages,
+applied once per event and each guarded by that event `i`:
 
 ```coq
-state_step ... i  =  initiate_next(bool_coding) ∘ handler_preroutine
-                     ∘ apply_schedule ∘ record_pending    (each guarded by the event i)
+state_step handler_preroutine bool_coding i =
+  initiate_next(bool_coding) ∘ handler_preroutine ∘ apply_schedule ∘ record_pending
 ```
 
 - **`record_pending`** — on an external interrupt input, set that interrupt's
@@ -344,15 +370,16 @@ state_step ... i  =  initiate_next(bool_coding) ∘ handler_preroutine
 
   `initiate_handler` saves the current user pid to `prev_pid`, points `cur_pid` at
   the handler, sets all masks, and clears that interrupt's `pending` bit.
-  (`initiate_next` is wrapped in `step_right` — applied only on output events, not on
-  inputs — which matters for the equivalence proof.)
+  `initiate_next` is wrapped in `step_right`, so it is applied only on output events.
 
-**Why `state_step` is a composition.** Writing it as a chain of independent stages
-rather than one monolithic update lets each stage be reasoned about on its own, which
-is what makes the central proof obligation tractable. The cost is that each stage is
-analysed over *all* states, forgetting the reachable subset the previous stage
-produces — which is exactly what `bool_coding` exists to compensate for (section 8b).
-The proof-side story is in [`noninterference.md`](noninterference.md).
+The stages read a pool output through `tI_out` / `dI_out` / `default_I_out`, which
+pick out the three handler slots, `is_I_out_done`, which reports which handler just
+emitted `Notify`, and `is_sch_out`, which matches the scheduler slot. `is_sch_out`
+matches `(None, (None, (Some n, _)))`, so the two user slots are inspected for
+`None`-ness and nothing more: no stage ever reads a user-slot *value*, which is why
+the state transition is independent of what userspace does. Why `state_step` is a
+composition rather than one update, and what that costs, is in
+[`noninterference.md` §7c](noninterference.md).
 
 
 ## 7. The generic model, and its three parameters
@@ -369,7 +396,7 @@ The pool, the state layout, `record_pending`, `apply_schedule` and `initiate_nex
 are the same term in both designs. What is left free is a triple, and each part of it
 is a distinct point of control over *when a handler is allowed to run*:
 
-- **`init : [stateType]`** — the state the system starts in. Because a handler is
+- **`init : [stateType]`** — the state the model starts in. Because a handler is
   serviceable exactly when it is pending and unmasked, the initial masks decide which
   interrupts can be serviced before anything at all has happened. It also decides
   whether the time-slice counter is enabled (`Some _`) or switched off (`None`).
@@ -621,7 +648,7 @@ slice size. This section supplies one of each, so both designs can be run.
 
 ```coq
 low_p     = out GetRequest                                    (* public user process *)
-high_p    = alternate Syscall NOP tt (fun i => i == Notify)   (* secret user process *)
+high_p    = alternate Syscall NOP tt (fun i => i == Notify)   (* private user process *)
 scheduler = map id (fun o => o.1 + 2)
               (sta (fun _ v => v) (fun _ v => v.+1 %% 2) 1 (out tt))
 
