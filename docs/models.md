@@ -529,24 +529,17 @@ model_sliced runtime runs p_pub p_priv p_sched =
     p_pub p_priv p_sched
 ```
 
-Two things change relative to `model_immediate`, one in each of the first two
-parameters. **All masks start set except the timer's**, so a secret handler can never
-be started merely because its interrupt arrived; the only interrupt serviceable from
-rest is the public timer. And **a fixed time slice replaces "run until the handler
-says it is done"**: what ends a handler's turn is the slice, not the handler's own
-secret output.
-
 **The initial state** starts the counter at `Some 0`, so no slice is live, and masks
 every interrupt but the timer:
 
 ```coq
-initial_state_sliced = ((initial_pid, None), (false, (Some 0, mask_most)))
 mask_most = ((false,true), ((false,true), (false,false)))
             (* pending false everywhere; masks set for default and disk,
                clear for the timer *)
+initial_state_sliced = ((initial_pid, None), (false, (Some 0, mask_most)))
 ```
 
-**The handler preroutine**, unlike `immediate_preroutine`, is a composition of three
+**The handler preroutine** is a composition of three
 stages:
 
 ```coq
@@ -559,10 +552,10 @@ it. Taking them in that order:
 
 *`initiate_ir` opens a slice.* When the timer handler completes, it loads the counter
 to `time_slice runtime runs`. The slice is `runs` complete handler executions long,
-so that many can take place before it ends. The timer is public, so *when* slices
-start is public:
+so that many can take place before it ends:
 
 ```coq
+time_slice runtime runs = runs * runtime
 initiate_ir runtime runs o v =
   if tI_out o is Some Notify then update_ir_count v (Some (time_slice runtime runs))
   else v
@@ -571,13 +564,9 @@ initiate_ir runtime runs o v =
 *`check_handler_completed` reopens the masks at a boundary.* Because the slice is
 *defined* as `runs * runtime`, it always ends on a handler boundary, and the counter
 is a nonzero multiple of `runtime` precisely when a handler has just finished — which
-is what `handler_completed` computes, rather than assumes. Note it reads the
-*counter*, not the handler's output: the boundary is public, whichever handler
-happens to be occupying the slot.
+is what `handler_completed` computes.
 
 ```coq
-time_slice runtime runs = runs * runtime
-
 handler_completed runtime c =
   match c with
   | Some n => (n != 0) && (n %% runtime == 0)   (* on a handler boundary *)
@@ -628,7 +617,7 @@ are the ones left runnable.
 live, into the state, and then forces the default mask to equal the disk mask:
 
 ```coq
-timeslice_live c = (c is Some n with 0 < n)
+timeslice_live c = (c is Some (S n))
 
 bool_coding v =
   let b := timeslice_live (ir_count v) in
@@ -646,17 +635,8 @@ bool_coding v =
 
 Both are invariants, and neither is available to the proof: writing `state_step` as a
 composition of independent stages (section 6) buys tractability at the cost of
-forgetting what the previous stage established, so each stage must be proved for
-*every* pair of related states, including ones that never arise. `bool_coding` puts
-the two facts back — the OR for (i), the mask equality for (ii). On any reachable
-state both are no-ops; stated unconditionally, they narrow the state space
-`initiate_next` is analysed over enough for the argument to go through.
-
-The pattern is parameterised by `timeslice_live`, which reads only `ir_count` — a
-public field — so it is the same across two related executions. That is what makes
-this legitimate rather than question-begging, and it is where the fact that the slice
-is started by the *public* timer handler does real work.
-[`noninterference.md` §7d](noninterference.md) gives the proof-side account.
+forgetting what the previous stage established. See
+[`noninterference.md` §7d](noninterference.md) for details.
 
 **Why it does not leak.** A handler can now run only inside a slice, every handler
 runs for the same `runtime` steps, and the default/NOP handler fills any part of a
@@ -671,7 +651,8 @@ own traces.
 ## 9. `model_sliced_userview`
 
 `model_sliced` still exposes the whole pool output, including handler and scheduler
-activity. The final model erases every slot but the two user space processes.
+activity. The final model erases from that output every slot but the two user space
+processes.
 
 ```coq
 parse_output o =
@@ -684,20 +665,10 @@ parse_output o =
 model_sliced_userview runtime runs p_pub p_priv p_sched =
   map id parse_output (model_sliced runtime runs p_pub p_priv p_sched)
     : Proc T_in (T_out Opub Opriv)
-
-final_out_rel Opub Opriv = eqmaybe_false (eqsum (publicRel Opub) (privateRel Opriv))
 ```
 
 Of the six output slots only two survive — the public one re-tagged `inl` and the
 secret one `inr`; every other slot, and any all-`None` tuple, projects to `None`.
-`final_out_rel` is the output relation the top theorem uses: the public component
-compared exactly, the syscall component treated as secret.
-
-`model_sliced_userview_NI` proves `NI in_rel final_out_rel model_sliced_userview` —
-the payoff: with fixed-length, masked handling, the presence of a secret disk
-interrupt is invisible in the user-space output. The proof is documented in
-[`noninterference.md`](noninterference.md).
-
 
 # Part III — one concrete system
 
@@ -748,12 +719,6 @@ model_sliced_concrete          = model_sliced          handler_runtime slice_run
 model_sliced_userview_concrete = model_sliced_userview handler_runtime slice_runs low_p high_p scheduler
 ```
 
-`model_sliced_NI` and `model_sliced_userview_NI` are proved of the *parametric*
-models, and hold for any scheduler and any two user processes that are themselves
-non-interfering at the classification their slot declares ([`noninterference.md`
-§6](noninterference.md)). These instances are what the traces below, and the
-counterexample `model_immediate_not_NI`, are stated at.
-
 
 ## 11. Adequacy: the example traces
 
@@ -763,24 +728,14 @@ trace. Reading a design's two runs against each other is what exhibits its
 behaviour, so both are shown aligned, with `≠` marking every row on which they
 differ.
 
-Every output is a six-slot tuple with exactly one slot `Some` at a time. The slot
-order is the *reverse* of the pool index of section 2:
+Every output is a six-slot tuple with exactly one slot `Some` at a time, and for each
+run we show only that value. A user process's value appears bare (`Get`, `NOP`,
+`Sys`); everything else is labelled by the slot it came from — `sch hi` / `sch lo` for
+the scheduler naming the private or the public process, and `tmr` / `dsk` / `dfl` for
+the timer, disk and default handlers. A handler emits `Nth` (`Nothing`) on each step
+and `Nfy` (`Notify`) on the one that completes it, so an `Nth`/`Nfy` pair is exactly
+one handler run. In the user-view columns `·` is `None`.
 
-| slot | carries | classified |
-|---|---|---|
-| `pub` | public user output | public |
-| `sys` | the secret process's `Syscall` or `NOP` | secret |
-| `pid` | scheduled pid | public |
-| `dfl` | default/NOP handler output | secret |
-| `dsk` | disk handler output | secret |
-| `tmr` | timer handler output | public |
-
-The last column is the classification `out_rel` gives each slot
-([`noninterference.md` §4](noninterference.md)); the tables below are read against
-it. In them a row is one step, named by the slot it fills: `·` is `None`, `Nth` is
-`Nothing`, `Nfy` is `Notify`, and `sch hi` / `sch lo` are scheduler outputs naming
-the secret and the public process. Since a handler activation is always `Nothing`
-then `Notify`, an `Nth`/`Nfy` pair is exactly one complete handler run.
 
 ### `model_immediate`: the leak
 
@@ -792,8 +747,8 @@ then `Notify`, an `Nth`/`Nfy` pair is exactly one complete handler run.
   Get                      Get
                            dI                     ← secret input
                            Get
-                           dsk  Nth               ← the disk handler runs immediately, wherever
-                           dsk  Nfy                 its interrupt happened to be serviced
+                           dsk  Nth               ← the disk handler runs immediately
+                           dsk  Nfy
                            Get
   tI                       tI
   Get                      Get
@@ -809,20 +764,16 @@ then `Notify`, an `Nth`/`Nfy` pair is exactly one complete handler run.
   Get                      Get
 ```
 
-What this shows is *where* a handler run may appear. In `model_immediate` it appears
-wherever its interrupt happened to be serviced: the disk run lands in the middle of
-the public output stream, and everything after it shifts down. The handler's own slot
-is secret and the public slot is not, so what an attacker observes is not the handler
-but its effect — steps on which a public output was due and nothing arrived.
-`model_immediate_not_NI` ([`noninterference.md` §5](noninterference.md)) turns that
-into a counterexample using a trace of just two public requests.
+What this shows is *when* a handler run may appear. In `model_immediate` it appears
+whenever its interrupt happened to be serviced: the disk run lands in the middle of
+the public output stream, and everything after it shifts down.
 
 ### `model_sliced`: the same two runs, and the projection
 
 `trace_sliced_no_dI'` against `trace_sliced_with_dI'`, in the same layout. Each run
 now carries its own `user view` column — the sequence `model_sliced_userview` emits,
 i.e. that run under `parse_output`. They are two distinct traces, and the point of
-the theorem is that they are *indistinguishable* at `⊥`, not that they are equal.
+the theorem is that they are *indistinguishable* at `⊥`.
 
 ```text
   no disk interrupt      with disk interrupt
@@ -860,36 +811,20 @@ Three things stand out, and they are the whole argument in miniature.
 above, where the disk handler ran the moment its interrupt was serviced. Here the
 disk interrupt arrives and *nothing happens*: it is masked, so it is merely recorded
 as pending, and the public process carries on emitting. Only when the timer handler
-completes does a slice open, and only inside that slice may a handler run. (Those
-three leading rows are why the two runs have different lengths. They are two
-separately chosen accepted traces, lined up from the timer onward to make the slice
-structure legible — not the pair of runs the theorem quantifies over.)
+completes does a slice open, and only inside that slice may a handler run.
 
 **Inside the slice, the disk handler substitutes for a NOP run.** That is the only
 structural difference between the two runs — the `≠` at the first of the two handler
-runs. It is a substitution, not an insertion: the slice is `runs * runtime` steps
-long either way, so it neither grows nor shrinks, and the public skeleton around it —
-the timer handler, the scheduled pid, the resumed `Get` — is identical. The second
-slice, where no interrupt is waiting, is `dfl` in both.
+runs.
 
 **The projection erases the substitution entirely.** Both `dsk` and `dfl` sit in
 slots `parse_output` discards, so each run's user view is `·` on every handler step
 and every scheduled pid. Comparing the two view columns against each other, the only
 place they differ at all is the secret process reacting to its notification, `NOP`
 against `Sys` — and both of those are classified secret, so an observer at `⊥` cannot
-tell them apart. The two views are therefore different sequences that no attacker can
-separate, which is exactly what `model_sliced_userview_NI` proves in general.
+tell them apart.
 
 
 ## Where to go next
 
-That is the whole construction. What it does *not* say is why any of it is secure:
-nothing above defines what an attacker can observe, and the claims made in passing —
-that a slot is public, that the pid split matters, that a handler run must be
-indistinguishable from filler — are stated but not made precise.
-
-That is the subject of [`noninterference.md`](noninterference.md): the security
-relation carried by each interface, the counterexample for `model_immediate`, how the
-generic theorems compose to prove `model_sliced`, and the one substantial obligation
-(`fv_NI`) that the compositional structure of `state_step` and `bool_coding` exist to
-make tractable.
+The security argument can be found in [`noninterference.md`](noninterference.md).
