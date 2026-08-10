@@ -57,24 +57,19 @@ are substantially simpler for it, since they never have to construct streams.
 A process has type `Proc I O`, where `I` and `O` are its input and output
 interfaces.
 
-**The semantics is a labelled transition system.** A process never computes silently.
-It moves only by taking an *input step*, in which the environment hands it a value of
-type `[I]`, or an *output step*, in which it produces a value of type `[O]` itself;
-these are two separate reduction relations in the source. Who chooses the label is
-what separates them: on an input step the environment supplies the value, and the
-process always has a step for whatever it is handed, whereas on an output step the
-process itself produces the value — the environment does not choose it, only observes
-what comes out. Nothing makes the
-two alternate — a run is any interleaving, and the models below routinely take
-several output steps in a row.
+A process moves in one of two ways:
 
-A **trace** is the sequence of labels along one run, each tagged to say which kind of
-step produced it: a value received or a value emitted. That is what an observer is
-defined against ([`noninterference.md` §1](noninterference.md)), and it is the only
-thing about a process that non-interference talks about.
+```text
+   p ──i──▶ p'     p receives the input i
+   p ──o──▶ p'     p emits the output o
+```
 
-Throughout, *emit* always means an output step, and *receive* or *consume* an input
-step.
+in any order — nothing forces them to alternate. A **trace** is the sequence of
+values along one such run, each marked as received or emitted, and it is all
+non-interference looks at. Precise definitions are in
+[`noninterference.md` §1](noninterference.md).
+
+Throughout, *emit* means an output step and *receive* an input step.
 
 There are seven constructors, described here by what each does on an input step and
 on an output step:
