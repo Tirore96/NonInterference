@@ -339,9 +339,12 @@ pool_input (v, event) = if event is inr o then Some (get_cur_pid v, dI_out o) el
 
 Its result is the *optional* input of `maybe p`, so the two branches mean:
 
-- **`event = inl i`, an external interrupt** → `None`, so the pool does not step. An arriving
-  interrupt does not advance any process; it is only recorded in the state, by
-  `record_pending` (section 6).
+- **`event = inl i`, an external interrupt** → `None`, so the pool does not step. An
+  arriving interrupt advances no process; it is only recorded in the state, by
+  `record_pending` (section 6). That it does *nothing else* is a security
+  requirement: an interrupt the observer may not see must not visibly move the
+  state, which leaves setting a single private bit as the only thing the input step
+  can afford to do. See [`noninterference.md` §7a](noninterference.md).
 - **`event = inr o`, a fed-back pool output** → `Some (pid, payload)`. The `pid` is
   `get_cur_pid v`, which selects the slot that runs next — this is how the state's
   scheduling decision reaches the pool. The `payload` is `dI_out o`, the disk

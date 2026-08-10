@@ -447,6 +447,28 @@ classified *per bit* rather than wholesale: `hidden_pending` pairs a **private
 pending** bit with a **public mask** bit. That pairing is not a stylistic choice —
 it is the only assignment satisfying both obligations.
 
+**Why an arriving interrupt does nothing but record itself.** `f_EP` also dictates
+the shape of the input stage, and this is a security requirement rather than a
+modelling convenience. A disk interrupt is distinguished at `⊥`, so whatever the
+model does on receiving one has to leave the state `⊥`-related to what it was.
+That rules out taking any decision on an input step: the model cannot start a
+handler, reassign `cur_pid`, clear a mask or move the slice counter, because each of
+those fields is compared by equality at `⊥` and any of them changing would break
+`f_EP` outright.
+
+What is left is to write to a *private* field and nothing else. `record_pending`
+sets that interrupt's pending bit, which is private exactly so that this is
+possible, and the state is otherwise untouched — so it is still related to the
+original and `f_EP` goes through. The other three stages of `state_step` are
+`step_right`s, so on an input event they are the identity by construction: the
+whole state transition on an interrupt is that one bit.
+
+Everything the interrupt eventually causes is therefore deferred to a later output
+step, where the input is no longer the thing being varied. That is why
+`initiate_next` is wrapped in `step_right` ([`models.md` §6](models.md)), and why
+`pool_input` returns `None` on an input event so the pool itself does not step
+([`models.md` §4](models.md)).
+
 ### 7b. `stateType_rel`: the resulting classification
 
 ```text
