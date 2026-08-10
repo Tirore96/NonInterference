@@ -55,32 +55,53 @@ over the traces a process admits rather than over an infinite stream. The proofs
 are substantially simpler for it, since they never have to construct streams.
 
 A process has type `Proc I O`, where `I` and `O` are its input and output
-interfaces. It runs by alternating input steps and output steps. There are seven
-constructors:
+interfaces.
 
-- **`out o`** — constant process. Ignores every input; every output step emits
-  the fixed value `o` and the process is unchanged.
-- **`map f g p`** — rewire `p` at the interface. Each incoming input is passed
-  through `f` before reaching `p`, and each of `p`'s outputs is passed through `g`
-  on the way out. (`Proc I' O → Proc I O'`)
-- **`sta f g v p`** — give `p` a state cell holding `v`. On input `i` the cell
-  updates to `f i v` and `p` sees the new value alongside `i`; on an output `o`
-  from `p` the cell updates to `g o v` and the whole process emits the pair
-  `(new-state, o)`. So a `sta` process *exposes* its state in its output stream
-  and threads it across steps.
-- **`swi b p`** — a one-bit "switch" in phase `b`, wrapping a `p` whose output is
-  tagged with a Bool. An input `(b', i)` flips the phase by `b ← xor b b'` and
-  hands `i` to `p`. On output: in phase `false` the switch emits `None` and stays
-  closed; in phase `true` it lets `p`'s tagged output `(c, o)` through as `Some o`
-  and re-flips the phase by the tag, `b ← xor true c`. `swi` is how a pool slot is
-  gated on / off (section 3).
-- **`par p1 p2`** — broadcast the same input to `p1` and `p2`; each output step
-  pairs one output of `p1` with one output of `p2`.
-- **`loop p`** — feedback: every output `p` produces is immediately fed back to
-  `p` as its next input. (`Proc I I → Proc I I`)
-- **`maybe p`** — make the input optional. Input `None` is a no-op (`p` idles);
-  input `Some i` steps `p` on `i`. Outputs pass through unchanged.
-  (`Proc I O → Proc (Option I) O`)
+**The semantics is a labelled transition system.** A process never computes silently.
+It moves only by taking an *input step*, in which the environment hands it a value of
+type `[I]`, or an *output step*, in which it produces a value of type `[O]` itself;
+these are two separate reduction relations in the source. Who chooses the label is
+what separates them: on an input step the environment supplies the value, and the
+process always has a step for whatever it is handed, whereas on an output step the
+process itself produces the value — the environment does not choose it, only observes
+what comes out. Nothing makes the
+two alternate — a run is any interleaving, and the models below routinely take
+several output steps in a row.
+
+A **trace** is the sequence of labels along one run, each tagged to say which kind of
+step produced it: a value received or a value emitted. That is what an observer is
+defined against ([`noninterference.md` §1](noninterference.md)), and it is the only
+thing about a process that non-interference talks about.
+
+Throughout, *emit* always means an output step, and *receive* or *consume* an input
+step.
+
+There are seven constructors, described here by what each does on an input step and
+on an output step:
+
+- **`out o`** — the constant process. It receives any value and is unchanged; it
+  emits the fixed `o` and is unchanged.
+- **`map f g p`** — rewires `p` at both interfaces. Receiving `i`, it hands `p` the
+  value `f i`. Emitting, it lets `p` emit some `o` and emits `g o` in its place.
+  (`Proc I' O → Proc I O'`)
+- **`sta f g v p`** — gives `p` a state cell holding `v`, and *exposes* that cell in
+  what it emits. Receiving `i`, the cell becomes `f i v` and `p` receives the pair
+  `(f i v, i)`. Emitting, `p` emits some `o`, the cell becomes `g o v`, and the whole
+  process emits the pair `(g o v, o)` — the new state alongside `p`'s value.
+- **`swi b p`** — a one-bit "switch" in phase `b`, wrapping a `p` that emits values
+  tagged with a Bool. Receiving `(b', i)`, the phase flips to `xor b b'` and `p`
+  receives `i`. Emitting in phase `false`, it emits `None` and `p` does not step at
+  all; emitting in phase `true`, `p` emits a tagged `(c, o)`, the switch emits
+  `Some o` and the phase becomes `xor true c`. `swi` is how a pool slot is gated on /
+  off (section 3).
+- **`par p1 p2`** — receiving `i`, both `p1` and `p2` receive it. Emitting, both emit,
+  and `par` emits the pair of their two values.
+- **`loop p`** — feedback. Receiving `i`, `p` receives it. Emitting is two steps of
+  `p`: `p` emits some `o`, that same `o` is immediately fed back to `p` as an input
+  step, and `loop p` emits `o`. (`Proc I I → Proc I I`)
+- **`maybe p`** — makes the input optional. Receiving `None`, `p` does not step;
+  receiving `Some i`, `p` receives `i`. Emitting passes straight through: `p` emits
+  `o` and so does `maybe p`. (`Proc I O → Proc (Option I) O`)
 
 > **Why interfaces are not just types.** In the mechanisation `I` and `O` are not
 > Coq `Set`s but are drawn from an inductive `Ty` (`Nat`, `Bool`, `Unit`, `Times`,
@@ -111,7 +132,8 @@ interrupt handlers, a scheduler, two user processes — closed into a self-drivi
 whole by a **stateful wrapper** (section 4) that threads the global state and
 decides, on every step, whose turn it is (sections 5 and 6).
 
-It consumes interrupts and emits one tuple per step holding every slot's output.
+It receives interrupts, and on each output step emits one tuple holding every
+slot's value.
 Nothing in it is committed to a security design: that is entirely the job of the
 three parameters `init`, `handler_preroutine` and `bool_coding`, which section 7
 sets out and Part II fixes in two different ways — once so that a secret interrupt
@@ -201,16 +223,18 @@ process_pool cur_pid n f_initial f_I f_O T' f_proj f_pid f_proc =
 ```
 
 Reading a single slot `k` from the inside out: `f_proc k` is the slot's process, and
-`map id (fun o => (true, o))` tags each output with the constant bit `true`; `maybe`
-makes the input optional, so the slot idles unless handed `Some`; `swi (f_initial k)`
-gates it, forwarding output only in phase `true`, and the constant `true` tag closes
-the phase after one output — so a selected slot advances by exactly one step and
-then waits to be re-selected (every process is cooperative); the outer `map`
-computes the switch bit `f_pid cur_pid == k` and the slot's payload `f_proj T' k`.
+`map id (fun o => (true, o))` tags everything it emits with the constant bit `true`;
+`maybe` makes the input optional, so on an input step the slot's process steps only
+if handed `Some`; `swi (f_initial k)` gates it, emitting the slot's value only in
+phase `true`, and the constant `true` tag closes the phase again — so a selected slot
+takes exactly one output step and then waits to be re-selected (every process is
+cooperative); the outer `map` builds the switch's input, the pair of the bit
+`f_pid cur_pid == k` and the slot's payload `f_proj T' k`.
 
 `par` lays the slots side by side and `times_on n f_O` is the nested product of all
-slot outputs, each wrapped in `Option`. The net effect: exactly the slot whose index
-equals the current pid advances and emits; all others emit `None`.
+slot outputs, each wrapped in `Option`. The net effect on an output step: the slot
+whose index equals the current pid emits its own value, and every other slot emits
+`None`.
 
 **Instantiation.** What has to stay open is the handler runtime, the scheduler and
 the two userspace processes, and all four enter through one argument only, `f_proc`.
@@ -282,7 +306,7 @@ f_proj = fun i n => match n with
 ```
 
 This is why every other slot can declare its input `Empty`: `f_proj` hands them
-`None`, and `maybe` turns that into an idle step. It has to be a `match` rather than
+`None`, on which `maybe` leaves the slot's process unstepped. It has to be a `match` rather than
 the `if n == 4 then i else None` it looks like, because the result type
 `[Option (f_I n)]` varies with `n` — only in the `4` branch is it
 `Option THandlerOutput`. It typechecks as a dependent pattern match.
@@ -290,7 +314,7 @@ the `if n == 4 then i else None` it looks like, because the result type
 
 ## 4. Stateful wrapper
 
-The pool consumes `(cur_pid, T')` and produces a product of slot outputs. On its own
+The pool receives a `(cur_pid, T')` pair and emits a product of slot values. On its own
 it has no state and no way to drive itself. `reactive_system` closes it into a single
 self-driving `Proc T_in T_out'` by adding the global state and a feedback loop.
 
@@ -320,7 +344,7 @@ pool_input (v, event) = if event is inr o then Some (get_cur_pid v, dI_out o) el
 
 Its result is the *optional* input of `maybe p`, so the two branches mean:
 
-- **`event = inl i`, an external interrupt** → `None`, so the pool idles. An arriving
+- **`event = inl i`, an external interrupt** → `None`, so the pool does not step. An arriving
   interrupt does not advance any process; it is only recorded in the state, by
   `record_pending` (section 6).
 - **`event = inr o`, a fed-back pool output** → `Some (pid, payload)`. The `pid` is
@@ -689,12 +713,13 @@ alternate x y z pred =
            (fun o v => v) false (out z))))
 ```
 
-which emits `x` when it has seen a `pred`-matching input since it last fired and `y`
+which emits `x` when it has received a `pred`-matching value since it last emitted, and `y`
 otherwise: a one-bit accumulator latches on a match, the loop feedback clears it once
 per cycle, and the outer `map` reads the tag.
 
 `scheduler` is a round-robin over the two user processes — the cell toggles 0/1 from
-1 and the output adds 2, so the pid alternates 2, 3, 2, 3, i.e. secret then public.
+1 and the emitted value adds 2, so the pid alternates 2, 3, 2, 3, i.e. private then
+public.
 Its input type is `Empty`: it only proposes the next process id.
 
 ```coq
