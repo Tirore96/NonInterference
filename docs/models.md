@@ -301,8 +301,8 @@ f_proj = fun i n => match n with
 ```
 
 This is why every other slot can declare its input `Empty`: `f_proj` hands them
-`None`, on which `maybe` leaves the slot's process unstepped. It has to be a `match` rather than
-the `if n == 4 then i else None` it looks like, because the result type
+`None`, on which `maybe` leaves the slot's process unstepped. It has to be a `match`
+rather than the `if n == 4 then i else None` it looks like, because the result type
 `[Option (f_I n)]` varies with `n` — only in the `4` branch is it
 `Option THandlerOutput`. It typechecks as a dependent pattern match.
 
@@ -370,11 +370,7 @@ stateType = ((cur_pid, prev_pid), (re_sch, (ir_count, ic)))
 | `ic` | `Times I_bits (Times I_bits I_bits)` | the interrupt controller: one `I_bits` per interrupt, in order default, disk, timer |
 | `I_bits` | `Times pending mask` | `pending` — an interrupt of this kind has arrived and awaits service; `mask` — service is currently blocked |
 
-The file then defines the obvious getters and setters (`get_cur_pid`,
-`update_I_mask`, ...), the boolean helpers `set_masks` / `unset_masks` / `masks_set`
-(all-masked is the "a handler is running, do not nest" condition), and
-`or_bool_state`, which merges requested controller bits into the live state while
-keeping the time slice untouched. A handler is *selectable* for an interrupt kind iff
+A handler is *selectable* for an interrupt kind iff
 it is pending and not masked (`I_ready`); `first_ready` picks the highest-priority
 ready one, in the fixed order timer > disk > default.
 
@@ -382,25 +378,30 @@ ready one, in the fixed order timer > disk > default.
 ## 6. State transitions
 
 The `state_update` threaded by `reactive_system` is a composition of four stages,
-applied once per event and each guarded by that event `i`:
+applied once per event and each guarded by that event `io`, which is either an
+input or an output:
 
 ```coq
-state_step handler_preroutine bool_coding i =
+state_step handler_preroutine bool_coding io =
   initiate_next(bool_coding) ∘ handler_preroutine ∘ apply_schedule ∘ record_pending
 ```
 
 - **`record_pending`** — on an external interrupt input, set that interrupt's
   `pending` bit.
 - **`apply_schedule`** — on a scheduler output, set `cur_pid` to the scheduled pid.
+  It reads that output with `is_sch_out`, which matches `(None, (None, (Some n, _)))`
+  — so the two user slots are checked for `None`-ness and nothing more. No stage
+  reads a user-slot *value*, which is why the state transition is independent of what
+  userspace does.
 - **`handler_preroutine`** — a parameter; see section 7.
 - **`initiate_next(bool_coding)`** — decide who runs next:
 
   ```coq
   initiate_next bc v =
     if masks_set v then v                     (* a handler is running *)
-    else let v := bc v in                     (* the second parameter *)
+    else let v := bc v in                     (* apply bc *)
          if first_ready v is Some ir then initiate_handler ir v
-         else if is_handler_pid v
+         else if is_handler_pid v             (* did handler just finish? *)
               then if get_re_sch v then initiate_scheduler v
                                    else initiate_prev_pid v
               else v                           (* stay in user space *)
@@ -410,12 +411,7 @@ state_step handler_preroutine bool_coding i =
   the handler, sets all masks, and clears that interrupt's `pending` bit.
   `initiate_next` is wrapped in `step_right`, so it is applied only on output events.
 
-The stages read a pool output through `tI_out` / `dI_out` / `default_I_out`, which
-pick out the three handler slots, `is_I_out_done`, which reports which handler just
-emitted `Notify`, and `is_sch_out`, which matches the scheduler slot. `is_sch_out`
-matches `(None, (None, (Some n, _)))`, so the two user slots are inspected for
-`None`-ness and nothing more: no stage ever reads a user-slot *value*, which is why
-the state transition is independent of what userspace does. Why `state_step` is a
+Why `state_step` is a
 composition rather than one update, and what that costs, is in
 [`noninterference.md` §7c](noninterference.md).
 
@@ -431,8 +427,9 @@ model runtime init handler_preroutine bool_coding p_pub p_priv p_sched =
 ```
 
 The pool, the state layout, `record_pending`, `apply_schedule` and `initiate_next`
-are the same term in both designs. What is left free is a triple, and each part of it
-is a distinct point of control over *when a handler is allowed to run*:
+stay fixed for both the interfering and the non-interfering model. What is left free
+is a triple, and each part of it is a distinct point of control over *when a handler
+is allowed to run*:
 
 - **`init : [stateType]`** — the state the model starts in. Because a handler is
   serviceable exactly when it is pending and unmasked, the initial masks decide which
@@ -449,9 +446,9 @@ is a distinct point of control over *when a handler is allowed to run*:
 - **`bool_coding : [stateType] -> [stateType]`** — consulted by `initiate_next`,
   after the "is a handler already running" test and before `first_ready` picks the
   next one. It is the design's last chance to constrain the state that the choice is
-  made from. Its real use is the one named above: re-imposing an invariant that the
+  made from. Its real use is re-imposing an invariant that the
   compositional proof has forgotten, so that the choice can be shown to come out the
-  same in two related executions.
+  same in two related executions ([`noninterference.md` §7d](noninterference.md)).
 
 Between them: `init` says what is runnable at rest, `handler_preroutine` says when
 that changes, and `bool_coding` says what must hold when the choice is made.
@@ -476,18 +473,33 @@ story.
 
 Handlers must all run for the same length of time, or the schedule would again
 depend on which interrupt arrived. The three handler slots therefore reuse one
-`I_handler runtime` (section 2), and the slice is `runs * runtime` — a whole number
-of handler runs by construction, so it always ends on a handler boundary. A real
-system would reach a fixed length by padding.
+`I_handler runtime` (section 2), and the slice is `runs * runtime`, where `runs` is
+the number of handler executions that occur in one time slice. A real system would
+reach a fixed length by padding.
 
 ### 8a. `model_immediate`
+
+The baseline, interrupts handled the ordinary way — `model` at the triple
+`(initial_state_immediate, immediate_preroutine, id)`:
 
 ```coq
 model_immediate runtime p_pub p_priv p_sched =
   model runtime initial_state_immediate immediate_preroutine id p_pub p_priv p_sched
+```
 
+**The initial state** disables the slice counter and leaves every controller bit
+clear, so from rest every interrupt is serviceable:
+
+```coq
 initial_state_immediate = ((initial_pid, None), (false, (None, false_ic)))
+```
 
+**The handler preroutine** reacts to a handler finishing, which a handler announces
+by emitting `Notify`; `is_I_out_done` scans the three handler slots for one. The
+response is to unmask everything, and if it was the timer handler, also to ask for a
+reschedule:
+
+```coq
 immediate_preroutine o v =
   if is_I_out_done o is Some ir
   then let v := unset_masks v in
@@ -495,10 +507,8 @@ immediate_preroutine o v =
   else v
 ```
 
-The counter is disabled and every controller bit clear, so the system starts with
-every interrupt serviceable. A handler signals completion by emitting `Notify`, and
-`immediate_preroutine` responds by unmasking everything — if it was the timer, also
-asking to reschedule. `bool_coding` is `id`: there is no bookkeeping to do.
+**`bool_coding` is `id`.** There is no time-slice bookkeeping to do, and so no
+invariant to restore.
 
 **Why it leaks.** Nothing constrains *when* a handler runs. Since all masks are
 clear, an interrupt is serviced as soon as it arrives, and its handler runs for its
@@ -711,9 +721,9 @@ alternate x y z pred =
            (fun o v => v) false (out z))))
 ```
 
-which emits `x` when it has received a `pred`-matching value since it last emitted, and `y`
-otherwise: a one-bit accumulator latches on a match, the loop feedback clears it once
-per cycle, and the outer `map` reads the tag.
+which emits `x` when it has received a `pred`-matching value since it last emitted,
+and `y` otherwise: a one-bit accumulator latches on a match, the loop feedback clears
+it once per cycle, and the outer `map` reads the tag.
 
 `scheduler` is a round-robin over the two user processes — the cell toggles 0/1 from
 1 and the emitted value adds 2, so the pid alternates 2, 3, 2, 3, i.e. private then
