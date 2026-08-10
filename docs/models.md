@@ -513,32 +513,31 @@ invariant to restore.
 **Why it leaks.** Nothing constrains *when* a handler runs. Since all masks are
 clear, an interrupt is serviced as soon as it arrives, and its handler runs for its
 full `runtime` steps in place of whichever process was running — pushing every later
-public output back by that much. The handler's own output is secret and the attacker
-cannot see it, but the public process's slot is not, and across those steps it
-carries nothing: an output that was due and did not arrive. `model_immediate_not_NI`
-turns that into a counterexample ([`noninterference.md` §5](noninterference.md));
-section 11 shows it in the model's own traces.
+public output back by that much.
+`model_immediate_not_NI` turns that into a counterexample
+([`noninterference.md` §5](noninterference.md)); section 11 shows it in the model's
+own traces.
 
 ### 8b. `model_sliced`
+
+The fixed design — `model` at the triple `(initial_state_sliced,
+sliced_preroutine runtime runs, bool_coding)`:
 
 ```coq
 model_sliced runtime runs p_pub p_priv p_sched =
   model runtime initial_state_sliced (sliced_preroutine runtime runs) bool_coding
     p_pub p_priv p_sched
-
-sliced_preroutine o = check_ir_count ∘ check_handler_completed ∘ initiate_ir o
 ```
 
-Unlike `immediate_preroutine`, the handler preroutine here is a composition of three
-stages. The rest of this section walks it right to left — `initiate_ir` opens a
-slice, `check_handler_completed` reopens masks at a boundary inside it, and
-`check_ir_count` ticks it and closes it — and then covers `bool_coding`.
+Two things change relative to `model_immediate`, one in each of the first two
+parameters. **All masks start set except the timer's**, so a secret handler can never
+be started merely because its interrupt arrived; the only interrupt serviceable from
+rest is the public timer. And **a fixed time slice replaces "run until the handler
+says it is done"**: what ends a handler's turn is the slice, not the handler's own
+secret output.
 
-Two things change relative to `model_immediate`. **All masks start set except the
-timer's**, so a secret handler can never be started merely because its interrupt
-arrived; the only interrupt serviceable from rest is the public timer. And **a fixed
-time slice replaces "run until the handler says it is done"**: what ends a handler's
-turn is the slice, not the handler's own secret output.
+**The initial state** starts the counter at `Some 0`, so no slice is live, and masks
+every interrupt but the timer:
 
 ```coq
 initial_state_sliced = ((initial_pid, None), (false, (Some 0, mask_most)))
@@ -547,7 +546,21 @@ mask_most = ((false,true), ((false,true), (false,false)))
                clear for the timer *)
 ```
 
-**`initiate_ir` — open a slice.**
+**The handler preroutine**, unlike `immediate_preroutine`, is a composition of three
+stages:
+
+```coq
+sliced_preroutine o = check_ir_count ∘ check_handler_completed ∘ initiate_ir o
+```
+
+Read right to left: `initiate_ir` opens a slice, `check_handler_completed` reopens
+the masks at a boundary inside it, and `check_ir_count` ticks the slice and closes
+it. Taking them in that order:
+
+*`initiate_ir` opens a slice.* When the timer handler completes, it loads the counter
+to `time_slice runtime runs`. The slice is `runs` complete handler executions long,
+so that many can take place before it ends. The timer is public, so *when* slices
+start is public:
 
 ```coq
 initiate_ir runtime runs o v =
@@ -555,11 +568,12 @@ initiate_ir runtime runs o v =
   else v
 ```
 
-When the timer handler completes, load the counter to `time_slice runtime runs`. The
-slice is `runs` complete handler executions long, so that many can take place before
-it ends. The timer is public, so *when* slices start is public.
-
-**`check_handler_completed` — reopen the masks at a boundary.**
+*`check_handler_completed` reopens the masks at a boundary.* Because the slice is
+*defined* as `runs * runtime`, it always ends on a handler boundary, and the counter
+is a nonzero multiple of `runtime` precisely when a handler has just finished — which
+is what `handler_completed` computes, rather than assumes. Note it reads the
+*counter*, not the handler's output: the boundary is public, whichever handler
+happens to be occupying the slot.
 
 ```coq
 time_slice runtime runs = runs * runtime
@@ -574,13 +588,10 @@ check_handler_completed runtime v =
   if handler_completed runtime (ir_count v) then set_tI (unset_masks v) else v
 ```
 
-Because the slice is *defined* as `runs * runtime`, it always ends on a handler
-boundary, and the counter is a nonzero multiple of `runtime` precisely when a handler
-has just finished — which is what `handler_completed` computes, rather than
-assumes. Note this reads the *counter*, not the handler's output: the boundary is
-public, whichever handler happens to be occupying the slot.
-
-**`check_ir_count` — tick, and close.**
+*`check_ir_count` ticks, and closes.* Its `Some 0` case is the mirror image of
+`check_handler_completed`: it closes the slice by masking the secret handlers and
+unmasking the timer, so the only interrupt serviceable next is the public one that
+starts the next slice.
 
 ```coq
 check_ir_count v =
@@ -590,10 +601,6 @@ check_ir_count v =
   | None      => v
   end
 ```
-
-The `Some 0` case is the mirror image of `check_handler_completed`: it closes the
-slice by masking the secret handlers and unmasking the timer, so the only interrupt
-serviceable next is the public one that starts the next slice.
 
 Together, at the concrete instance of section 10, where a slice of 4 is two runs of a
 2-step handler:
@@ -615,11 +622,10 @@ Together, at the concrete instance of section 10, where a slice of 4 is two runs
 
 `Some 4` and `Some 2` are the nonzero multiples of `runtime` below the slice, so they
 are exactly the boundaries `handler_completed` marks, and at both the secret handlers
-are the ones left runnable. A secret handler run therefore takes the place of a
-default/NOP run instead of displacing a user process, and a slice containing a disk
-run has the same shape as one containing only filler.
+are the ones left runnable.
 
-**`bool_coding`.**
+**`bool_coding`** ORs a controller pattern, parameterised by whether the slice is
+live, into the state, and then forces the default mask to equal the disk mask:
 
 ```coq
 timeslice_live c = (c is Some n with 0 < n)
@@ -630,9 +636,6 @@ bool_coding v =
   let v := update_bool_state v (or_bool_state (bool_state v) ic) in
   update_I_mask v DefaultInterrupt (get_I_mask v DiskInterrupt)
 ```
-
-It ORs a controller pattern, parameterised by whether the slice is live, into the
-state, then forces the default mask to equal the disk mask.
 
 *Why it is needed.* Two facts hold of every state the model can actually reach:
 
@@ -654,6 +657,15 @@ public field — so it is the same across two related executions. That is what m
 this legitimate rather than question-begging, and it is where the fact that the slice
 is started by the *public* timer handler does real work.
 [`noninterference.md` §7d](noninterference.md) gives the proof-side account.
+
+**Why it does not leak.** A handler can now run only inside a slice, every handler
+runs for the same `runtime` steps, and the default/NOP handler fills any part of a
+slice no real interrupt claims. A secret handler run therefore takes the place of a
+NOP run rather than displacing a user process: a slice containing a disk run has the
+same shape as one containing only filler, and the public schedule around it is
+unchanged. `model_sliced_NI` proves this
+([`noninterference.md` §6](noninterference.md)); section 11 shows it in the model's
+own traces.
 
 
 ## 9. `model_sliced_userview`
