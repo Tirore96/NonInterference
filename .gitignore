@@ -1,6 +1,8 @@
 token.txt
 rocq_mcp_cache*
 *~
+\#*\#
+.\#*
 *.aux
 *.vo
 *.vos
