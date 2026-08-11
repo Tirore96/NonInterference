@@ -8,9 +8,10 @@ security argument. Definitions are as given in
 [`noninterference.v`](../theories/noninterference.v).
 
 > **Logical foundations.** Classical logic is imported at
-> [`theories/theorems.v:739`](../theories/theorems.v) and used in one place, the
-> switch lemma `swi_NI'`, because `aware` is not constructively decidable (a
-> decision procedure would do instead). Everything else is constructive.
+> [`theories/theorems.v:737`](../theories/theorems.v) and used in one place, the
+> case split on `aware` inside `swi_NI`, because `aware` is not constructively
+> decidable (a decision procedure would do instead). Everything else is
+> constructive.
 
 ## Contents
 
@@ -85,12 +86,14 @@ publicRel A    dis l x = False        rel l x y = (x = y)
 privateRel A   dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨ (l = ⊥)
 ```
 
-A public value can be neither inserted, removed, nor varied without an observer
-noticing. A private value is secret at `⊥` and nowhere else. There the relation is
-total, so the value may be inserted, removed or replaced unnoticed; higher up it is
-compared by equality like any public one. The syscall output and the secret handler
-outputs carry `privateRel`. The interrupt input carries a stricter custom relation
-(section 4).
+Under `publicRel` nothing is ever unobservable, and two values are related only
+when they are equal. So a public value can be neither inserted, removed, nor varied
+without an observer noticing, at any level.
+
+Under `privateRel` everything is unobservable at `⊥` and everything is related
+there, which is what lets non-interference insert, remove or replace such a value
+freely. At every other level nothing is unobservable and the relation is again
+equality.
 
 
 ## 3. Composite relations
@@ -137,59 +140,56 @@ in for `Some v` only when `v` is itself a secret the observer may not see.
 
 ## 4. The model interfaces: `in_rel`, `out_rel`, `final_out_rel`
 
-**`in_rel : cRel [T_in]`** is `TInterrupt_rel`, a custom relation whose `dis` field
-is `ir_dis` and whose `rel` field relates two interrupts when both are unobservable
-or the two are equal:
+**`in_rel : cRel [T_in]`** is `TInterrupt_rel`, built from `ir_dis` rather than
+taken as `privateRel TInterrupt`:
 
-```text
-ir_dis l ir = (ir = DiskInterrupt ∧ l = ⊥)
+```coq
+ir_dis l ir            := ir = DiskInterrupt /\ l = \bot
+TInterrupt_rel.dis     := ir_dis
+TInterrupt_rel.rel l   := fun ir ir' => ir = ir' \/ (ir_dis l ir /\ ir_dis l ir')
 ```
 
-So the disk interrupt alone is unobservable, and only at `⊥`. Every other
-interrupt, the timer included, has to be matched even there. Taking
-`privateRel TInterrupt` would hide the timer as well, and non-interference would
-then forbid the schedule from depending on it, which is the whole basis of
-`model_sliced`. Singling out the disk interrupt gives the theorem the reading we
-want: the timer is a public scheduled event, and the disk interrupt's presence is
-what an attacker cannot infer.
+The disk interrupt alone is unobservable, and only at `⊥`; every other interrupt
+must be matched even there. `privateRel TInterrupt` would hide the timer as well,
+and non-interference would then forbid the schedule from depending on it, which is
+the whole basis of `model_sliced`.
 
-**`out_rel Opub Opriv : cRel [T_out' Opub Opriv]`** (full pool output, for
-`model_immediate` / `model_sliced`)
+**`out_rel Opub Opriv : cRel [T_out' Opub Opriv]`** relates two pool outputs
+componentwise. A pool output is a six-tuple, one `Option` per slot:
 
 ```text
-eqpair (eqmaybe publicRel)               public user output   (exact)
-  (eqpair (eqmaybe privateRel)           syscall              (secret at ⊥)
-    (eqpair (eqmaybe publicRel)          scheduler pid        (exact)
-      (eqpair (eqmaybe_top privateRel)   handler output       (secret)
-        (eqpair (eqmaybe_top privateRel) handler output       (secret)
-          (eqmaybe publicRel)))))        handler output       (public)
+( pub , sys , sch , dfl , dsk , tmr )
 ```
 
-The three handler components are the slots default/NOP, disk, timer. The timer slot
-is public, since it reacts only to public scheduled events. The disk slot is
-private because the disk interrupt is, and the default/NOP slot has to be private
-as well: a slice step is filled by one or the other, so the two must look alike.
+and `out_rel` is the corresponding nest of `eqpair`s, with these components:
 
-**Scheduling secrecy lives in the choice of `eqmaybe` variant.** The handlers and
-the private user process both carry `privateRel` payloads, but:
+| slot | component relation | value at `⊥` | did the slot run? |
+|---|---|---|---|
+| `pub` public user process | `eqmaybe publicRel` | visible | visible |
+| `sys` private user process | `eqmaybe privateRel` | hidden | visible |
+| `sch` scheduler | `eqmaybe publicRel` | visible | visible |
+| `dfl` default/NOP handler | `eqmaybe_top privateRel` | hidden | hidden |
+| `dsk` disk handler | `eqmaybe_top privateRel` | hidden | hidden |
+| `tmr` timer handler | `eqmaybe publicRel` | visible | visible |
 
-```text
-sys slot  eqmaybe     privateRel    None is PUBLIC
-                                    → that high_p produced an output is visible;
-                                      only Syscall-versus-NOP is hidden
+The timer slot is public, since it reacts only to public scheduled events. The disk
+slot is private because the disk interrupt is, and the default/NOP slot has to be
+private as well: a slice step is filled by one or the other, so the two must look
+alike.
 
-dfl, dsk  eqmaybe_top privateRel    None is unobservable at ⊥
-                                    → at the attacker's level, a handler output is
-                                      indistinguishable from no output at all, so
-                                      *whether the handler ran* is hidden too
-```
+**The last two columns come apart only for the handlers, and that is where
+scheduling secrecy lives.** The `privateRel` payload hides the *value* in a slot.
+Whether the slot ran is decided by the `eqmaybe` variant wrapped around it, since
+that is what fixes who can see `None`. Under plain `eqmaybe`, `None` is public, so
+a `⊥`-observer sees a `Some` where the other run has a `None`: `sys` hides
+`Syscall` from `NOP` but not the fact that `high_p` produced something. Under
+`eqmaybe_top`, `None` is unobservable at `⊥` and may be related to `Some o`, so a
+disk handler run and a step where nothing happened are the same observation.
 
-That difference is the formal content of "the leak is in the scheduling". For
-`high_p` hiding the value suffices, since when it runs is public anyway. For the
-two secret handlers the *fact of running* must be hidden as well, and `eqmaybe_top`
-does it by letting `Some o` relate to `None`: a disk handler run and a step where
-nothing happened become the same observation. Section 6a discharges the resulting
-obligation.
+For `high_p` hiding the value is enough, since when it runs is public anyway. For
+the two secret handlers the fact of running must go too, which is the formal
+content of "the leak is in the scheduling". Section 6a discharges the obligation
+`eqmaybe_top` creates.
 
 **`final_out_rel Opub Opriv : cRel [T_out Opub Opriv]`** (user-visible output, for
 `model_sliced_userview`)
@@ -253,17 +253,29 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
 follows from the first by output weakening: `parse_output` maps `out_rel`-related
 outputs to `final_out_rel`-related ones.
 
-**Why the result is parametric.** The theorem covers the mechanism at every
-instance. The scheduler, both user processes, their alphabets, the handler length
-and the slice size are all arbitrary, with no side condition beyond the one built
-into `time_slice runtime runs = runs * runtime`. The design is what makes this
-available: the state transition never reads a user slot's output *value*
-(`is_sch_out` matches `(None,(None,(Some n,_)))`, inspecting the user slots only
-for `None`-ness), so no user behaviour reaches the schedule and `fv_NI` (section 7)
-never mentions the slot processes. The three hypotheses are consumed at three
-leaves of the assembly below; instantiating them with `low_p_NI`, `high_p_NI` and
-`scheduler_NI` recovers the concrete system (`model_sliced_concrete_NI`,
-`model_sliced_userview_concrete_NI`).
+**Why the result is parametric.** Everything the process pool is built around
+stays fixed; everything it carries is left open:
+
+| parameter | ranges over | side condition |
+|---|---|---|
+| `p_pub` | any process in the public user slot | must be `NI` at `publicRel`/`publicRel` |
+| `p_priv` | any process in the private user slot | must be `NI` at `privateRel`/`privateRel` |
+| `p_sched` | any scheduler | must be `NI` at `publicRel`/`publicRel` |
+| `Opub`, `Opriv` | the two user output alphabets | none |
+| `runtime` | how many steps a handler runs for | none |
+| `runs` | how many handler runs a slice holds | none |
+
+Two features of the design buy this:
+
+- **The pool's own transition never reads a user slot's output value.**
+  `is_sch_out` matches `(None,(None,(Some n,_)))`, inspecting the user slots only
+  for `None`-ness, so no user behaviour reaches the schedule.
+- **`fv_NI` (section 7) never mentions the slot processes**, so the one hard
+  obligation is unaffected by what fills them.
+
+The three hypotheses are consumed at three leaves of the assembly below.
+Instantiating them with `low_p_NI`, `high_p_NI` and `scheduler_NI` recovers the
+concrete system (`model_sliced_concrete_NI`, `model_sliced_userview_concrete_NI`).
 
 `model_sliced_NI` is assembled from the generic composition theorems, one per
 constructor of the calculus, so the proof follows the structure of the term itself
@@ -273,10 +285,10 @@ from the outside in:
 |---|---|---|
 | the outer `map inl (inr_or_def def)` and every interface rewiring | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
 | `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output relations must coincide |
-| `sta` (the global state cell) | `sta_NI` / `sta_NI'` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates — **this is where section 7 is discharged** |
+| `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates — **this is where section 7 is discharged** |
 | `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_false IRel) ORel (maybe p)` |
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
-| `swi` (gating each slot on/off) | `swi_NI` / `swi_NI'` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level |
+| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`falseRel`](#6a-gating-a-slot-why-falserel-and-where-obliviousness-is-needed) for every public slot |
 | the leaves | `out_NI`, or a hypothesis | the handler and padding leaves are constant processes, so `out_NI`; the scheduler and user slots are where the three parametricity hypotheses are consumed |
 | `parse_output` on top of `model_sliced` | `map_NI` again | output weakening, giving `model_sliced_userview_NI` |
 
