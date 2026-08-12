@@ -35,16 +35,16 @@ Require Export NonInterference.theories.theorems.
 
    The three models:
 
-     model_immediate       : Proc T_in (T_out' Opub Opriv)
+     model_immediate       : Proc T_in (T_out Opub Opriv)
        Normal interrupt handling: interrupts an attacker should not know
        about leak through scheduling.
 
-     model_sliced          : Proc T_in (T_out' Opub Opriv)
+     model_sliced          : Proc T_in (T_out Opub Opriv)
        Interrupt masking is controlled so that secret interrupts can be
        received without leaking.  Shows every process-pool output (user
        space, scheduler and all handlers).
 
-     model_sliced_userview : Proc T_in (T_out Opub Opriv)
+     model_sliced_userview : Proc T_in (T_out_userview Opub Opriv)
        The final model: [model_sliced] behind a projection of the pool's
        output that erases every slot but the two user space processes.
        This is the one proved non-interfering in noninterference.v.
@@ -96,19 +96,19 @@ Definition T_in := TInterrupt.
    process.  They are parameters throughout: the mechanism never inspects a
    user-slot value, only whether the slot produced one, so nothing below
    depends on what fills these two positions. *)
-Definition T_out' (Opub Opriv : Ty) := Times (Option Opub) (Times (Option Opriv) (Times (Option Nat) (times_on 2 (fun _ => THandlerOutput)))).
-Definition T_out (Opub Opriv : Ty) := Option (Sum Opub Opriv).
+Definition T_out (Opub Opriv : Ty) := Times (Option Opub) (Times (Option Opriv) (Times (Option Nat) (times_on 2 (fun _ => THandlerOutput)))).
+Definition T_out_userview (Opub Opriv : Ty) := Option (Sum Opub Opriv).
 
 (* The concrete alphabets used by the instance of Part III. *)
-Notation T_out'C := (T_out' TPublicOutput TTypeSyscall).
 Notation T_outC := (T_out TPublicOutput TTypeSyscall).
+Notation T_out_userviewC := (T_out_userview TPublicOutput TTypeSyscall).
 
 
 (* === 1. Interrupt handler and the slot family === *)
 
 Definition handler_type := Proc Empty THandlerOutput.
 
-(* I_handler runtime =
+(* ir_handler runtime =
      map id (fun o => if o.1 == 0 then Notify else Nothing)
        (sta (fun _ v => v) (fun _ v => v.+1 %% runtime) 0 (out tt))
 
@@ -119,7 +119,7 @@ Definition handler_type := Proc Empty THandlerOutput.
    a secret handler's run is the same length as the NOP run it replaces.
    ([runtime = 0] degenerates: [n %% 0 = n], so the count never returns to 0 and
    the handler never signals completion.) *)
-Definition I_handler (runtime : nat) : handler_type :=
+Definition ir_handler (runtime : nat) : handler_type :=
   map (O := Times Nat Unit) (O' := THandlerOutput) id
     (fun o => if o.1 == 0 then Notify else Nothing)
     (sta (V := Nat) (O := Unit)
@@ -129,7 +129,7 @@ Definition I_handler (runtime : nat) : handler_type :=
 
 (* Only the secret user process consumes input (the disk handler's Notify).
    Every other slot is input-free, which the interface records as [Empty]. *)
-Definition my_f_I (n : nat) :=
+Definition slot_I (n : nat) :=
   match n with
   | 0 => Empty (*tI*)
   | 1 => Empty (*dI*)
@@ -140,7 +140,7 @@ Definition my_f_I (n : nat) :=
   | _ => Empty (*padding*)
   end.
 
-Definition my_f_O (Opub Opriv : Ty) (n : nat) :=
+Definition slot_O (Opub Opriv : Ty) (n : nat) :=
   match n with
   | 0 => THandlerOutput (*tI*)
   | 1 => THandlerOutput (*dI*)
@@ -159,18 +159,18 @@ Definition unit_proc : Proc Empty Unit := out (O := Unit) tt.
    The scheduler and the two user processes are parameters.  They are what
    the mechanism is supposed to protect, not part of the mechanism, so the
    development fixes only the handlers and the padding.  [slot_procs] places
-   each parameter at the pid [my_f_pid] assigns it: the public process
+   each parameter at the pid [slot_pid] assigns it: the public process
    outermost (5), then the secret process (4), then the scheduler (3). *)
 Definition slot_procs (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)             (*public user process, slot 5*)
   (p_priv : Proc THandlerOutput Opriv)  (*secret user process, slot 4*)
   (p_sched : Proc Empty Nat)            (*scheduler,           slot 3*)
-  : forall n, Proc (my_f_I n) (my_f_O Opub Opriv n) :=
+  : forall n, Proc (slot_I n) (slot_O Opub Opriv n) :=
   fun n => match n with
            | 0        (*timer interrupt handler*)
            | 1        (*disk interrupt handler*)
            | 2        (*default handler*)
-             => I_handler runtime
+             => ir_handler runtime
            | 3 => p_sched
            | 4 => p_priv
            | 5 => p_pub
@@ -219,7 +219,7 @@ Fixpoint process_pool
 Definition cur_pid := Sum Bool Nat.
 Definition initial_pid : [cur_pid] := inr 3. (*starting with low process*)
 
-Definition my_f_pid (pid : [cur_pid]) : [Nat] :=
+Definition slot_pid (pid : [cur_pid]) : [Nat] :=
   match pid with
   | inl true => 1 (*disk interrupt*)
   | inl false => 2 (*default interrupt*)
@@ -230,23 +230,23 @@ Definition my_f_pid (pid : [cur_pid]) : [Nat] :=
   | inr n => n
   end.
 
-Definition my_f_initial (n : nat) := n == (my_f_pid initial_pid).
+Definition slot_initial (n : nat) := n == (slot_pid initial_pid).
 
 Definition T_intermediate := Option THandlerOutput.
-Definition f_proj (i : [T_intermediate]) : forall n, [Option (my_f_I n)] :=
+Definition f_proj (i : [T_intermediate]) : forall n, [Option (slot_I n)] :=
   fun n => match n with
            | 4 => i     (*the high process receives the disk-interrupt handler's output*)
            | _ => None  (*every other process receives nothing*)
            end.
 
 (* pool p_pub p_priv p_sched =
-     process_pool 5 my_f_initial my_f_I my_f_O T_intermediate f_proj my_f_pid
+     process_pool 5 slot_initial slot_I slot_O T_intermediate f_proj slot_pid
        (slot_procs p_pub p_priv p_sched) *)
 Definition pool (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) :=
-  @process_pool cur_pid 5 my_f_initial my_f_I (my_f_O Opub Opriv) T_intermediate f_proj my_f_pid
+  @process_pool cur_pid 5 slot_initial slot_I (slot_O Opub Opriv) T_intermediate f_proj slot_pid
     (slot_procs runtime p_pub p_priv p_sched).
 
 
@@ -260,109 +260,109 @@ Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x'
          (sta state_update (fun _ v => v) state
            (map pool_input inr (maybe p))))) *)
 Definition reactive_system
-  (cur_pid stateType : Ty)
-  (state : [stateType])
-  (T_in T_out T' : Ty)
-  (state_update : [Sum T_in T_out] -> [stateType] -> [stateType])
-  (def : [T_out])
-  (p : Proc (Times cur_pid T') T_out)
-  (pool_input : [Times stateType (Sum T_in T_out)] -> [Option (Times cur_pid T')])
-  : Proc T_in T_out :=
-  (@map T_in (Sum T_in T_out) (Sum T_in T_out) T_out inl (inr_or_def def)
-                          (@loop (Sum T_in T_out)
+  (cur_pid state_type : Ty)
+  (state : [state_type])
+  (T_in T_out_userview T' : Ty)
+  (state_update : [Sum T_in T_out_userview] -> [state_type] -> [state_type])
+  (def : [T_out_userview])
+  (p : Proc (Times cur_pid T') T_out_userview)
+  (pool_input : [Times state_type (Sum T_in T_out_userview)] -> [Option (Times cur_pid T')])
+  : Proc T_in T_out_userview :=
+  (@map T_in (Sum T_in T_out_userview) (Sum T_in T_out_userview) T_out_userview inl (inr_or_def def)
+                          (@loop (Sum T_in T_out_userview)
                              (@map _ _ (Times _ _) _
                                 id snd
-                                (@sta _ _ stateType state_update (fun _ v => v) state
-                                   (@map (Times stateType (Sum _ _ ))
-                                      (Option (Times cur_pid T')) _ (Sum T_in T_out) pool_input inr (maybe p)))))).
+                                (@sta _ _ state_type state_update (fun _ v => v) state
+                                   (@map (Times state_type (Sum _ _ ))
+                                      (Option (Times cur_pid T')) _ (Sum T_in T_out_userview) pool_input inr (maybe p)))))).
 
 
 (* === 4. Model state === *)
 Definition mask := Bool.
 Definition pending := Bool.
-Definition I_bits := Times pending mask.
+Definition ir_bits := Times pending mask.
 Definition ir_count := Option Nat.
-Definition ic := Times I_bits (Times I_bits I_bits).
+Definition ic := Times ir_bits (Times ir_bits ir_bits).
 Definition count := Nat.
-Definition re_sch := Bool.
+Definition re_sched := Bool.
 Definition prev_pid := Option Nat.
 Definition pids := Times cur_pid prev_pid.
 (* ic_count bundles the interrupt-handler time slice with the interrupt controller.
    ir_count = None  -> feature disabled
    ir_count = Some n -> n steps of handler execution left; Some 0 -> return to user space *)
 Definition ic_count := Times ir_count ic.
-Definition bool_state := Times re_sch ic_count.
+Definition bool_state := Times re_sched ic_count.
 Definition all_interrupts : seq [TInterrupt] :=
   [:: TimerInterrupt; DiskInterrupt; DefaultInterrupt].
 Definition sans_timer : seq [TInterrupt] :=
   [:: DiskInterrupt; DefaultInterrupt].
-Definition stateType := Times pids bool_state.
+Definition state_type := Times pids bool_state.
 
-Definition get_pids (v : [stateType]) := v.1.
-Definition get_bool_state (v : [stateType]) := v.2.
-Definition get_cur_pid (v : [stateType]) := (get_pids v).1.
-Definition get_prev_pid (v : [stateType]) := (get_pids v).2.
-Definition get_re_sch (v : [stateType]) := (get_bool_state v).1.
-Definition get_ic_count (v : [stateType]) := (get_bool_state v).2.
-Definition get_ir_count (v : [stateType]) := (get_ic_count v).1.
-Definition get_ic (v : [stateType]) := (get_ic_count v).2.
+Definition get_pids (v : [state_type]) := v.1.
+Definition get_bool_state (v : [state_type]) := v.2.
+Definition get_cur_pid (v : [state_type]) := (get_pids v).1.
+Definition get_prev_pid (v : [state_type]) := (get_pids v).2.
+Definition get_re_sched (v : [state_type]) := (get_bool_state v).1.
+Definition get_ic_count (v : [state_type]) := (get_bool_state v).2.
+Definition get_ir_count (v : [state_type]) := (get_ic_count v).1.
+Definition get_ic (v : [state_type]) := (get_ic_count v).2.
 
-Definition get_I_bits' (ic : [ic]) (ir : [TInterrupt]) : [I_bits] :=
+Definition get_ir_bits' (ic : [ic]) (ir : [TInterrupt]) : [ir_bits] :=
   match ir with
   | DefaultInterrupt => ic.1
   | DiskInterrupt    => ic.2.1
   | TimerInterrupt => ic.2.2
   end.
-Definition get_I_bits (v : [stateType]) (ir : [TInterrupt]) := get_I_bits' (get_ic v) ir.
+Definition get_ir_bits (v : [state_type]) (ir : [TInterrupt]) := get_ir_bits' (get_ic v) ir.
 
-Definition get_pending' (bits : [I_bits]) := bits.1.
-Definition get_mask' (bits : [I_bits]) := bits.2.
+Definition get_pending' (bits : [ir_bits]) := bits.1.
+Definition get_mask' (bits : [ir_bits]) := bits.2.
 
-Definition get_I_pending (v : [stateType]) (ir : [TInterrupt]) := get_pending' (get_I_bits v ir).
-Definition get_I_mask (v : [stateType]) (ir : [TInterrupt]) := get_mask' (get_I_bits v ir).
+Definition get_ir_pending (v : [state_type]) (ir : [TInterrupt]) := get_pending' (get_ir_bits v ir).
+Definition get_ir_mask (v : [state_type]) (ir : [TInterrupt]) := get_mask' (get_ir_bits v ir).
 
-Definition update_pids (v : [stateType]) pids : [stateType] := (pids,v.2).
-Definition update_bool_state (v : [stateType]) bs : [stateType] := (v.1,bs).
-Definition update_cur_pid (v : [stateType]) cur_pid : [stateType] := update_pids v (cur_pid,(get_pids v).2).
-Definition update_prev_pid (v : [stateType]) prev_pid : [stateType] := update_pids v ((get_pids v).1,prev_pid).
-Definition update_re_sch (v : [stateType]) re_sch : [stateType] := update_bool_state v (re_sch,(get_bool_state v).2).
+Definition update_pids (v : [state_type]) pids : [state_type] := (pids,v.2).
+Definition update_bool_state (v : [state_type]) bs : [state_type] := (v.1,bs).
+Definition update_cur_pid (v : [state_type]) cur_pid : [state_type] := update_pids v (cur_pid,(get_pids v).2).
+Definition update_prev_pid (v : [state_type]) prev_pid : [state_type] := update_pids v ((get_pids v).1,prev_pid).
+Definition update_re_sched (v : [state_type]) re_sched : [state_type] := update_bool_state v (re_sched,(get_bool_state v).2).
 
-Definition update_I_bits' (myic : [ic]) (ir : [TInterrupt]) (bits : [I_bits]) : [ic] :=
+Definition update_ir_bits' (myic : [ic]) (ir : [TInterrupt]) (bits : [ir_bits]) : [ic] :=
   match ir with
   | DefaultInterrupt => (bits, myic.2)
   | DiskInterrupt    => (myic.1, (bits, myic.2.2))
   | TimerInterrupt => (myic.1, (myic.2.1, bits))
   end.
 
-Definition update_ic_count (v : [stateType]) icc : [stateType] := update_bool_state v ((get_bool_state v).1,icc).
-Definition update_ir_count (v : [stateType]) c : [stateType] := update_ic_count v (c,(get_ic_count v).2).
-Definition update_ic (v : [stateType]) ic : [stateType] := update_ic_count v ((get_ic_count v).1,ic).
-Definition update_I_bits (v : [stateType]) (ir : [TInterrupt]) (bits : [I_bits]) := update_ic v (update_I_bits' (get_ic v) ir bits).
+Definition update_ic_count (v : [state_type]) icc : [state_type] := update_bool_state v ((get_bool_state v).1,icc).
+Definition update_ir_count (v : [state_type]) c : [state_type] := update_ic_count v (c,(get_ic_count v).2).
+Definition update_ic (v : [state_type]) ic : [state_type] := update_ic_count v ((get_ic_count v).1,ic).
+Definition update_ir_bits (v : [state_type]) (ir : [TInterrupt]) (bits : [ir_bits]) := update_ic v (update_ir_bits' (get_ic v) ir bits).
 
-Definition update_I_pending (v : [stateType]) (ir : [TInterrupt]) pending : [stateType] :=
-  update_I_bits v ir (pending,get_I_mask v ir).
-Definition update_I_mask (v : [stateType]) (ir : [TInterrupt ]) mask : [stateType] :=
-  update_I_bits v ir (get_I_pending v ir,mask).
+Definition update_ir_pending (v : [state_type]) (ir : [TInterrupt]) pending : [state_type] :=
+  update_ir_bits v ir (pending,get_ir_mask v ir).
+Definition update_ir_mask (v : [state_type]) (ir : [TInterrupt ]) mask : [state_type] :=
+  update_ir_bits v ir (get_ir_pending v ir,mask).
 
-Definition or_I_bits (b1 b2 : [I_bits]) : [I_bits] := (b1.1 || b2.1, b1.2 || b2.2).
+Definition or_ir_bits (b1 b2 : [ir_bits]) : [ir_bits] := (b1.1 || b2.1, b1.2 || b2.2).
 Definition or_ic (c1 c2 : [ic]) : [ic] :=
-  (or_I_bits c1.1  c2.1,
-   (or_I_bits c1.2.1 c2.2.1,
-    or_I_bits c1.2.2 c2.2.2)).
+  (or_ir_bits c1.1  c2.1,
+   (or_ir_bits c1.2.1 c2.2.1,
+    or_ir_bits c1.2.2 c2.2.2)).
 (* keep the base state's time slice (s1.2.1); only the interrupt controller is merged *)
 Definition or_bool_state (s1 s2 : [bool_state]) : [bool_state] := (s1.1 || s2.1, (s1.2.1, or_ic s1.2.2 s2.2.2)).
 
-Definition set_masks (v : [stateType]) : [stateType] :=
-  foldr (fun I v' => update_I_mask v' I true) v all_interrupts.
-Definition unset_masks (v : [stateType]) : [stateType] :=
-  foldr (fun I v' => update_I_mask v' I false) v all_interrupts.
-Definition unset_masks_sans (v : [stateType]) : [stateType] :=
-  foldr (fun I v' => update_I_mask v' I false) v sans_timer.
-Definition unset_tI (v : [stateType]) : [stateType] := update_I_mask v TimerInterrupt false.
-Definition set_tI (v : [stateType]) : [stateType] := update_I_mask v TimerInterrupt true.
-Definition set_otherIs (v : [stateType]) : [stateType] := foldr (fun I v' => update_I_mask v' I true) v sans_timer.
-Definition masks_set (v : [stateType]) :=
-  foldr (fun I b => (get_I_mask v I) && b) true all_interrupts.
+Definition set_masks (v : [state_type]) : [state_type] :=
+  foldr (fun I v' => update_ir_mask v' I true) v all_interrupts.
+Definition unset_masks (v : [state_type]) : [state_type] :=
+  foldr (fun I v' => update_ir_mask v' I false) v all_interrupts.
+Definition unset_masks_sans (v : [state_type]) : [state_type] :=
+  foldr (fun I v' => update_ir_mask v' I false) v sans_timer.
+Definition unset_tI (v : [state_type]) : [state_type] := update_ir_mask v TimerInterrupt false.
+Definition set_tI (v : [state_type]) : [state_type] := update_ir_mask v TimerInterrupt true.
+Definition set_otherIs (v : [state_type]) : [state_type] := foldr (fun I v' => update_ir_mask v' I true) v sans_timer.
+Definition masks_set (v : [state_type]) :=
+  foldr (fun I b => (get_ir_mask v I) && b) true all_interrupts.
 
 
 (* === 5. Reading the pool's output ===
@@ -371,36 +371,36 @@ Definition masks_set (v : [stateType]) :=
    emitted when no slot produced one, and [pool_input], the value fed back in.
    Both designs use all of these unchanged. *)
 
-Definition tI_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
+Definition tI_out (Opub Opriv : Ty) (o : [T_out Opub Opriv]) :=
   match o with
   | (_,(_,(_,(_,(_,x))))) => x
   end.
 
-Definition dI_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
+Definition dI_out (Opub Opriv : Ty) (o : [T_out Opub Opriv]) :=
   match o with
   | (_,(_,(_,(_,(x,_))))) => x
   end.
 
-Definition default_I_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
+Definition default_ir_out (Opub Opriv : Ty) (o : [T_out Opub Opriv]) :=
   match o with
   | (_,(_,(_,(x,(_,_))))) => x
   end.
 
-Definition is_I_out_done (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [Option TInterrupt] :=
+Definition is_ir_out_done (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [Option TInterrupt] :=
   if tI_out o is Some Notify then Some TimerInterrupt
   else if dI_out o is Some Notify then Some DiskInterrupt
-  else if default_I_out o is Some Notify then Some DefaultInterrupt
+  else if default_ir_out o is Some Notify then Some DefaultInterrupt
   else None.
 
-Definition def (Opub Opriv : Ty) : [ T_out' Opub Opriv ]  := (None,(None,(None,(None,(None,None))))).
+Definition def (Opub Opriv : Ty) : [ T_out Opub Opriv ]  := (None,(None,(None,(None,(None,None))))).
 
 (*discards input from the inner process, only allowed to affect bit in ic, not pid*)
-Definition pool_input (Opub Opriv : Ty) (si : [Times stateType (Sum T_in (T_out' Opub Opriv))]) : [Option (Times cur_pid T_intermediate)] :=
+Definition pool_input (Opub Opriv : Ty) (si : [Times state_type (Sum T_in (T_out Opub Opriv))]) : [Option (Times cur_pid T_intermediate)] :=
   if si.2 is inr o then Some (get_cur_pid si.1, dI_out o) else None.
 
 (* The user view: keep the two user slots, erase the scheduler and all three
    handlers.  Used by [model_sliced_userview] in section 9. *)
-Definition parse_output (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [T_out Opub Opriv] :=
+Definition parse_output (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [T_out_userview Opub Opriv] :=
   match o with
   | (Some public,_) => Some (inl public)
   | (None,(Some prv,_)) => Some (inr prv)
@@ -417,9 +417,9 @@ Definition parse_output (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [T_out Opu
    g')] pointwise in the event -- so a pipeline of stages collapses into a single
    [step_sum] whose summands are the input and output pipelines. *)
 Definition step_sum (Opub Opriv : Ty)
-  (f : [T_in] -> [stateType] -> [stateType])
-  (g : [T_out' Opub Opriv] -> [stateType] -> [stateType])
-  : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
+  (f : [T_in] -> [state_type] -> [state_type])
+  (g : [T_out Opub Opriv] -> [state_type] -> [state_type])
+  : [Sum T_in (T_out Opub Opriv)] -> [state_type] -> [state_type] :=
   fun i v =>
   match i with
   | inl i => f i v
@@ -429,24 +429,24 @@ Definition step_sum (Opub Opriv : Ty)
 (* An arriving interrupt is recorded as pending; whether it is serviced is
    decided later, by [initiate_next].  This is the whole of the input summand:
    f_EP forbids the transition from taking any decision on an input event. *)
-Definition set_pending (i : [T_in]) (v : [stateType]) : [stateType] :=
-  update_I_pending v i true.
+Definition set_pending (i : [T_in]) (v : [state_type]) : [state_type] :=
+  update_ir_pending v i true.
 
-Definition is_sch_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
+Definition is_sched_out (Opub Opriv : Ty) (o : [T_out Opub Opriv]) :=
   match o with
   | (None,(None,(Some n,_))) => Some n
   | _ => None
   end.
-Definition check_scheduler (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType])  :=
-  if is_sch_out o is Some n then update_cur_pid v (inr n) else v.
+Definition check_scheduler (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type])  :=
+  if is_sched_out o is Some n then update_cur_pid v (inr n) else v.
 
 (* [check_scheduler] installs the pid a scheduler output names as the current
    one.  Note this reads the scheduler slot only -- the user slots are inspected
-   for None-ness and nothing more (see [is_sch_out]), which is what keeps the
+   for None-ness and nothing more (see [is_sched_out]), which is what keeps the
    state transition independent of what userspace does. *)
 
 (* The pid of the handler an interrupt runs in. *)
-Definition I_handler_pid (ir : [TInterrupt]) : [cur_pid] :=
+Definition ir_handler_pid (ir : [TInterrupt]) : [cur_pid] :=
   match ir with
   | TimerInterrupt   => inr 0
   | DiskInterrupt    => inl true
@@ -454,26 +454,26 @@ Definition I_handler_pid (ir : [TInterrupt]) : [cur_pid] :=
   end.
 
 (* It selects the slot the interrupt's own position in all_interrupts names. *)
-Lemma my_f_pid_I_handler_pid : forall ir, my_f_pid (I_handler_pid ir) = index ir all_interrupts.
+Lemma slot_pid_ir_handler_pid : forall ir, slot_pid (ir_handler_pid ir) = index ir all_interrupts.
 Proof. by case. Qed.
 
 (* before overriding cur_pid, save it to prev_pid if it is a user process *)
-Definition save_cur_to_prev (v : [stateType]) : [stateType] :=
+Definition save_cur_to_prev (v : [state_type]) : [state_type] :=
   if get_cur_pid v is inr n
   then update_prev_pid v (Some n)
   else v.
 
-Definition initiate_handler (ir : [TInterrupt]) (v : [stateType]) :=
-  update_I_pending (set_masks (update_cur_pid (save_cur_to_prev v) (I_handler_pid ir))) ir false.
+Definition initiate_handler (ir : [TInterrupt]) (v : [state_type]) :=
+  update_ir_pending (set_masks (update_cur_pid (save_cur_to_prev v) (ir_handler_pid ir))) ir false.
 
 (* a handler is selectable iff pending and not masked *)
-Definition I_ready (v : [stateType]) (ir : [TInterrupt]) : bool :=
-  get_I_pending v ir && ~~ get_I_mask v ir.
+Definition ir_ready (v : [state_type]) (ir : [TInterrupt]) : bool :=
+  get_ir_pending v ir && ~~ get_ir_mask v ir.
 
-Definition first_ready (v : [stateType]) : option [TInterrupt] :=
-  ohead [seq ir <-  all_interrupts | (I_ready v ir) ].
+Definition first_ready (v : [state_type]) : option [TInterrupt] :=
+  ohead [seq ir <-  all_interrupts | (ir_ready v ir) ].
 
-Definition is_handler_pid (v : [stateType]) :=
+Definition is_handler_pid (v : [state_type]) :=
     match get_cur_pid v with
     | inr 0 => true
     | inr _ => false
@@ -482,16 +482,16 @@ Definition is_handler_pid (v : [stateType]) :=
 
 Definition scheduler_pid : [cur_pid] := inr 1.
 
-Definition initiate_scheduler  (v : [stateType]) := update_re_sch (update_prev_pid (update_cur_pid v scheduler_pid) None) false.
+Definition initiate_scheduler  (v : [state_type]) := update_re_sched (update_prev_pid (update_cur_pid v scheduler_pid) None) false.
 
-Definition get_prev_pid_wrap (v : [stateType]) : [Option cur_pid] := if get_prev_pid v is Some n then Some (inr n) else None.
-Definition initiate_prev_pid  (v : [stateType]) := update_prev_pid (update_cur_pid v (odflt scheduler_pid (get_prev_pid_wrap v))) None.
+Definition get_prev_pid_wrap (v : [state_type]) : [Option cur_pid] := if get_prev_pid v is Some n then Some (inr n) else None.
+Definition initiate_prev_pid  (v : [state_type]) := update_prev_pid (update_cur_pid v (odflt scheduler_pid (get_prev_pid_wrap v))) None.
 
-Definition initiate_next (restore_invariant :  [stateType] -> [stateType]) :  [stateType] -> [stateType] :=
+Definition initiate_next (restore_invariant :  [state_type] -> [state_type]) :  [state_type] -> [state_type] :=
   fun v => if (masks_set v) then v (*handler running*) else
              let v := restore_invariant v (*apply time slice logic to bools*) in
              if first_ready v is Some ir then initiate_handler ir v (*first or later handler in the time slice is initiated here, enforced that at least one will run due to restore_invariant*) else
-               if is_handler_pid v then if get_re_sch v then initiate_scheduler v else initiate_prev_pid v  (*mask not set but we are in handler pid, we have just finished the time slice*) else
+               if is_handler_pid v then if get_re_sched v then initiate_scheduler v else initiate_prev_pid v  (*mask not set but we are in handler pid, we have just finished the time slice*) else
                  v (*we are running in user space*).
 
 
@@ -500,7 +500,7 @@ Definition initiate_next (restore_invariant :  [stateType] -> [stateType]) :  [s
    it eventually causes happens in the output summand, where the input is no
    longer the thing being varied.  That split is forced by f_EP, which under
    eqsum_L constrains the input summand alone. *)
-Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (restore_invariant : [stateType] -> [stateType]) : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
+Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out Opub Opriv] -> [state_type] -> [state_type]) (restore_invariant : [state_type] -> [state_type]) : [Sum T_in (T_out Opub Opriv)] -> [state_type] -> [state_type] :=
   step_sum set_pending
            (fun o => (initiate_next restore_invariant) \o (handler_preroutine o) \o (@check_scheduler Opub Opriv o)).
 
@@ -516,13 +516,13 @@ Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv
    here: the slice size reaches the model only through [handler_preroutine],
    already applied. *)
 Definition model (runtime : nat) (Opub Opriv : Ty)
-  (init : [stateType])
-  (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType])
-  (restore_invariant : [stateType] -> [stateType])
+  (init : [state_type])
+  (handler_preroutine : [T_out Opub Opriv] -> [state_type] -> [state_type])
+  (restore_invariant : [state_type] -> [state_type])
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out' Opub Opriv) :=
-  @reactive_system cur_pid stateType init T_in (T_out' Opub Opriv) T_intermediate
+  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
+  @reactive_system cur_pid state_type init T_in (T_out Opub Opriv) T_intermediate
     (state_step handler_preroutine restore_invariant) (def Opub Opriv)
     (pool runtime p_pub p_priv p_sched) (@pool_input Opub Opriv).
 
@@ -557,19 +557,19 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
 
 (* -- model_immediate -- *)
 
-Definition false_I_bits : [I_bits] := (false,false).
-Definition false_ic : [ic] := ((false,false),(false_I_bits,false_I_bits)).
-Definition initial_state_immediate : [stateType] := ((initial_pid,None),(false,(None,false_ic))).
+Definition false_ir_bits : [ir_bits] := (false,false).
+Definition false_ic : [ic] := ((false,false),(false_ir_bits,false_ir_bits)).
+Definition initial_state_immediate : [state_type] := ((initial_pid,None),(false,(None,false_ic))).
 
-Definition immediate_preroutine (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType])  :=
-  if is_I_out_done o is Some ir then let v := unset_masks v in if ir is TimerInterrupt then update_re_sch v true else v else v.
+Definition immediate_preroutine (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type])  :=
+  if is_ir_out_done o is Some ir then let v := unset_masks v in if ir is TimerInterrupt then update_re_sched v true else v else v.
 
 (* model_immediate p_pub p_priv p_sched =
      model initial_state_immediate immediate_preroutine id p_pub p_priv p_sched *)
 Definition model_immediate (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out' Opub Opriv) :=
+  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
   model runtime initial_state_immediate (@immediate_preroutine Opub Opriv) id
     p_pub p_priv p_sched.
 
@@ -577,7 +577,7 @@ Definition model_immediate (runtime : nat) (Opub Opriv : Ty)
 
 Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*mask set for everything but timer interrupt*)
 
-Definition initial_state_sliced : [stateType] := ((initial_pid,None),(false,(Some 0,mask_most))).
+Definition initial_state_sliced : [state_type] := ((initial_pid,None),(false,(Some 0,mask_most))).
 
 (* The time slice, as a whole number [runs] of handler runs.  Expressing it this
    way rather than as an independent constant is what makes "the slice ends on a
@@ -591,13 +591,13 @@ Definition handler_completed (runtime : nat) (c : [ir_count]) :=
   | None => false
   end.
 
-Definition initiate_ir (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType]) : [stateType] :=
+Definition initiate_ir (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type]) : [state_type] :=
   if tI_out o is Some Notify then update_ir_count v (Some (time_slice runtime runs)) else v.
 
-Definition check_handler_completed (runtime : nat) (v : [stateType]) : [stateType] :=
+Definition check_handler_completed (runtime : nat) (v : [state_type]) : [state_type] :=
   if handler_completed runtime (get_ir_count v) then set_tI (unset_masks v) else v.
 
-Definition check_ir_count (v : [stateType]) : [stateType] :=
+Definition check_ir_count (v : [state_type]) : [state_type] :=
     match (get_ir_count v) with
     | Some n.+1 => update_ir_count v (Some n)
     | Some 0 => update_ir_count (set_otherIs (unset_tI v)) None
@@ -615,10 +615,10 @@ v is ready -> time slice is live for v -> time slice is live for v' -> pending f
 Definition restore_invariant v := let b := timeslice_live (get_ir_count v) in
                             let ic := (true,(None,((b,~~b),((false,~~b),(false,b))))) in
                             let v := update_bool_state v (or_bool_state (get_bool_state v) ic) in
-                            let m := get_I_mask v DiskInterrupt in
-                            update_I_mask v DefaultInterrupt m.
+                            let m := get_ir_mask v DiskInterrupt in
+                            update_ir_mask v DefaultInterrupt m.
 
-Definition sliced_preroutine (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*)
+Definition sliced_preroutine (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [state_type] -> [state_type] := check_ir_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*)
 
 (* model_sliced p_pub p_priv p_sched =
      model initial_state_sliced (sliced_preroutine runtime runs) restore_invariant
@@ -626,7 +626,7 @@ Definition sliced_preroutine (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out'
 Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out' Opub Opriv) :=
+  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
   model runtime initial_state_sliced (@sliced_preroutine runtime runs Opub Opriv) restore_invariant
     p_pub p_priv p_sched.
 
@@ -636,10 +636,10 @@ Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
 Definition model_sliced_userview (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
+  (p_sched : Proc Empty Nat) : Proc T_in (T_out_userview Opub Opriv) :=
   map id (@parse_output Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 
-Definition out_rel_userview (Opub Opriv : Ty) : cRel [T_out Opub Opriv] := eqmaybe_hidden (eqsum (publicRel Opub) (privateRel Opriv)).
+Definition out_rel_userview (Opub Opriv : Ty) : cRel [T_out_userview Opub Opriv] := eqmaybe_hidden (eqsum (public_rel Opub) (private_rel Opriv)).
 
 
 (* #################################################################
@@ -652,8 +652,8 @@ Definition out_rel_userview (Opub Opriv : Ty) : cRel [T_out Opub Opriv] := eqmay
    length or a slice size.  This section supplies one of each, so that the
    models can be run and their behaviour exhibited as traces. *)
 
-(* low_p = out GetRequest *)
-Definition low_p := @out Empty TPublicOutput GetRequest.
+(* p_pub_concrete = out GetRequest *)
+Definition p_pub_concrete := @out Empty TPublicOutput GetRequest.
 
 
 (* alternate x y z pred =
@@ -674,15 +674,15 @@ Definition alternate (A B C : Ty) (x y : [B]) (z : [C]) (pred : [A] -> bool) :=
                            false
                            (@out (Times Bool _ ) C z)
                         )))).
-(* high_p = alternate Syscall NOP tt (fun i => i == Notify) *)
-Definition high_p := @alternate THandlerOutput TTypeSyscall Unit Syscall NOP tt (fun i => i == Notify).
+(* p_priv_concrete = alternate Syscall NOP tt (fun i => i == Notify) *)
+Definition p_priv_concrete := @alternate THandlerOutput TTypeSyscall Unit Syscall NOP tt (fun i => i == Notify).
 
 (* scheduler =
      map id (fun o => o.1 + 2)
        (sta (fun _ v => v) (fun _ v => v.+1 %% 2) 1 (out tt)) *)
 Definition scheduler : Proc Empty Nat :=
   map (O := Times Nat Unit) (O' := Nat) id
-    (fun o => o.1 + 2)                        (*skip the interrupt handlers to reach high_p and low_p*)
+    (fun o => o.1 + 2)                        (*skip the interrupt handlers to reach p_priv_concrete and p_pub_concrete*)
     (sta (V := Nat) (O := Unit)
        (fun _ v => v) (fun _ v => v.+1 %% 2)
        1                                      (*will start scheduling the high process*)
@@ -693,13 +693,13 @@ Definition scheduler : Proc Empty Nat :=
 Definition handler_runtime := 2.
 Definition slice_runs := 2.
 
-Definition my_procs := slot_procs handler_runtime low_p high_p scheduler.
-Definition my_process_pool := pool handler_runtime low_p high_p scheduler.
+Definition slot_procs_concrete := slot_procs handler_runtime p_pub_concrete p_priv_concrete scheduler.
+Definition pool_concrete := pool handler_runtime p_pub_concrete p_priv_concrete scheduler.
 
-Definition model_immediate_concrete := model_immediate handler_runtime low_p high_p scheduler.
-Definition model_sliced_concrete := model_sliced handler_runtime slice_runs low_p high_p scheduler.
+Definition model_immediate_concrete := model_immediate handler_runtime p_pub_concrete p_priv_concrete scheduler.
+Definition model_sliced_concrete := model_sliced handler_runtime slice_runs p_pub_concrete p_priv_concrete scheduler.
 Definition model_sliced_userview_concrete :=
-  model_sliced_userview handler_runtime slice_runs low_p high_p scheduler.
+  model_sliced_userview handler_runtime slice_runs p_pub_concrete p_priv_concrete scheduler.
 
 (* Sanity, at this instance: the computed test agrees with the enumeration
    [Some 2 | Some 4] it replaced, on every value the counter can reach (the
@@ -721,17 +721,17 @@ Proof. by case: n => [|[|[|[|[|n]]]]]. Qed.
    traces are the [model_sliced] ones under [parse_output]. *)
 
 (* -- Named inputs and outputs -- *)
-Definition Tsum' := ([T_in] + [T_out'C])%type.
-Definition Tsum := Sum T_in T_outC.
+Definition Tsum' := ([T_in] + [T_outC])%type.
+Definition Tsum := Sum T_in T_out_userviewC.
 
 Definition dI' : Tsum' := inl DiskInterrupt.
 Definition tI' : Tsum' := inl TimerInterrupt.
-Definition low_out x : [T_out'C] := (Some x,(None,(None,(None,(None,None))))).
-Definition high_out x : [T_out'C] := (None,(Some x,(None,(None,(None,None))))).
-Definition sch_o x : [T_out'C] := (None,(None,(Some x,(None,(None,None))))).
-Definition defaultI_o x : [T_out'C] := (None,(None,(None,(Some x,(None,None))))).
-Definition dI_o x : [T_out'C] := (None,(None,(None,(None,(Some x,None))))).
-Definition tI_o x : [T_out'C] := (None,(None,(None,(None,(None,Some x))))).
+Definition low_out x : [T_outC] := (Some x,(None,(None,(None,(None,None))))).
+Definition high_out x : [T_outC] := (None,(Some x,(None,(None,(None,None))))).
+Definition sched_o x : [T_outC] := (None,(None,(Some x,(None,(None,None))))).
+Definition defaultI_o x : [T_outC] := (None,(None,(None,(Some x,(None,None))))).
+Definition dI_o x : [T_outC] := (None,(None,(None,(None,(Some x,None))))).
+Definition tI_o x : [T_outC] := (None,(None,(None,(None,(None,Some x))))).
 
 Definition tmr_done' : Tsum' :=  inr (tI_o (Notify)).
 Definition tmr_step' : Tsum' :=  inr (tI_o (Nothing)).
@@ -743,8 +743,8 @@ Definition out_get' : Tsum' := inr (low_out GetRequest).
 Definition out_nop' : Tsum' := inr (high_out NOP).
 Definition out_syscall' : Tsum' := inr (high_out Syscall).
 
-Definition sched_pub' : Tsum' := inr (sch_o 3).
-Definition sched_priv' : Tsum' := inr (sch_o 2).
+Definition sched_pub' : Tsum' := inr (sched_o 3).
+Definition sched_priv' : Tsum' := inr (sched_o 2).
 
 Definition nop_step' : Tsum' :=  inr (defaultI_o (Nothing)).
 Definition nop_done' : Tsum' :=  inr (defaultI_o (Notify)).
@@ -757,14 +757,14 @@ Definition tI : [Tsum] := inl TimerInterrupt.
 Definition dI : [Tsum] := inl DiskInterrupt.
 
 Definition seqtype' := seq Tsum'.
-Definition seqtype := seq ([T_in] + [T_outC]).
+Definition seqtype := seq ([T_in] + [T_out_userviewC]).
 
 
 (* -- model_immediate traces -- *)
 Definition immediate_no_dI' : seqtype' :=   [::out_get';                                     tI';out_get';tmr_step';tmr_done';sched_priv';out_nop'(*nop*);tI';out_nop';tmr_step';tmr_done';sched_pub';out_get'].
 Definition immediate_with_dI' : seqtype' := [::out_get';dI';out_get';dsk_step';dsk_done';out_get';tI';out_get';tmr_step';tmr_done';sched_priv';out_syscall'(*sys*);tI';out_nop';tmr_step';tmr_done';sched_pub';out_get'].
 
-Ltac rewr := rewrite /model_immediate_concrete /model_immediate /model /reactive_system /my_process_pool /pool /process_pool /my_f_initial /low_p /alternate /high_p /pool_input /tI_o /I_handler /f_proj /scheduler /low_out.
+Ltac rewr := rewrite /model_immediate_concrete /model_immediate /model /reactive_system /pool_concrete /pool /process_pool /slot_initial /p_pub_concrete /alternate /p_priv_concrete /pool_input /tI_o /ir_handler /f_proj /scheduler /low_out.
 
 Ltac lsolv := try solve [ reduce_tac;reduce_tac | reduce_tac;try solve [reduce_once | econ];simpl;first (reduce_tac;reduce_tac)];simpl.
 Ltac reduce_tac2 :=
@@ -774,11 +774,11 @@ Ltac reduce_tac2 :=
 
 Ltac sta_state_reduce :=
   match goal with
-  | |- context [(@sta (Sum T_in T_out'C) (Sum T_in T_out'C) stateType (state_step _ _) _ ?state _)] =>let reduced := eval cbv in state in
+  | |- context [(@sta (Sum T_in T_outC) (Sum T_in T_outC) state_type (state_step _ _) _ ?state _)] =>let reduced := eval cbv in state in
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.
 
-Lemma trace_immediate_no_dI' : forall l, Trace (publicRel _) l immediate_no_dI' model_immediate_concrete.
+Lemma trace_immediate_no_dI' : forall l, Trace (public_rel _) l immediate_no_dI' model_immediate_concrete.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -796,7 +796,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.
 
-Lemma trace_immediate_with_dI' : forall l, Trace (publicRel _) l immediate_with_dI' model_immediate_concrete.
+Lemma trace_immediate_with_dI' : forall l, Trace (public_rel _) l immediate_with_dI' model_immediate_concrete.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -818,9 +818,9 @@ Definition sliced_no_dI' : seqtype' :=   [::out_get';                      tI';o
 Definition sliced_with_dI' : seqtype' := [::out_get';dI';out_get';out_get';tI';out_get';tmr_step';tmr_done';dsk_step'      ;dsk_done'      ;nop_step';nop_done';sched_priv';out_syscall'(*sys*);tI';out_nop';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_pub';out_get'].
 
 
-Ltac rewr ::= rewrite /model_immediate_concrete /model_immediate /model /reactive_system /my_process_pool /pool /process_pool /my_f_initial /low_p /alternate /high_p /pool_input /tI_o /I_handler /f_proj /scheduler /low_out /model_sliced_concrete /model_sliced /my_process_pool /pool /pool_input /f_proj.
+Ltac rewr ::= rewrite /model_immediate_concrete /model_immediate /model /reactive_system /pool_concrete /pool /process_pool /slot_initial /p_pub_concrete /alternate /p_priv_concrete /pool_input /tI_o /ir_handler /f_proj /scheduler /low_out /model_sliced_concrete /model_sliced /pool_concrete /pool /pool_input /f_proj.
 
-Lemma trace_sliced_no_dI' : forall l, Trace (publicRel _) l sliced_no_dI' model_sliced_concrete.
+Lemma trace_sliced_no_dI' : forall l, Trace (public_rel _) l sliced_no_dI' model_sliced_concrete.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -835,7 +835,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.
 
-Lemma trace_sliced_with_dI' : forall l, Trace (publicRel _) l sliced_with_dI' model_sliced_concrete.
+Lemma trace_sliced_with_dI' : forall l, Trace (public_rel _) l sliced_with_dI' model_sliced_concrete.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -874,14 +874,14 @@ Proof. ssa. Qed.
 Lemma good_with_dI_eq : map_tr (@parse_output TPublicOutput TTypeSyscall) sliced_with_dI' = good_with_dI.
 Proof. ssa. Qed.
 
-Lemma trace_no_dI : forall l, Trace (publicRel _) l good_no_dI model_sliced_userview_concrete.
+Lemma trace_no_dI : forall l, Trace (public_rel _) l good_no_dI model_sliced_userview_concrete.
 Proof.
   intros. rewrite -good_no_dI_eq. eapply Trace_map.
   2:eapply trace_sliced_no_dI'.
   mrw. ssa. subst. done.
 Qed.
 
-Lemma trace_with_dI : forall l, Trace (publicRel _) l good_with_dI model_sliced_userview_concrete.
+Lemma trace_with_dI : forall l, Trace (public_rel _) l good_with_dI model_sliced_userview_concrete.
 Proof.
   intros. rewrite -good_with_dI_eq. eapply Trace_map.
   2:eapply trace_sliced_with_dI'.

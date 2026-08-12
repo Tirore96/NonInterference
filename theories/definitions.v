@@ -226,7 +226,7 @@ Definition NI_l (I O : Ty) (IRel : cRel [I]) (ORel : cRel [O]) (l : level) (p : 
 Definition NI (I O : Ty) (IRel : cRel [I]) (ORel : cRel [O]) (p : Proc I O) := forall l, NI_l IRel ORel l p.
 
 
-Definition falseRel : cRel ([Bool]).
+Definition false_rel : cRel ([Bool]).
   refine (@CRel _
             (fun l (b : [Bool]) => ~~ b /\ l = \bot)
             (fun l b1 b2 => b1 = b2)
@@ -240,7 +240,7 @@ Definition falseRel : cRel ([Bool]).
   intros. subst. ssa.
 Defined.
 
-Definition publicRel (A : Ty) : cRel ([A]).
+Definition public_rel (A : Ty) : cRel ([A]).
   refine (@CRel _
             (fun l b => False)
             (fun l b1 b2 => b1 = b2)
@@ -271,7 +271,7 @@ done.
 Qed.
 Hint Resolve not_booleq.
 
-Definition privateRel (A : Ty) : cRel ([A]).
+Definition private_rel (A : Ty) : cRel ([A]).
   refine (@CRel _
             (fun l b => l = \bot)
             (fun l b1 b2 => l <> \bot /\ b1 = b2 \/ l = \bot)
@@ -875,7 +875,7 @@ Definition is_inl (A B : Set) (x : A + B) := if x is inl _ then true else false.
 Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
 
 
-Lemma aware_public : aware (publicRel Bool) true \bot.
+Lemma aware_public : aware (public_rel Bool) true \bot.
 Proof. rewrite /aware. ssa.
 Qed.
 Hint Resolve aware_public.

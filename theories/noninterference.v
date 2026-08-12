@@ -23,7 +23,7 @@ Require Export NonInterference.theories.models.
      4. Model interfaces : in_rel, out_rel (out_rel_userview is in models.v)
      5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
-     7. The state relation (stateType_rel) and the fv_NI obligation
+     7. The state relation (state_type_rel) and the fv_NI obligation
    Note: this file imports classical logic via theorems.v (Require Import
    Classical), used only in swi_NI because `aware` is not constructively
    decidable.
@@ -54,14 +54,14 @@ Definition in_rel : cRel [T_in].
 Defined.
 
 (* out_rel: the 6-slot pool output.  Handler slots are default/NOP, disk,
-   timer: the first two are secret (eqmaybe_private privateRel), the timer slot
+   timer: the first two are secret (eqmaybe_private private_rel), the timer slot
    is public (it reacts only to public timer interrupts). *)
-Definition out_rel (Opub Opriv : Ty) : cRel [T_out' Opub Opriv] := eqpair (eqmaybe (publicRel _))
-                                          (eqpair (eqmaybe (privateRel _))
-                                             (eqpair (eqmaybe (publicRel _))
-                                                (eqpair (eqmaybe_private ((privateRel _)))
-                                                   (eqpair (eqmaybe_private (privateRel _))
-                                                      (eqmaybe (publicRel _)))))).
+Definition out_rel (Opub Opriv : Ty) : cRel [T_out Opub Opriv] := eqpair (eqmaybe (public_rel _))
+                                          (eqpair (eqmaybe (private_rel _))
+                                             (eqpair (eqmaybe (public_rel _))
+                                                (eqpair (eqmaybe_private ((private_rel _)))
+                                                   (eqpair (eqmaybe_private (private_rel _))
+                                                      (eqmaybe (public_rel _)))))).
 
 (* The alphabets the concrete models are instantiated at. *)
 Notation out_relC := (out_rel TPublicOutput TTypeSyscall).
@@ -75,7 +75,7 @@ Proof.
   econ;eauto.
 Qed.
 
-Lemma helper_trace' : Trace (publicRel _) \bot [::out_get';out_get'] model_immediate_concrete.
+Lemma helper_trace' : Trace (public_rel _) \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
     rewr;simpl;rewr;simpl;rewr;simpl;rewr.
     (first [econ;[idtac | econ | idtac] | econ];
@@ -171,44 +171,44 @@ Proof.
   right. exists i. exists i0. ssa.
 Qed.
 
-Lemma private_not_bot : forall (A : Ty) l (x y : [A]), l <> \bot -> x = y -> rel (privateRel _) l x y.
+Lemma private_not_bot : forall (A : Ty) l (x y : [A]), l <> \bot -> x = y -> rel (private_rel _) l x y.
 Proof.
 ssa.
 Qed.
 
-Lemma private_not_bot' : forall (A : Ty) l (x y : [A]), l <> \bot -> rel (privateRel _) l x y -> x = y.
+Lemma private_not_bot' : forall (A : Ty) l (x y : [A]), l <> \bot -> rel (private_rel _) l x y -> x = y.
 Proof.
 ssa. de H0.
 Qed.
 
-Lemma eqmaybe_private_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (privateRel _)) l x y -> x = y.
+Lemma eqmaybe_private_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (private_rel _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. de H0. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_public_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (publicRel _)) l x y -> x = y.
+Lemma eqmaybe_public_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (public_rel _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_private_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_private (privateRel _)) l x y -> x = y.
+Lemma eqmaybe_private_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_private (private_rel _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. de H0. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_private_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_private (privateRel _)) \bot x y.
+Lemma eqmaybe_private_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_private (private_rel _)) \bot x y.
 Proof.
   ssa. de x. de y. de y.
 Qed.
 
-Lemma private_bot : forall (A : Ty) (x y : [A]), rel ((privateRel _)) \bot x y.
+Lemma private_bot : forall (A : Ty) (x y : [A]), rel ((private_rel _)) \bot x y.
 Proof.
   ssa.
 Qed.
 
 Hint Resolve private_bot.
 
-Lemma publicRel_eq : forall (A : Ty) l x y, rel (publicRel A) l x y -> x = y.
+Lemma public_rel_eq : forall (A : Ty) l x y, rel (public_rel A) l x y -> x = y.
 Proof. ssa. Qed.
 
 Lemma out_rel_not_bot : forall i i' l, l <> \bot -> rel (out_rel Opub Opriv) l i i' -> i = i'.
@@ -235,26 +235,26 @@ Qed.
 
 
 
-Lemma falseRel_aware : forall l, aware falseRel true l.
+Lemma false_rel_aware : forall l, aware false_rel true l.
 Proof.
 intros. rewrite /aware. intros. ssa. subst. simpl. intro. ssa.
 Qed.
 
 (* === Section 7a: the state relation.  Classification across two bot-related
    states: masks PUBLIC everywhere; the secret handlers' (disk, default)
-   pending bits secret via hidden_pending; cur_pid's inl/inr tag PUBLIC but the
+   pending bits secret via private_pending_rel; cur_pid's inl/inr tag PUBLIC but the
    bool inside inl (which handler) secret;
-   re_sch, ir_count (the slice), scheduler/user pid all public.
+   re_sched, ir_count (the slice), scheduler/user pid all public.
    (docs/noninterference.md §7a.) === *)
-Definition pids_rel : cRel [pids] := eqpair (eqsum (privateRel _) (publicRel _)) (publicRel _).
-Definition hidden_pending : cRel [I_bits] := eqpair (privateRel _) (publicRel _).
-Definition public_pair : cRel [I_bits] := eqpair (publicRel _) (publicRel _).
-Definition ic_rel : cRel [ic] := eqpair hidden_pending (eqpair hidden_pending public_pair).
-Definition bool_state_rel : cRel [bool_state] := eqpair (publicRel _) (eqpair (publicRel _) ic_rel).
-Definition stateType_rel : cRel [stateType] := eqpair pids_rel bool_state_rel.
+Definition pids_rel : cRel [pids] := eqpair (eqsum (private_rel _) (public_rel _)) (public_rel _).
+Definition private_pending_rel : cRel [ir_bits] := eqpair (private_rel _) (public_rel _).
+Definition public_bits_rel : cRel [ir_bits] := eqpair (public_rel _) (public_rel _).
+Definition ic_rel : cRel [ic] := eqpair private_pending_rel (eqpair private_pending_rel public_bits_rel).
+Definition bool_state_rel : cRel [bool_state] := eqpair (public_rel _) (eqpair (public_rel _) ic_rel).
+Definition state_type_rel : cRel [state_type] := eqpair pids_rel bool_state_rel.
 
 
-Lemma stateType_rel_not_bot : forall i i' l, l <> \bot -> rel stateType_rel l i i' -> i = i'.
+Lemma state_type_rel_not_bot : forall i i' l, l <> \bot -> rel state_type_rel l i i' -> i = i'.
 Proof.
   intros.
   move:H0.
@@ -263,10 +263,10 @@ Proof.
   move: i'=>[[a0' a1']] [b' [b0' [[b1' b2' [[b3' b4' [b5' b6']]]]]]].  
   rewrite !pair_rewr. 
   move=> /eqsum_split Hsplit.
-  move=>/publicRel_eq -> /publicRel_eq -> /publicRel_eq -> // /private_not_bot' -> // /publicRel_eq -> // /private_not_bot' -> // /publicRel_eq -> // /publicRel_eq -> /publicRel_eq ->.
+  move=>/public_rel_eq -> /public_rel_eq -> /public_rel_eq -> // /private_not_bot' -> // /public_rel_eq -> // /private_not_bot' -> // /public_rel_eq -> // /public_rel_eq -> /public_rel_eq ->.
   case: Hsplit.
   move=>[x][y][]->[]->/private_not_bot' ->//.
-  move=>[x][y][]->[]-> /publicRel_eq ->//.  
+  move=>[x][y][]->[]-> /public_rel_eq ->//.  
 Qed.
 
 
@@ -319,9 +319,9 @@ Qed.
    g] splits: on the left both events are inputs and only f runs, on the right
    both are outputs and only g runs. *)
 Lemma fv_NI_step_sum : forall f g,
-    fv_NI in_rel stateType_rel stateType_rel f ->
-    fv_NI (out_rel Opub Opriv) stateType_rel stateType_rel g ->
-    fv_NI (eqsum_L in_rel (out_rel Opub Opriv)) stateType_rel stateType_rel (@step_sum Opub Opriv f g).
+    fv_NI in_rel state_type_rel state_type_rel f ->
+    fv_NI (out_rel Opub Opriv) state_type_rel state_type_rel g ->
+    fv_NI (eqsum_L in_rel (out_rel Opub Opriv)) state_type_rel state_type_rel (@step_sum Opub Opriv f g).
 Proof.
   ssa. move: H H0. mrw. intros.
   apply eqsum_L_llrr in H1 as H1'. destruct H1'. destruct H3. destruct i. destruct i'.
@@ -333,42 +333,42 @@ Qed.
 (* Under eqsum_L only an inl is ever unobservable, so f_EP of a step_sum is a
    condition on its input summand alone. *)
 Lemma f_EP_step_sum : forall f g,
-    f_EP in_rel stateType_rel f ->
-    f_EP (eqsum_L in_rel (out_rel Opub Opriv)) stateType_rel (@step_sum Opub Opriv f g).
+    f_EP in_rel state_type_rel f ->
+    f_EP (eqsum_L in_rel (out_rel Opub Opriv)) state_type_rel (@step_sum Opub Opriv f g).
 Proof.
   ssa. move: H. mrw. intros. destruct i.
   rewrite /step_sum. eauto.
   ssa.
 Qed.
 
-Definition ready_aux (v : [stateType]) := I_ready v TimerInterrupt /\ first_ready v = Some TimerInterrupt \/ ~ I_ready v TimerInterrupt /\ I_ready v DiskInterrupt /\ first_ready v = Some DiskInterrupt \/  ~ I_ready v TimerInterrupt /\ ~ I_ready v DiskInterrupt /\ I_ready v DefaultInterrupt /\ first_ready v = Some DefaultInterrupt \/ ~ I_ready v TimerInterrupt /\ ~ I_ready v DiskInterrupt /\ ~ I_ready v DefaultInterrupt /\ first_ready v = None.
+Definition ready_aux (v : [state_type]) := ir_ready v TimerInterrupt /\ first_ready v = Some TimerInterrupt \/ ~ ir_ready v TimerInterrupt /\ ir_ready v DiskInterrupt /\ first_ready v = Some DiskInterrupt \/  ~ ir_ready v TimerInterrupt /\ ~ ir_ready v DiskInterrupt /\ ir_ready v DefaultInterrupt /\ first_ready v = Some DefaultInterrupt \/ ~ ir_ready v TimerInterrupt /\ ~ ir_ready v DiskInterrupt /\ ~ ir_ready v DefaultInterrupt /\ first_ready v = None.
 
 Lemma ready_auxP v : ready_aux v.
 Proof.
   rewrite /ready_aux.
-  destruct (I_ready v TimerInterrupt) eqn:Heqn. left. ssa.
+  destruct (ir_ready v TimerInterrupt) eqn:Heqn. left. ssa.
   rewrite /first_ready. rewrite /all_interrupts /ohead. rewrite /filter.
   rewrite Heqn. done.
   right.
-  destruct (I_ready v DiskInterrupt) eqn:Heqn'.
+  destruct (ir_ready v DiskInterrupt) eqn:Heqn'.
   left. con. done. con. done.
   rewrite /first_ready /ohead /filter /all_interrupts Heqn Heqn' //.
   right.
-  destruct (I_ready v DefaultInterrupt) eqn:Heqn''.
+  destruct (ir_ready v DefaultInterrupt) eqn:Heqn''.
   left. con. done. con. done. con. done.
   rewrite /first_ready /ohead /filter /all_interrupts Heqn Heqn' Heqn''//.
   rewrite /first_ready /ohead /filter /all_interrupts Heqn Heqn' Heqn''//. ssa.
 Qed.
 
 
-Definition ready_cases (v v' : [stateType]) := ready_aux v /\ ready_aux v'.
+Definition ready_cases (v v' : [state_type]) := ready_aux v /\ ready_aux v'.
 
-Definition ready_aux2 (v : [stateType]) := I_ready v DiskInterrupt /\ first_ready v = Some DiskInterrupt \/
-                                             ~ I_ready v DiskInterrupt /\ I_ready v DefaultInterrupt /\ first_ready v = Some DefaultInterrupt \/
-                                             ~ I_ready v DiskInterrupt /\ ~ I_ready v DefaultInterrupt /\ first_ready v = None.
+Definition ready_aux2 (v : [state_type]) := ir_ready v DiskInterrupt /\ first_ready v = Some DiskInterrupt \/
+                                             ~ ir_ready v DiskInterrupt /\ ir_ready v DefaultInterrupt /\ first_ready v = Some DefaultInterrupt \/
+                                             ~ ir_ready v DiskInterrupt /\ ~ ir_ready v DefaultInterrupt /\ first_ready v = None.
 
-Definition ready_cases2 (v v' : [stateType]) := I_ready v TimerInterrupt /\ I_ready v' TimerInterrupt /\ first_ready v = Some TimerInterrupt /\ first_ready v' = Some TimerInterrupt \/
-                                                  ~ I_ready v TimerInterrupt /\ ~ I_ready v' TimerInterrupt /\
+Definition ready_cases2 (v v' : [state_type]) := ir_ready v TimerInterrupt /\ ir_ready v' TimerInterrupt /\ first_ready v = Some TimerInterrupt /\ first_ready v' = Some TimerInterrupt \/
+                                                  ~ ir_ready v TimerInterrupt /\ ~ ir_ready v' TimerInterrupt /\
                                                     ready_aux2 v /\ ready_aux2 v'.
 
 Lemma ready_casesP v v' : ready_cases v v'.
@@ -376,7 +376,7 @@ Proof.
   rewrite /ready_cases. con. apply ready_auxP. apply ready_auxP.
 Qed.
 
-Lemma ready_cases2P v v' : I_ready v TimerInterrupt = I_ready v' TimerInterrupt -> ready_cases2 v v'.
+Lemma ready_cases2P v v' : ir_ready v TimerInterrupt = ir_ready v' TimerInterrupt -> ready_cases2 v v'.
 Proof.
   rewrite /ready_cases2.
   move: (ready_casesP v v'). rewrite /ready_cases. case.
@@ -408,7 +408,7 @@ Proof.
   right;  rewrite /ready_aux2;ssa.
 Qed.
 
-Lemma first_ready_update_re_sch : forall v b, first_ready (update_re_sch v b) = first_ready v.
+Lemma first_ready_update_re_sched : forall v b, first_ready (update_re_sched v b) = first_ready v.
 Proof.
   intros. cbv. ssa.
 Qed.
@@ -422,14 +422,14 @@ Qed.
 
 (* Slot 5, the public user process.  Its output slot is public, so it may
    emit anything as long as it emits it unconditionally. *)
-Lemma low_p_NI : NI (publicRel Empty) (publicRel TPublicOutput) low_p.
+Lemma p_pub_concrete_NI : NI (public_rel Empty) (public_rel TPublicOutput) p_pub_concrete.
 Proof.
   apply out_NI.
 Qed.
 
 (* Slot 4, the secret user process.  Both its input (the disk handler's
    [Notify]) and its output are secret. *)
-Lemma high_p_NI : NI (privateRel THandlerOutput) (privateRel TTypeSyscall) high_p.
+Lemma p_priv_concrete_NI : NI (private_rel THandlerOutput) (private_rel TTypeSyscall) p_priv_concrete.
 Proof.
   eapply map_NI.
   mrw. intros. apply rel_eqsum_L. eauto.
@@ -442,7 +442,7 @@ Proof.
   destruct i. destruct i0.
   2: apply loop_NI.
   destruct i1. destruct i2.
-  move:H. instantiate (1:=  (eqpair (privateRel Bool) _)).
+  move:H. instantiate (1:=  (eqpair (private_rel Bool) _)).
   move/rel_eqpair. case. rewrite !pair_rewr.
   intros. clear b. ssa. destruct a. ssa. subst. case_if. subst. ssa. subst. ssa.
   ssa.
@@ -462,23 +462,23 @@ Proof.
   ssa. destruct i'. ssa. apply rel_refl.
   mrw. intros. destruct i. apply dis_eqsum_L2 in H. ssa. ssa.
   apply out_NI.
-  Unshelve. all: exact (publicRel _).
+  Unshelve. all: exact (public_rel _).
 Qed.
 
 (* Slot 3, the scheduler.  Its output -- the pid it picks -- is public. *)
-Lemma scheduler_NI : NI (publicRel Empty) (publicRel Nat) scheduler.
+Lemma scheduler_NI : NI (public_rel Empty) (public_rel Nat) scheduler.
 Proof.
   eapply map_NI. eauto. eauto.
   instantiate (1:=eqpair _ _).
   mrw. move=> l i i' /rel_eqpair[] + _.
-  instantiate (1:= publicRel _). move=>/publicRel_eq ->. ssa.
+  instantiate (1:= public_rel _). move=>/public_rel_eq ->. ssa.
   eapply sta_NI.
   mrw. intros. move: H0.
-  move/publicRel_eq=>->//.
+  move/public_rel_eq=>->//.
   mrw. intros. eauto.
   mrw. intros. auto.
   apply out_NI.
-  Unshelve. all: exact (publicRel _).
+  Unshelve. all: exact (public_rel _).
 Qed.
 
 
@@ -491,16 +491,16 @@ Qed.
    The result holds for *any* scheduler and any two user processes that are
    themselves non-interfering at the classification their slot declares.  That
    it can: [state_step] never reads a user process's output value, only whether
-   the slot produced one -- [is_sch_out] matches [(None,(None,(Some n,_)))] --
+   the slot produced one -- [is_sched_out] matches [(None,(None,(Some n,_)))] --
    so no user behaviour reaches the schedule, and fv_NI, the one hard
    obligation, does not depend on which processes fill the slots.
 
-   [low_p_NI], [high_p_NI] and [scheduler_NI] above are the instances that give
+   [p_pub_concrete_NI], [p_priv_concrete_NI] and [scheduler_NI] above are the instances that give
    back the concrete system; see the corollaries at the end of the file. === *)
 
 (* The parametric proof cannot unfold its own processes, so [rewr] drops
-   /low_p /alternate /high_p /scheduler. *)
-Ltac rewr ::= rewrite /model_sliced /model /reactive_system /pool /process_pool /my_f_initial /slot_procs /pool_input /tI_o /I_handler /f_proj /low_out.
+   /p_pub_concrete /alternate /p_priv_concrete /scheduler. *)
+Ltac rewr ::= rewrite /model_sliced /model /reactive_system /pool /process_pool /slot_initial /slot_procs /pool_input /tI_o /ir_handler /f_proj /low_out.
 
 Section Parametric.
 
@@ -508,9 +508,9 @@ Variable p_pub : Proc Empty Opub.
 Variable p_priv : Proc THandlerOutput Opriv.
 Variable p_sched : Proc Empty Nat.
 
-Hypothesis p_pub_NI : NI (publicRel Empty) (publicRel Opub) p_pub.
-Hypothesis p_priv_NI : NI (privateRel THandlerOutput) (privateRel Opriv) p_priv.
-Hypothesis p_sched_NI : NI (publicRel Empty) (publicRel Nat) p_sched.
+Hypothesis p_pub_NI : NI (public_rel Empty) (public_rel Opub) p_pub.
+Hypothesis p_priv_NI : NI (private_rel THandlerOutput) (private_rel Opriv) p_priv.
+Hypothesis p_sched_NI : NI (public_rel Empty) (public_rel Nat) p_sched.
 
 Lemma model_sliced_NI : NI in_rel (out_rel Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
@@ -528,7 +528,7 @@ Proof.
   eauto. eauto.
   mrw. intros.
   case/rel_eqpair: H;eauto.
-  instantiate (1:= stateType_rel).
+  instantiate (1:= state_type_rel).
 
   (*state update: This part is long. Involves set_pending, check_scheduler and the two preroutine stages*)
   apply sta_NI.
@@ -544,11 +544,11 @@ Proof.
   move: H0.
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 /rel_eqpair[]/rel_eqpair[]H3 H4/rel_eqpair[]/rel_eqpair[]H5 H6/rel_eqpair[]H7 H8.
   move: H0 H1 H2 H3 H4 H5 H6 H7 H8.
-  move: v=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
-  rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_I_mask /get_mask' /update_I_pending /update_I_bits /update_I_bits' !pair_rewr.
+  move: v=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+  rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_pending /update_ir_bits /update_ir_bits' !pair_rewr.
   move=> H0 H1 H2 H3 H4 H5 H6 H7 H8.
-  rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_I_mask /get_mask' /update_I_pending /update_I_bits /update_I_bits' !pair_rewr.    
+  rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_pending /update_ir_bits /update_ir_bits' !pair_rewr.    
 
   apply/rel_eqpair2;con;first ssa.
   apply/rel_eqpair2;con;first ssa.
@@ -576,22 +576,22 @@ Proof.
 
   destruct (eqVneq l \bot).
   2: {  apply out_rel_not_bot in H. 2:apply/eqP=>//. subst.
-        apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
+        apply state_type_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
   subst.  
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] /publicRel_eq H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6. 
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] /public_rel_eq H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6. 
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
   move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] _ /rel_eqpair[] _ +.
   move: i=>[a[] b[] c[] d[] e f].
   move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
-  rewrite !pair_rewr /is_sch_out. subst.
+  rewrite !pair_rewr /is_sched_out. subst.
  
   case/rel_eqmaybe2.
-  move=>[]x []y []-> []->// /publicRel_eq ->//.
+  move=>[]x []y []-> []->// /public_rel_eq ->//.
   move=>[]->[]->//.
 
   case/rel_eqmaybe2.
@@ -599,7 +599,7 @@ Proof.
   move=>[]->[]->//.
 
   case/rel_eqmaybe2.
-  move=>[]x0 []y0 []-> []->// /publicRel_eq ->//.
+  move=>[]x0 []y0 []-> []->// /public_rel_eq ->//.
 
   move=>_. (*drop*)
 
@@ -618,8 +618,8 @@ Proof.
 
   have: tI_out i = tI_out i'.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -627,10 +627,10 @@ Proof.
   move: H=> /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ +.
   move: i=>[a[] b[] c[] d[] e f].
   move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
-  rewrite !pair_rewr /is_sch_out.  
+  rewrite !pair_rewr /is_sched_out.  
 
   case/rel_eqmaybe2.
-  move=>[]x'[]y'[]->[]->/publicRel_eq->//.
+  move=>[]x'[]y'[]->[]->/public_rel_eq->//.
   move=>[]->->//.
 
   move=>->.
@@ -645,13 +645,13 @@ Proof.
 
   have: get_ir_count v = get_ir_count v'.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
-  move: H2=>/publicRel_eq->//.
+  move: H2=>/public_rel_eq->//.
   move=>->.
   destruct (handler_completed runtime (get_ir_count v')).
 
@@ -669,13 +669,13 @@ Proof.
 
   have: get_ir_count v = get_ir_count v'.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
-  move: H2=>/publicRel_eq->//.
+  move: H2=>/public_rel_eq->//.
   move=>->.
 
   destruct (get_ir_count v').
@@ -696,8 +696,8 @@ Proof.
   apply/rel_eqpair2. con. 
   apply/rel_eqpair2. con. ssa.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    rewrite !pair_rewr.
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    rewrite !pair_rewr.
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6. eauto.
@@ -708,7 +708,7 @@ Proof.
   (*initiate_next: the outermost stage of the output summand*)
   mrw. intros.
   destruct (eqVneq l \bot).
-  2: { apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
+  2: { apply state_type_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
 
   subst.
 
@@ -719,32 +719,32 @@ Proof.
 
   have: masks_set v = masks_set v'.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask']. 
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask']. 
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
   move: H4 H5 H6.
-  move=>/publicRel_eq ->.
-  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /publicRel_eq ->.
-  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /publicRel_eq ->. ssa.
+  move=>/public_rel_eq ->.
+  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /public_rel_eq ->.
+  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /public_rel_eq ->. ssa.
   move=>->.
   
   destruct (masks_set v'). done. 
 
-  have: I_ready  (restore_invariant v) TimerInterrupt =
-          I_ready (restore_invariant v') TimerInterrupt. 
+  have: ir_ready  (restore_invariant v) TimerInterrupt =
+          ir_ready (restore_invariant v') TimerInterrupt. 
 
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
-  move: H6. move/rel_eqpair=>[]. rewrite !pair_rewr. move=>/publicRel_eq->/publicRel_eq->.
-  move/publicRel_eq : H2=>->//. 
+  move: H6. move/rel_eqpair=>[]. rewrite !pair_rewr. move=>/public_rel_eq->/public_rel_eq->.
+  move/public_rel_eq : H2=>->//. 
   
   move/ready_cases2P. rewrite /ready_cases2.
 
@@ -753,8 +753,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst'.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -765,26 +765,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.  
   
   move:Haux Haux'.
   rewrite /ready_aux2.
@@ -795,8 +795,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD'.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -807,26 +807,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
-  move/publicRel_eq : H2=>->.
+  move/public_rel_eq : H2=>->.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
 
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. eauto. ssa.
@@ -834,22 +834,22 @@ Proof.
   apply/rel_eqpair2. con. eauto. ssa.
   apply/rel_eqpair2. con.
 
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/publicRel_eq->//. 
+  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_rel_eq->//. 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /publicRel_eq ->/publicRel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->//. 
+  move=>[]i0'[]i1'[]->[]-> /public_rel_eq ->/public_rel_eq ->. ssa.
 
-  move/publicRel_eq : H4=>->//.
+  move/public_rel_eq : H4=>->//.
 
   move=>[]HreadyD'[]HreadyDef' Hfirst'.
   rewrite Hfirst Hfirst'.
 
   clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef'.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -860,26 +860,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
-  move/publicRel_eq : H2=>->.
+  move/public_rel_eq : H2=>->.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
 
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. eauto. ssa.
@@ -887,27 +887,27 @@ Proof.
   apply/rel_eqpair2. con. eauto. ssa.
   apply/rel_eqpair2. con.
 
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/publicRel_eq->//. 
+  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_rel_eq->//. 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /publicRel_eq ->/publicRel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->//. 
+  move=>[]i0'[]i1'[]->[]-> /public_rel_eq ->/public_rel_eq ->. ssa.
 
-  move/publicRel_eq : H4=>->//.
+  move/public_rel_eq : H4=>->//.
 
 
   move=>[]HreadyD'[]HreadyDef' Hfirst'.
   rewrite Hfirst Hfirst'. exfalso.
   clear Hready Hready' Hfirst Hfirst'.
   
-  move: v H0 HreadyD HreadyD' HreadyDef'=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0 HreadyD HreadyD' HreadyDef'=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
+  move: HH H4 H5 H6. move=>/public_rel_eq->/public_rel_eq->/public_rel_eq->/public_rel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
   move=>+ /negP + /negP.
   rewrite !negb_and !negbK.
   move/andP. case.
@@ -930,8 +930,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -942,26 +942,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
-  move/publicRel_eq : H2=>->.
+  move/public_rel_eq : H2=>->.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
 
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. eauto. ssa.
@@ -969,14 +969,14 @@ Proof.
   apply/rel_eqpair2. con. eauto. ssa.
   apply/rel_eqpair2. con.
 
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/publicRel_eq->//. 
+  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_rel_eq->//. 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /publicRel_eq ->/publicRel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->//. 
+  move=>[]i0'[]i1'[]->[]-> /public_rel_eq ->/public_rel_eq ->. ssa.
 
-  move/publicRel_eq : H4=>->//.  
+  move/public_rel_eq : H4=>->//.  
   
 
   move=>[[]HreadyD'[]HreadyDef' Hfirst'|].
@@ -984,8 +984,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef HreadyDef'.
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -996,26 +996,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
-  move/publicRel_eq : H2=>->.
+  move/public_rel_eq : H2=>->.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->. rewrite !pair_rewr //.
-  move/publicRel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->/publicRel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
+  move/public_rel_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
 
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. eauto. ssa.
@@ -1023,28 +1023,28 @@ Proof.
   apply/rel_eqpair2. con. eauto. ssa.
   apply/rel_eqpair2. con.
 
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/publicRel_eq->//. 
+  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_rel_eq->//. 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/publicRel_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /publicRel_eq ->/publicRel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->//. 
+  move=>[]i0'[]i1'[]->[]-> /public_rel_eq ->/public_rel_eq ->. ssa.
 
-  move/publicRel_eq : H4=>->//.  
+  move/public_rel_eq : H4=>->//.  
 
   move=>[]HreadyD'[]HreadyDef' Hfirst'.
   rewrite Hfirst Hfirst'. exfalso.
 
   clear Hready HreadyD Hready' Hfirst Hfirst'.
   
-  move: v H0 HreadyD' HreadyDef HreadyDef'=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0 HreadyD' HreadyDef HreadyDef'=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
+  move: HH H4 H5 H6. move=>/public_rel_eq->/public_rel_eq->/public_rel_eq->/public_rel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
   move/negP. rewrite !negb_and !negbK.
   move/orP. case. move/orP. case.
   intro.
@@ -1081,14 +1081,14 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst'.
   
-  move: v H0 HreadyD' HreadyD HreadyDef => [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0 HreadyD' HreadyD HreadyDef => [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
+  move: HH H4 H5 H6. move=>/public_rel_eq->/public_rel_eq->/public_rel_eq->/public_rel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
   move/andP. case. intro.
   rewrite negb_or negbK. move/andP. case.
   intro. intro.
@@ -1108,14 +1108,14 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst'.
   
-  move: v H0 HreadyD' HreadyD HreadyDef HreadyDef' => [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0 HreadyD' HreadyD HreadyDef HreadyDef' => [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
+  move: HH H4 H5 H6. move=>/public_rel_eq->/public_rel_eq->/public_rel_eq->/public_rel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.
 
   move/negP. rewrite !negb_and !negb_or.
   move/orP. case. intro.
@@ -1264,43 +1264,43 @@ Proof.
   clear Hready Hready' HreadyD HreadyDef Hfirst HreadyD' HreadyDef' Hfirst'.
 
   have: is_handler_pid (restore_invariant v) = is_handler_pid (restore_invariant v').
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
   move: H0.
   case/rel_eqpair. rewrite !pair_rewr.
-  move=>+ /publicRel_eq ->.
+  move=>+ /public_rel_eq ->.
 
   move/eqsum_split.
   case.
   move=>[]i0'[]i1'[]->[]->_. ssa.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->. ssa.
   move=>->.
   destruct (is_handler_pid _).
-  have: get_re_sch (restore_invariant v) = get_re_sch (restore_invariant v').
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+  have: get_re_sched (restore_invariant v) = get_re_sched (restore_invariant v').
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
   move/rel_eqpair : H0. case. rewrite !pair_rewr.
 
-  move=>+ /publicRel_eq ->.
-  move/publicRel_eq : H1=>->.
+  move=>+ /public_rel_eq ->.
+  move/public_rel_eq : H1=>->.
 
   move/eqsum_split.
   case.
   move=>[]i0'[]i1'[]->[]->_. ssa.
-  move=>[]i0'[]i1'[]->[]->/publicRel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->. ssa.
 
   move=>->.
-  destruct (get_re_sch (restore_invariant v')).
+  destruct (get_re_sched (restore_invariant v')).
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -1311,33 +1311,33 @@ Proof.
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con.  eauto. rewrite !pair_rewr.
 
-  move/publicRel_eq : H4=>->.
+  move/public_rel_eq : H4=>->.
   move/rel_eqpair2 : H5.
-  case. rewrite !pair_rewr. move=>_ /publicRel_eq ->//.
-  move/publicRel_eq :H2=>->. done.
+  case. rewrite !pair_rewr. move=>_ /public_rel_eq ->//.
+  move/public_rel_eq :H2=>->. done.
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. done. 
-  move/publicRel_eq : H2=>->. rewrite !pair_rewr.
-  move/rel_eqpair2 : H5. case. rewrite !pair_rewr. move=>_ /publicRel_eq ->. ssa.
+  move/public_rel_eq : H2=>->. rewrite !pair_rewr.
+  move/rel_eqpair2 : H5. case. rewrite !pair_rewr. move=>_ /public_rel_eq ->. ssa.
   apply/rel_eqpair2. con. rewrite !pair_rewr.
   move/rel_eqpair2 : H6. case. rewrite !pair_rewr.
-  move/publicRel_eq ->. done.
+  move/public_rel_eq ->. done.
   rewrite !pair_rewr.
   move/rel_eqpair2 : H6. case. rewrite !pair_rewr.
-  move=>/publicRel_eq -> /publicRel_eq ->//.
-  move/publicRel_eq : H2=>->//.
+  move=>/public_rel_eq -> /public_rel_eq ->//.
+  move/public_rel_eq : H2=>->//.
 
 
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.    
 
   move/rel_eqpair : H0. case. rewrite !pair_rewr.
-  move=>_ /publicRel_eq ->.
-  move/publicRel_eq : H1=>->.
-  move/publicRel_eq : H2=>->.
-  move/publicRel_eq : H4=>->.  ssa.
+  move=>_ /public_rel_eq ->.
+  move/public_rel_eq : H1=>->.
+  move/public_rel_eq : H2=>->.
+  move/public_rel_eq : H4=>->.  ssa.
   rewrite /odflt /oapp /get_prev_pid /get_prev_pid_wrap /get_prev_pid /get_pids !pair_rewr.
   destruct prev'. done.
   destruct scheduler_pid. auto. done.
@@ -1346,8 +1346,8 @@ Proof.
   subst. ssa. subst. done. subst. done.
 
   
-  move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.    
 
@@ -1365,7 +1365,7 @@ Proof.
   mrw. intros.
   simpl in H. rewrite /ir_dis in H. destruct H. subst.
 
-  move: v => [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v => [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. de cur.
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
@@ -1376,7 +1376,7 @@ Proof.
 
   (*map*)
   eapply map_NI.
-  instantiate (1:= eqmaybe_hidden (eqpair (eqsum (privateRel Bool) (publicRel _)) (eqmaybe_hidden (privateRel _)))).
+  instantiate (1:= eqmaybe_hidden (eqpair (eqsum (private_rel Bool) (public_rel _)) (eqmaybe_hidden (private_rel _)))).
   mrw. intros.
   destruct i. destruct i'.
   rewrite !pair_rewr.
@@ -1422,7 +1422,7 @@ Proof.
   eapply maybe_NI.
   eapply par_NI.
   eapply map_NI.
-  instantiate (1:= eqpair_LR falseRel (_)).
+  instantiate (1:= eqpair_LR false_rel (_)).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 2:eauto.
   clear H0.
@@ -1431,9 +1431,9 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto.
   subst. simpl. case_if. case_if. done. done.
   case_if. done. done.
-  move=>[]x[]y[]->[]->/publicRel_eq->/=. done.
+  move=>[]x[]y[]->[]->/public_rel_eq->/=. done.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (publicRel _) falseRel).
+  instantiate (1:= eqmaybe_swi (public_rel _) false_rel).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1453,7 +1453,7 @@ Proof.
   (*map*)
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR falseRel _).
+  instantiate (1:= eqpair_LR false_rel _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
@@ -1462,9 +1462,9 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto.
   subst. simpl. case_if. case_if. done. done.
   case_if. done. done.
-  move=>[]x[]y[]->[]->/publicRel_eq->/=. done. eauto.
+  move=>[]x[]y[]->[]->/public_rel_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (privateRel _) falseRel).
+  instantiate (1:= eqmaybe_swi (private_rel _) false_rel).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1486,7 +1486,7 @@ Proof.
   (*map*)
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR falseRel _).
+  instantiate (1:= eqpair_LR false_rel _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
@@ -1495,9 +1495,9 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto.
   subst. simpl. case_if. case_if. done. done.
   case_if. done. done.
-  move=>[]x[]y[]->[]->/publicRel_eq->/=. done. eauto.
+  move=>[]x[]y[]->[]->/public_rel_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (publicRel _) falseRel).
+  instantiate (1:= eqmaybe_swi (public_rel _) false_rel).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1517,18 +1517,18 @@ Proof.
   (*map*)
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR (privateRel _) _).
+  instantiate (1:= eqpair_LR (private_rel _) _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
   case/eqsum_split:H.
   move=>[]x[]y[]->[]->. intros.
   simpl in b. destruct b. destruct H. subst. eauto. eauto.
-  move=>[]x[]y[]->[]->/publicRel_eq->/=.
+  move=>[]x[]y[]->[]->/public_rel_eq->/=.
   destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_hidden (privateRel _)). auto.
+  instantiate (1:= eqmaybe_hidden (private_rel _)). auto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (privateRel _) (privateRel _)).
+  instantiate (1:= eqmaybe_swi (private_rel _) (private_rel _)).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1554,7 +1554,7 @@ Proof.
 
   eapply map_NI. eauto. eauto.
   mrw. intros.
-  move:H. instantiate (1:=eqpair (privateRel _) (publicRel _)).
+  move:H. instantiate (1:=eqpair (private_rel _) (public_rel _)).
   move/rel_eqpair. case=>HH _.
   simpl in HH. destruct HH. destruct H. rewrite H0.
   case_if. auto. auto. subst. auto.
@@ -1570,18 +1570,18 @@ Proof.
   (*map*)
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR (privateRel _) _).
+  instantiate (1:= eqpair_LR (private_rel _) _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
   case/eqsum_split:H.
   move=>[]x[]y[]->[]->. intros.
   simpl in b. destruct b. destruct H. subst. eauto. eauto.
-  move=>[]x[]y[]->[]->/publicRel_eq->/=.
+  move=>[]x[]y[]->[]->/public_rel_eq->/=.
   destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_hidden (privateRel _)). auto.
+  instantiate (1:= eqmaybe_hidden (private_rel _)). auto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (privateRel _) (privateRel _)).
+  instantiate (1:= eqmaybe_swi (private_rel _) (private_rel _)).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1607,7 +1607,7 @@ Proof.
 
   eapply map_NI. eauto. eauto.
   mrw. intros.
-  move:H. instantiate (1:=eqpair (privateRel _) (publicRel _)).
+  move:H. instantiate (1:=eqpair (private_rel _) (public_rel _)).
   move/rel_eqpair. case=>HH _.
   simpl in HH. destruct HH. destruct H. rewrite H0.
   case_if. auto. auto. subst. auto.
@@ -1619,7 +1619,7 @@ Proof.
   apply out_NI.
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR falseRel _).
+  instantiate (1:= eqpair_LR false_rel _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
@@ -1628,9 +1628,9 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto.
   subst. simpl. case_if. case_if. done. done.
   case_if. done. done.
-  move=>[]x[]y[]->[]->/publicRel_eq->/=. done. eauto.
+  move=>[]x[]y[]->[]->/public_rel_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (publicRel _) falseRel).
+  instantiate (1:= eqmaybe_swi (public_rel _) false_rel).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1647,15 +1647,15 @@ Proof.
   eapply map_NI. eauto. eauto.
   instantiate (1:=eqpair _ _).
   mrw. move=> l i i' /rel_eqpair[] + _.
-  instantiate (1:= publicRel _). move=>/publicRel_eq ->. ssa.
+  instantiate (1:= public_rel _). move=>/public_rel_eq ->. ssa.
   eapply sta_NI.
   mrw. intros. move: H0.
-  move/publicRel_eq=>->//.
+  move/public_rel_eq=>->//.
   mrw. intros. eauto.
   mrw. intros. auto.
   apply out_NI.
 
-  Unshelve. all: apply publicRel.
+  Unshelve. all: apply public_rel.
 Qed.  
 
 
@@ -1674,7 +1674,7 @@ Proof.
   rewrite !pair_rewr.
   rewrite /parse_output.
   move/rel_eqmaybe2. case.
-  move=>[]x'[]y'[]->[]->/publicRel_eq->//.
+  move=>[]x'[]y'[]->[]->/public_rel_eq->//.
   move=>[]->->.
   move/rel_eqmaybe2. case.
   move=>[]x'[]y'[]->[]-> H _ _ _ _.
@@ -1691,12 +1691,12 @@ End Parameters.
 Corollary model_sliced_concrete_NI : NI in_rel out_relC model_sliced_concrete.
 Proof.
   apply model_sliced_NI.
-  apply low_p_NI. apply high_p_NI. apply scheduler_NI.
+  apply p_pub_concrete_NI. apply p_priv_concrete_NI. apply scheduler_NI.
 Qed.
 
 Corollary model_sliced_userview_concrete_NI :
   NI in_rel out_rel_userviewC model_sliced_userview_concrete.
 Proof.
   apply model_sliced_userview_NI.
-  apply low_p_NI. apply high_p_NI. apply scheduler_NI.
+  apply p_pub_concrete_NI. apply p_priv_concrete_NI. apply scheduler_NI.
 Qed.  

@@ -16,7 +16,7 @@ security argument. Definitions are as given in
 ## Contents
 
 1. [Characterised equivalences (`cRel`): the framework and levels](#1-characterised-equivalences-crel-the-framework-and-levels)
-2. [Base relations: `publicRel`, `privateRel`](#2-base-relations-publicrel-privaterel)
+2. [Base relations: `public_rel`, `private_rel`](#2-base-relations-public_rel-private_rel)
 3. [Composite relations](#3-composite-relations)
 4. [The model interfaces: `in_rel`, `out_rel`, `out_rel_userview`](#4-the-model-interfaces-in_rel-out_rel-out_rel_userview)
 5. [`model_immediate` is not non-interfering](#5-model_immediate-is-not-non-interfering)
@@ -75,22 +75,22 @@ unchanged by anything the observer at `l` may not see. The case that matters is
 `l = ⊥`; the counterexample of section 5 refutes the *insertion* clause.
 
 
-## 2. Base relations: `publicRel`, `privateRel`
+## 2. Base relations: `public_rel`, `private_rel`
 
 **public** and **private** classify an *interface*, whereas **unobservable** is the
 per-level property `dis l x`. ("Secret" is used informally for unobservable
 at `⊥`.)
 
 ```text
-publicRel A    dis l x = False        rel l x y = (x = y)
-privateRel A   dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨ (l = ⊥)
+public_rel A    dis l x = False        rel l x y = (x = y)
+private_rel A   dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨ (l = ⊥)
 ```
 
-Under `publicRel` nothing is ever unobservable, and two values are related only
+Under `public_rel` nothing is ever unobservable, and two values are related only
 when they are equal. So a public value can be neither inserted, removed, nor varied
 without an observer noticing, at any level.
 
-Under `privateRel` everything is unobservable at `⊥` and everything is related
+Under `private_rel` everything is unobservable at `⊥` and everything is related
 there, which is what lets non-interference insert, remove or replace such a value
 freely. At every other level nothing is unobservable and the relation is again
 equality.
@@ -139,7 +139,7 @@ see `None`", `None` being secret exactly when `¬P l`:
 eqmaybe          P l = True        None is public: everyone can see it.
 eqmaybe_private  P l = (l ≠ ⊥)     everyone but ⊥ can see None; None is secret
                                    only at the attacker level ⊥ -- the same
-                                   condition as privateRel.
+                                   condition as private_rel.
 eqmaybe_hidden   P l = False       nobody can see None; None is secret at every
                                    level (a value whose very presence is hidden).
 eqmaybe_swi      P l = aware BRel  those who are "aware" per a Bool relation BRel
@@ -154,7 +154,7 @@ in for `Some v` only when `v` is itself a secret the observer may not see.
 ## 4. The model interfaces: `in_rel`, `out_rel`, `out_rel_userview`
 
 **`in_rel : cRel [T_in]`** is built from `ir_dis` rather than taken as
-`privateRel TInterrupt`:
+`private_rel TInterrupt`:
 
 ```coq
 ir_dis l ir      := ir = DiskInterrupt /\ l = \bot
@@ -163,11 +163,11 @@ in_rel.rel l     := fun ir ir' => ir = ir' \/ (ir_dis l ir /\ ir_dis l ir')
 ```
 
 The disk interrupt alone is unobservable, and only at `⊥`; every other interrupt
-must be matched even there. `privateRel TInterrupt` would hide the timer as well,
+must be matched even there. `private_rel TInterrupt` would hide the timer as well,
 and non-interference would then forbid the schedule from depending on it, which is
 the whole basis of `model_sliced`.
 
-**`out_rel Opub Opriv : cRel [T_out' Opub Opriv]`** relates two pool outputs
+**`out_rel Opub Opriv : cRel [T_out Opub Opriv]`** relates two pool outputs
 componentwise. A pool output is a six-tuple, one `Option` per slot:
 
 ```text
@@ -178,12 +178,12 @@ and `out_rel` is the corresponding nest of `eqpair`s, with these components:
 
 | slot | component relation | value at `⊥` | did the slot run? |
 |---|---|---|---|
-| `pub` public user process | `eqmaybe publicRel` | visible | visible |
-| `sys` private user process | `eqmaybe privateRel` | hidden | visible |
-| `sch` scheduler | `eqmaybe publicRel` | visible | visible |
-| `dfl` default/NOP handler | `eqmaybe_private privateRel` | hidden | hidden |
-| `dsk` disk handler | `eqmaybe_private privateRel` | hidden | hidden |
-| `tmr` timer handler | `eqmaybe publicRel` | visible | visible |
+| `pub` public user process | `eqmaybe public_rel` | visible | visible |
+| `sys` private user process | `eqmaybe private_rel` | hidden | visible |
+| `sch` scheduler | `eqmaybe public_rel` | visible | visible |
+| `dfl` default/NOP handler | `eqmaybe_private private_rel` | hidden | hidden |
+| `dsk` disk handler | `eqmaybe_private private_rel` | hidden | hidden |
+| `tmr` timer handler | `eqmaybe public_rel` | visible | visible |
 
 The timer slot is public, since it reacts only to public scheduled events. The disk
 slot is private because the disk interrupt is, and the default/NOP slot has to be
@@ -191,24 +191,25 @@ private as well: a slice step is filled by one or the other, so the two must loo
 alike.
 
 **The last two columns come apart only for the handlers, and that is where
-scheduling secrecy lives.** The `privateRel` payload hides the *value* in a slot.
+scheduling secrecy lives.** The `private_rel` payload hides the *value* in a slot.
 Whether the slot ran is decided by the `eqmaybe` variant wrapped around it, since
 that is what fixes who can see `None`. Under plain `eqmaybe`, `None` is public, so
 a `⊥`-observer sees a `Some` where the other run has a `None`: `sys` hides
-`Syscall` from `NOP` but not the fact that `high_p` produced something. Under
+`Syscall` from `NOP` but not the fact that `p_priv_concrete` produced something. Under
 `eqmaybe_private`, `None` is unobservable at `⊥` and may be related to `Some o`, so a
 disk handler run and a step where nothing happened are the same observation.
 
-For `high_p` hiding the value is enough, since when it runs is public anyway. For
-the two secret handlers the fact of running must go too, which is the formal
+For `p_priv_concrete` hiding the value is enough, since when it runs is public
+anyway. For the two secret handlers the fact of running must go too, which is the
+formal
 content of "the leak is in the scheduling". Section 6a discharges the obligation
 `eqmaybe_private` creates.
 
-**`out_rel_userview Opub Opriv : cRel [T_out Opub Opriv]`** (user-visible output, for
-`model_sliced_userview`)
+**`out_rel_userview Opub Opriv : cRel [T_out_userview Opub Opriv]`**
+(user-visible output, for `model_sliced_userview`)
 
 ```text
-eqmaybe_hidden (eqsum publicRel privateRel)
+eqmaybe_hidden (eqsum public_rel private_rel)
 ```
 
 Only the user-visible channel survives `parse_output`: a public user output on the
@@ -251,9 +252,9 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
        (p_pub : Proc Empty Opub)
        (p_priv : Proc THandlerOutput Opriv)
        (p_sched : Proc Empty Nat),
-  NI (publicRel Empty) (publicRel Opub) p_pub ->
-  NI (privateRel THandlerOutput) (privateRel Opriv) p_priv ->
-  NI (publicRel Empty) (publicRel Nat) p_sched ->
+  NI (public_rel Empty) (public_rel Opub) p_pub ->
+  NI (private_rel THandlerOutput) (private_rel Opriv) p_priv ->
+  NI (public_rel Empty) (public_rel Nat) p_sched ->
      NI in_rel (out_rel Opub Opriv)
           (model_sliced runtime runs p_pub p_priv p_sched)
   /\ NI in_rel (out_rel_userview Opub Opriv)
@@ -271,9 +272,9 @@ stays fixed; everything it carries is left open:
 
 | parameter | ranges over | side condition |
 |---|---|---|
-| `p_pub` | any process in the public user slot | must be `NI` at `publicRel`/`publicRel` |
-| `p_priv` | any process in the private user slot | must be `NI` at `privateRel`/`privateRel` |
-| `p_sched` | any scheduler | must be `NI` at `publicRel`/`publicRel` |
+| `p_pub` | any process in the public user slot | must be `NI` at `public_rel`/`public_rel` |
+| `p_priv` | any process in the private user slot | must be `NI` at `private_rel`/`private_rel` |
+| `p_sched` | any scheduler | must be `NI` at `public_rel`/`public_rel` |
 | `Opub`, `Opriv` | the two user output alphabets | none |
 | `runtime` | how many steps a handler runs for | none |
 | `runs` | how many handler runs a slice holds | none |
@@ -281,13 +282,14 @@ stays fixed; everything it carries is left open:
 Two features of the design buy this:
 
 - **The pool's own transition never reads a user slot's output value.**
-  `is_sch_out` matches `(None,(None,(Some n,_)))`, inspecting the user slots only
+  `is_sched_out` matches `(None,(None,(Some n,_)))`, inspecting the user slots only
   for `None`-ness, so no user behaviour reaches the schedule.
 - **`fv_NI` (section 7) never mentions the slot processes**, so the one hard
   obligation is unaffected by what fills them.
 
-Instantiating them with `low_p_NI`, `high_p_NI` and `scheduler_NI` recovers the
-concrete system (`model_sliced_concrete_NI`, `model_sliced_userview_concrete_NI`).
+Instantiating them with `p_pub_concrete_NI`, `p_priv_concrete_NI` and
+`scheduler_NI` recovers the concrete system (`model_sliced_concrete_NI`,
+`model_sliced_userview_concrete_NI`).
 
 `model_sliced_NI` is assembled from the generic composition theorems, one per
 constructor of the calculus, so the proof follows the structure of the term itself
@@ -300,7 +302,7 @@ from the outside in:
 | `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates — **this is where section 7 is discharged** |
 | `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_hidden IRel) ORel (maybe p)` |
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
-| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`falseRel`](#6a-gating-a-slot-why-falserel-and-where-obliviousness-is-needed) for every public slot |
+| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`false_rel`](#6a-gating-a-slot-why-false_rel-and-where-obliviousness-is-needed) for every public slot |
 | the leaves | `out_NI`, or a hypothesis | the handler and padding leaves are constant processes, so `out_NI`; the scheduler and user slots are where the three parametricity hypotheses are consumed |
 | `parse_output` on top of `model_sliced` | `map_NI` again | output weakening, giving `model_sliced_userview_NI` |
 
@@ -312,7 +314,7 @@ in section 4: `par_NI` imposes `out_rel`'s nest of `eqpair`s on a pool output, a
 Two of these layers carry substantial side conditions. `sta_NI`'s are section 7,
 and `swi_NI`'s occupy the rest of this one.
 
-### 6a. Gating a slot: why `falseRel`, and where obliviousness is needed
+### 6a. Gating a slot: why `false_rel`, and where obliviousness is needed
 
 `par_NI` peels the pool apart into one goal per slot, so it is enough to look at a
 single slot. Each is built the same way ([`models.md` §3](models.md)): a `swi`
@@ -320,7 +322,7 @@ holding the slot's process, with a `map` in front that computes the gate bit fro
 the current pid.
 
 ```coq
-map (fun i => (my_f_pid i.1 == k, f_proj i.2 k)) id (swi ... (f_proc k))
+map (fun i => (slot_pid i.1 == k, f_proj i.2 k)) id (swi ... (f_proc k))
 ```
 
 Two obligations are left for slot `k`, both parameterised by a Bool relation `BRel`
@@ -328,7 +330,7 @@ we get to choose. `map_NI` asks that the gate map be sound at `BRel`, and its
 second half is the one that bites:
 
 ```coq
-f_PU (eqsum privateRel publicRel) BRel (fun pid => my_f_pid pid == k)
+f_PU (eqsum private_rel public_rel) BRel (fun pid => slot_pid pid == k)
   (* an unobservable pid must produce an unobservable bit *)
 ```
 
@@ -343,57 +345,59 @@ be unobservable, so the observer can trust the gate. Under `oblivious` every out
 the gated process can produce is unobservable at `l`, so the observer learns
 nothing from it either way.
 
-`cur_pid` is `Sum Bool Nat` classified `eqsum privateRel publicRel` (section 7b),
+`cur_pid` is `Sum Bool Nat` classified `eqsum private_rel public_rel` (section 7b),
 so at `⊥` every `inl b` is unobservable while `inr n` is not. What `f_PU` demands
-of `BRel` therefore depends on where `my_f_pid` sends those two `inl` values, which
+of `BRel` therefore depends on where `slot_pid` sends those two `inl` values, which
 is `1` for `inl true` and `2` for `inl false` ([models.v:222](../theories/models.v)).
 
-**`low_p` at slot 5, and the same for slots 4, 3 and 0.** Both unobservable pids
-miss this slot, so the gate map sends them to `false`. `f_PU` needs a `BRel` in
+**`p_pub_concrete` at slot 5, and the same for slots 4, 3 and 0.** Both
+unobservable pids miss this slot, so the gate map sends them to `false`. `f_PU`
+needs a `BRel` in
 which `false` is unobservable — a sink for the pids the observer may not see, which
 happens not to select this slot anyway. `aware BRel true l` then needs `true` to be
-observable and rigid at every level. `falseRel`
+observable and rigid at every level. `false_rel`
 ([definitions.v:252](../theories/definitions.v)) is exactly that relation:
 
 ```text
-falseRel   dis l b = (b = false ∧ l = ⊥)      rel l b b' = (b = b')
+false_rel   dis l b = (b = false ∧ l = ⊥)      rel l b b' = (b = b')
 ```
 
 It is a well-formed `cRel` because `false` is its only unobservable value, so the
 unobservable values form one class (section 1). With it, `f_PU` holds, and
-`falseRel_aware : forall l, aware falseRel true l`
+`false_rel_aware : forall l, aware false_rel true l`
 ([noninterference.v:230](../theories/noninterference.v)) discharges `swi_NI` by the
 left disjunct at every level, no case split needed.
 
 **The disk handler at slot 1, and the same for the default handler at slot 2.**
 Here `inl true` maps to `true` and `inl false` maps to `false`, and both pids are
 unobservable at `⊥`. `f_PU` now demands that *both* booleans be unobservable there,
-which rules `falseRel` out and leaves `privateRel Bool`. But if `true` is
+which rules `false_rel` out and leaves `private_rel Bool`. But if `true` is
 unobservable at `⊥` then `aware BRel true ⊥` fails by definition, so the left
 disjunct is gone and the proof must split on the level:
 
-- above `⊥`, `privateRel` collapses to equality, nothing is unobservable, and
+- above `⊥`, `private_rel` collapses to equality, nothing is unobservable, and
   `aware` applies as before;
 - at `⊥`, the right disjunct is used. The proof builds an `ObliviousTrace`, every
   output step of which must satisfy `dis ORel ⊥ o`.
 
 That last obligation is affordable only because the slot's output was classified
-`eqmaybe_private privateRel` in section 4, which makes both `Some o` and `None`
-unobservable at `⊥`. Under `eqmaybe privateRel` the `None` would be public,
+`eqmaybe_private private_rel` in section 4, which makes both `Some o` and `None`
+unobservable at `⊥`. Under `eqmaybe private_rel` the `None` would be public,
 obliviousness would fail, and nothing would hide that the handler ran. Losing
 awareness at `⊥` costs nothing, since the slot's output is private there anyway.
 
 | slot | process | `BRel` | `swi_NI` discharged by |
 |---|---|---|---|
-| 5 | `low_p`, public | `falseRel` | `aware`, every level |
-| 4 | `high_p`, private | `falseRel` | `aware`, every level |
-| 3 | scheduler | `falseRel` | `aware`, every level |
-| 0 | timer handler | `falseRel` | `aware`, every level |
-| 2 | default/NOP handler | `privateRel` | `oblivious` at `⊥`, `aware` above |
-| 1 | disk handler | `privateRel` | `oblivious` at `⊥`, `aware` above |
+| 5 | `p_pub_concrete`, public | `false_rel` | `aware`, every level |
+| 4 | `p_priv_concrete`, private | `false_rel` | `aware`, every level |
+| 3 | scheduler | `false_rel` | `aware`, every level |
+| 0 | timer handler | `false_rel` | `aware`, every level |
+| 2 | default/NOP handler | `private_rel` | `oblivious` at `⊥`, `aware` above |
+| 1 | disk handler | `private_rel` | `oblivious` at `⊥`, `aware` above |
 
-The line falls between the two secret handlers and everything else. `high_p` sits
-on the public side of it: its secrecy travels in the `privateRel` payload inside
+The line falls between the two secret handlers and everything else.
+`p_priv_concrete` sits on the public side of it: its secrecy travels in the
+`private_rel` payload inside
 `eqmaybe_swi`, never in its gate.
 
 > The generic theorems in [`theories/theorems.v`](../theories/theorems.v)
@@ -410,7 +414,7 @@ The state transition is driven by an event, which is an interrupt arriving on th
 left or a pool output on the right:
 
 ```coq
-event : Sum T_in (T_out' Opub Opriv)      inl i = an interrupt arrived
+event : Sum T_in (T_out Opub Opriv)      inl i = an interrupt arrived
                                           inr o = the pool produced an output
 ```
 
@@ -457,7 +461,7 @@ condition on `set_pending` alone.
   take different branches and produce unrelated states.
 
 Both must hold at once, so the interrupt controller is classified *per bit*:
-`hidden_pending` pairs a private pending bit with a public mask bit, the only
+`private_pending_rel` pairs a private pending bit with a public mask bit, the only
 assignment that satisfies both.
 
 `f_EP` also explains why `set_pending` writes one bit and stops. No decision can be
@@ -466,13 +470,13 @@ mask or moving the slice counter would all disturb fields compared by equality a
 `⊥`. Everything the interrupt causes is deferred to the right summand, where the
 input is no longer the thing being varied.
 
-### 7b. `stateType_rel`: the resulting classification
+### 7b. `state_type_rel`: the resulting classification
 
-The state is nested pairs ([`models.md` §5](models.md)), and `stateType_rel` is the
+The state is nested pairs ([`models.md` §5](models.md)), and `state_type_rel` is the
 matching nest of `eqpair`s:
 
 ```text
-state = ( ( cur_pid , prev_pid ) , ( re_sch , ( ir_count , ic ) ) )
+state = ( ( cur_pid , prev_pid ) , ( re_sched , ( ir_count , ic ) ) )
 ic    = ( dfl , ( dsk , tmr ) )        the interrupt controller
 dfl   = ( pending , mask )             and likewise dsk and tmr
 ```
@@ -481,13 +485,13 @@ Field by field:
 
 | field | type | relation | at `⊥` |
 |---|---|---|---|
-| `cur_pid` | Sum Bool Nat | `eqsum privateRel publicRel` | see below |
-| `prev_pid` | Nat | `publicRel` | visible |
-| `re_sch` | Bool | `publicRel` | visible |
-| `ir_count`, the slice counter | Option Nat | `publicRel` | visible |
-| `dfl` | (pending, mask) | `hidden_pending` | pending hidden, mask visible |
-| `dsk` | (pending, mask) | `hidden_pending` | pending hidden, mask visible |
-| `tmr` | (pending, mask) | `public_pair` | both visible |
+| `cur_pid` | Sum Bool Nat | `eqsum private_rel public_rel` | see below |
+| `prev_pid` | Nat | `public_rel` | visible |
+| `re_sched` | Bool | `public_rel` | visible |
+| `ir_count`, the slice counter | Option Nat | `public_rel` | visible |
+| `dfl` | (pending, mask) | `private_pending_rel` | pending hidden, mask visible |
+| `dsk` | (pending, mask) | `private_pending_rel` | pending hidden, mask visible |
+| `tmr` | (pending, mask) | `public_bits_rel` | both visible |
 
 Every mask bit is public, which is the formal content of "all masks are public".
 
@@ -495,7 +499,7 @@ Every mask bit is public, which is the formal content of "all masks are public".
 the design is doing its work. `inl b` means a handler is running, with `b`
 selecting which; `inr n` is a user or scheduler pid. Since `eqsum` never relates an
 `inl` to an `inr` (section 3), *that* a handler is running stays visible, and so
-does the pid in `inr n`. What `privateRel` hides is the `Bool` inside `inl`: at
+does the pid in `inr n`. What `private_rel` hides is the `Bool` inside `inl`: at
 `⊥`, `inl true` and `inl false` are related, so the disk handler and the
 default/NOP one look alike.
 
@@ -504,11 +508,11 @@ the only things allowed to differ.
 
 ### 7c. `fv_NI` and the composition-breakdown technique
 
-The core obligation for `model_sliced` is that `stateType_rel` is closed under the
+The core obligation for `model_sliced` is that `state_type_rel` is closed under the
 whole transition:
 
 ```text
-fv_NI  (eqsum_L in_rel out_rel)  stateType_rel  stateType_rel
+fv_NI  (eqsum_L in_rel out_rel)  state_type_rel  state_type_rel
        (state_step sliced_preroutine restore_invariant)
 ```
 
@@ -589,6 +593,6 @@ for:
   never itself be interrupted.
 - **Fixed pool size and layout.** Six slots, the last of them padding. The
   scheduler and user slot *processes* are parameters, but their number and position
-  are fixed by the output projections `is_sch_out`, `tI_out`, `dI_out` and
-  `default_I_out`, tuple patterns that hardwire two user slots before the scheduler
+  are fixed by the output projections `is_sched_out`, `tI_out`, `dI_out` and
+  `default_ir_out`, tuple patterns that hardwire two user slots before the scheduler
   slot. Varying the count changes the state transition and lands inside `fv_NI`.

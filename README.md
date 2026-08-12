@@ -35,8 +35,9 @@ Slots 3, 4 and 5 are **parameters** of the development, not fixed processes: the
 results below hold for any scheduler and any two user processes that are themselves
 non-interfering at the classification their slot declares, over arbitrary output
 alphabets. The concrete instance used for the example traces is a round-robin
-scheduler, a `high_p` that issues a `Syscall` if the disk handler notified it and
-`NOP` otherwise, and a `low_p` that repeatedly issues `GetRequest`. Only the
+scheduler, a `p_priv_concrete` that issues a `Syscall` if the disk handler
+notified it and `NOP` otherwise, and a `p_pub_concrete` that repeatedly issues
+`GetRequest`. Only the
 interrupt handlers are fixed — they are the mechanism under study.
 
 Exactly one slot runs per step, chosen by the current pid. The global state holds a
@@ -103,7 +104,7 @@ and every classification in the development is expressed with them.
 A **public** value is observable at every level and indistinguishable only from
 itself. A **private** value is unobservable at `⊥`, where all private values are
 therefore indistinguishable; above `⊥` it is observable and values must agree
-exactly. (Formally, `publicRel` and `privateRel`, in
+exactly. (Formally, `public_rel` and `private_rel`, in
 [`docs/noninterference.md` §2](docs/noninterference.md).)
 
 The disk interrupt is the only secret input. The timer interrupt is public, and has
@@ -183,9 +184,9 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
        (p_pub : Proc Empty Opub)
        (p_priv : Proc THandlerOutput Opriv)
        (p_sched : Proc Empty Nat),
-  NI (publicRel Empty) (publicRel Opub) p_pub ->
-  NI (privateRel THandlerOutput) (privateRel Opriv) p_priv ->
-  NI (publicRel Empty) (publicRel Nat) p_sched ->
+  NI (public_rel Empty) (public_rel Opub) p_pub ->
+  NI (private_rel THandlerOutput) (private_rel Opriv) p_priv ->
+  NI (public_rel Empty) (public_rel Nat) p_sched ->
   NI in_rel (out_rel_userview Opub Opriv)
      (model_sliced_userview runtime runs p_pub p_priv p_sched)
 ```
@@ -197,7 +198,8 @@ handler length and slice size — the last two with no side condition, because
 boundary" structural rather than assumed.
 
 `model_sliced_concrete_NI` and `model_sliced_userview_concrete_NI` recover the
-concrete system by instantiating with `low_p_NI`, `high_p_NI` and `scheduler_NI`.
+concrete system by instantiating with `p_pub_concrete_NI`, `p_priv_concrete_NI`
+and `scheduler_NI`.
 `model_immediate` is parametric in the same way, but the counterexample is stated
 at the concrete instance `model_immediate_concrete`: exhibiting a leak needs one
 system, not all of them.
