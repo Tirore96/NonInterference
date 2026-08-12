@@ -25,7 +25,7 @@ Require Export NonInterference.theories.models.
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
      7. The state relation (stateType_rel) and the fv_NI obligation
    Note: this file imports classical logic via theorems.v (Require Import
-   Classical), used only in swi_NI' because `aware` is not constructively
+   Classical), used only in swi_NI because `aware` is not constructively
    decidable.
    =================================================================== *)
 
@@ -286,12 +286,14 @@ Proof.
 Qed.
 
 
-(* === Section 7b: the composition-breakdown technique.  state_step is
+(* === The composition-breakdown technique.  state_step is
    initiate_next(bool_coding) o handler_preroutine o apply_schedule o record_pending.  fv_NI_comp
    discharges fv_NI of the composition from fv_NI of the parts; fv_NI_step_left
-   / _right lift each stage to the eqsum in_rel/out_rel event.  Cost: every
+   / _right lift each stage to the event relation.  Those two are stated at
+   eqsum but apply to the eqsum_L goal by conversion: the two relations share
+   a rel field and differ only in dis, which fv_NI never mentions.  Cost: every
    stage is proved over ALL related states, forgetting the reachable subset —
-   bool_coding (7c) repairs this before initiate_next.  (docs §7b.) === *)
+   bool_coding repairs this before initiate_next.  (docs §7c, §7d.) === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
@@ -322,18 +324,6 @@ Proof.
   rewrite /step_left. eauto. done. done.
   destruct H2. destruct i. done. destruct i'. done.
   rewrite /step_left. eauto.
-Qed.
-
-Lemma f_EP_left : forall f,
-    f_EP in_rel stateType_rel f -> f_EP (eqsum in_rel (out_rel Opub Opriv)) stateType_rel (@step_left Opub Opriv f).
-Proof.
-  ssa.
-Qed.
-
-Lemma f_EP_right : forall f,
-    f_EP (out_rel Opub Opriv) stateType_rel f -> f_EP (eqsum in_rel (out_rel Opub Opriv)) stateType_rel (@step_right Opub Opriv f).
-Proof.
-  ssa.
 Qed.
 
 Definition ready_aux (v : [stateType]) := I_ready v TimerInterrupt /\ first_ready v = Some TimerInterrupt \/ ~ I_ready v TimerInterrupt /\ I_ready v DiskInterrupt /\ first_ready v = Some DiskInterrupt \/  ~ I_ready v TimerInterrupt /\ ~ I_ready v DiskInterrupt /\ I_ready v DefaultInterrupt /\ first_ready v = Some DefaultInterrupt \/ ~ I_ready v TimerInterrupt /\ ~ I_ready v DiskInterrupt /\ ~ I_ready v DefaultInterrupt /\ first_ready v = None.

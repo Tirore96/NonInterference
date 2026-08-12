@@ -118,6 +118,11 @@ eqpair_R   secret at l iff the RIGHT component is (the left is irrelevant)
 the sum itself is never secret, so the *tag* is always public even when the payload
 underneath is not.
 
+**`eqsum_L`** — same relation, but the sum inherits secrecy from its left
+component: `dis l (inl i) = dis IRel l i` and `dis l (inr o) = False`. This is the
+one the state cell uses (section 7a), where it makes `f_EP` a condition on the
+input summand alone.
+
 **`eqmaybe VRel` and variants (`eqmaybe_top` / `eqmaybe_false` / `eqmaybe_swi`)** —
 relate `Option` values. On `Some`/`Some` they defer to `VRel`; they differ only in
 a level-predicate `P l` = "the observer at `l` can see `None`", `None` being secret
@@ -393,19 +398,41 @@ on the public side of it: its secrecy travels in the `privateRel` payload inside
 
 ### 7a. What constrains the classification
 
-The state transition is a pipeline of four stages, each wrapped so that it fires on
-only one kind of event ([`models.md` §6](models.md)):
+The state transition is driven by an event, which is an interrupt arriving on the
+left or a pool output on the right:
 
 ```coq
-state_step handler_preroutine bool_coding =
-    step_right (initiate_next bool_coding)     (* output events *)
-  ∘ step_right handler_preroutine              (* output events *)
-  ∘ apply_schedule                             (* output events *)
-  ∘ record_pending                             (* input  events *)
+event : Sum T_in (T_out' Opub Opriv)      inl i = an interrupt arrived
+                                          inr o = the pool produced an output
 ```
 
-`record_pending` is the only stage that reacts to an arriving interrupt; the other
-three are `step_right`s and act as the identity on an input event.
+It is a pipeline of four stages, each wrapped so that it fires on only one kind of
+event ([`models.md` §6](models.md)). Write `f ⊕ g` for the state update that
+handles an input with `f` and an output with `g`, and `1` for the update that does
+nothing:
+
+```text
+(f ⊕ g) (inl i) = f i          step_left  f = f ⊕ 1
+(f ⊕ g) (inr o) = g o          step_right g = 1 ⊕ g
+```
+
+So wrapping a stage is filling one summand and leaving the other as the identity,
+and the pipeline is
+
+```text
+state_step h b
+  = (1 ⊕ initiate_next b) ∘ (1 ⊕ h) ∘ (1 ⊕ check_scheduler) ∘ (set_pending ⊕ 1)
+```
+
+Composition is componentwise, `(f ⊕ g) ∘ (f' ⊕ g') = (f ∘ f') ⊕ (g ∘ g')`, so the
+left summand holds `set_pending` on its own and the other three stages line up in
+the right:
+
+```text
+  = set_pending ⊕ (initiate_next b ∘ h ∘ check_scheduler)
+```
+
+Nothing but `set_pending` happens when an interrupt arrives.
 
 `sta_NI` needs two side conditions on this transition, and they push in opposite
 directions:
@@ -418,7 +445,10 @@ f_EP  IRel VRel f       :=  dis IRel l i -> rel VRel l (f i v) v
 
 `fv_NI` says the transition maps related states to related states. `f_EP`, for
 *equivalence preserving*, asks for more: an input the observer may not see must not
-visibly move the state.
+visibly move the state. Events are related by `eqsum_L in_rel out_rel`
+([noninterference.v:514](../theories/noninterference.v)), whose `dis` holds only on
+the `inl` side, so `f_EP` constrains the left summand and nothing else. It is a
+condition on `set_pending` alone.
 
 - **`f_EP` forces fields written by a secret input to be private.** A disk
   interrupt is unobservable at `⊥`, and `record_pending` responds by setting the
@@ -432,11 +462,11 @@ Both must hold at once, so the interrupt controller is classified *per bit*:
 `hidden_pending` pairs a private pending bit with a public mask bit, the only
 assignment that satisfies both.
 
-`f_EP` also explains why `record_pending` writes one bit and stops. No decision can
-be taken on an input step, since starting a handler, reassigning `cur_pid`,
-clearing a mask or moving the slice counter would all disturb fields compared by
-equality at `⊥`. Everything the interrupt causes is deferred to a later output
-step, where the input is no longer the thing being varied.
+`f_EP` also explains why `set_pending` writes one bit and stops. No decision can be
+taken on an input step, since starting a handler, reassigning `cur_pid`, clearing a
+mask or moving the slice counter would all disturb fields compared by equality at
+`⊥`. Everything the interrupt causes is deferred to the right summand, where the
+input is no longer the thing being varied.
 
 ### 7b. `stateType_rel`: the resulting classification
 
@@ -479,20 +509,15 @@ The core obligation for `model_sliced` is that `stateType_rel` is closed under t
 whole transition:
 
 ```text
-fv_NI  (eqsum in_rel out_rel)  stateType_rel  stateType_rel
+fv_NI  (eqsum_L in_rel out_rel)  stateType_rel  stateType_rel
        (state_step sliced_preroutine bool_coding)
 ```
 
-The event driving the transition is either an input or an output, so it lives in a
-`Sum` and is related by `eqsum in_rel out_rel` (section 3): two input events are
-compared by `in_rel`, two output events by `out_rel`, and an input is never related
-to an output. That last point is what makes the stage-by-stage split work, since a
-stage guarded by `step_left` can assume both events are inputs and a stage guarded
-by `step_right` can assume both are outputs.
-
-`fv_NI_comp` then reduces `fv_NI` of the pipeline to `fv_NI` of each stage, and
-`fv_NI_step_left` / `fv_NI_step_right` supply the guards. One goal per stage
-remains:
+`eqsum_L` relates two inputs by `in_rel` and two outputs by `out_rel`, and never
+relates an input to an output. So a goal about `f ⊕ g` splits in two: on the left
+both events are inputs and only `f` runs, on the right both are outputs and only
+`g` runs. `fv_NI_comp` then breaks the right-hand pipeline into its three stages,
+leaving one goal apiece:
 
 | stage | fires on | what has to be shown |
 |---|---|---|
