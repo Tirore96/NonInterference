@@ -238,7 +238,7 @@ Proof.
     + match_dd. move: (IH _ _ H4) => [t] [Hpi] Hpo.
       exists (inr o :: t). split.
       * simpl. rewrite Hpi. done.
-      * simpl. econ. eauto. 2: apply Hpo. move: H2 => [_ HO]. apply HO.
+      * simpl. econ. eauto. 2: apply Hpo. move: H2 => /rel_eqpair [_ HO]. apply HO.
 Qed.
 
 (* Specialisation to the NI call-site: the composite trace insert n (inl i) t  *)
@@ -415,7 +415,7 @@ Proof.
       eapply IH. apply Hg. apply Hf. eapply NI_reduceI. apply HNI. apply H1. apply H3. apply Hl.
     + inv HT.
       econ. econ. reflexivity. apply H1.
-      split. eapply rel_trans. eapply Hg. apply H2. apply rel_refl. apply rel_sym. apply Hw. apply H2.
+      apply rel_eqpair2. split. eapply rel_trans. eapply Hg. apply H2. apply rel_refl. apply rel_sym. apply Hw. apply H2.
       eapply IH. apply Hg. apply Hf. eapply NI_reduceO. apply HNI. apply H1. apply H4.
       eapply lthread_stable. apply Hf. apply Hg. 2: apply Hl. eapply Hg. apply rel_sym. apply H2. apply rel_refl.
 Qed.
@@ -435,7 +435,7 @@ Proof.
       * simpl. econ. eauto. apply Hpo.
       * simpl. split. apply rel_refl. apply Hlt.
     + match_dd. destruct o as [vobs oobs].
-      move: H2 => /= [HV HO].
+      move: H2 => /rel_eqpair /= [HV HO].
       move: (IH _ _ Hf Hg H4) => [T] [Hpi] [Hpo] Hlt.
       exists (inr (vobs, oobs) :: T). split; [|split].
       * simpl. rewrite Hpi. done.
@@ -721,7 +721,7 @@ Proof.
   - intros b_out o o_obs t_swi t_p' Hrel Hswi IH p HT.
     inv HT.
     destruct o' as [b_out' o''].
-    destruct H2 as [Hb Ho].
+    apply rel_eqpair_LR in H2. destruct H2 as [Hb Ho].
     simpl in Hb, Ho.
     have Ho' : rel (eqmaybe_swi ORel BRel) l (Some o'') (Some o) by exact Ho.
     econstructor.
@@ -1290,7 +1290,7 @@ Proof.
     have E6 := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H6.
     have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ E6; subst p'.
     have [IH1 IH2] := IH _ _ erefl.
-    case: Hrel => Hr1 Hr2.
+    case/rel_eqpair: Hrel => Hr1 Hr2.
     by split => /=; [apply: (TR2 H5 Hr1 IH1) | apply: (TR2 H7 Hr2 IH2)].
 Qed.
 
@@ -1304,7 +1304,7 @@ Proof.
     + inversion H1; subst. inversion H2; subst.
       apply: (TR1 (reduce_parI H3 H4) (IH _ _ H5 H7)).
     + inversion H1; subst. inversion H2; subst.
-      have Hr : rel (eqpair ORel1 ORel2) l (o',o'0) o by split; [exact H4|exact H7].
+      have Hr : rel (eqpair ORel1 ORel2) l (o',o'0) o by apply: rel_eqpair2; split; [exact H4|exact H7].
       apply: (TR2 (reduce_parO H3 H5) Hr (IH _ _ H6 H9)).
 Qed.
 

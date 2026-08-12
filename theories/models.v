@@ -445,18 +445,17 @@ Definition check_scheduler (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [sta
    for None-ness and nothing more (see [is_sch_out]), which is what keeps the
    state transition independent of what userspace does. *)
 
-Definition nat_to_cur_pid (n : nat) : [cur_pid ] :=
-  match n with
-  | 0 => inr 0 (*timer interrupt*)
-  | 1 => inl true (*disk interrupt*)
-  | 2 => inl false (*default interrupt*)
-  | 3 => inr 1 (*scheduler*)
-  | 4 => inr 2 (*high p*)
-  | 5 => inr 3 (*low p*)
-  | n => inr n
-  end.
+(* The pid of the handler an interrupt runs in. *)
 Definition I_handler_pid (ir : [TInterrupt]) : [cur_pid] :=
-  nat_to_cur_pid (index ir all_interrupts).
+  match ir with
+  | TimerInterrupt   => inr 0
+  | DiskInterrupt    => inl true
+  | DefaultInterrupt => inl false
+  end.
+
+(* It selects the slot the interrupt's own position in all_interrupts names. *)
+Lemma my_f_pid_I_handler_pid : forall ir, my_f_pid (I_handler_pid ir) = index ir all_interrupts.
+Proof. by case. Qed.
 
 (* before overriding cur_pid, save it to prev_pid if it is a user process *)
 Definition save_cur_to_prev (v : [stateType]) : [stateType] :=

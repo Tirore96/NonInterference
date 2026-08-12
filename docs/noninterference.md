@@ -98,35 +98,44 @@ equality.
 
 ## 3. Composite relations
 
-**`eqpair IRel ORel : cRel [Times I O]`** — relate pairs componentwise:
-`(a,b) ~ (a',b')` iff `a ~ a'` and `b ~ b'`.
+Each family is one construction taking *which values are secret* as a parameter;
+the variants are that parameter, instantiated. The rest follows from the
+characterisation of section 1: values of the same shape are related
+componentwise, and values of different shape only by both being secret.
 
-**`eqpair_LR` / `eqpair_R`** — variants of `eqpair` differing only in when the
-*pair* counts as secret. Plain `eqpair` never is (`dis = False`); the gated
-variants make the pair itself secret, so two related states can carry different
-values there:
+**`eqpair IRel ORel : cRel [Times I O]`** — relate pairs componentwise:
+`(a,b) ~ (a',b')` iff `a ~ a'` and `b ~ b'`. Nothing is secret (`dis = False`).
+The model's own relations are built from this one, so it stays a definition in
+its own right rather than an instance carrying a secrecy case that never fires.
+
+**`eqpair_L` / `eqpair_R` / `eqpair_LR`** (`eqpair_aux`) — the gated variants,
+where the *pair* may be secret and two related states can then differ there:
 
 ```text
-eqpair_LR  secret at l iff BOTH components are secret at l
-eqpair_R   secret at l iff the RIGHT component is (the left is irrelevant)
+eqpair_L   secret at l iff the LEFT component is (the right is irrelevant)
+eqpair_R   secret at l iff the RIGHT component is
+eqpair_LR  secret at l iff BOTH components are
 ```
 
-(`eqpair_L` is the mirror image.)
+**`eqsum IRel ORel : cRel [Sum I O]`** and variants (`eqsum_aux`) — relate a
+`Sum` tag-by-tag, `inl` by `IRel` and `inr` by `ORel`:
 
-**`eqsum IRel ORel : cRel [Sum I O]`** — relate a `Sum` tag-by-tag, `inl` by
-`IRel` and `inr` by `ORel`. An `inl` is never related to an `inr` at any level, and
-the sum itself is never secret, so the *tag* is always public even when the payload
-underneath is not.
+```text
+eqsum      nothing is secret; the tag stays public even when the payload
+           underneath is not, and an inl is never related to an inr
+eqsum_L    an inl is secret exactly when its payload is; an inr never is
+eqsum_R    the mirror image
+eqsum_LR   either injection is secret when its payload is
+```
 
-**`eqsum_L`** — same relation, but the sum inherits secrecy from its left
-component: `dis l (inl i) = dis IRel l i` and `dis l (inr o) = False`. This is the
-one the state cell uses (section 7a), where it makes `f_EP` a condition on the
-input summand alone.
+Only `eqsum_LR` ever relates an `inl` to an `inr`, and only when both are secret.
+`eqsum_L` is the one the state cell uses (section 7a), where it makes `f_EP` a
+condition on the input summand alone.
 
-**`eqmaybe VRel` and variants (`eqmaybe_top` / `eqmaybe_false` / `eqmaybe_swi`)** —
-relate `Option` values. On `Some`/`Some` they defer to `VRel`; they differ only in
-a level-predicate `P l` = "the observer at `l` can see `None`", `None` being secret
-exactly when `¬P l`:
+**`eqmaybe VRel` and variants (`eqmaybe_top` / `eqmaybe_false` / `eqmaybe_swi`,
+via `eqmaybe_aux`)** — relate `Option` values. On `Some`/`Some` they defer to
+`VRel`; they differ only in a level-predicate `P l` = "the observer at `l` can
+see `None`", `None` being secret exactly when `¬P l`:
 
 ```text
 eqmaybe       P l = True        None is public: everyone can see it.

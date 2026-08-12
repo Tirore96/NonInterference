@@ -325,180 +325,6 @@ Definition privateRel (A : Ty) : cRel ([A]).
 Defined.
 
 
-Definition eqpair {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
-  refine (@CRel _ 
-            (fun (l : level) _ => False)
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con. destruct IRel. destruct ORel. simpl. con.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-  - con. destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv0 l). case.
-    move => _ Hsym _.  apply Hsym. eauto.
-
-    destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv1 l). case. eauto.
-
-  - destruct IRel,ORel. simpl. con.
-    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
-
-
-  - move=> l0 l1 HOrder a0 a1 [] HI HO.
-    destruct IRel,ORel;ssa. eauto. eauto.
-
-  - eauto.
-
-    intros. con.
-done.
-done.
-Defined.
-
-Definition eqpair_LR {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
-  refine (@CRel _ 
-            (fun (l : level) io => dis IRel l (fst io) /\ dis ORel l (snd io))
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2))
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con. destruct IRel. destruct ORel. simpl. con.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-  - con. destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv0 l). case.
-    move => _ Hsym _.  apply Hsym. eauto.
-
-    destruct H. destruct IRel. destruct ORel. simpl. 
-    move: (equiv1 l). case. eauto.
-
-  - destruct IRel,ORel. simpl. con.
-    ssa. move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    ssa. move: (equiv1 l). case. move=> _ _ Htrans. eauto.
-
-
-  - move=> l0 l1 HOrder a0 a1 [] HI HO.
-    destruct IRel,ORel;ssa. eauto. eauto.
-
-  - intros. ssa. de IRel. eauto. de ORel. eauto.
-  - intros. ssa. de IRel. con.
-    ssa. apply/i;eauto.
-    de ORel. apply/i0;eauto.
-    ssa. apply/i;eauto.
-    de ORel. apply/i0;eauto.
-Defined.
-
-Definition eqpair_L {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
-  refine (@CRel _ 
-            (fun (l : level) io => dis IRel l (fst io))
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ dis IRel l (fst io1) /\ dis IRel l (fst io2))
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con. destruct IRel. destruct ORel. simpl. con.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-  - rewrite /Symmetric. intros. destruct H. destruct IRel. destruct ORel. simpl.
-    ssa. left.
-    move: (equiv0 l). case.
-    move => _ Hsym _. con.  apply Hsym. eauto.
-
-    move: (equiv1 l). case.
-    move => _ Hsym' _.  apply Hsym'. eauto.
-
-    ssa.
-
-  - destruct IRel,ORel. simpl. intro. intros.
-
-    de H. de H0. left. ssa.
-    move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    move: (equiv1 l). case. move=> _ _ Htrans. eauto.
-
-    right. ssa. apply/i. apply: H0.
-    move: (equiv0 l). case.
-    move=> _ Hsym _. apply/Hsym. done.
-
-    de H0.
-
-    right. ssa. apply/i. apply: H1. done.
-
-
-  - intros. de H0.
-    left.
-    de IRel;eauto.
-    de ORel;eauto.
-    right.
-    de IRel;eauto.
-
-  - intros. de IRel;eauto.
-
-  - intros. con.
-    intros. eauto.
-    case. case. move=> HH _.
-    de IRel;eauto. apply/i. 2:eauto. done.
-    ssa.
-Defined.
-
-Definition eqpair_R {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
-  refine (@CRel _ 
-            (fun (l : level) io => dis ORel l (snd io))
-            (fun l io1 io2 => rel IRel l (fst io1) (fst io2) /\ rel ORel l (snd io1) (snd io2) \/ dis ORel l (snd io1) /\ dis ORel l (snd io2))
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con. destruct IRel. destruct ORel. simpl. con.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-  - rewrite /Symmetric. intros. destruct H. destruct IRel. destruct ORel. simpl.
-    ssa. left.
-    move: (equiv0 l). case.
-    move => _ Hsym _. con.  apply Hsym. eauto.
-
-    move: (equiv1 l). case.
-    move => _ Hsym' _.  apply Hsym'. eauto.
-
-    ssa.
-
-  - destruct IRel,ORel. simpl. intro. intros.
-
-    de H. de H0. left. ssa.
-    move: (equiv0 l). case. move=> _ _ Htrans. eauto.
-    move: (equiv1 l). case. move=> _ _ Htrans. eauto.
-
-    right. ssa. apply/i0. apply: H0.
-    move: (equiv1 l). case.
-    move=> _ Hsym _. apply/Hsym. done.
-
-    de H0.
-
-    right. ssa. apply/i0. apply: H1. done.
-
-
-  - intros. de H0.
-    left.
-    de IRel;eauto.
-    de ORel;eauto.
-    right.
-    de IRel;eauto.
-
-  - intros. de ORel;eauto. de ORel;eauto.
-
-  - intros. de ORel;eauto.
-    intros. con. ssa.
-    case. case. intros. de ORel. apply/i. 2:eauto. done.
-    case. ssa.
-Defined.
-
 (*Definition eqpair_REQ {I O : Ty} (def : [I]) (ORel : cRel [O]) : cRel ([Times I O]).
   refine (@CRel _ 
             (fun (l : level) io => fst io = def /\ dis ORel l (snd io))
@@ -620,171 +446,6 @@ Hint Resolve dis_rel_dis dis_rel_dis2 dis_dis_rel.
          de H.
 Defined.*)
 
-Lemma eqsum_LR {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
-  refine (@CRel _ 
-            (fun (l : level) io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end)
-            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
-                                            | inr o1,inr o2 => rel ORel l o1 o2
-                                            | inl i1, inr i2 => dis IRel l i1 /\ dis ORel l i2
-                                            | inr i1, inl i2 => dis ORel l i1 /\ dis IRel l i2 end)
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con.
-    intro. 
-    destruct IRel. destruct ORel. simpl. de x.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y.
-    move: (equiv0 l). case. eauto. 
-    move: (equiv1 l). case. de y.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y. de z.
-    move: (equiv0 l). case. eauto. apply/i. 2:eauto.
-    move: (equiv1 l). case. eauto.
-
-    move: (equiv0 l). case. eauto. 
-    de z. apply/i. done. done.
-    apply/i0. eauto.
-    done.
-    de y. de z. apply/i. 2:eauto. done.
-    apply/i0. done. done.
-    de z. apply/i0. eauto.
-    move:(equiv1 l)=> [] _ Hsym _. eauto.
-    move:(equiv1 l)=> [] _ _ Htrans. eauto.
-
-
-    intros. de a0. de a1. de IRel;eauto. de IRel;eauto.
-    de ORel;eauto.
-    de a1. de ORel;eauto. de IRel;eauto. de ORel;eauto.
-
-
-    intros. de a. de IRel;eauto. de ORel;eauto.
-
-    intros. con.
-    intros. de a0. de a1. de a1.
-    de a0. de a1. eauto.
-    de a1. eauto.
-Defined.
-
-Lemma eqsum_L {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
-  refine (@CRel _ 
-            (fun (l : level) io => match io with | inl i => dis IRel l i | inr _ => False  end)
-            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
-                                            | inr o1,inr o2 => rel ORel l o1 o2
-                                            | _,_ => False end)
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con.
-    intro. 
-    destruct IRel. destruct ORel. simpl. de x.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y.
-    move: (equiv0 l). case. eauto. 
-    move: (equiv1 l). case. de y.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y. de z.
-    move: (equiv0 l). case. eauto. de y. de z. 
-    move: (equiv1 l). case. move=> _ _ Htrans. apply/Htrans. eauto. done.
-    intros. de a0. de a1. de IRel;eauto. de IRel;eauto.
-    de ORel;eauto.
-    de a1. eauto.
-    
-    intros. de a. de IRel;eauto.
-    
-    intros. con.
-    intros. de a0. de a1. de a0.
-    de a1. 
-    de IRel. apply/i1;eauto.
-Defined.
-
-Lemma eqsum_R {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
-  refine (@CRel _ 
-            (fun (l : level) io => match io with | inl _ => False | inr o => dis ORel l o end)
-            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
-                                            | inr o1,inr o2 => rel ORel l o1 o2
-                                            | _,_ => False end)
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con.
-    intro. 
-    destruct IRel. destruct ORel. simpl. de x.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y.
-    move: (equiv0 l). case. eauto. 
-    move: (equiv1 l). case. de y.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y. de z.
-    move: (equiv0 l). case. eauto. de y. de z. 
-    move: (equiv1 l). case. move=> _ _ Htrans. apply/Htrans. eauto. done.
-    intros. de a0. de a1. de IRel;eauto. de IRel;eauto.
-    de ORel;eauto.
-    de a1. eauto.
-    
-    intros. de a. de IRel;eauto. de ORel;eauto.
-    
-    intros. con.
-    intros. de a0. de a1. de a0.
-    de a1. 
-    de IRel. de ORel. apply/i2;eauto.
-Defined.
-
-
-
-Lemma eqsum {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
-  refine (@CRel _ 
-            (fun (l : level) io => False)
-            (fun l io1 io2 => match io1,io2 with | inl i1,inl i2 => rel IRel l i1 i2
-                                            | inr o1,inr o2 => rel ORel l o1 o2
-                                            | _,_ => False
-                                            end)           
-            _
-            _
-            _
-            _).
-  - move=> l. 
-    con.
-    intro. 
-    destruct IRel. destruct ORel. simpl. de x.
-    move: (equiv0 l). case. eauto.
-    move: (equiv1 l). case. eauto.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y.
-    move: (equiv0 l). case. eauto. 
-    move: (equiv1 l). case. de y.
-
-    destruct IRel. destruct ORel. simpl.
-    intro. ssa. de x. de y. de z.
-    move: (equiv0 l). case. eauto.
-    de z. de y. de y.
-    move: (equiv1 l). case. move=> _ _ Htrans. apply/Htrans. eauto. eauto.
-    intros. de a0. de a1. de IRel;eauto. de IRel;eauto.
-    de ORel;eauto.
-    de a1. eauto.
-    done.
-    intros. con. done.
-    de a0.
-Defined.
 
 Definition levelPred := level -> Prop.
 Definition presP (P:levelPred) := forall x0 x1, order x0 x1 -> P x0 -> P x1.
@@ -818,6 +479,115 @@ Proof. intros. de ARel.
 Qed.
 
 Hint Resolve rel_refl rel_sym rel_trans cRel_rule1 cRel_rule2 cRel_rule3.
+
+(* The four pair relations differ only in which component makes a pair
+   unobservable.  Taking that predicate as a parameter forces the rest: two
+   pairs are related componentwise, or by both being unobservable.  The four
+   cRel obligations are then discharged once instead of four times. *)
+Definition eqpair_aux {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O])
+                      (D : level -> [Times I O] -> Prop) :
+  (forall l0 l1, order l0 l1 -> forall x, D l1 x -> D l0 x) ->
+  (forall l x y, D l x -> rel IRel l x.1 y.1 -> rel ORel l x.2 y.2 -> D l y) ->
+  cRel ([Times I O]).
+  move=> Hmon HD.
+  refine (@CRel _ D
+            (fun l x y => rel IRel l x.1 y.1 /\ rel ORel l x.2 y.2 \/
+                          D l x /\ D l y)
+            _ _ _ _).
+  - move=> l. con.
+    move=> x. left. ssa.
+    move=> x y. case; ssa; eauto.
+    move=> x y z. case; case=> Ha Hb; case; case=> Hc Hd;
+      [left|right|right|right]; ssa; eauto; try (apply/(HD _ y); eauto).
+  - move=> l0 l1 Hord x y. case; case=> Ha Hb; [left|right]; ssa; eauto.
+  - exact Hmon.
+  - move=> l x Hx y. con.
+    move=> Hy. right. ssa.
+    case. case=> Ha Hb. apply/(HD _ x); eauto. case. ssa.
+Defined.
+
+(* eqpair is left concrete on purpose.  It is the relation the models are built
+   from, and going through eqpair_aux would leave every goal about it carrying a
+   [\/ False /\ False] disjunct that no longer splits like a conjunction. *)
+Definition eqpair {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  refine (@CRel _
+            (fun (l : level) _ => False)
+            (fun l io1 io2 => rel IRel l io1.1 io2.1 /\ rel ORel l io1.2 io2.2)
+            _ _ _ _).
+  - move=> l. con.
+    move=> x. ssa.
+    move=> x y. ssa; eauto.
+    move=> x y z. ssa; eauto.
+  - move=> l0 l1 Hord x y. ssa; eauto.
+  - done.
+  - ssa.
+Defined.
+
+Definition eqpair_L {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  apply:(@eqpair_aux _ _ IRel ORel (fun l io => dis IRel l io.1)); ssa; eauto.
+Defined.
+
+Definition eqpair_R {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  apply:(@eqpair_aux _ _ IRel ORel (fun l io => dis ORel l io.2)); ssa; eauto.
+Defined.
+
+Definition eqpair_LR {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Times I O]).
+  apply:(@eqpair_aux _ _ IRel ORel
+           (fun l io => dis IRel l io.1 /\ dis ORel l io.2)); ssa; eauto.
+Defined.
+
+(* The four sum relations differ only in which injections are unobservable.
+   Taking that predicate as a parameter forces the rest: two values of the same
+   tag are related componentwise, and values of different tags can only be
+   related by both being unobservable.  The four cRel obligations are then
+   discharged once instead of four times. *)
+Definition eqsum_aux {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O])
+                     (D : level -> [Sum I O] -> Prop) :
+  (forall l0 l1, order l0 l1 -> forall x, D l1 x -> D l0 x) ->
+  (forall l i0, D l (inl i0) -> forall i1, D l (inl i1) <-> rel IRel l i0 i1) ->
+  (forall l o0, D l (inr o0) -> forall o1, D l (inr o1) <-> rel ORel l o0 o1) ->
+  cRel ([Sum I O]).
+  move=> Hmon Hl Hr.
+  assert (HlD : forall l i0 i1, D l (inl i0) -> rel IRel l i0 i1 -> D l (inl i1)) by (intros; by apply/(Hl _ _ H)).
+  assert (HrD : forall l o0 o1, D l (inr o0) -> rel ORel l o0 o1 -> D l (inr o1)) by (intros; by apply/(Hr _ _ H)).
+  assert (HlR : forall l i0 i1, D l (inl i0) -> D l (inl i1) -> rel IRel l i0 i1) by (intros; by apply/(Hl _ _ H)).
+  assert (HrR : forall l o0 o1, D l (inr o0) -> D l (inr o1) -> rel ORel l o0 o1) by (intros; by apply/(Hr _ _ H)).
+  refine (@CRel _ D
+            (fun l x y => match x,y with
+                          | inl i1,inl i2 => rel IRel l i1 i2
+                          | inr o1,inr o2 => rel ORel l o1 o2
+                          | _,_ => D l x /\ D l y
+                          end)
+            _ _ _ _).
+  - move=> l. con.
+    move=> x. de x.
+    move=> x y. de x; de y; ssa; eauto.
+    move=> x y z. de x; de y; de z; ssa; eauto.
+  - move=> l0 l1 Hord x y. de x; de y; ssa; eauto.
+  - exact Hmon.
+  - move=> l x Hx y. de x; de y; con; ssa; eauto.
+Defined.
+
+Definition eqsum {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
+  apply:(@eqsum_aux _ _ IRel ORel (fun l io => False)); ssa.
+Defined.
+
+Definition eqsum_L {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
+  apply:(@eqsum_aux _ _ IRel ORel
+           (fun l io => if io is inl i then dis IRel l i else False)); ssa; eauto; de x; eauto.
+Defined.
+
+Definition eqsum_R {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
+  apply:(@eqsum_aux _ _ IRel ORel
+           (fun l io => if io is inr o then dis ORel l o else False)); ssa; eauto; de x; eauto.
+Defined.
+
+Definition eqsum_LR {I O : Ty} (IRel : cRel [I]) (ORel : cRel [O]) : cRel ([Sum I O]).
+  apply:(@eqsum_aux _ _ IRel ORel
+           (fun l io => match io with | inl i => dis IRel l i | inr o => dis ORel l o end));
+    ssa; eauto; de x; eauto.
+Defined.
+
 Definition eqmaybe_dis {V : Ty} (P: levelPred) (VRel : cRel [V]) l (v : [Option V]) := if v is Some v' then dis VRel l v' else ~ P l.
 Definition eqmaybe_aux {V : Ty} (P: levelPred) (VRel : cRel [V]) : presP P -> cRel ([Option V]).
 intros.  
@@ -1034,12 +804,12 @@ Qed.
 
 Lemma rel_eqpair_LR : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, rel (eqpair_LR ARel BRel) l a b -> rel ARel l a.1 b.1 /\ rel BRel l a.2 b.2.
 Proof.
-  ssa.
+  intros. case: H; ssa; eauto.
 Qed.
 
 Lemma rel_eqpair_LR2 : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a1 a2 b1 b2,  rel ARel l a1 b1 /\ rel BRel l a2 b2 -> rel (eqpair_LR ARel BRel) l (a1,a2) (b1,b2).
 Proof.
-  ssa.
+  intros. left. ssa.
 Qed.
 
 Lemma dis_eqpair_R : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l a b, dis (eqpair_R ARel BRel) l (a,b) -> dis BRel l b.
@@ -1091,7 +861,7 @@ Qed.
 
 Lemma f_NI_snd_eqpair_LR : forall (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]), f_NI (eqpair_LR ARel BRel) BRel snd. 
 Proof.
-mrw. ssa.
+mrw. intros. apply rel_eqpair_LR in H. ssa.
 Qed.
 
 Hint Resolve f_NI_snd_eqpair f_NI_snd_eqpair_LR: tempdb.

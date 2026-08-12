@@ -140,13 +140,13 @@ Section Parameters.
 Variable Opub Opriv : Ty.       (*alphabets of the public and secret user slots*)
 Variable runtime runs : nat.    (*handler length; handler runs per time slice*)
 
-Lemma eqsum_L_llrr l i i' : rel (eqsum_L in_rel (out_rel Opub Opriv)) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
+Lemma eqsum_llrr  (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B])  l i i' : rel (eqsum ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
 Proof.
   intros. destruct i. destruct i'. ssa.
   exfalso. ssa. destruct i'. ssa. ssa.
 Qed.
 
-Lemma eqsum_llrr  (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B])  l i i' : rel (eqsum ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
+Lemma eqsum_L_llrr (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l i i' : rel (eqsum_L ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
 Proof.
   intros. destruct i. destruct i'. ssa.
   exfalso. ssa. destruct i'. ssa. ssa.
@@ -156,6 +156,17 @@ Lemma eqsum_split (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l i0 i1 : rel (
                                                                                                               exists i0' i1', (i0 = inr i0' /\ i1 = inr i1' /\ rel BRel l i0' i1').
 Proof.
   intros. apply eqsum_llrr in H as H'. destruct H'.
+  destruct H0. destruct i0. destruct i1.
+  left. exists i. exists i0. ssa.
+  ssa. ssa. destruct i0. ssa.
+  destruct i1. ssa.
+  right. exists i. exists i0. ssa.
+Qed.
+
+Lemma eqsum_L_split (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l i0 i1 : rel (eqsum_L ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
+                                                                                                              exists i0' i1', (i0 = inr i0' /\ i1 = inr i1' /\ rel BRel l i0' i1').
+Proof.
+  intros. apply eqsum_L_llrr in H as H'. destruct H'.
   destruct H0. destruct i0. destruct i1.
   left. exists i. exists i0. ssa.
   ssa. ssa. destruct i0. ssa.
@@ -290,10 +301,9 @@ Qed.
    step_sum set_pending (initiate_next(enforce_invariant) o handler_preroutine o
    check_scheduler).  fv_NI_step_sum splits a goal into the two summands, and
    fv_NI_comp discharges fv_NI of the output pipeline from fv_NI of its stages.
-   fv_NI_step_sum is stated at eqsum but applies to the eqsum_L goal by
-   conversion: the two relations share a rel field and differ only in dis, which
-   fv_NI never mentions.  f_EP does mention dis, so f_EP_step_sum is stated at
-   eqsum_L, where it reduces to a condition on set_pending alone.  Cost: every
+   The event relation is eqsum_L: an input may be unobservable, an output never
+   is, which is why f_EP_step_sum reduces to a condition on set_pending alone.
+   Cost: every
    stage is proved over ALL related states, forgetting the reachable subset --
    enforce_invariant repairs this before initiate_next.  (docs §7c, §7d.) === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
@@ -314,10 +324,10 @@ Qed.
 Lemma fv_NI_step_sum : forall f g,
     fv_NI in_rel stateType_rel stateType_rel f ->
     fv_NI (out_rel Opub Opriv) stateType_rel stateType_rel g ->
-    fv_NI (eqsum in_rel (out_rel Opub Opriv)) stateType_rel stateType_rel (@step_sum Opub Opriv f g).
+    fv_NI (eqsum_L in_rel (out_rel Opub Opriv)) stateType_rel stateType_rel (@step_sum Opub Opriv f g).
 Proof.
   ssa. move: H H0. mrw. intros.
-  apply eqsum_llrr in H1 as H1'. destruct H1'. destruct H3. destruct i. destruct i'.
+  apply eqsum_L_llrr in H1 as H1'. destruct H1'. destruct H3. destruct i. destruct i'.
   rewrite /step_sum. eauto. done. done.
   destruct H3. destruct i. done. destruct i'. done.
   rewrite /step_sum. eauto.
@@ -431,7 +441,7 @@ Proof.
   instantiate (1:= eqsum_L _ _). intros.
   destruct i. destruct i'. apply rel_refl. ssa.
   destruct i'. ssa.
-  apply rel_eqsum_R2' in H.
+  apply rel_eqsum_L2' in H.
   destruct i. destruct i0.
   2: apply loop_NI.
   destruct i1. destruct i2.
@@ -514,7 +524,7 @@ Proof.
   2:eapply loop_NI. apply eqsum_L_llrr in H as H'. destruct H'.
   destruct i. destruct i'. ssa. ssa. ssa.
   destruct i. ssa. destruct i'. ssa.
-  apply rel_eqsum_L2' in H. 
+  apply rel_eqsum_L2' in H.
   rewrite /inr_or_def. done.
 
   eapply map_NI.
@@ -1376,7 +1386,7 @@ Proof.
   apply rel_eqpair_R2' in H.
   destruct H. destruct H.
   remember H0. clear Heqr.
-  move/eqsum_split : H0. case.
+  move/eqsum_L_split : H0. case.
   move=>[]x0[]x1[]->[]->. auto.
   move=>[]x0[]x1[]->[]->Hout.
   apply rel_eqmaybe_false2.
