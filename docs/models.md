@@ -341,7 +341,7 @@ Its result is the *optional* input of `maybe p`, so the two branches mean:
 
 - **`event = inl i`, an external interrupt** → `None`, so the pool does not step. An
   arriving interrupt advances no process; it is only recorded in the state, by
-  `record_pending` (section 6). That it does *nothing else* is a security
+  `set_pending` (section 6). That it does *nothing else* is a security
   requirement: an interrupt the observer may not see must not visibly move the
   state, which leaves setting a single private bit as the only thing the input step
   can afford to do. See [`noninterference.md` §7a](noninterference.md).
@@ -377,18 +377,23 @@ ready one, in the fixed order timer > disk > default.
 
 ## 6. State transitions
 
-The `state_update` threaded by `reactive_system` is a composition of four stages,
-applied once per event and each guarded by that event `io`, which is either an
-input or an output:
+The `state_update` threaded by `reactive_system` runs once per event, and an event
+is either an interrupt arriving or a pool output. `step_sum f g` is the update that
+runs `f` on the first and `g` on the second, and the transition is one of these:
 
 ```coq
-state_step handler_preroutine enforce_invariant io =
-  initiate_next(enforce_invariant) ∘ handler_preroutine ∘ apply_schedule ∘ record_pending
+step_sum f g (inl i) = f i
+step_sum f g (inr o) = g o
+
+state_step handler_preroutine enforce_invariant =
+  step_sum set_pending
+           (initiate_next(enforce_invariant) ∘ handler_preroutine ∘ check_scheduler)
 ```
 
-- **`record_pending`** — on an external interrupt input, set that interrupt's
-  `pending` bit.
-- **`apply_schedule`** — on a scheduler output, set `cur_pid` to the scheduled pid.
+- **`set_pending`** — on an arriving interrupt, set that interrupt's `pending` bit.
+  This is the whole of the input summand; that it does nothing else is a security
+  requirement, argued in [`noninterference.md` §7a](noninterference.md).
+- **`check_scheduler`** — on a scheduler output, set `cur_pid` to the scheduled pid.
   It reads that output with `is_sch_out`, which matches `(None, (None, (Some n, _)))`
   — so the two user slots are checked for `None`-ness and nothing more. No stage
   reads a user-slot *value*, which is why the state transition is independent of what
@@ -408,12 +413,11 @@ state_step handler_preroutine enforce_invariant io =
   ```
 
   `initiate_handler` saves the current user pid to `prev_pid`, points `cur_pid` at
-  the handler, sets all masks, and clears that interrupt's `pending` bit.
-  `initiate_next` is wrapped in `step_right`, so it is applied only on output events.
+  the handler, sets all masks, and clears that interrupt's `pending` bit. Sitting in
+  the output summand, it runs only on output events.
 
-Why `state_step` is a
-composition rather than one update, and what that costs, is in
-[`noninterference.md` §7c](noninterference.md).
+Why the output summand is a composition rather than one update, and what that
+costs, is in [`noninterference.md` §7c](noninterference.md).
 
 
 ## 7. The generic model, and its three parameters
@@ -426,7 +430,7 @@ model runtime init handler_preroutine enforce_invariant p_pub p_priv p_sched =
     (pool runtime p_pub p_priv p_sched) pool_input
 ```
 
-The pool, the state layout, `record_pending`, `apply_schedule` and `initiate_next`
+The pool, the state layout, `set_pending`, `check_scheduler` and `initiate_next`
 stay fixed for both the interfering and the non-interfering model. What is left free
 is a triple, and each part of it is a distinct point of control over *when a handler
 is allowed to run*:

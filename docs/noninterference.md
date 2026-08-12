@@ -406,33 +406,23 @@ event : Sum T_in (T_out' Opub Opriv)      inl i = an interrupt arrived
                                           inr o = the pool produced an output
 ```
 
-It is a pipeline of four stages, each wrapped so that it fires on only one kind of
-event ([`models.md` §6](models.md)). Write `f ⊕ g` for the state update that
-handles an input with `f` and an output with `g`, and `1` for the update that does
-nothing:
+`step_sum f g`, written `f ⊕ g` below, is the state update that handles an input
+with `f` and an output with `g`, and the transition is one of these
+([`models.md` §6](models.md)):
 
 ```text
-(f ⊕ g) (inl i) = f i          step_left  f = f ⊕ 1
-(f ⊕ g) (inr o) = g o          step_right g = 1 ⊕ g
+(f ⊕ g) (inl i) = f i
+(f ⊕ g) (inr o) = g o
+
+state_step h b = set_pending ⊕ (initiate_next b ∘ h ∘ check_scheduler)
 ```
 
-So wrapping a stage is filling one summand and leaving the other as the identity,
-and the pipeline is
+An arriving interrupt does nothing but record itself. Everything it eventually
+causes sits in the right summand, on a later output step where the input is no
+longer the thing being varied.
 
-```text
-state_step h b
-  = (1 ⊕ initiate_next b) ∘ (1 ⊕ h) ∘ (1 ⊕ check_scheduler) ∘ (set_pending ⊕ 1)
-```
-
-Composition is componentwise, `(f ⊕ g) ∘ (f' ⊕ g') = (f ∘ f') ⊕ (g ∘ g')`, so the
-left summand holds `set_pending` on its own and the other three stages line up in
-the right:
-
-```text
-  = set_pending ⊕ (initiate_next b ∘ h ∘ check_scheduler)
-```
-
-Nothing but `set_pending` happens when an interrupt arrives.
+Composition is componentwise — `(f ⊕ g) ∘ (f' ⊕ g') = (f ∘ f') ⊕ (g ∘ g')` — so the
+two summands can be reasoned about separately, which is what section 7c does.
 
 `sta_NI` needs two side conditions on this transition, and they push in opposite
 directions:
@@ -451,8 +441,8 @@ the `inl` side, so `f_EP` constrains the left summand and nothing else. It is a
 condition on `set_pending` alone.
 
 - **`f_EP` forces fields written by a secret input to be private.** A disk
-  interrupt is unobservable at `⊥`, and `record_pending` responds by setting the
-  disk pending bit. For `f_EP` to hold the result must still be `⊥`-related to the
+  interrupt is unobservable at `⊥`, and `set_pending` responds by setting the disk
+  pending bit. For `f_EP` to hold the result must still be `⊥`-related to the
   original, so that bit cannot be public. Likewise the default handler's.
 - **`fv_NI` forces fields that decide control flow to be public.** `initiate_next`
   branches on the mask bits, and two `⊥`-related states disagreeing there would
@@ -515,17 +505,21 @@ fv_NI  (eqsum_L in_rel out_rel)  stateType_rel  stateType_rel
 ```
 
 `eqsum_L` relates two inputs by `in_rel` and two outputs by `out_rel`, and never
-relates an input to an output. So a goal about `f ⊕ g` splits in two: on the left
-both events are inputs and only `f` runs, on the right both are outputs and only
-`g` runs. `fv_NI_comp` then breaks the right-hand pipeline into its three stages,
-leaving one goal apiece:
+relates an input to an output. So `fv_NI_step_sum` splits the goal along the `⊕`:
+on the left both events are inputs and only `set_pending` runs, on the right both
+are outputs and only the pipeline runs. `fv_NI_comp` then breaks that pipeline into
+its three stages, leaving one goal apiece:
 
-| stage | fires on | what has to be shown |
+| stage | summand | what has to be shown |
 |---|---|---|
-| `record_pending` | inputs | an arriving interrupt sets a pending bit, and related inputs give related states |
-| `apply_schedule` | outputs | the scheduler pid is public, so the `cur_pid` update agrees |
-| `handler_preroutine` | outputs | the slice bookkeeping reads only the public `ir_count` and masks, so it agrees |
-| `initiate_next` | outputs | related states must pick the same branch of "what runs next" — the hard one, see 7d |
+| `set_pending` | input | an arriving interrupt sets a pending bit, and related inputs give related states |
+| `check_scheduler` | output | the scheduler pid is public, so the `cur_pid` update agrees |
+| `handler_preroutine` | output | the slice bookkeeping reads only the public `ir_count` and masks, so it agrees |
+| `initiate_next` | output | related states must pick the same branch of "what runs next" — the hard one, see 7d |
+
+`f_EP` needs no such breakdown. Since `eqsum_L` makes only an `inl` unobservable,
+`f_EP_step_sum` reduces it to a condition on `set_pending`, and the output summand
+never comes up.
 
 Each goal is self-contained, which is the point of splitting. The cost is that a
 stage is proved over *all* pairs of related states and cannot assume its input came

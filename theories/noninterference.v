@@ -287,12 +287,14 @@ Qed.
 
 
 (* === The composition-breakdown technique.  state_step is
-   initiate_next(enforce_invariant) o handler_preroutine o apply_schedule o record_pending.  fv_NI_comp
-   discharges fv_NI of the composition from fv_NI of the parts; fv_NI_step_left
-   / _right lift each stage to the event relation.  Those two are stated at
-   eqsum but apply to the eqsum_L goal by conversion: the two relations share
-   a rel field and differ only in dis, which fv_NI never mentions.  Cost: every
-   stage is proved over ALL related states, forgetting the reachable subset —
+   step_sum set_pending (initiate_next(enforce_invariant) o handler_preroutine o
+   check_scheduler).  fv_NI_step_sum splits a goal into the two summands, and
+   fv_NI_comp discharges fv_NI of the output pipeline from fv_NI of its stages.
+   fv_NI_step_sum is stated at eqsum but applies to the eqsum_L goal by
+   conversion: the two relations share a rel field and differ only in dis, which
+   fv_NI never mentions.  f_EP does mention dis, so f_EP_step_sum is stated at
+   eqsum_L, where it reduces to a condition on set_pending alone.  Cost: every
+   stage is proved over ALL related states, forgetting the reachable subset --
    enforce_invariant repairs this before initiate_next.  (docs §7c, §7d.) === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
@@ -306,24 +308,30 @@ Proof.
 intros. move: H H0. rewrite /f_EP. ssa. eauto.
 Qed.
 
-Lemma fv_NI_step_left : forall f,
-    fv_NI in_rel stateType_rel stateType_rel f -> fv_NI (eqsum in_rel (out_rel Opub Opriv)) stateType_rel stateType_rel (@step_left Opub Opriv f).
+(* An event relation never relates an inl to an inr, so a goal about [step_sum f
+   g] splits: on the left both events are inputs and only f runs, on the right
+   both are outputs and only g runs. *)
+Lemma fv_NI_step_sum : forall f g,
+    fv_NI in_rel stateType_rel stateType_rel f ->
+    fv_NI (out_rel Opub Opriv) stateType_rel stateType_rel g ->
+    fv_NI (eqsum in_rel (out_rel Opub Opriv)) stateType_rel stateType_rel (@step_sum Opub Opriv f g).
 Proof.
-  ssa. move: H. mrw. intros.
-  apply eqsum_llrr in H0 as H0'. destruct H0'. destruct H2. destruct i. destruct i'.
-  rewrite /step_left. eauto. done. done.
-  destruct H2. destruct i. done. destruct i'. done.
-  rewrite /step_left. eauto.
+  ssa. move: H H0. mrw. intros.
+  apply eqsum_llrr in H1 as H1'. destruct H1'. destruct H3. destruct i. destruct i'.
+  rewrite /step_sum. eauto. done. done.
+  destruct H3. destruct i. done. destruct i'. done.
+  rewrite /step_sum. eauto.
 Qed.
 
-Lemma fv_NI_step_right : forall f,
-    fv_NI (out_rel Opub Opriv) stateType_rel stateType_rel f -> fv_NI (eqsum in_rel (out_rel Opub Opriv)) stateType_rel stateType_rel (@step_right Opub Opriv f).
+(* Under eqsum_L only an inl is ever unobservable, so f_EP of a step_sum is a
+   condition on its input summand alone. *)
+Lemma f_EP_step_sum : forall f g,
+    f_EP in_rel stateType_rel f ->
+    f_EP (eqsum_L in_rel (out_rel Opub Opriv)) stateType_rel (@step_sum Opub Opriv f g).
 Proof.
-  ssa. move: H. mrw. intros.
-  apply eqsum_llrr in H0 as H0'. destruct H0'. destruct H2. destruct i. destruct i'.
-  rewrite /step_left. eauto. done. done.
-  destruct H2. destruct i. done. destruct i'. done.
-  rewrite /step_left. eauto.
+  ssa. move: H. mrw. intros. destruct i.
+  rewrite /step_sum. eauto.
+  ssa.
 Qed.
 
 Definition ready_aux (v : [stateType]) := I_ready v TimerInterrupt /\ first_ready v = Some TimerInterrupt \/ ~ I_ready v TimerInterrupt /\ I_ready v DiskInterrupt /\ first_ready v = Some DiskInterrupt \/  ~ I_ready v TimerInterrupt /\ ~ I_ready v DiskInterrupt /\ I_ready v DefaultInterrupt /\ first_ready v = Some DefaultInterrupt \/ ~ I_ready v TimerInterrupt /\ ~ I_ready v DiskInterrupt /\ ~ I_ready v DefaultInterrupt /\ first_ready v = None.
@@ -515,16 +523,15 @@ Proof.
   case/rel_eqpair: H;eauto.
   instantiate (1:= stateType_rel).
 
-  (*state update: This part is long. Involves record_pending, apply_schedule and the two preroutine stages*)
+  (*state update: This part is long. Involves set_pending, check_scheduler and the two preroutine stages*)
   apply sta_NI.
   mrw;eauto.
 
-  apply fv_NI_comp.
+  (*split the transition into its input and output summands*)
+  apply fv_NI_step_sum.
 
-  (*record_pending*)
-  rewrite /record_pending.
-  apply fv_NI_step_left.
-
+  (*set_pending: the input summand*)
+  rewrite /set_pending.
   mrw. intros.
   apply in_rel_eq in H;subst.
   move: H0.
@@ -552,11 +559,11 @@ Proof.
   destruct i';rewrite !pair_rewr //.
   destruct i';rewrite !pair_rewr //.    
 
+  (*the output summand, initiate_next o handler_preroutine o check_scheduler*)
   apply fv_NI_comp.
 
-  (*apply_schedule*)
-  rewrite /apply_schedule.
-  apply fv_NI_step_right. rewrite /check_scheduler.
+  (*check_scheduler*)
+  rewrite /check_scheduler.
 
   mrw. intros.
 
@@ -594,10 +601,8 @@ Proof.
   move=>[]->[]->//.
 
 
-  (*apply_schedule*)
+  (*handler_preroutine, itself a composition of three stages*)
   apply fv_NI_comp.
-  
-  apply fv_NI_step_right.
 
   apply fv_NI_comp.
 
@@ -693,20 +698,15 @@ Proof.
   apply/rel_eqpair2. con. ssa.
   apply/rel_eqpair2. con. ssa. ssa. done.
 
+  (*initiate_next: the outermost stage of the output summand*)
   mrw. intros.
   destruct (eqVneq l \bot).
-  2: { move/eqsum_split : H. case.
-       move=>[]x[]y[]->[]->. ssa.
-       move=>[]x[]y[]->[]->. 
-       apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto.
-  }
+  2: { apply stateType_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
 
   subst.
 
-  move/eqsum_split: H. case.
-  move=>[]x[]y[]->[]->. ssa.
-  move=>[]x[]y[]->[]->. move=>Hout.
-  rewrite /step_right.
+  (*initiate_next ignores the output, so the out_rel hypothesis is not needed*)
+  clear H.
 
   rewrite /initiate_next.
 
@@ -1351,14 +1351,11 @@ Proof.
 
 
   
-  apply f_EP_comp.
+  (*f_EP concerns the input summand only: set_pending*)
+  apply f_EP_step_sum.
 
-  rewrite /record_pending.
-  mrw. intro.
-  intro. destruct i.
-  intro. have: dis in_rel l i. ssa. clear H=>H.
-  intros.
-  rewrite /step_left.
+  rewrite /set_pending.
+  mrw. intros.
   simpl in H. rewrite /ir_dis in H. destruct H. subst.
 
   move: v => [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
@@ -1368,23 +1365,6 @@ Proof.
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. ssa.
-  ssa.
-
-  apply f_EP_comp.
-  rewrite /apply_schedule.
-  mrw. intros.
-  destruct i. have: (step_right (@check_scheduler _ _) (inl i) v) = v. done. move=>->//.
-  ssa.
-
-  apply f_EP_comp.
-  mrw. intros.
-  destruct i. have: (step_right (@sliced_preroutine runtime runs _ _) (inl i) v) = v. done. move=>->//.
-  ssa.
-
-  mrw. intros.
-  destruct i.
-  have:  (@step_right Opub Opriv (fun=> initiate_next enforce_invariant) (inl i) v) = v. done.
-  move=>->. auto.
   ssa.
 
   (*map*)

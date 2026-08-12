@@ -409,23 +409,28 @@ Definition parse_output (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [T_out Opu
 
 
 (* === 6. State transitions === *)
-Definition step_left (Opub Opriv : Ty) (f : [T_in] -> [stateType] -> [stateType]) : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
+
+(* An event is either an arriving interrupt (inl) or a pool output (inr), and a
+   stage of the transition reacts to exactly one of the two.  [step_sum f g] is
+   the state update that runs [f] on an input and [g] on an output.  Composition
+   is componentwise -- [step_sum f g \o step_sum f' g' = step_sum (f \o f') (g \o
+   g')] pointwise in the event -- so a pipeline of stages collapses into a single
+   [step_sum] whose summands are the input and output pipelines. *)
+Definition step_sum (Opub Opriv : Ty)
+  (f : [T_in] -> [stateType] -> [stateType])
+  (g : [T_out' Opub Opriv] -> [stateType] -> [stateType])
+  : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
   fun i v =>
   match i with
   | inl i => f i v
-  | inr _ => v
-  end.
-
-Definition step_right (Opub Opriv : Ty) (f : [T_out' Opub Opriv] -> [stateType] -> [stateType]) : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
-  fun i v =>
-  match i with
-  | inl _ => v
-  | inr o => f o v
+  | inr o => g o v
   end.
 
 (* An arriving interrupt is recorded as pending; whether it is serviced is
-   decided later, by [initiate_next]. *)
-Definition record_pending (Opub Opriv : Ty) := @step_left Opub Opriv (fun i v => update_I_pending v i true).
+   decided later, by [initiate_next].  This is the whole of the input summand:
+   f_EP forbids the transition from taking any decision on an input event. *)
+Definition set_pending (i : [T_in]) (v : [stateType]) : [stateType] :=
+  update_I_pending v i true.
 
 Definition is_sch_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
   match o with
@@ -435,11 +440,10 @@ Definition is_sch_out (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) :=
 Definition check_scheduler (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) (v : [stateType])  :=
   if is_sch_out o is Some n then update_cur_pid v (inr n) else v.
 
-(* A scheduler output installs the pid it names as the current one.  Note this
-   reads the scheduler slot only -- the user slots are inspected for None-ness and
-   nothing more (see [is_sch_out]), which is what keeps the state transition
-   independent of what userspace does. *)
-Definition apply_schedule (Opub Opriv : Ty) := step_right (@check_scheduler Opub Opriv).
+(* [check_scheduler] installs the pid a scheduler output names as the current
+   one.  Note this reads the scheduler slot only -- the user slots are inspected
+   for None-ness and nothing more (see [is_sch_out]), which is what keeps the
+   state transition independent of what userspace does. *)
 
 Definition nat_to_cur_pid (n : nat) : [cur_pid ] :=
   match n with
@@ -493,9 +497,13 @@ Definition initiate_next (enforce_invariant :  [stateType] -> [stateType]) :  [s
 
 
 
-Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (enforce_invariant : [stateType] -> [stateType]) (i : [Sum T_in (T_out' Opub Opriv)]) : [stateType] -> [stateType] :=
-  (@step_right Opub Opriv (fun i => initiate_next enforce_invariant) i) \o (step_right handler_preroutine i) \o (apply_schedule i) \o (record_pending i).
-(*we wrap initiate_next in step_right even though it does not use the input to ensure we only apply this step on output updates, this is important for the last case of f_EP for initiate_next*)
+(* The state transition.  An arriving interrupt only records itself; everything
+   it eventually causes happens in the output summand, where the input is no
+   longer the thing being varied.  That split is forced by f_EP, which under
+   eqsum_L constrains the input summand alone. *)
+Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (enforce_invariant : [stateType] -> [stateType]) : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
+  step_sum set_pending
+           (fun o => (initiate_next enforce_invariant) \o (handler_preroutine o) \o (@check_scheduler Opub Opriv o)).
 
 
 (* === 7. The generic model ===
