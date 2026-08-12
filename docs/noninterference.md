@@ -117,18 +117,16 @@ eqpair_R   secret at l iff the RIGHT component is
 eqpair_LR  secret at l iff BOTH components are
 ```
 
-**`eqsum IRel ORel : cRel [Sum I O]`** and variants (`eqsum_aux`) — relate a
-`Sum` tag-by-tag, `inl` by `IRel` and `inr` by `ORel`:
+**`eqsum IRel ORel : cRel [Sum I O]`** and **`eqsum_L`** (`eqsum_aux`) — relate a
+`Sum` tag-by-tag, `inl` by `IRel` and `inr` by `ORel`. Neither ever relates an
+`inl` to an `inr`, so the *tag* stays public even when the payload underneath is
+not; an `inr` is never secret. They differ only in the `inl` case:
 
 ```text
-eqsum      nothing is secret; the tag stays public even when the payload
-           underneath is not, and an inl is never related to an inr
-eqsum_L    an inl is secret exactly when its payload is; an inr never is
-eqsum_R    the mirror image
-eqsum_LR   either injection is secret when its payload is
+eqsum      nothing is secret
+eqsum_L    an inl is secret exactly when its payload is
 ```
 
-Only `eqsum_LR` ever relates an `inl` to an `inr`, and only when both are secret.
 `eqsum_L` is the one the state cell uses (section 7a), where it makes `f_EP` a
 condition on the input summand alone.
 
