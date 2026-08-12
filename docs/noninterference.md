@@ -273,7 +273,6 @@ Two features of the design buy this:
 - **`fv_NI` (section 7) never mentions the slot processes**, so the one hard
   obligation is unaffected by what fills them.
 
-The three hypotheses are consumed at three leaves of the assembly below.
 Instantiating them with `low_p_NI`, `high_p_NI` and `scheduler_NI` recovers the
 concrete system (`model_sliced_concrete_NI`, `model_sliced_userview_concrete_NI`).
 
@@ -302,57 +301,87 @@ and `swi_NI`'s occupy the rest of this one.
 
 ### 6a. Gating a slot: why `falseRel`, and where obliviousness is needed
 
-Every pool slot is gated by a `swi` whose bit says "is this slot the currently
-selected pid", computed by mapping the current pid through `my_f_pid` and comparing
-with the slot index. The `cRel` chosen for that Bool decides what an observer
-learns from the gate; `swi_NI` demands, at every level:
+`par_NI` peels the pool apart into one goal per slot, so it is enough to look at a
+single slot. Each is built the same way ([`models.md` §3](models.md)): a `swi`
+holding the slot's process, with a `map` in front that computes the gate bit from
+the current pid.
 
 ```coq
-aware BRel true l  \/  oblivious (eqpair_R BRel ORel) p l
+map (fun i => (my_f_pid i.1 == k, f_proj i.2 k)) id (swi ... (f_proc k))
+```
+
+Two obligations are left for slot `k`, both parameterised by a Bool relation `BRel`
+we get to choose. `map_NI` asks that the gate map be sound at `BRel`, and its
+second half is the one that bites:
+
+```coq
+f_PU (eqsum privateRel publicRel) BRel (fun pid => my_f_pid pid == k)
+  (* an unobservable pid must produce an unobservable bit *)
+```
+
+and `swi_NI` asks, at every level,
+
+```coq
+aware BRel true l  \/  oblivious (eqpair_R BRel ORel) (f_proc k) l
 ```
 
 Under `aware BRel true l` a value related to `true` must *be* `true` and must not
-be unobservable, so the observer can trust the gate. Under `oblivious ORel p l`
-every output the gated process can produce is unobservable at `l`, so the observer
-learns nothing from it either way.
+be unobservable, so the observer can trust the gate. Under `oblivious` every output
+the gated process can produce is unobservable at `l`, so the observer learns
+nothing from it either way.
 
-**The `falseRel` trick, for slots whose identity is public.** `falseRel`
-([definitions.v:261](../theories/definitions.v)) is equality on booleans with
-`dis l b := ~~ b /\ l = ⊥`, making `false` the unobservable value and only at `⊥`.
-It is a well-formed `cRel` because `false` is the *only* unobservable value, so it
-forms a single class (section 1).
+`cur_pid` is `Sum Bool Nat` classified `eqsum privateRel publicRel` (section 7b),
+so at `⊥` every `inl b` is unobservable while `inr n` is not. What `f_PU` demands
+of `BRel` therefore depends on where `my_f_pid` sends those two `inl` values, which
+is `1` for `inl true` and `2` for `inl false` ([models.v:222](../theories/models.v)).
 
-Deriving the gate bit from a pid sends every id other than this slot's to `false`,
-and since `false` is unobservable, that map preserves unobservability. `true` never
-is, so `falseRel_aware : forall l, aware falseRel true l`
-([noninterference.v:218](../theories/noninterference.v)) holds at *every* level and
-discharges `swi_NI` by the left disjunct outright.
+**`low_p` at slot 5, and the same for slots 4, 3 and 0.** Both unobservable pids
+miss this slot, so the gate map sends them to `false`. `f_PU` needs a `BRel` in
+which `false` is unobservable — a sink for the pids the observer may not see, which
+happens not to select this slot anyway. `aware BRel true l` then needs `true` to be
+observable and rigid at every level. `falseRel`
+([definitions.v:252](../theories/definitions.v)) is exactly that relation:
 
-**Where that is not available.** The two secret handlers cannot use it, since
-whether they are running is the very thing that must be hidden (section 4). Their
-proofs split on the level:
+```text
+falseRel   dis l b = (b = false ∧ l = ⊥)      rel l b b' = (b = b')
+```
 
-| slot | process | `swi_NI` obligation discharged by |
-|---|---|---|
-| 5 | `low_p`, public | `aware`, at every level |
-| 4 | `high_p`, private | `aware`, at every level |
-| 3 | scheduler | `aware`, at every level |
-| 0 | timer handler | `aware`, at every level |
-| 2 | default/NOP handler | `oblivious` at `⊥`; `aware` above |
-| 1 | disk handler | `oblivious` at `⊥`; `aware` above |
+It is a well-formed `cRel` because `false` is its only unobservable value, so the
+unobservable values form one class (section 1). With it, `f_PU` holds, and
+`falseRel_aware : forall l, aware falseRel true l`
+([noninterference.v:230](../theories/noninterference.v)) discharges `swi_NI` by the
+left disjunct at every level, no case split needed.
 
-The line falls between the two secret handlers and everything else, which includes
-the private user process: `high_p` uses the same `aware` argument as the public
-one, its secrecy carried by the `privateRel` payload inside `eqmaybe_swi` while its
-gate stays trustworthy.
+**The disk handler at slot 1, and the same for the default handler at slot 2.**
+Here `inl true` maps to `true` and `inl false` maps to `false`, and both pids are
+unobservable at `⊥`. `f_PU` now demands that *both* booleans be unobservable there,
+which rules `falseRel` out and leaves `privateRel Bool`. But if `true` is
+unobservable at `⊥` then `aware BRel true ⊥` fails by definition, so the left
+disjunct is gone and the proof must split on the level:
 
-Obliviousness is needed *only at the attacker's level*. Above `⊥`, `privateRel`
-collapses to equality, so the gate is trustworthy and `aware` applies. At `⊥` the
-proof builds an `ObliviousTrace`, whose every output step must satisfy
-`dis ORel l o`. That holds because the handler slots were classified
-`eqmaybe_top privateRel`, which makes both `Some o` and `None` unobservable there.
-Had they been classified `eqmaybe privateRel`, `None` would be public,
-obliviousness would fail, and nothing would hide that the handler ran.
+- above `⊥`, `privateRel` collapses to equality, nothing is unobservable, and
+  `aware` applies as before;
+- at `⊥`, the right disjunct is used. The proof builds an `ObliviousTrace`, every
+  output step of which must satisfy `dis ORel ⊥ o`.
+
+That last obligation is affordable only because the slot's output was classified
+`eqmaybe_top privateRel` in section 4, which makes both `Some o` and `None`
+unobservable at `⊥`. Under `eqmaybe privateRel` the `None` would be public,
+obliviousness would fail, and nothing would hide that the handler ran. Losing
+awareness at `⊥` costs nothing, since the slot's output is private there anyway.
+
+| slot | process | `BRel` | `swi_NI` discharged by |
+|---|---|---|---|
+| 5 | `low_p`, public | `falseRel` | `aware`, every level |
+| 4 | `high_p`, private | `falseRel` | `aware`, every level |
+| 3 | scheduler | `falseRel` | `aware`, every level |
+| 0 | timer handler | `falseRel` | `aware`, every level |
+| 2 | default/NOP handler | `privateRel` | `oblivious` at `⊥`, `aware` above |
+| 1 | disk handler | `privateRel` | `oblivious` at `⊥`, `aware` above |
+
+The line falls between the two secret handlers and everything else. `high_p` sits
+on the public side of it: its secrecy travels in the `privateRel` payload inside
+`eqmaybe_swi`, never in its gate.
 
 > The generic theorems in [`theories/theorems.v`](../theories/theorems.v)
 > mechanise results from separate prior work; the mechanisation replaces the
@@ -364,9 +393,22 @@ obliviousness would fail, and nothing would hide that the handler ran.
 
 ### 7a. What constrains the classification
 
-`stateType_rel` assigns a classification to every field of the global state. What
-pins that assignment down is that `sta_NI` needs **two** side conditions on the
-state update, and they push in opposite directions:
+The state transition is a pipeline of four stages, each wrapped so that it fires on
+only one kind of event ([`models.md` §6](models.md)):
+
+```coq
+state_step handler_preroutine bool_coding =
+    step_right (initiate_next bool_coding)     (* output events *)
+  ∘ step_right handler_preroutine              (* output events *)
+  ∘ apply_schedule                             (* output events *)
+  ∘ record_pending                             (* input  events *)
+```
+
+`record_pending` is the only stage that reacts to an arriving interrupt; the other
+three are `step_right`s and act as the identity on an input event.
+
+`sta_NI` needs two side conditions on this transition, and they push in opposite
+directions:
 
 ```coq
 fv_NI IRel VRel VRel f  :=  rel IRel l i i' -> rel VRel l v v' ->
@@ -374,111 +416,95 @@ fv_NI IRel VRel VRel f  :=  rel IRel l i i' -> rel VRel l v v' ->
 f_EP  IRel VRel f       :=  dis IRel l i -> rel VRel l (f i v) v
 ```
 
-`fv_NI` says the update maps related states to related states. `f_EP`, for
-*equivalence preserving*, asks for more: if the **input** is unobservable at `l`,
-the update has to leave the state where it was, up to `rel VRel l`. An input the
-observer may not see must not visibly move the state.
-
-These squeeze the classification from both sides:
+`fv_NI` says the transition maps related states to related states. `f_EP`, for
+*equivalence preserving*, asks for more: an input the observer may not see must not
+visibly move the state.
 
 - **`f_EP` forces fields written by a secret input to be private.** A disk
-  interrupt is unobservable at `⊥` and `record_pending` responds by setting the
-  disk pending bit; for `f_EP` to hold, the result must still be `⊥`-related to the
+  interrupt is unobservable at `⊥`, and `record_pending` responds by setting the
+  disk pending bit. For `f_EP` to hold the result must still be `⊥`-related to the
   original, so that bit cannot be public. Likewise the default handler's.
 - **`fv_NI` forces fields that decide control flow to be public.** `initiate_next`
-  branches on the mask bits; two `⊥`-related states disagreeing there would take
-  different branches and produce unrelated states.
+  branches on the mask bits, and two `⊥`-related states disagreeing there would
+  take different branches and produce unrelated states.
 
-Both must hold at once, so the interrupt controller has to be classified *per bit*:
-`hidden_pending` pairs a **private pending** bit with a **public mask** bit, the
-only assignment that satisfies both obligations.
+Both must hold at once, so the interrupt controller is classified *per bit*:
+`hidden_pending` pairs a private pending bit with a public mask bit, the only
+assignment that satisfies both.
 
-**Why an arriving interrupt does nothing but record itself.** `f_EP` also dictates
-the shape of the input stage, and it does so on security grounds. A disk interrupt
-is unobservable at `⊥`, so receiving one has to leave the state `⊥`-related to what
-it was. No decision can be taken on an input step: the model cannot start a
-handler, reassign `cur_pid`, clear a mask or move the slice counter, since all four
-are compared by equality at `⊥`.
-
-That leaves writing to a *private* field and nothing else. `record_pending` sets
-the interrupt's pending bit, which is private for just this reason, and touches
-nothing else, so `f_EP` goes through. The other three stages of `state_step` are
-`step_right`s and so act as the identity on an input event.
-
-Everything the interrupt eventually causes is deferred to a later output step,
-where the input is no longer the thing being varied. Hence `initiate_next` sits
-inside a `step_right` ([`models.md` §6](models.md)), and `pool_input` returns
-`None` on an input event to keep the pool from stepping
-([`models.md` §4](models.md)).
+`f_EP` also explains why `record_pending` writes one bit and stops. No decision can
+be taken on an input step, since starting a handler, reassigning `cur_pid`,
+clearing a mask or moving the slice counter would all disturb fields compared by
+equality at `⊥`. Everything the interrupt causes is deferred to a later output
+step, where the input is no longer the thing being varied.
 
 ### 7b. `stateType_rel`: the resulting classification
 
+The state is nested pairs ([`models.md` §5](models.md)), and `stateType_rel` is the
+matching nest of `eqpair`s:
+
 ```text
-stateType_rel : cRel [stateType]
-  = eqpair pids_rel bool_state_rel
-    pids_rel       = eqpair (eqsum privateRel publicRel) publicRel
-    bool_state_rel = eqpair publicRel (eqpair publicRel ic_rel)
-    ic_rel         = eqpair hidden_pending (eqpair hidden_pending public_pair)
-    hidden_pending = eqpair privateRel publicRel      (pending secret, MASK public)
-    public_pair    = eqpair publicRel publicRel
+( ( cur_pid , prev_pid ) , ( re_sch , ( ir_count , ic ) ) )
+
+  ic = ( dfl , ( dsk , tmr ) )      one (pending, mask) pair per handler
 ```
 
-Reading off the classification (the `stateType` layout is in
-[`models.md` §5](models.md)):
+Field by field:
 
-- **masks: public everywhere.** Every mask bit sits under `publicRel`, so it must
-  agree across two related executions.
-- **pending bits of the two secret handlers (disk, default): secret**
-  (`hidden_pending` pairs a private pending with a public mask); the timer
-  handler's controller pair is public (`public_pair`).
-- **`cur_pid`** (`Sum Bool Nat`, under `eqsum privateRel publicRel`): the `inl`/`inr`
-  *tag* is public (section 3), so whether a handler is running at all is visible.
-  The secret is the `Bool` *inside* the `inl`. At `⊥`, `inl true` and `inl false`
-  are related, so an observer cannot tell the disk handler from the default/NOP
-  one. The user/scheduler pid `inr n` is public, as is **`prev_pid`**.
-- **`re_sch` and `ir_count`** (the time slice): public.
+| field | type | relation | at `⊥` |
+|---|---|---|---|
+| `cur_pid`, the `inl`/`inr` tag | — | `eqsum` | visible |
+| `cur_pid`, handler bit in `inl b` | Bool | `privateRel` | hidden |
+| `cur_pid`, user or scheduler pid in `inr n` | Nat | `publicRel` | visible |
+| `prev_pid` | Nat | `publicRel` | visible |
+| `re_sch` | Bool | `publicRel` | visible |
+| `ir_count`, the slice counter | Option Nat | `publicRel` | visible |
+| `dfl` pending / mask | Bool | `privateRel` / `publicRel` | hidden / visible |
+| `dsk` pending / mask | Bool | `privateRel` / `publicRel` | hidden / visible |
+| `tmr` pending / mask | Bool | `publicRel` / `publicRel` | visible / visible |
 
-So across two `⊥`-related states only the secret handlers' pending bits and the
-handler bit inside `cur_pid` may differ.
+The pending-and-mask pairs are `hidden_pending` for `dfl` and `dsk`, `public_pair`
+for `tmr`. Every mask bit is public, which is the formal content of "all masks are
+public".
+
+Whether a handler is running at all stays visible, because `eqsum` never relates an
+`inl` to an `inr` (section 3). Only which handler it is can be hidden: at `⊥`,
+`inl true` and `inl false` are related, so the disk handler and the default/NOP one
+look alike. Across two `⊥`-related states, those two `inl` bits and the `dfl` and
+`dsk` pending bits are the only things allowed to differ.
 
 ### 7c. `fv_NI` and the composition-breakdown technique
 
 The core obligation for `model_sliced` is that `stateType_rel` is closed under the
-state transition:
+whole transition:
 
 ```text
-fv_NI (eqsum in_rel out_rel) stateType_rel stateType_rel
-      (state_step sliced_preroutine bool_coding)
+fv_NI  (eqsum in_rel out_rel)  stateType_rel  stateType_rel
+       (state_step sliced_preroutine bool_coding)
 ```
 
-`state_step` is a composition ([`models.md` §6](models.md)), and `fv_NI_comp`
-discharges `fv_NI` of a composition from `fv_NI` of the parts. With
-`fv_NI_step_left` / `fv_NI_step_right` lifting a stage to the
-`eqsum in_rel/out_rel` event, the obligation splits into one independent goal per
-stage:
+The event driving the transition is either an input or an output, so it lives in a
+`Sum` and is related by `eqsum in_rel out_rel` (section 3): two input events are
+compared by `in_rel`, two output events by `out_rel`, and an input is never related
+to an output. That last point is what makes the stage-by-stage split work, since a
+stage guarded by `step_left` can assume both events are inputs and a stage guarded
+by `step_right` can assume both are outputs.
 
-```text
-state_step sliced_preroutine bool_coding  =
-    initiate_next(bool_coding) o handler_preroutine o apply_schedule o record_pending
+`fv_NI_comp` then reduces `fv_NI` of the pipeline to `fv_NI` of each stage, and
+`fv_NI_step_left` / `fv_NI_step_right` supply the guards. One goal per stage
+remains:
 
-   stage                        lifted by    per-stage fv_NI obligation
-   ---------------------------------------------------------------------------------
-   record_pending (input)       step_left    arriving interrupt sets a pending bit;
-                                             related inputs give related states
-   apply_schedule (output)      step_right   scheduler pid is public, so the
-                                             cur_pid update agrees
-   handler_preroutine           step_right   slice bookkeeping reads only the public
-     (sliced_preroutine)                     ir_count and masks, so it agrees
-   initiate_next(bool_coding)   step_right   THE HARD ONE: related states must pick
-                                             the SAME branch of "what runs next"
-                                             -- see 7d
-```
+| stage | fires on | what has to be shown |
+|---|---|---|
+| `record_pending` | inputs | an arriving interrupt sets a pending bit, and related inputs give related states |
+| `apply_schedule` | outputs | the scheduler pid is public, so the `cur_pid` update agrees |
+| `handler_preroutine` | outputs | the slice bookkeeping reads only the public `ir_count` and masks, so it agrees |
+| `initiate_next` | outputs | related states must pick the same branch of "what runs next" — the hard one, see 7d |
 
-The gain is that each stage becomes a self-contained goal. The price is that each
-is proved over *all* pairs of related states and cannot assume its input came from
-the stage before it. Splitting the composition discards the reachable set the
-earlier stage actually produces, leaving every stage to hold even for states that
-never arise in a real run. Section 7d recovers what is lost.
+Each goal is self-contained, which is the point of splitting. The cost is that a
+stage is proved over *all* pairs of related states and cannot assume its input came
+from the stage before it, so it must hold even for states no real run produces.
+Section 7d recovers what that loses.
 
 ### 7d. `bool_coding`: re-establishing the forgotten invariant
 
@@ -532,17 +558,6 @@ for:
   unmodelled ([`models.md` §3](models.md)).
 - **No interrupt nesting.** All masks are set while a handler runs, so a handler can
   never itself be interrupted.
-- **Slice length is a parameter.** The theorem holds for every `runtime` and `runs`
-  with no side condition, because nothing in the argument inspects a numeral. The
-  `fv_NI` stages that read the counter first establish that it is *public*, then
-  case on it abstractly, treating `handler_completed` as an opaque boolean and the
-  counter as `None` / `Some 0` / `Some n.+1`. The design does require the slice to
-  end on a handler boundary, but that is structural, since
-  `time_slice runtime runs = runs * runtime`. Degenerate values are covered too: at
-  `runtime = 0` a handler never signals completion and at `runs = 0` the slice
-  closes immediately, and both systems remain non-interfering while simply doing
-  less. One genuine constraint survives, that all three handlers share a single
-  `runtime`, which `slot_procs` enforces by construction.
 - **Fixed pool size and layout.** Six slots, the last of them padding. The
   scheduler and user slot *processes* are parameters, but their number and position
   are fixed by the output projections `is_sch_out`, `tI_out`, `dI_out` and
