@@ -60,7 +60,7 @@ The three differ along two independent axes, and it helps to keep them apart.
 **Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
 interface, same pool, same state layout. Both are the *same* generic definition,
 `model`, at a different triple of arguments — the initial state,
-`handler_preroutine`, and `bool_coding`, tabulated in
+`handler_preroutine`, and `enforce_invariant`, tabulated in
 [`docs/models.md` §8](docs/models.md) — and that difference is the whole security
 story: one leaks, the other does not.
 

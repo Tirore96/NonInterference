@@ -287,13 +287,13 @@ Qed.
 
 
 (* === The composition-breakdown technique.  state_step is
-   initiate_next(bool_coding) o handler_preroutine o apply_schedule o record_pending.  fv_NI_comp
+   initiate_next(enforce_invariant) o handler_preroutine o apply_schedule o record_pending.  fv_NI_comp
    discharges fv_NI of the composition from fv_NI of the parts; fv_NI_step_left
    / _right lift each stage to the event relation.  Those two are stated at
    eqsum but apply to the eqsum_L goal by conversion: the two relations share
    a rel field and differ only in dis, which fv_NI never mentions.  Cost: every
    stage is proved over ALL related states, forgetting the reachable subset —
-   bool_coding repairs this before initiate_next.  (docs §7c, §7d.) === *)
+   enforce_invariant repairs this before initiate_next.  (docs §7c, §7d.) === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
@@ -726,8 +726,8 @@ Proof.
   
   destruct (masks_set v'). done. 
 
-  have: I_ready  (bool_coding v) TimerInterrupt =
-          I_ready (bool_coding v') TimerInterrupt. 
+  have: I_ready  (enforce_invariant v) TimerInterrupt =
+          I_ready (enforce_invariant v') TimerInterrupt. 
 
 
   move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
@@ -900,7 +900,7 @@ Proof.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /bool_coding /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
   move=>+ /negP + /negP.
   rewrite !negb_and !negbK.
   move/andP. case.
@@ -1036,8 +1036,8 @@ Proof.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /bool_coding /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /bool_coding /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
   move/negP. rewrite !negb_and !negbK.
   move/orP. case. move/orP. case.
   intro.
@@ -1080,8 +1080,8 @@ Proof.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /bool_coding /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /bool_coding /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
   move/andP. case. intro.
   rewrite negb_or negbK. move/andP. case.
   intro. intro.
@@ -1107,8 +1107,8 @@ Proof.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /bool_coding /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /bool_coding /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.
 
   move/negP. rewrite !negb_and !negb_or.
   move/orP. case. intro.
@@ -1256,7 +1256,7 @@ Proof.
 
   clear Hready Hready' HreadyD HreadyDef Hfirst HreadyD' HreadyDef' Hfirst'.
 
-  have: is_handler_pid (bool_coding v) = is_handler_pid (bool_coding v').
+  have: is_handler_pid (enforce_invariant v) = is_handler_pid (enforce_invariant v').
   move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
@@ -1273,7 +1273,7 @@ Proof.
   move=>[]i0'[]i1'[]->[]->/publicRel_eq ->. ssa.
   move=>->.
   destruct (is_handler_pid _).
-  have: get_re_sch (bool_coding v) = get_re_sch (bool_coding v').
+  have: get_re_sch (enforce_invariant v) = get_re_sch (enforce_invariant v').
   move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
 
@@ -1290,7 +1290,7 @@ Proof.
   move=>[]i0'[]i1'[]->[]->/publicRel_eq ->. ssa.
 
   move=>->.
-  destruct (get_re_sch (bool_coding v')).
+  destruct (get_re_sch (enforce_invariant v')).
 
   move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
@@ -1383,7 +1383,7 @@ Proof.
 
   mrw. intros.
   destruct i.
-  have:  (@step_right Opub Opriv (fun=> initiate_next bool_coding) (inl i) v) = v. done.
+  have:  (@step_right Opub Opriv (fun=> initiate_next enforce_invariant) (inl i) v) = v. done.
   move=>->. auto.
   ssa.
 

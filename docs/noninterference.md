@@ -474,34 +474,35 @@ The state is nested pairs ([`models.md` §5](models.md)), and `stateType_rel` is
 matching nest of `eqpair`s:
 
 ```text
-( ( cur_pid , prev_pid ) , ( re_sch , ( ir_count , ic ) ) )
-
-  ic = ( dfl , ( dsk , tmr ) )      one (pending, mask) pair per handler
+state = ( ( cur_pid , prev_pid ) , ( re_sch , ( ir_count , ic ) ) )
+ic    = ( dfl , ( dsk , tmr ) )        the interrupt controller
+dfl   = ( pending , mask )             and likewise dsk and tmr
 ```
 
 Field by field:
 
 | field | type | relation | at `⊥` |
 |---|---|---|---|
-| `cur_pid`, the `inl`/`inr` tag | — | `eqsum` | visible |
-| `cur_pid`, handler bit in `inl b` | Bool | `privateRel` | hidden |
-| `cur_pid`, user or scheduler pid in `inr n` | Nat | `publicRel` | visible |
+| `cur_pid` | Sum Bool Nat | `eqsum privateRel publicRel` | see below |
 | `prev_pid` | Nat | `publicRel` | visible |
 | `re_sch` | Bool | `publicRel` | visible |
 | `ir_count`, the slice counter | Option Nat | `publicRel` | visible |
-| `dfl` pending / mask | Bool | `privateRel` / `publicRel` | hidden / visible |
-| `dsk` pending / mask | Bool | `privateRel` / `publicRel` | hidden / visible |
-| `tmr` pending / mask | Bool | `publicRel` / `publicRel` | visible / visible |
+| `dfl` | (pending, mask) | `hidden_pending` | pending hidden, mask visible |
+| `dsk` | (pending, mask) | `hidden_pending` | pending hidden, mask visible |
+| `tmr` | (pending, mask) | `public_pair` | both visible |
 
-The pending-and-mask pairs are `hidden_pending` for `dfl` and `dsk`, `public_pair`
-for `tmr`. Every mask bit is public, which is the formal content of "all masks are
-public".
+Every mask bit is public, which is the formal content of "all masks are public".
 
-Whether a handler is running at all stays visible, because `eqsum` never relates an
-`inl` to an `inr` (section 3). Only which handler it is can be hidden: at `⊥`,
-`inl true` and `inl false` are related, so the disk handler and the default/NOP one
-look alike. Across two `⊥`-related states, those two `inl` bits and the `dfl` and
-`dsk` pending bits are the only things allowed to differ.
+`cur_pid` is the one field whose parts are classified differently, and it is where
+the design is doing its work. `inl b` means a handler is running, with `b`
+selecting which; `inr n` is a user or scheduler pid. Since `eqsum` never relates an
+`inl` to an `inr` (section 3), *that* a handler is running stays visible, and so
+does the pid in `inr n`. What `privateRel` hides is the `Bool` inside `inl`: at
+`⊥`, `inl true` and `inl false` are related, so the disk handler and the
+default/NOP one look alike.
+
+Across two `⊥`-related states, that bit and the `dfl` and `dsk` pending bits are
+the only things allowed to differ.
 
 ### 7c. `fv_NI` and the composition-breakdown technique
 
@@ -510,7 +511,7 @@ whole transition:
 
 ```text
 fv_NI  (eqsum_L in_rel out_rel)  stateType_rel  stateType_rel
-       (state_step sliced_preroutine bool_coding)
+       (state_step sliced_preroutine enforce_invariant)
 ```
 
 `eqsum_L` relates two inputs by `in_rel` and two outputs by `out_rel`, and never
@@ -531,24 +532,25 @@ stage is proved over *all* pairs of related states and cannot assume its input c
 from the stage before it, so it must hold even for states no real run produces.
 Section 7d recovers what that loses.
 
-### 7d. `bool_coding`: re-establishing the forgotten invariant
+### 7d. `enforce_invariant`: re-establishing the forgotten invariant
 
 Two facts hold of every state `model_sliced` can reach: while the time slice is
 live, the NOP (default) handler's pending bit is true, the disk and NOP masks are
 false and the timer mask is true; and the disk and NOP masks are always toggled
-together. Because `fv_NI_comp` forgets them, `bool_coding` re-bakes them into the
-state just before `initiate_next` runs:
+together. Because `fv_NI_comp` forgets them, `enforce_invariant` writes them back
+into the interrupt controller just before `initiate_next` runs:
 
-- it ORs in a controller pattern derived from `timeslice_live`, restoring "slice
-  live ⇒ NOP pending, disk/NOP unmasked, timer masked". Since `timeslice_live`
-  reads only the public `ir_count`, the pattern is equal across two related states;
+- it sets the controller's flags from `timeslice_live`, restoring "slice live ⇒ NOP
+  pending, disk/NOP unmasked, timer masked". The flags are ORed in, so a state that
+  already has them set is untouched. Since `timeslice_live` reads only the public
+  `ir_count`, the same flags are set in two related states;
 - it forces the default (NOP) mask to equal the disk mask. On any state that
   already satisfies the invariant this is a no-op, but stated unconditionally it
   lets the `sta` non-interference argument assume the two masks are in sync without
   having to recover that fact from an earlier stage.
 
 The hard `initiate_next` stage can then assume related states take the same branch,
-because `bool_coding` has already run and made the deciding mask bits agree.
+because `enforce_invariant` has already run and made the deciding mask bits agree.
 
 
 ## 8. Model limitations

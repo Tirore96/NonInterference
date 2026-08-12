@@ -484,17 +484,17 @@ Definition initiate_scheduler  (v : [stateType]) := update_re_sch (update_prev_p
 Definition get_prev_pid_wrap (v : [stateType]) : [Option cur_pid] := if get_prev_pid v is Some n then Some (inr n) else None.
 Definition initiate_prev_pid  (v : [stateType]) := update_prev_pid (update_cur_pid v (odflt scheduler_pid (get_prev_pid_wrap v))) None.
 
-Definition initiate_next (bool_coding :  [stateType] -> [stateType]) :  [stateType] -> [stateType] :=
+Definition initiate_next (enforce_invariant :  [stateType] -> [stateType]) :  [stateType] -> [stateType] :=
   fun v => if (masks_set v) then v (*handler running*) else
-             let v := bool_coding v (*apply time slice logic to bools*) in
-             if first_ready v is Some ir then initiate_handler ir v (*first or later handler in the time slice is initiated here, enforced that at least one will run due to bool_coding*) else
+             let v := enforce_invariant v (*apply time slice logic to bools*) in
+             if first_ready v is Some ir then initiate_handler ir v (*first or later handler in the time slice is initiated here, enforced that at least one will run due to enforce_invariant*) else
                if is_handler_pid v then if get_re_sch v then initiate_scheduler v else initiate_prev_pid v  (*mask not set but we are in handler pid, we have just finished the time slice*) else
                  v (*we are running in user space*).
 
 
 
-Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (bool_coding : [stateType] -> [stateType]) (i : [Sum T_in (T_out' Opub Opriv)]) : [stateType] -> [stateType] :=
-  (@step_right Opub Opriv (fun i => initiate_next bool_coding) i) \o (step_right handler_preroutine i) \o (apply_schedule i) \o (record_pending i).
+Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (enforce_invariant : [stateType] -> [stateType]) (i : [Sum T_in (T_out' Opub Opriv)]) : [stateType] -> [stateType] :=
+  (@step_right Opub Opriv (fun i => initiate_next enforce_invariant) i) \o (step_right handler_preroutine i) \o (apply_schedule i) \o (record_pending i).
 (*we wrap initiate_next in step_right even though it does not use the input to ensure we only apply this step on output updates, this is important for the last case of f_EP for initiate_next*)
 
 
@@ -503,7 +503,7 @@ Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv
    Everything above is shared.  A model is the process pool run inside the
    stateful wrapper, and the only freedom left is the triple
 
-     (init, handler_preroutine, bool_coding)
+     (init, handler_preroutine, enforce_invariant)
 
    that section 8 fixes in two different ways.  Note [runs] is not a parameter
    here: the slice size reaches the model only through [handler_preroutine],
@@ -511,12 +511,12 @@ Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv
 Definition model (runtime : nat) (Opub Opriv : Ty)
   (init : [stateType])
   (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType])
-  (bool_coding : [stateType] -> [stateType])
+  (enforce_invariant : [stateType] -> [stateType])
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out' Opub Opriv) :=
   @reactive_system cur_pid stateType init T_in (T_out' Opub Opriv) T_intermediate
-    (state_step handler_preroutine bool_coding) (def Opub Opriv)
+    (state_step handler_preroutine enforce_invariant) (def Opub Opriv)
     (pool runtime p_pub p_priv p_sched) (@pool_input Opub Opriv).
 
 
@@ -539,7 +539,7 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
                           unmasks everything, so     a slice; the slice is counted
                           a pending interrupt is     down and closed on a handler
                           serviced at once           boundary
-     bool_coding          id                         bool_coding
+     enforce_invariant          id                         enforce_invariant
                           nothing                    off-slice, forces the disk and
                                                      default handlers masked
 
@@ -605,7 +605,7 @@ Definition timeslice_live (c : [ir_count]) := match c with | Some n => 0 < n | _
 v is ready -> time slice is live for v -> time slice is live for v' -> pending for default is true (which combined with unset_handler_masks invariant that it always turns off masks when a handler is done, ensures that default handler always can fire if v can fire disk or default handler
  *)
 
-Definition bool_coding v := let b := timeslice_live (get_ir_count v) in
+Definition enforce_invariant v := let b := timeslice_live (get_ir_count v) in
                             let ic := (true,(None,((b,~~b),((false,~~b),(false,b))))) in
                             let v := update_bool_state v (or_bool_state (get_bool_state v) ic) in
                             let m := get_I_mask v DiskInterrupt in
@@ -614,13 +614,13 @@ Definition bool_coding v := let b := timeslice_live (get_ir_count v) in
 Definition sliced_preroutine (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*)
 
 (* model_sliced p_pub p_priv p_sched =
-     model initial_state_sliced (sliced_preroutine runtime runs) bool_coding
+     model initial_state_sliced (sliced_preroutine runtime runs) enforce_invariant
        p_pub p_priv p_sched *)
 Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out' Opub Opriv) :=
-  model runtime initial_state_sliced (@sliced_preroutine runtime runs Opub Opriv) bool_coding
+  model runtime initial_state_sliced (@sliced_preroutine runtime runs Opub Opriv) enforce_invariant
     p_pub p_priv p_sched.
 
 
