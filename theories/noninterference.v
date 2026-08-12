@@ -20,7 +20,7 @@ Require Export NonInterference.theories.models.
 
    Prose companion: docs/noninterference.md (kept in sync with the
    section banners below).  Structure:
-     4. Model interfaces : in_rel, out_rel (final_out_rel is in models.v)
+     4. Model interfaces : in_rel, out_rel (out_rel_userview is in models.v)
      5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
      7. The state relation (stateType_rel) and the fv_NI obligation
@@ -29,11 +29,11 @@ Require Export NonInterference.theories.models.
    decidable.
    =================================================================== *)
 
-(* --- Section 4: input relation.  in_rel = TInterrupt_rel is a CUSTOM
-   relation: ir_dis makes ONLY the disk interrupt secret, and only at bot;
-   the timer interrupt stays public.  (docs/noninterference.md §4.) --- *)
+(* --- Section 4: input relation.  in_rel is a CUSTOM relation: ir_dis makes
+   ONLY the disk interrupt secret, and only at bot; the timer interrupt stays
+   public.  (docs/noninterference.md §4.) --- *)
 Definition ir_dis (l : level) (ir : [TInterrupt]) := ir = DiskInterrupt /\ l = \bot.
-Definition TInterrupt_rel : cRel [TInterrupt].
+Definition in_rel : cRel [T_in].
   refine (@CRel _
             ir_dis
             (fun l ir ir' => ir = ir' \/ ir_dis l ir /\ ir_dis l ir')
@@ -51,24 +51,21 @@ Definition TInterrupt_rel : cRel [TInterrupt].
   ssa. rewrite /ir_dis. con. ssa. ssa. de H0. subst.
   move:H. rewrite /ir_dis. intros;subst. ssa.
   ssa. de H0. move: H. rewrite /ir_dis. ssa.
-Defined.  
-
-
-Definition in_rel : cRel [T_in] := TInterrupt_rel.
+Defined.
 
 (* out_rel: the 6-slot pool output.  Handler slots are default/NOP, disk,
-   timer: the first two are secret (eqmaybe_top privateRel), the timer slot
+   timer: the first two are secret (eqmaybe_private privateRel), the timer slot
    is public (it reacts only to public timer interrupts). *)
 Definition out_rel (Opub Opriv : Ty) : cRel [T_out' Opub Opriv] := eqpair (eqmaybe (publicRel _))
                                           (eqpair (eqmaybe (privateRel _))
                                              (eqpair (eqmaybe (publicRel _))
-                                                (eqpair (eqmaybe_top ((privateRel _)))
-                                                   (eqpair (eqmaybe_top (privateRel _))
+                                                (eqpair (eqmaybe_private ((privateRel _)))
+                                                   (eqpair (eqmaybe_private (privateRel _))
                                                       (eqmaybe (publicRel _)))))).
 
 (* The alphabets the concrete models are instantiated at. *)
 Notation out_relC := (out_rel TPublicOutput TTypeSyscall).
-Notation final_out_relC := (final_out_rel TPublicOutput TTypeSyscall).
+Notation out_rel_userviewC := (out_rel_userview TPublicOutput TTypeSyscall).
 
 Lemma Trace_imp : forall (A B : Ty) (p : Proc A B) (s : seq ([A] + [B])) l (BRel BRel' : cRel [B]), (forall x y, rel BRel l x y -> rel BRel' l x y) -> Trace BRel l s p -> Trace BRel' l s p.
 Proof.  
@@ -194,12 +191,12 @@ Proof.
 ssa. de x. de y. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_private_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_top (privateRel _)) l x y -> x = y.
+Lemma eqmaybe_private_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_private (privateRel _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. de H0. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_private_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_top (privateRel _)) \bot x y.
+Lemma eqmaybe_private_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_private (privateRel _)) \bot x y.
 Proof.
   ssa. de x. de y. de y.
 Qed.
@@ -224,7 +221,7 @@ Proof.
   move=>/eqmaybe_public_not_bot=>->//.
   move=>/eqmaybe_private_not_bot'=>->//.
   move=>/eqmaybe_public_not_bot=>->//.
-  move/rel_eqmaybe_top.
+  move/rel_eqmaybe_private.
   case.
   move=>[x0][y0][]->[]-> /private_not_bot' ->//.
   move=>/eqmaybe_private_not_bot=>->//.
@@ -298,14 +295,14 @@ Qed.
 
 
 (* === The composition-breakdown technique.  state_step is
-   step_sum set_pending (initiate_next(enforce_invariant) o handler_preroutine o
+   step_sum set_pending (initiate_next(restore_invariant) o handler_preroutine o
    check_scheduler).  fv_NI_step_sum splits a goal into the two summands, and
    fv_NI_comp discharges fv_NI of the output pipeline from fv_NI of its stages.
    The event relation is eqsum_L: an input may be unobservable, an output never
    is, which is why f_EP_step_sum reduces to a condition on set_pending alone.
    Cost: every
    stage is proved over ALL related states, forgetting the reachable subset --
-   enforce_invariant repairs this before initiate_next.  (docs §7c, §7d.) === *)
+   restore_invariant repairs this before initiate_next.  (docs §7c, §7d.) === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
@@ -736,8 +733,8 @@ Proof.
   
   destruct (masks_set v'). done. 
 
-  have: I_ready  (enforce_invariant v) TimerInterrupt =
-          I_ready (enforce_invariant v') TimerInterrupt. 
+  have: I_ready  (restore_invariant v) TimerInterrupt =
+          I_ready (restore_invariant v') TimerInterrupt. 
 
 
   move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
@@ -910,7 +907,7 @@ Proof.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
   move=>+ /negP + /negP.
   rewrite !negb_and !negbK.
   move/andP. case.
@@ -1046,8 +1043,8 @@ Proof.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
   move/negP. rewrite !negb_and !negbK.
   move/orP. case. move/orP. case.
   intro.
@@ -1090,8 +1087,8 @@ Proof.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
   move/andP. case. intro.
   rewrite negb_or negbK. move/andP. case.
   intro. intro.
@@ -1117,8 +1114,8 @@ Proof.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/publicRel_eq->/publicRel_eq->/publicRel_eq->/publicRel_eq->. 
 
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /enforce_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /I_ready /get_I_pending /get_pending' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_I_mask /get_mask' /get_I_bits /get_I_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.
 
   move/negP. rewrite !negb_and !negb_or.
   move/orP. case. intro.
@@ -1266,7 +1263,7 @@ Proof.
 
   clear Hready Hready' HreadyD HreadyDef Hfirst HreadyD' HreadyDef' Hfirst'.
 
-  have: is_handler_pid (enforce_invariant v) = is_handler_pid (enforce_invariant v').
+  have: is_handler_pid (restore_invariant v) = is_handler_pid (restore_invariant v').
   move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
@@ -1283,7 +1280,7 @@ Proof.
   move=>[]i0'[]i1'[]->[]->/publicRel_eq ->. ssa.
   move=>->.
   destruct (is_handler_pid _).
-  have: get_re_sch (enforce_invariant v) = get_re_sch (enforce_invariant v').
+  have: get_re_sch (restore_invariant v) = get_re_sch (restore_invariant v').
   move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
 
@@ -1300,7 +1297,7 @@ Proof.
   move=>[]i0'[]i1'[]->[]->/publicRel_eq ->. ssa.
 
   move=>->.
-  destruct (get_re_sch (enforce_invariant v')).
+  destruct (get_re_sch (restore_invariant v')).
 
   move: v H0=> [[cur prev]] [re_sch] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   move: v'=> [[cur' prev']] [re_sch'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
@@ -1379,7 +1376,7 @@ Proof.
 
   (*map*)
   eapply map_NI.
-  instantiate (1:= eqmaybe_false (eqpair (eqsum (privateRel Bool) (publicRel _)) (eqmaybe_false (privateRel _)))).
+  instantiate (1:= eqmaybe_hidden (eqpair (eqsum (privateRel Bool) (publicRel _)) (eqmaybe_hidden (privateRel _)))).
   mrw. intros.
   destruct i. destruct i'.
   rewrite !pair_rewr.
@@ -1389,7 +1386,7 @@ Proof.
   move/eqsum_L_split : H0. case.
   move=>[]x0[]x1[]->[]->. auto.
   move=>[]x0[]x1[]->[]->Hout.
-  apply rel_eqmaybe_false2.
+  apply rel_eqmaybe_hidden2.
   apply rel_eqpair2. con. rewrite !pair_rewr.
 
   move:H.
@@ -1402,7 +1399,7 @@ Proof.
   case: x0=>a[]b[]c[]d[] e f.
   case: x1=>a'[]b'[] c'[] d'[] e' f'.
   rewrite !pair_rewr.
-  move/rel_eqmaybe_top. case.
+  move/rel_eqmaybe_private. case.
   move=>[]x'[]y'[] ->[]->.
   rewrite /dI_out. intro. move: b0. simpl. case.
   case. intros. subst. auto. intros. auto.
@@ -1529,7 +1526,7 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto. eauto.
   move=>[]x[]y[]->[]->/publicRel_eq->/=.
   destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_false (privateRel _)). auto.
+  instantiate (1:= eqmaybe_hidden (privateRel _)). auto.
   mrw. intros. ssa.
   instantiate (1:= eqmaybe_swi (privateRel _) (privateRel _)).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
@@ -1582,7 +1579,7 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto. eauto.
   move=>[]x[]y[]->[]->/publicRel_eq->/=.
   destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_false (privateRel _)). auto.
+  instantiate (1:= eqmaybe_hidden (privateRel _)). auto.
   mrw. intros. ssa.
   instantiate (1:= eqmaybe_swi (privateRel _) (privateRel _)).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
@@ -1665,8 +1662,8 @@ Qed.
 (* === Section 6 (payoff): the top result.  model_sliced_userview = map id
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
    weakening through parse_output (out_rel-related outputs map to
-   final_out_rel-related ones).  (docs/noninterference.md §6.) === *)
-Lemma model_sliced_userview_NI : NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
+   out_rel_userview-related ones).  (docs/noninterference.md §6.) === *)
+Lemma model_sliced_userview_NI : NI in_rel (out_rel_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
   eapply map_NI. eauto. eauto.
   2: apply model_sliced_NI.
@@ -1698,7 +1695,7 @@ Proof.
 Qed.
 
 Corollary model_sliced_userview_concrete_NI :
-  NI in_rel final_out_relC model_sliced_userview_concrete.
+  NI in_rel out_rel_userviewC model_sliced_userview_concrete.
 Proof.
   apply model_sliced_userview_NI.
   apply low_p_NI. apply high_p_NI. apply scheduler_NI.

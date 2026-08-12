@@ -60,7 +60,7 @@ The three differ along two independent axes, and it helps to keep them apart.
 **Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
 interface, same pool, same state layout. Both are the *same* generic definition,
 `model`, at a different triple of arguments — the initial state,
-`handler_preroutine`, and `enforce_invariant`, tabulated in
+`handler_preroutine`, and `restore_invariant`, tabulated in
 [`docs/models.md` §8](docs/models.md) — and that difference is the whole security
 story: one leaks, the other does not.
 
@@ -168,7 +168,7 @@ Three machine-checked theorems, in
 |---|---|---|
 | `model_immediate_not_NI` | `~ NI in_rel out_relC model_immediate_concrete` | The naive design leaks: a secret disk interrupt is observable. |
 | `model_sliced_NI` | `NI in_rel (out_rel Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
-| `model_sliced_userview_NI` | `NI in_rel (final_out_rel Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
+| `model_sliced_userview_NI` | `NI in_rel (out_rel_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
 
 Two of the parameters are numbers. The **handler length** `runtime` is how many
 output steps every handler runs for before it signals completion with `Notify`;
@@ -186,7 +186,7 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
   NI (publicRel Empty) (publicRel Opub) p_pub ->
   NI (privateRel THandlerOutput) (privateRel Opriv) p_priv ->
   NI (publicRel Empty) (publicRel Nat) p_sched ->
-  NI in_rel (final_out_rel Opub Opriv)
+  NI in_rel (out_rel_userview Opub Opriv)
      (model_sliced_userview runtime runs p_pub p_priv p_sched)
 ```
 

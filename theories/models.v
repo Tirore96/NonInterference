@@ -487,10 +487,10 @@ Definition initiate_scheduler  (v : [stateType]) := update_re_sch (update_prev_p
 Definition get_prev_pid_wrap (v : [stateType]) : [Option cur_pid] := if get_prev_pid v is Some n then Some (inr n) else None.
 Definition initiate_prev_pid  (v : [stateType]) := update_prev_pid (update_cur_pid v (odflt scheduler_pid (get_prev_pid_wrap v))) None.
 
-Definition initiate_next (enforce_invariant :  [stateType] -> [stateType]) :  [stateType] -> [stateType] :=
+Definition initiate_next (restore_invariant :  [stateType] -> [stateType]) :  [stateType] -> [stateType] :=
   fun v => if (masks_set v) then v (*handler running*) else
-             let v := enforce_invariant v (*apply time slice logic to bools*) in
-             if first_ready v is Some ir then initiate_handler ir v (*first or later handler in the time slice is initiated here, enforced that at least one will run due to enforce_invariant*) else
+             let v := restore_invariant v (*apply time slice logic to bools*) in
+             if first_ready v is Some ir then initiate_handler ir v (*first or later handler in the time slice is initiated here, enforced that at least one will run due to restore_invariant*) else
                if is_handler_pid v then if get_re_sch v then initiate_scheduler v else initiate_prev_pid v  (*mask not set but we are in handler pid, we have just finished the time slice*) else
                  v (*we are running in user space*).
 
@@ -500,9 +500,9 @@ Definition initiate_next (enforce_invariant :  [stateType] -> [stateType]) :  [s
    it eventually causes happens in the output summand, where the input is no
    longer the thing being varied.  That split is forced by f_EP, which under
    eqsum_L constrains the input summand alone. *)
-Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (enforce_invariant : [stateType] -> [stateType]) : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
+Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType]) (restore_invariant : [stateType] -> [stateType]) : [Sum T_in (T_out' Opub Opriv)] -> [stateType] -> [stateType] :=
   step_sum set_pending
-           (fun o => (initiate_next enforce_invariant) \o (handler_preroutine o) \o (@check_scheduler Opub Opriv o)).
+           (fun o => (initiate_next restore_invariant) \o (handler_preroutine o) \o (@check_scheduler Opub Opriv o)).
 
 
 (* === 7. The generic model ===
@@ -510,7 +510,7 @@ Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv
    Everything above is shared.  A model is the process pool run inside the
    stateful wrapper, and the only freedom left is the triple
 
-     (init, handler_preroutine, enforce_invariant)
+     (init, handler_preroutine, restore_invariant)
 
    that section 8 fixes in two different ways.  Note [runs] is not a parameter
    here: the slice size reaches the model only through [handler_preroutine],
@@ -518,12 +518,12 @@ Definition state_step (Opub Opriv : Ty) (handler_preroutine : [T_out' Opub Opriv
 Definition model (runtime : nat) (Opub Opriv : Ty)
   (init : [stateType])
   (handler_preroutine : [T_out' Opub Opriv] -> [stateType] -> [stateType])
-  (enforce_invariant : [stateType] -> [stateType])
+  (restore_invariant : [stateType] -> [stateType])
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out' Opub Opriv) :=
   @reactive_system cur_pid stateType init T_in (T_out' Opub Opriv) T_intermediate
-    (state_step handler_preroutine enforce_invariant) (def Opub Opriv)
+    (state_step handler_preroutine restore_invariant) (def Opub Opriv)
     (pool runtime p_pub p_priv p_sched) (@pool_input Opub Opriv).
 
 
@@ -546,7 +546,7 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
                           unmasks everything, so     a slice; the slice is counted
                           a pending interrupt is     down and closed on a handler
                           serviced at once           boundary
-     enforce_invariant          id                         enforce_invariant
+     restore_invariant          id                         restore_invariant
                           nothing                    off-slice, forces the disk and
                                                      default handlers masked
 
@@ -612,7 +612,7 @@ Definition timeslice_live (c : [ir_count]) := match c with | Some n => 0 < n | _
 v is ready -> time slice is live for v -> time slice is live for v' -> pending for default is true (which combined with unset_handler_masks invariant that it always turns off masks when a handler is done, ensures that default handler always can fire if v can fire disk or default handler
  *)
 
-Definition enforce_invariant v := let b := timeslice_live (get_ir_count v) in
+Definition restore_invariant v := let b := timeslice_live (get_ir_count v) in
                             let ic := (true,(None,((b,~~b),((false,~~b),(false,b))))) in
                             let v := update_bool_state v (or_bool_state (get_bool_state v) ic) in
                             let m := get_I_mask v DiskInterrupt in
@@ -621,13 +621,13 @@ Definition enforce_invariant v := let b := timeslice_live (get_ir_count v) in
 Definition sliced_preroutine (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out' Opub Opriv]) : [stateType] -> [stateType] := check_ir_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*)
 
 (* model_sliced p_pub p_priv p_sched =
-     model initial_state_sliced (sliced_preroutine runtime runs) enforce_invariant
+     model initial_state_sliced (sliced_preroutine runtime runs) restore_invariant
        p_pub p_priv p_sched *)
 Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out' Opub Opriv) :=
-  model runtime initial_state_sliced (@sliced_preroutine runtime runs Opub Opriv) enforce_invariant
+  model runtime initial_state_sliced (@sliced_preroutine runtime runs Opub Opriv) restore_invariant
     p_pub p_priv p_sched.
 
 
@@ -639,7 +639,7 @@ Definition model_sliced_userview (runtime runs : nat) (Opub Opriv : Ty)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
   map id (@parse_output Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 
-Definition final_out_rel (Opub Opriv : Ty) : cRel [T_out Opub Opriv] := eqmaybe_false (eqsum (publicRel Opub) (privateRel Opriv)).
+Definition out_rel_userview (Opub Opriv : Ty) : cRel [T_out Opub Opriv] := eqmaybe_hidden (eqsum (publicRel Opub) (privateRel Opriv)).
 
 
 (* #################################################################

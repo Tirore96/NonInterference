@@ -1070,7 +1070,7 @@ Proof.
       * apply: IH. apply: H4.
 Qed.
 
-Theorem maybe_NI : forall (I O :Ty) (IRel : cRel [I]) (ORel : cRel [O]) p, NI IRel ORel p -> NI (eqmaybe_false IRel) ORel (maybe p).
+Theorem maybe_NI : forall (I O :Ty) (IRel : cRel [I]) (ORel : cRel [O]) p, NI IRel ORel p -> NI (eqmaybe_hidden IRel) ORel (maybe p).
 Proof.
   intros. rewrite /NI /NI_l. ssa.
   - move: (H l). ssa. clear H.

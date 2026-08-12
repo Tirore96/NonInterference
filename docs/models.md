@@ -116,8 +116,8 @@ and `NI` mean, and the equivalences they are indexed by, are in
 ## 1. The generic model
 
 ```coq
-model runtime init handler_preroutine enforce_invariant p_pub p_priv p_sched =
-  reactive_system init (state_step handler_preroutine enforce_invariant) def
+model runtime init handler_preroutine restore_invariant p_pub p_priv p_sched =
+  reactive_system init (state_step handler_preroutine restore_invariant) def
     (pool runtime p_pub p_priv p_sched) pool_input
       : Proc T_in (T_out' Opub Opriv)
 ```
@@ -130,7 +130,7 @@ decides, on every step, whose turn it is (sections 5 and 6).
 It receives interrupts, and on each output step emits one tuple holding every
 slot's value.
 Nothing in it is committed to a security design: that is entirely the job of the
-three parameters `init`, `handler_preroutine` and `enforce_invariant`, which section 7
+three parameters `init`, `handler_preroutine` and `restore_invariant`, which section 7
 sets out and Part II fixes in two different ways — once so that a secret interrupt
 leaks, once so that it does not.
 
@@ -385,9 +385,9 @@ runs `f` on the first and `g` on the second, and the transition is one of these:
 step_sum f g (inl i) = f i
 step_sum f g (inr o) = g o
 
-state_step handler_preroutine enforce_invariant =
+state_step handler_preroutine restore_invariant =
   step_sum set_pending
-           (initiate_next(enforce_invariant) ∘ handler_preroutine ∘ check_scheduler)
+           (initiate_next(restore_invariant) ∘ handler_preroutine ∘ check_scheduler)
 ```
 
 - **`set_pending`** — on an arriving interrupt, set that interrupt's `pending` bit.
@@ -399,7 +399,7 @@ state_step handler_preroutine enforce_invariant =
   reads a user-slot *value*, which is why the state transition is independent of what
   userspace does.
 - **`handler_preroutine`** — a parameter; see section 7.
-- **`initiate_next(enforce_invariant)`** — decide who runs next:
+- **`initiate_next(restore_invariant)`** — decide who runs next:
 
   ```coq
   initiate_next bc v =
@@ -425,8 +425,8 @@ costs, is in [`noninterference.md` §7c](noninterference.md).
 That completes it:
 
 ```coq
-model runtime init handler_preroutine enforce_invariant p_pub p_priv p_sched =
-  reactive_system init (state_step handler_preroutine enforce_invariant) def
+model runtime init handler_preroutine restore_invariant p_pub p_priv p_sched =
+  reactive_system init (state_step handler_preroutine restore_invariant) def
     (pool runtime p_pub p_priv p_sched) pool_input
 ```
 
@@ -447,7 +447,7 @@ is allowed to run*:
   between reopening as soon as a handler says it is done, and reopening only at a
   fixed boundary.
 
-- **`enforce_invariant : [stateType] -> [stateType]`** — consulted by `initiate_next`,
+- **`restore_invariant : [stateType] -> [stateType]`** — consulted by `initiate_next`,
   after the "is a handler already running" test and before `first_ready` picks the
   next one. It is the design's last chance to constrain the state that the choice is
   made from. Its real use is re-imposing an invariant that the
@@ -455,7 +455,7 @@ is allowed to run*:
   same in two related executions ([`noninterference.md` §7d](noninterference.md)).
 
 Between them: `init` says what is runnable at rest, `handler_preroutine` says when
-that changes, and `enforce_invariant` says what must hold when the choice is made.
+that changes, and `restore_invariant` says what must hold when the choice is made.
 
 
 # Part II — the two designs
@@ -469,7 +469,7 @@ story.
 |---|---|---|
 | **`init`** | all masks clear; counter `None` (disabled) | all masks set except the timer's; counter `Some 0` |
 | **`handler_preroutine`** | `immediate_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_preroutine`: reload the slice on a timer `Notify`, unmask at fixed boundaries, tick the slice |
-| **`enforce_invariant`** | `id` (no bookkeeping) | `enforce_invariant`: restore the time-slice invariant; force the default mask to equal the disk mask |
+| **`restore_invariant`** | `id` (no bookkeeping) | restore the time-slice invariant: force the default mask to equal the disk mask |
 | **When a handler stops** | when it emits its **secret** `Notify` — *secret-driven* | at a fixed **public** time-slice boundary — *slice-driven* |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
 | **Non-interfering?** | **No** (`model_immediate_not_NI`) | **Yes** (`model_sliced_NI`, for any non-interfering userspace) |
@@ -511,7 +511,7 @@ immediate_preroutine o v =
   else v
 ```
 
-**`enforce_invariant` is `id`.** There is no time-slice bookkeeping to do, and so no
+**`restore_invariant` is `id`.** There is no time-slice bookkeeping to do, and so no
 invariant to restore.
 
 **Why it leaks.** Nothing constrains *when* a handler runs. Since all masks are
@@ -525,11 +525,11 @@ own traces.
 ### 8b. `model_sliced`
 
 The fixed design — `model` at the triple `(initial_state_sliced,
-sliced_preroutine runtime runs, enforce_invariant)`:
+sliced_preroutine runtime runs, restore_invariant)`:
 
 ```coq
 model_sliced runtime runs p_pub p_priv p_sched =
-  model runtime initial_state_sliced (sliced_preroutine runtime runs) enforce_invariant
+  model runtime initial_state_sliced (sliced_preroutine runtime runs) restore_invariant
     p_pub p_priv p_sched
 ```
 
@@ -617,14 +617,14 @@ Together, at the concrete instance of section 10, where a slice of 4 is two runs
 are exactly the boundaries `handler_completed` marks, and at both the secret handlers
 are the ones left runnable.
 
-**`enforce_invariant`** sets the interrupt controller's flags from whether the
+**`restore_invariant`** sets the interrupt controller's flags from whether the
 slice is live, ORing them into the state, and then forces the default mask to equal
 the disk mask:
 
 ```coq
 timeslice_live c = (c is Some (S n))
 
-enforce_invariant v =
+restore_invariant v =
   let b := timeslice_live (ir_count v) in
   let ic := (true, (None, ((b,~~b), ((false,~~b), (false,b))))) in
   let v := update_bool_state v (or_bool_state (bool_state v) ic) in

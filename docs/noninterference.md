@@ -18,7 +18,7 @@ security argument. Definitions are as given in
 1. [Characterised equivalences (`cRel`): the framework and levels](#1-characterised-equivalences-crel-the-framework-and-levels)
 2. [Base relations: `publicRel`, `privateRel`](#2-base-relations-publicrel-privaterel)
 3. [Composite relations](#3-composite-relations)
-4. [The model interfaces: `in_rel`, `out_rel`, `final_out_rel`](#4-the-model-interfaces-in_rel-out_rel-final_out_rel)
+4. [The model interfaces: `in_rel`, `out_rel`, `out_rel_userview`](#4-the-model-interfaces-in_rel-out_rel-out_rel_userview)
 5. [`model_immediate` is not non-interfering](#5-model_immediate-is-not-non-interfering)
 6. [`model_sliced` and `model_sliced_userview` are non-interfering](#6-model_sliced-and-model_sliced_userview-are-non-interfering)
 7. [The state relation and `fv_NI` — the hard part](#7-the-state-relation-and-fv_ni--the-hard-part)
@@ -130,19 +130,20 @@ eqsum_L    an inl is secret exactly when its payload is
 `eqsum_L` is the one the state cell uses (section 7a), where it makes `f_EP` a
 condition on the input summand alone.
 
-**`eqmaybe VRel` and variants (`eqmaybe_top` / `eqmaybe_false` / `eqmaybe_swi`,
+**`eqmaybe VRel` and variants (`eqmaybe_private` / `eqmaybe_hidden` / `eqmaybe_swi`,
 via `eqmaybe_aux`)** — relate `Option` values. On `Some`/`Some` they defer to
 `VRel`; they differ only in a level-predicate `P l` = "the observer at `l` can
 see `None`", `None` being secret exactly when `¬P l`:
 
 ```text
-eqmaybe       P l = True        None is public: everyone can see it.
-eqmaybe_top   P l = (l ≠ ⊥)     everyone but ⊥ can see None; None is secret
-                                only at the attacker level ⊥.
-eqmaybe_false P l = False       nobody can see None; None is secret at every
-                                level (a value whose very presence is hidden).
-eqmaybe_swi   P l = aware BRel  those who are "aware" per a Bool relation BRel
-                                can see None; used to gate a switch branch.
+eqmaybe          P l = True        None is public: everyone can see it.
+eqmaybe_private  P l = (l ≠ ⊥)     everyone but ⊥ can see None; None is secret
+                                   only at the attacker level ⊥ -- the same
+                                   condition as privateRel.
+eqmaybe_hidden   P l = False       nobody can see None; None is secret at every
+                                   level (a value whose very presence is hidden).
+eqmaybe_swi      P l = aware BRel  those who are "aware" per a Bool relation BRel
+                                   can see None; used to gate a switch branch.
 ```
 
 The mixed case follows from the characterisation (section 1): `Some v ~ None` at
@@ -150,15 +151,15 @@ The mixed case follows from the characterisation (section 1): `Some v ~ None` at
 in for `Some v` only when `v` is itself a secret the observer may not see.
 
 
-## 4. The model interfaces: `in_rel`, `out_rel`, `final_out_rel`
+## 4. The model interfaces: `in_rel`, `out_rel`, `out_rel_userview`
 
-**`in_rel : cRel [T_in]`** is `TInterrupt_rel`, built from `ir_dis` rather than
-taken as `privateRel TInterrupt`:
+**`in_rel : cRel [T_in]`** is built from `ir_dis` rather than taken as
+`privateRel TInterrupt`:
 
 ```coq
-ir_dis l ir            := ir = DiskInterrupt /\ l = \bot
-TInterrupt_rel.dis     := ir_dis
-TInterrupt_rel.rel l   := fun ir ir' => ir = ir' \/ (ir_dis l ir /\ ir_dis l ir')
+ir_dis l ir      := ir = DiskInterrupt /\ l = \bot
+in_rel.dis       := ir_dis
+in_rel.rel l     := fun ir ir' => ir = ir' \/ (ir_dis l ir /\ ir_dis l ir')
 ```
 
 The disk interrupt alone is unobservable, and only at `⊥`; every other interrupt
@@ -180,8 +181,8 @@ and `out_rel` is the corresponding nest of `eqpair`s, with these components:
 | `pub` public user process | `eqmaybe publicRel` | visible | visible |
 | `sys` private user process | `eqmaybe privateRel` | hidden | visible |
 | `sch` scheduler | `eqmaybe publicRel` | visible | visible |
-| `dfl` default/NOP handler | `eqmaybe_top privateRel` | hidden | hidden |
-| `dsk` disk handler | `eqmaybe_top privateRel` | hidden | hidden |
+| `dfl` default/NOP handler | `eqmaybe_private privateRel` | hidden | hidden |
+| `dsk` disk handler | `eqmaybe_private privateRel` | hidden | hidden |
 | `tmr` timer handler | `eqmaybe publicRel` | visible | visible |
 
 The timer slot is public, since it reacts only to public scheduled events. The disk
@@ -195,19 +196,19 @@ Whether the slot ran is decided by the `eqmaybe` variant wrapped around it, sinc
 that is what fixes who can see `None`. Under plain `eqmaybe`, `None` is public, so
 a `⊥`-observer sees a `Some` where the other run has a `None`: `sys` hides
 `Syscall` from `NOP` but not the fact that `high_p` produced something. Under
-`eqmaybe_top`, `None` is unobservable at `⊥` and may be related to `Some o`, so a
+`eqmaybe_private`, `None` is unobservable at `⊥` and may be related to `Some o`, so a
 disk handler run and a step where nothing happened are the same observation.
 
 For `high_p` hiding the value is enough, since when it runs is public anyway. For
 the two secret handlers the fact of running must go too, which is the formal
 content of "the leak is in the scheduling". Section 6a discharges the obligation
-`eqmaybe_top` creates.
+`eqmaybe_private` creates.
 
-**`final_out_rel Opub Opriv : cRel [T_out Opub Opriv]`** (user-visible output, for
+**`out_rel_userview Opub Opriv : cRel [T_out Opub Opriv]`** (user-visible output, for
 `model_sliced_userview`)
 
 ```text
-eqmaybe_false (eqsum publicRel privateRel)
+eqmaybe_hidden (eqsum publicRel privateRel)
 ```
 
 Only the user-visible channel survives `parse_output`: a public user output on the
@@ -255,7 +256,7 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
   NI (publicRel Empty) (publicRel Nat) p_sched ->
      NI in_rel (out_rel Opub Opriv)
           (model_sliced runtime runs p_pub p_priv p_sched)
-  /\ NI in_rel (final_out_rel Opub Opriv)
+  /\ NI in_rel (out_rel_userview Opub Opriv)
           (model_sliced_userview runtime runs p_pub p_priv p_sched)
 ```
 
@@ -263,7 +264,7 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
 
 `model_sliced_userview = map id parse_output model_sliced`, and the second conjunct
 follows from the first by output weakening: `parse_output` maps `out_rel`-related
-outputs to `final_out_rel`-related ones.
+outputs to `out_rel_userview`-related ones.
 
 **Why the result is parametric.** Everything the process pool is built around
 stays fixed; everything it carries is left open:
@@ -297,7 +298,7 @@ from the outside in:
 | the outer `map inl (inr_or_def def)` and every interface rewiring | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
 | `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output relations must coincide |
 | `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates — **this is where section 7 is discharged** |
-| `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_false IRel) ORel (maybe p)` |
+| `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_hidden IRel) ORel (maybe p)` |
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
 | `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`falseRel`](#6a-gating-a-slot-why-falserel-and-where-obliviousness-is-needed) for every public slot |
 | the leaves | `out_NI`, or a hypothesis | the handler and padding leaves are constant processes, so `out_NI`; the scheduler and user slots are where the three parametricity hypotheses are consumed |
@@ -377,7 +378,7 @@ disjunct is gone and the proof must split on the level:
   output step of which must satisfy `dis ORel ⊥ o`.
 
 That last obligation is affordable only because the slot's output was classified
-`eqmaybe_top privateRel` in section 4, which makes both `Some o` and `None`
+`eqmaybe_private privateRel` in section 4, which makes both `Some o` and `None`
 unobservable at `⊥`. Under `eqmaybe privateRel` the `None` would be public,
 obliviousness would fail, and nothing would hide that the handler ran. Losing
 awareness at `⊥` costs nothing, since the slot's output is private there anyway.
@@ -508,7 +509,7 @@ whole transition:
 
 ```text
 fv_NI  (eqsum_L in_rel out_rel)  stateType_rel  stateType_rel
-       (state_step sliced_preroutine enforce_invariant)
+       (state_step sliced_preroutine restore_invariant)
 ```
 
 `eqsum_L` relates two inputs by `in_rel` and two outputs by `out_rel`, and never
@@ -533,12 +534,12 @@ stage is proved over *all* pairs of related states and cannot assume its input c
 from the stage before it, so it must hold even for states no real run produces.
 Section 7d recovers what that loses.
 
-### 7d. `enforce_invariant`: re-establishing the forgotten invariant
+### 7d. `restore_invariant`: putting the forgotten invariant back
 
 Two facts hold of every state `model_sliced` can reach: while the time slice is
 live, the NOP (default) handler's pending bit is true, the disk and NOP masks are
 false and the timer mask is true; and the disk and NOP masks are always toggled
-together. Because `fv_NI_comp` forgets them, `enforce_invariant` writes them back
+together. Because `fv_NI_comp` forgets them, `restore_invariant` writes them back
 into the interrupt controller just before `initiate_next` runs:
 
 - it sets the controller's flags from `timeslice_live`, restoring "slice live ⇒ NOP
@@ -551,7 +552,7 @@ into the interrupt controller just before `initiate_next` runs:
   having to recover that fact from an earlier stage.
 
 The hard `initiate_next` stage can then assume related states take the same branch,
-because `enforce_invariant` has already run and made the deciding mask bits agree.
+because `restore_invariant` has already run and made the deciding mask bits agree.
 
 
 ## 8. Model limitations
