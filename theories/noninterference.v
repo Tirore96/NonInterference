@@ -20,7 +20,7 @@ Require Export NonInterference.theories.models.
 
    Prose companion: docs/noninterference.md (kept in sync with the
    section banners below).  Structure:
-     4. Model interfaces : in_rel, out_rel (out_rel_userview is in models.v)
+     4. The model's security relations : in_rel, out_rel (out_rel_userview is in models.v)
      5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
      7. The state relation (state_type_rel) and the fv_NI obligation

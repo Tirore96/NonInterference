@@ -51,7 +51,7 @@ Require Export NonInterference.theories.theorems.
 
    Contents:
      Part I
-       0.  Interfaces
+       0.  Input and output types
        1.  Interrupt handler and the slot family
        2.  Process pool
        3.  Stateful wrapper
@@ -68,7 +68,7 @@ Require Export NonInterference.theories.theorems.
    ================================================================= *)
 
 (* A note on notation.  Processes have type [Proc I O] where I and O range over
-   the inductive [Ty] of interface types, and [ [t] ] denotes the Coq type that
+   the inductive [Ty], and [ [t] ] denotes the Coq type that
    [t : Ty] encodes.  Indexing by [Ty] rather than by Coq's [Set] is what makes
    reductions invertible in the proofs, but it also forces the explicit [@] and
    [Ty] annotations below.  To keep the constructions readable, each process
@@ -80,7 +80,7 @@ Require Export NonInterference.theories.theorems.
    PART I -- the shared skeleton
    ################################################################# *)
 
-(* === 0. Interfaces === *)
+(* === 0. Input and output types === *)
 
 Fixpoint times_n n (f : nat -> Ty) : Ty :=
   let t := f n in
@@ -128,7 +128,7 @@ Definition ir_handler (runtime : nat) : handler_type :=
        (out (O := Unit) tt)).
 
 (* Only the secret user process consumes input (the disk handler's Notify).
-   Every other slot is input-free, which the interface records as [Empty]. *)
+   Every other slot is input-free, which the input type records as [Empty]. *)
 Definition slot_I (n : nat) :=
   match n with
   | 0 => Empty (*tI*)

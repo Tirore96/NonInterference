@@ -10,7 +10,8 @@ process is given with the `@` and `Ty` annotations erased (section 0 says why th
 source needs them); no proof code is reproduced.
 
 > Why one instantiation is non-interfering and the other is not — the security
-> relations, the classification of each interface, and the central proof obligation
+> relations, the relation each input and output type carries, and the central proof
+> obligation
 > — is in [`noninterference.md`](noninterference.md), the companion to
 > [`theories/noninterference.v`](../theories/noninterference.v).
 
@@ -54,8 +55,7 @@ coinductively are given inductively here** — `oblivious`, for instance, is sta
 over the traces a process admits rather than over an infinite stream. The proofs
 are substantially simpler for it, since they never have to construct streams.
 
-A process has type `Proc I O`, where `I` and `O` are its input and output
-interfaces.
+A process has type `Proc I O`, where `I` and `O` are its input and output types.
 
 A process moves in one of two ways:
 
@@ -76,7 +76,7 @@ on an output step:
 
 - **`out o`** — the constant process. It receives any value and is unchanged; it
   emits the fixed `o` and is unchanged.
-- **`map f g p`** — rewires `p` at both interfaces. Receiving `i`, it hands `p` the
+- **`map f g p`** — rewires `p` on both sides. Receiving `i`, it hands `p` the
   value `f i`. Emitting, it lets `p` emit some `o` and emits `g o` in its place.
   (`Proc I' O → Proc I O'`)
 - **`sta f g v p`** — gives `p` a state cell holding `v`, and *exposes* that cell in
@@ -98,7 +98,8 @@ on an output step:
   receiving `Some i`, `p` receives `i`. Emitting passes straight through: `p` emits
   `o` and so does `maybe p`. (`Proc I O → Proc (Option I) O`)
 
-> **Why interfaces are not just types.** In the mechanisation `I` and `O` are not
+> **Why `I` and `O` are drawn from `Ty`, not `Set`.** In the mechanisation they are
+> not
 > Coq `Set`s but are drawn from an inductive `Ty` (`Nat`, `Bool`, `Unit`, `Times`,
 > `Option`, `Sum`, ...), with `[t]` interpreting a `t : Ty` as the `Set` it encodes.
 > Going through `Ty` rather than through `Set` directly is what makes reductions
@@ -162,7 +163,8 @@ replaces. (`runtime = 0` degenerates — `n %% 0 = n`, so the cell never returns
 and the handler never signals completion. Nothing breaks; the handler simply never
 finishes.)
 
-**The slot map.** `slot_I` and `slot_O` give the interfaces of pool slot `n`, and
+**The slot map.** `slot_I` and `slot_O` give the input and output types of pool slot
+`n`, and
 `slot_procs` gives its process:
 
 | slot | process | input | output |
@@ -273,7 +275,7 @@ line is what lets the state relation classify a whole pid in one place, as
 `eqsum private_rel public_rel`, with the proof case-splitting on the tag
 ([`noninterference.md` §7b](noninterference.md)).
 
-**The slot interfaces**, tabulated in section 2. `f_O` is parameterised by the two
+**The slot types**, tabulated in section 2. `f_O` is parameterised by the two
 alphabets — this is where `Opub` and `Opriv` enter the pool's output type:
 
 ```coq

@@ -11,10 +11,12 @@ interrupt takes CPU time away from the process that was running, and the resulti
 gap in that process's output is visible. The development formalises both designs —
 the one that leaks and one that does not — and proves each claim.
 
-Both designs are expressed in a small process calculus, `Proc I O`, whose
-interfaces carry the security classification; non-interference is then a property
-of a closed term in that calculus. The calculus and its generic non-interference
-theorems are not ours: they are due to Rafnsson et al., *Timing-Sensitive
+Both designs are expressed in a small process calculus, `Proc I O`.
+Non-interference is a property of a closed term in that calculus, stated against a
+relation on its input type and one on its output type; each says, level by level,
+which values an observer can tell apart and which it cannot see at all. The
+calculus and its generic non-interference theorems are not ours: they are due to
+Rafnsson et al., *Timing-Sensitive
 Noninterference through Composition*,
 [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf).
 The contribution here is the OS models and their proofs, together with the
@@ -59,7 +61,7 @@ Everything below refers to these. All three are in
 The three differ along two independent axes, and it helps to keep them apart.
 
 **Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
-interface, same pool, same state layout. Both are the *same* generic definition,
+types, same pool, same state layout. Both are the *same* generic definition,
 `model`, at a different triple of arguments — the initial state,
 `handler_preroutine`, and `restore_invariant`, tabulated in
 [`docs/models.md` §8](docs/models.md) — and that difference is the whole security
@@ -115,9 +117,10 @@ Non-interference must therefore permit the schedule to depend on it.
 `NI in_rel out_rel p` is then the standard condition: at every level, inserting or
 removing inputs that are unobservable there, or swapping inputs that are
 indistinguishable there, leaves the traces that observer can see unchanged. The
-classification lives entirely in `in_rel` and `out_rel` — one **level-indexed
-equivalence** (the *L-equivalences* of the original paper) on the input type and one
-on the output type. Every claim made above about what is public or secret is a
+classification lives entirely in `in_rel` and `out_rel` — one relation on the input
+type and one on the output type. Each says, at every level, which values are
+**indistinguishable** there (the *L-equivalences* of the original paper) and which
+are **unobservable** there. Every claim made above about what is public or secret is a
 statement about those two relations; they are given in
 [`docs/noninterference.md` §4](docs/noninterference.md).
 

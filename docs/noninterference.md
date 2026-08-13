@@ -18,7 +18,7 @@ security argument. Definitions are as given in
 1. [Characterised equivalences (`cRel`): the framework and levels](#1-characterised-equivalences-crel-the-framework-and-levels)
 2. [Base relations: `public_rel`, `private_rel`](#2-base-relations-public_rel-private_rel)
 3. [Composite relations](#3-composite-relations)
-4. [The model interfaces: `in_rel`, `out_rel`, `out_rel_userview`](#4-the-model-interfaces-in_rel-out_rel-out_rel_userview)
+4. [The model's security relations: `in_rel`, `out_rel`, `out_rel_userview`](#4-the-models-security-relations-in_rel-out_rel-out_rel_userview)
 5. [`model_immediate` is not non-interfering](#5-model_immediate-is-not-non-interfering)
 6. [`model_sliced` and `model_sliced_userview` are non-interfering](#6-model_sliced-and-model_sliced_userview-are-non-interfering)
 7. [The state relation and `fv_NI` — the hard part](#7-the-state-relation-and-fv_ni--the-hard-part)
@@ -27,9 +27,9 @@ security argument. Definitions are as given in
 
 ## 1. Characterised equivalences (`cRel`): the framework and levels
 
-Every interface carries a `cRel`
-([`definitions.v`](../theories/definitions.v)), a level-indexed relation saying what
-an observer at each level can tell about values of that type:
+A `cRel` ([`definitions.v`](../theories/definitions.v)) is fixed for the input type
+and for the output type: a level-indexed relation saying what an observer at each
+level can tell about values of that type:
 
 ```text
 rel l x y   x and y are indistinguishable to an observer at level l
@@ -77,9 +77,9 @@ unchanged by anything the observer at `l` may not see. The case that matters is
 
 ## 2. Base relations: `public_rel`, `private_rel`
 
-**public** and **private** classify an *interface*, whereas **unobservable** is the
-per-level property `dis l x`. ("Secret" is used informally for unobservable
-at `⊥`.)
+**public** and **private** name a whole relation, the one a type is given, whereas
+**unobservable** is the per-level property `dis l x`. ("Secret" is used informally
+for unobservable at `⊥`.)
 
 ```text
 public_rel A    dis l x = False        rel l x y = (x = y)
@@ -151,7 +151,7 @@ The mixed case follows from the characterisation (section 1): `Some v ~ None` at
 in for `Some v` only when `v` is itself a secret the observer may not see.
 
 
-## 4. The model interfaces: `in_rel`, `out_rel`, `out_rel_userview`
+## 4. The model's security relations: `in_rel`, `out_rel`, `out_rel_userview`
 
 **`in_rel : cRel [T_in]`** is built from `ir_dis` rather than taken as
 `private_rel TInterrupt`:
@@ -297,7 +297,7 @@ from the outside in:
 
 | layer of `model_sliced` | theorem | what it gives |
 |---|---|---|
-| the outer `map inl (inr_or_def def)` and every interface rewiring | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
+| the outer `map inl (inr_or_def def)` and every rewiring of an input or output | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
 | `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output relations must coincide |
 | `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates — **this is where section 7 is discharged** |
 | `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_hidden IRel) ORel (maybe p)` |
@@ -307,8 +307,8 @@ from the outside in:
 | `parse_output` on top of `model_sliced` | `map_NI` again | output weakening, giving `model_sliced_userview_NI` |
 
 Each theorem *derives* the composite's relations from those of its parts rather
-than taking them as given, which accounts for the shape of the interface relations
-in section 4: `par_NI` imposes `out_rel`'s nest of `eqpair`s on a pool output, and
+than taking them as given, which accounts for the shape of the relations in
+section 4: `par_NI` imposes `out_rel`'s nest of `eqpair`s on a pool output, and
 `swi_NI` imposes its `eqmaybe`s on a gated slot.
 
 Two of these layers carry substantial side conditions. `sta_NI`'s are section 7,
