@@ -33,14 +33,13 @@ A process pool of six slots, driven by a global state and a feedback loop:
 | 4 | the secret user process | consumes the disk handler's notifications |
 | 5 | the public user process | emits on the public channel |
 
-Slots 3, 4 and 5 are **parameters** of the development, not fixed processes: the
-results below hold for any scheduler and any two user processes that are themselves
-non-interfering at the classification their slot declares, over arbitrary output
-alphabets. The concrete instance used for the example traces is a round-robin
-scheduler, a `p_priv_concrete` that issues a `Syscall` if the disk handler
-notified it and `NOP` otherwise, and a `p_pub_concrete` that repeatedly issues
-`GetRequest`. Only the
-interrupt handlers are fixed — they are the mechanism under study.
+Slots 3, 4 and 5 are **parameters** of the development: the results below hold for
+any scheduler and any two user processes that are themselves non-interfering at the
+classification their slot declares, over arbitrary output alphabets. The concrete
+instance used for the example traces is a round-robin scheduler, a
+`p_priv_concrete` that issues a `Syscall` if the disk handler notified it and `NOP`
+otherwise, and a `p_pub_concrete` that repeatedly issues `GetRequest`. Only the
+interrupt handlers are fixed: they are the mechanism under study.
 
 Exactly one slot runs per step, chosen by the current pid. The global state holds a
 `(pending, mask)` bit pair per interrupt — an interrupt is serviced when it is
@@ -62,9 +61,9 @@ The three differ along two independent axes, and it helps to keep them apart.
 
 **Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
 types, same pool, same state layout. Both are the *same* generic definition,
-`model`, at a different triple of arguments — the initial state,
+`model`, at a different triple of arguments: the initial state,
 `handler_preroutine`, and `restore_invariant`, tabulated in
-[`docs/models.md` §8](docs/models.md) — and that difference is the whole security
+[`docs/models.md` §8](docs/models.md). That difference is the whole security
 story: one leaks, the other does not.
 
 **Axis 2: observation — `model_sliced` vs `model_sliced_userview`.** Same
@@ -83,9 +82,9 @@ processes. Below, `·` is `None` and `Nfy` is `Notify`:
                     kept            discarded: scheduler and handler activity
 ```
 
-Exactly one slot is `Some` per step, so each row above is one output step, not
-four parallel events. `model_immediate` emits the same six-slot tuple as
-`model_sliced` — the diagram is about the projection, not about the leak.
+Exactly one slot is `Some` per step, so each row above is a single output step.
+`model_immediate` emits the same six-slot tuple as `model_sliced`, so the diagram
+concerns the projection alone; the leak is the subject of the next section.
 
 Non-interference is proved at both observations. Proving it at the six-slot tuple
 is just what a statement about a parallel composition looks like, and it is the
@@ -194,8 +193,8 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
      (model_sliced_userview runtime runs p_pub p_priv p_sched)
 ```
 
-So the theorem is about the interrupt-and-scheduling mechanism, not about one
-system: arbitrary userspace and scheduler, arbitrary output alphabets, arbitrary
+So the theorem covers the interrupt-and-scheduling mechanism in general:
+arbitrary userspace and scheduler, arbitrary output alphabets, arbitrary
 handler length and slice size — the last two with no side condition, because
 `time_slice runtime runs = runs * runtime` makes "the slice ends on a handler
 boundary" structural rather than assumed.
@@ -204,8 +203,8 @@ boundary" structural rather than assumed.
 concrete system by instantiating with `p_pub_concrete_NI`, `p_priv_concrete_NI`
 and `scheduler_NI`.
 `model_immediate` is parametric in the same way, but the counterexample is stated
-at the concrete instance `model_immediate_concrete`: exhibiting a leak needs one
-system, not all of them.
+at the concrete instance `model_immediate_concrete`: exhibiting a leak needs only
+one system.
 
 ## Logical foundations
 
@@ -234,7 +233,7 @@ This compiles the four-file chain in dependency order
 | Path | What it is |
 |---|---|
 | [`theories/definitions.v`](theories/definitions.v) | The process calculus, traces, `NI`, and the security relations. |
-| [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); they are used here, not contributed. |
+| [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); this repository uses them as prior work. |
 | [`theories/models.v`](theories/models.v) | In three parts: the skeleton both designs share, ending in the generic `model`; the two designs, as `model` at two triples of arguments; and one concrete system, with the example traces. |
 | [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state relations, and the three theorems above. |
 | [`docs/models.md`](docs/models.md) | **What the models are** — long-form companion to `models.v`. |

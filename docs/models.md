@@ -98,10 +98,9 @@ on an output step:
   receiving `Some i`, `p` receives `i`. Emitting passes straight through: `p` emits
   `o` and so does `maybe p`. (`Proc I O → Proc (Option I) O`)
 
-> **Why `I` and `O` are drawn from `Ty`, not `Set`.** In the mechanisation they are
-> not
-> Coq `Set`s but are drawn from an inductive `Ty` (`Nat`, `Bool`, `Unit`, `Times`,
-> `Option`, `Sum`, ...), with `[t]` interpreting a `t : Ty` as the `Set` it encodes.
+> **Why `I` and `O` are drawn from `Ty`.** In the mechanisation they range over an
+> inductive `Ty` (`Nat`, `Bool`, `Unit`, `Times`, `Option`, `Sum`, ...) rather than
+> over Coq's `Set`, with `[t]` interpreting a `t : Ty` as the `Set` it encodes.
 > Going through `Ty` rather than through `Set` directly is what makes reductions
 > invertible, which the negative result needs: to refute non-interference one must
 > show a trace is *not* accepted. The cost is the explicit annotations in the source,
