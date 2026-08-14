@@ -16,25 +16,25 @@ Open Scope order_scope.
 Require Export NonInterference.theories.models.
 
 (* ===================================================================
-   NonInterference — the concrete security relations and the results.
+   NonInterference — the concrete security equivalences and the results.
 
    Prose companion: docs/noninterference.md (kept in sync with the
    section banners below).  Structure:
-     4. The model's security relations : in_rel, out_rel (out_rel_userview is in models.v)
+     4. The model's equivalences : in_equiv, out_equiv (out_equiv_userview is in models.v)
      5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
-     7. The state relation (state_type_rel) and the fv_NI obligation
+     7. The state equivalence (state_type_equiv) and the fv_NI obligation
    Note: this file imports classical logic via theorems.v (Require Import
    Classical), used only in swi_NI because `aware` is not constructively
    decidable.
    =================================================================== *)
 
-(* --- Section 4: input relation.  in_rel is a CUSTOM relation: ir_dis makes
+(* --- Section 4: the input equivalence.  in_equiv is CUSTOM: ir_dis makes
    ONLY the disk interrupt secret, and only at bot; the timer interrupt stays
    public.  (docs/noninterference.md §4.) --- *)
 Definition ir_dis (l : level) (ir : [TInterrupt]) := ir = DiskInterrupt /\ l = \bot.
-Definition in_rel : cRel [T_in].
-  refine (@CRel _
+Definition in_equiv : cEquiv [T_in].
+  refine (@CEquiv _
             ir_dis
             (fun l ir ir' => ir = ir' \/ ir_dis l ir /\ ir_dis l ir')
             _
@@ -53,21 +53,21 @@ Definition in_rel : cRel [T_in].
   ssa. de H0. move: H. rewrite /ir_dis. ssa.
 Defined.
 
-(* out_rel: the 6-slot pool output.  Handler slots are default/NOP, disk,
-   timer: the first two are secret (eqmaybe_private private_rel), the timer slot
+(* out_equiv: the 6-slot pool output.  Handler slots are default/NOP, disk,
+   timer: the first two are secret (eqmaybe_private private_equiv), the timer slot
    is public (it reacts only to public timer interrupts). *)
-Definition out_rel (Opub Opriv : Ty) : cRel [T_out Opub Opriv] := eqpair (eqmaybe (public_rel _))
-                                          (eqpair (eqmaybe (private_rel _))
-                                             (eqpair (eqmaybe (public_rel _))
-                                                (eqpair (eqmaybe_private ((private_rel _)))
-                                                   (eqpair (eqmaybe_private (private_rel _))
-                                                      (eqmaybe (public_rel _)))))).
+Definition out_equiv (Opub Opriv : Ty) : cEquiv [T_out Opub Opriv] := eqpair (eqmaybe (public_equiv _))
+                                          (eqpair (eqmaybe (private_equiv _))
+                                             (eqpair (eqmaybe (public_equiv _))
+                                                (eqpair (eqmaybe_private ((private_equiv _)))
+                                                   (eqpair (eqmaybe_private (private_equiv _))
+                                                      (eqmaybe (public_equiv _)))))).
 
 (* The alphabets the concrete models are instantiated at. *)
-Notation out_relC := (out_rel TPublicOutput TTypeSyscall).
-Notation out_rel_userviewC := (out_rel_userview TPublicOutput TTypeSyscall).
+Notation out_equivC := (out_equiv TPublicOutput TTypeSyscall).
+Notation out_equiv_userviewC := (out_equiv_userview TPublicOutput TTypeSyscall).
 
-Lemma Trace_imp : forall (A B : Ty) (p : Proc A B) (s : seq ([A] + [B])) l (BRel BRel' : cRel [B]), (forall x y, rel BRel l x y -> rel BRel' l x y) -> Trace BRel l s p -> Trace BRel' l s p.
+Lemma Trace_imp : forall (A B : Ty) (p : Proc A B) (s : seq ([A] + [B])) l (BRel BRel' : cEquiv [B]), (forall x y, rel BRel l x y -> rel BRel' l x y) -> Trace BRel l s p -> Trace BRel' l s p.
 Proof.  
   intros.
   elim : H0 H;ssa.
@@ -75,7 +75,7 @@ Proof.
   econ;eauto.
 Qed.
 
-Lemma helper_trace' : Trace (public_rel _) \bot [::out_get';out_get'] model_immediate_concrete.
+Lemma helper_trace' : Trace (public_equiv _) \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
     rewr;simpl;rewr;simpl;rewr;simpl;rewr.
     (first [econ;[idtac | econ | idtac] | econ];
@@ -89,7 +89,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.   
 
-Lemma helper_trace : Trace out_relC \bot [::out_get';out_get'] model_immediate_concrete.
+Lemma helper_trace : Trace out_equivC \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace'.
   intros. simpl in H. subst. auto.
@@ -105,7 +105,7 @@ Opaque state_step pool_input initial_state_immediate def f_proj.
    runs its full two steps, so the expected second public output becomes None.
    Two public outputs suffice to refute NI.  Short by necessity —
    inversion on reductions is expensive.  (docs/noninterference.md §5.) === *)
-Lemma model_immediate_not_NI : ~ NI in_rel out_relC model_immediate_concrete.
+Lemma model_immediate_not_NI : ~ NI in_equiv out_equivC model_immediate_concrete.
 Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
@@ -137,19 +137,19 @@ Section Parameters.
 Variable Opub Opriv : Ty.       (*alphabets of the public and secret user slots*)
 Variable runtime runs : nat.    (*handler length; handler runs per time slice*)
 
-Lemma eqsum_llrr  (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B])  l i i' : rel (eqsum ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
+Lemma eqsum_llrr  (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B])  l i i' : rel (eqsum ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
 Proof.
   intros. destruct i. destruct i'. ssa.
   exfalso. ssa. destruct i'. ssa. ssa.
 Qed.
 
-Lemma eqsum_L_llrr (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l i i' : rel (eqsum_L ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
+Lemma eqsum_L_llrr (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l i i' : rel (eqsum_L ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
 Proof.
   intros. destruct i. destruct i'. ssa.
   exfalso. ssa. destruct i'. ssa. ssa.
 Qed.
 
-Lemma eqsum_split (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l i0 i1 : rel (eqsum ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
+Lemma eqsum_split (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l i0 i1 : rel (eqsum ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
                                                                                                               exists i0' i1', (i0 = inr i0' /\ i1 = inr i1' /\ rel BRel l i0' i1').
 Proof.
   intros. apply eqsum_llrr in H as H'. destruct H'.
@@ -160,7 +160,7 @@ Proof.
   right. exists i. exists i0. ssa.
 Qed.
 
-Lemma eqsum_L_split (A B : Ty) (ARel : cRel [A]) (BRel : cRel [B]) l i0 i1 : rel (eqsum_L ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
+Lemma eqsum_L_split (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l i0 i1 : rel (eqsum_L ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
                                                                                                               exists i0' i1', (i0 = inr i0' /\ i1 = inr i1' /\ rel BRel l i0' i1').
 Proof.
   intros. apply eqsum_L_llrr in H as H'. destruct H'.
@@ -171,47 +171,47 @@ Proof.
   right. exists i. exists i0. ssa.
 Qed.
 
-Lemma private_not_bot : forall (A : Ty) l (x y : [A]), l <> \bot -> x = y -> rel (private_rel _) l x y.
+Lemma private_not_bot : forall (A : Ty) l (x y : [A]), l <> \bot -> x = y -> rel (private_equiv _) l x y.
 Proof.
 ssa.
 Qed.
 
-Lemma private_not_bot' : forall (A : Ty) l (x y : [A]), l <> \bot -> rel (private_rel _) l x y -> x = y.
+Lemma private_not_bot' : forall (A : Ty) l (x y : [A]), l <> \bot -> rel (private_equiv _) l x y -> x = y.
 Proof.
 ssa. de H0.
 Qed.
 
-Lemma eqmaybe_private_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (private_rel _)) l x y -> x = y.
+Lemma eqmaybe_private_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (private_equiv _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. de H0. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_public_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (public_rel _)) l x y -> x = y.
+Lemma eqmaybe_public_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (public_equiv _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_private_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_private (private_rel _)) l x y -> x = y.
+Lemma eqmaybe_private_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_private (private_equiv _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. de H0. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_private_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_private (private_rel _)) \bot x y.
+Lemma eqmaybe_private_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_private (private_equiv _)) \bot x y.
 Proof.
   ssa. de x. de y. de y.
 Qed.
 
-Lemma private_bot : forall (A : Ty) (x y : [A]), rel ((private_rel _)) \bot x y.
+Lemma private_bot : forall (A : Ty) (x y : [A]), rel ((private_equiv _)) \bot x y.
 Proof.
   ssa.
 Qed.
 
 Hint Resolve private_bot.
 
-Lemma public_rel_eq : forall (A : Ty) l x y, rel (public_rel A) l x y -> x = y.
+Lemma public_equiv_eq : forall (A : Ty) l x y, rel (public_equiv A) l x y -> x = y.
 Proof. ssa. Qed.
 
-Lemma out_rel_not_bot : forall i i' l, l <> \bot -> rel (out_rel Opub Opriv) l i i' -> i = i'.
+Lemma out_equiv_not_bot : forall i i' l, l <> \bot -> rel (out_equiv Opub Opriv) l i i' -> i = i'.
 Proof.
   intros.
   move:H0. move/rel_eqpair=> [] + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [].
@@ -235,26 +235,26 @@ Qed.
 
 
 
-Lemma false_rel_aware : forall l, aware false_rel true l.
+Lemma false_equiv_aware : forall l, aware false_equiv true l.
 Proof.
 intros. rewrite /aware. intros. ssa. subst. simpl. intro. ssa.
 Qed.
 
-(* === Section 7a: the state relation.  Classification across two bot-related
+(* === Section 7a: the state equivalence.  Classification across two bot-related
    states: masks PUBLIC everywhere; the secret handlers' (disk, default)
-   pending bits secret via private_pending_rel; cur_pid's inl/inr tag PUBLIC but the
+   pending bits secret via private_pending_equiv; cur_pid's inl/inr tag PUBLIC but the
    bool inside inl (which handler) secret;
    re_sched, ir_count (the slice), scheduler/user pid all public.
    (docs/noninterference.md §7a.) === *)
-Definition pids_rel : cRel [pids] := eqpair (eqsum (private_rel _) (public_rel _)) (public_rel _).
-Definition private_pending_rel : cRel [ir_bits] := eqpair (private_rel _) (public_rel _).
-Definition public_bits_rel : cRel [ir_bits] := eqpair (public_rel _) (public_rel _).
-Definition ic_rel : cRel [ic] := eqpair private_pending_rel (eqpair private_pending_rel public_bits_rel).
-Definition bool_state_rel : cRel [bool_state] := eqpair (public_rel _) (eqpair (public_rel _) ic_rel).
-Definition state_type_rel : cRel [state_type] := eqpair pids_rel bool_state_rel.
+Definition pids_equiv : cEquiv [pids] := eqpair (eqsum (private_equiv _) (public_equiv _)) (public_equiv _).
+Definition private_pending_equiv : cEquiv [ir_bits] := eqpair (private_equiv _) (public_equiv _).
+Definition public_bits_equiv : cEquiv [ir_bits] := eqpair (public_equiv _) (public_equiv _).
+Definition ic_equiv : cEquiv [ic] := eqpair private_pending_equiv (eqpair private_pending_equiv public_bits_equiv).
+Definition bool_state_equiv : cEquiv [bool_state] := eqpair (public_equiv _) (eqpair (public_equiv _) ic_equiv).
+Definition state_type_equiv : cEquiv [state_type] := eqpair pids_equiv bool_state_equiv.
 
 
-Lemma state_type_rel_not_bot : forall i i' l, l <> \bot -> rel state_type_rel l i i' -> i = i'.
+Lemma state_type_equiv_not_bot : forall i i' l, l <> \bot -> rel state_type_equiv l i i' -> i = i'.
 Proof.
   intros.
   move:H0.
@@ -263,21 +263,21 @@ Proof.
   move: i'=>[[a0' a1']] [b' [b0' [[b1' b2' [[b3' b4' [b5' b6']]]]]]].  
   rewrite !pair_rewr. 
   move=> /eqsum_split Hsplit.
-  move=>/public_rel_eq -> /public_rel_eq -> /public_rel_eq -> // /private_not_bot' -> // /public_rel_eq -> // /private_not_bot' -> // /public_rel_eq -> // /public_rel_eq -> /public_rel_eq ->.
+  move=>/public_equiv_eq -> /public_equiv_eq -> /public_equiv_eq -> // /private_not_bot' -> // /public_equiv_eq -> // /private_not_bot' -> // /public_equiv_eq -> // /public_equiv_eq -> /public_equiv_eq ->.
   case: Hsplit.
   move=>[x][y][]->[]->/private_not_bot' ->//.
-  move=>[x][y][]->[]-> /public_rel_eq ->//.  
+  move=>[x][y][]->[]-> /public_equiv_eq ->//.  
 Qed.
 
 
 Transparent state_step pool_input initial_state_immediate def f_proj.
 
-Lemma in_rel_eq i i0 l : rel in_rel l i i0 -> i = i0.
+Lemma in_equiv_eq i i0 l : rel in_equiv l i i0 -> i = i0.
 Proof.
   ssa. de H. move: H H0. rewrite /ir_dis. ssa. subst. done.
 Qed.
 
-Lemma sta_comp : forall (I V O : Ty) (IRel : cRel [I]) (VRel : cRel [V]) (ORel : cRel [O]) (f f' : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V])
+Lemma sta_comp : forall (I V O : Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (ORel : cEquiv [O]) (f f' : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V])
                         (v : [V]) (p : Proc (Times V I) O),
     fv_NI ORel VRel VRel g ->
     fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
@@ -298,30 +298,30 @@ Qed.
    step_sum set_pending (initiate_next(restore_invariant) o handler_preroutine o
    check_scheduler).  fv_NI_step_sum splits a goal into the two summands, and
    fv_NI_comp discharges fv_NI of the output pipeline from fv_NI of its stages.
-   The event relation is eqsum_L: an input may be unobservable, an output never
+   The event equivalence is eqsum_L: an input may be unobservable, an output never
    is, which is why f_EP_step_sum reduces to a condition on set_pending alone.
    Cost: every
    stage is proved over ALL related states, forgetting the reachable subset --
    restore_invariant repairs this before initiate_next.  (docs §7c, §7d.) === *)
-Lemma fv_NI_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
+Lemma fv_NI_comp : forall (I V: Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
 intros. move: H H0. rewrite /fv_NI. ssa.
 Qed.
 
-Lemma f_EP_comp : forall (I V: Ty) (IRel : cRel [I]) (VRel : cRel [V]) (f f' : [I]  -> [V] ->  [V]),
+Lemma f_EP_comp : forall (I V: Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (f f' : [I]  -> [V] ->  [V]),
     f_EP IRel VRel f -> f_EP IRel VRel f' -> f_EP IRel VRel (fun i => (f' i) \o (f i)).
 Proof.
 intros. move: H H0. rewrite /f_EP. ssa. eauto.
 Qed.
 
-(* An event relation never relates an inl to an inr, so a goal about [step_sum f
+(* An event equivalence never relates an inl to an inr, so a goal about [step_sum f
    g] splits: on the left both events are inputs and only f runs, on the right
    both are outputs and only g runs. *)
 Lemma fv_NI_step_sum : forall f g,
-    fv_NI in_rel state_type_rel state_type_rel f ->
-    fv_NI (out_rel Opub Opriv) state_type_rel state_type_rel g ->
-    fv_NI (eqsum_L in_rel (out_rel Opub Opriv)) state_type_rel state_type_rel (@step_sum Opub Opriv f g).
+    fv_NI in_equiv state_type_equiv state_type_equiv f ->
+    fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv g ->
+    fv_NI (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv state_type_equiv (@step_sum Opub Opriv f g).
 Proof.
   ssa. move: H H0. mrw. intros.
   apply eqsum_L_llrr in H1 as H1'. destruct H1'. destruct H3. destruct i. destruct i'.
@@ -333,8 +333,8 @@ Qed.
 (* Under eqsum_L only an inl is ever unobservable, so f_EP of a step_sum is a
    condition on its input summand alone. *)
 Lemma f_EP_step_sum : forall f g,
-    f_EP in_rel state_type_rel f ->
-    f_EP (eqsum_L in_rel (out_rel Opub Opriv)) state_type_rel (@step_sum Opub Opriv f g).
+    f_EP in_equiv state_type_equiv f ->
+    f_EP (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv (@step_sum Opub Opriv f g).
 Proof.
   ssa. move: H. mrw. intros. destruct i.
   rewrite /step_sum. eauto.
@@ -422,14 +422,14 @@ Qed.
 
 (* Slot 5, the public user process.  Its output slot is public, so it may
    emit anything as long as it emits it unconditionally. *)
-Lemma p_pub_concrete_NI : NI (public_rel Empty) (public_rel TPublicOutput) p_pub_concrete.
+Lemma p_pub_concrete_NI : NI (public_equiv Empty) (public_equiv TPublicOutput) p_pub_concrete.
 Proof.
   apply out_NI.
 Qed.
 
 (* Slot 4, the secret user process.  Both its input (the disk handler's
    [Notify]) and its output are secret. *)
-Lemma p_priv_concrete_NI : NI (private_rel THandlerOutput) (private_rel TTypeSyscall) p_priv_concrete.
+Lemma p_priv_concrete_NI : NI (private_equiv THandlerOutput) (private_equiv TTypeSyscall) p_priv_concrete.
 Proof.
   eapply map_NI.
   mrw. intros. apply rel_eqsum_L. eauto.
@@ -442,7 +442,7 @@ Proof.
   destruct i. destruct i0.
   2: apply loop_NI.
   destruct i1. destruct i2.
-  move:H. instantiate (1:=  (eqpair (private_rel Bool) _)).
+  move:H. instantiate (1:=  (eqpair (private_equiv Bool) _)).
   move/rel_eqpair. case. rewrite !pair_rewr.
   intros. clear b. ssa. destruct a. ssa. subst. case_if. subst. ssa. subst. ssa.
   ssa.
@@ -462,23 +462,23 @@ Proof.
   ssa. destruct i'. ssa. apply rel_refl.
   mrw. intros. destruct i. apply dis_eqsum_L2 in H. ssa. ssa.
   apply out_NI.
-  Unshelve. all: exact (public_rel _).
+  Unshelve. all: exact (public_equiv _).
 Qed.
 
 (* Slot 3, the scheduler.  Its output -- the pid it picks -- is public. *)
-Lemma scheduler_NI : NI (public_rel Empty) (public_rel Nat) scheduler.
+Lemma scheduler_NI : NI (public_equiv Empty) (public_equiv Nat) scheduler.
 Proof.
   eapply map_NI. eauto. eauto.
   instantiate (1:=eqpair _ _).
   mrw. move=> l i i' /rel_eqpair[] + _.
-  instantiate (1:= public_rel _). move=>/public_rel_eq ->. ssa.
+  instantiate (1:= public_equiv _). move=>/public_equiv_eq ->. ssa.
   eapply sta_NI.
   mrw. intros. move: H0.
-  move/public_rel_eq=>->//.
+  move/public_equiv_eq=>->//.
   mrw. intros. eauto.
   mrw. intros. auto.
   apply out_NI.
-  Unshelve. all: exact (public_rel _).
+  Unshelve. all: exact (public_equiv _).
 Qed.
 
 
@@ -508,15 +508,15 @@ Variable p_pub : Proc Empty Opub.
 Variable p_priv : Proc THandlerOutput Opriv.
 Variable p_sched : Proc Empty Nat.
 
-Hypothesis p_pub_NI : NI (public_rel Empty) (public_rel Opub) p_pub.
-Hypothesis p_priv_NI : NI (private_rel THandlerOutput) (private_rel Opriv) p_priv.
-Hypothesis p_sched_NI : NI (public_rel Empty) (public_rel Nat) p_sched.
+Hypothesis p_pub_NI : NI (public_equiv Empty) (public_equiv Opub) p_pub.
+Hypothesis p_priv_NI : NI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv.
+Hypothesis p_sched_NI : NI (public_equiv Empty) (public_equiv Nat) p_sched.
 
-Lemma model_sliced_NI : NI in_rel (out_rel Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
+Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
   rewr;simpl;rewr;simpl.
   eapply map_NI.
-  instantiate (1:= eqsum_L in_rel (out_rel Opub Opriv)). ssa. ssa.
+  instantiate (1:= eqsum_L in_equiv (out_equiv Opub Opriv)). ssa. ssa.
   mrw. intros.
   2:eapply loop_NI. apply eqsum_L_llrr in H as H'. destruct H'.
   destruct i. destruct i'. ssa. ssa. ssa.
@@ -528,7 +528,7 @@ Proof.
   eauto. eauto.
   mrw. intros.
   case/rel_eqpair: H;eauto.
-  instantiate (1:= state_type_rel).
+  instantiate (1:= state_type_equiv).
 
   (*state update: This part is long. Involves set_pending, check_scheduler and the two preroutine stages*)
   apply sta_NI.
@@ -540,7 +540,7 @@ Proof.
   (*set_pending: the input summand*)
   rewrite /set_pending.
   mrw. intros.
-  apply in_rel_eq in H;subst.
+  apply in_equiv_eq in H;subst.
   move: H0.
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 /rel_eqpair[]/rel_eqpair[]H3 H4/rel_eqpair[]/rel_eqpair[]H5 H6/rel_eqpair[]H7 H8.
   move: H0 H1 H2 H3 H4 H5 H6 H7 H8.
@@ -575,14 +575,14 @@ Proof.
   mrw. intros.
 
   destruct (eqVneq l \bot).
-  2: {  apply out_rel_not_bot in H. 2:apply/eqP=>//. subst.
-        apply state_type_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
+  2: {  apply out_equiv_not_bot in H. 2:apply/eqP=>//. subst.
+        apply state_type_equiv_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
   subst.  
 
   move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] /public_rel_eq H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6. 
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] /public_equiv_eq H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6. 
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
   move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] _ /rel_eqpair[] _ +.
@@ -591,7 +591,7 @@ Proof.
   rewrite !pair_rewr /is_sched_out. subst.
  
   case/rel_eqmaybe2.
-  move=>[]x []y []-> []->// /public_rel_eq ->//.
+  move=>[]x []y []-> []->// /public_equiv_eq ->//.
   move=>[]->[]->//.
 
   case/rel_eqmaybe2.
@@ -599,7 +599,7 @@ Proof.
   move=>[]->[]->//.
 
   case/rel_eqmaybe2.
-  move=>[]x0 []y0 []-> []->// /public_rel_eq ->//.
+  move=>[]x0 []y0 []-> []->// /public_equiv_eq ->//.
 
   move=>_. (*drop*)
 
@@ -630,7 +630,7 @@ Proof.
   rewrite !pair_rewr /is_sched_out.  
 
   case/rel_eqmaybe2.
-  move=>[]x'[]y'[]->[]->/public_rel_eq->//.
+  move=>[]x'[]y'[]->[]->/public_equiv_eq->//.
   move=>[]->->//.
 
   move=>->.
@@ -651,7 +651,7 @@ Proof.
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
-  move: H2=>/public_rel_eq->//.
+  move: H2=>/public_equiv_eq->//.
   move=>->.
   destruct (handler_completed runtime (get_ir_count v')).
 
@@ -675,7 +675,7 @@ Proof.
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
-  move: H2=>/public_rel_eq->//.
+  move: H2=>/public_equiv_eq->//.
   move=>->.
 
   destruct (get_ir_count v').
@@ -708,11 +708,11 @@ Proof.
   (*initiate_next: the outermost stage of the output summand*)
   mrw. intros.
   destruct (eqVneq l \bot).
-  2: { apply state_type_rel_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
+  2: { apply state_type_equiv_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
 
   subst.
 
-  (*initiate_next ignores the output, so the out_rel hypothesis is not needed*)
+  (*initiate_next ignores the output, so the out_equiv hypothesis is not needed*)
   clear H.
 
   rewrite /initiate_next.
@@ -726,9 +726,9 @@ Proof.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
   move: H4 H5 H6.
-  move=>/public_rel_eq ->.
-  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /public_rel_eq ->.
-  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /public_rel_eq ->. ssa.
+  move=>/public_equiv_eq ->.
+  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /public_equiv_eq ->.
+  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /public_equiv_eq ->. ssa.
   move=>->.
   
   destruct (masks_set v'). done. 
@@ -743,8 +743,8 @@ Proof.
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
-  move: H6. move/rel_eqpair=>[]. rewrite !pair_rewr. move=>/public_rel_eq->/public_rel_eq->.
-  move/public_rel_eq : H2=>->//. 
+  move: H6. move/rel_eqpair=>[]. rewrite !pair_rewr. move=>/public_equiv_eq->/public_equiv_eq->.
+  move/public_equiv_eq : H2=>->//. 
   
   move/ready_cases2P. rewrite /ready_cases2.
 
@@ -765,26 +765,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.  
   
   move:Haux Haux'.
   rewrite /ready_aux2.
@@ -807,26 +807,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
-  move/public_rel_eq : H2=>->.
+  move/public_equiv_eq : H2=>->.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
 
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. eauto. ssa.
@@ -834,14 +834,14 @@ Proof.
   apply/rel_eqpair2. con. eauto. ssa.
   apply/rel_eqpair2. con.
 
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_rel_eq->//. 
+  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_equiv_eq->//. 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /public_rel_eq ->/public_rel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->//. 
+  move=>[]i0'[]i1'[]->[]-> /public_equiv_eq ->/public_equiv_eq ->. ssa.
 
-  move/public_rel_eq : H4=>->//.
+  move/public_equiv_eq : H4=>->//.
 
   move=>[]HreadyD'[]HreadyDef' Hfirst'.
   rewrite Hfirst Hfirst'.
@@ -860,26 +860,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
-  move/public_rel_eq : H2=>->.
+  move/public_equiv_eq : H2=>->.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
 
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. eauto. ssa.
@@ -887,14 +887,14 @@ Proof.
   apply/rel_eqpair2. con. eauto. ssa.
   apply/rel_eqpair2. con.
 
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_rel_eq->//. 
+  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_equiv_eq->//. 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /public_rel_eq ->/public_rel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->//. 
+  move=>[]i0'[]i1'[]->[]-> /public_equiv_eq ->/public_equiv_eq ->. ssa.
 
-  move/public_rel_eq : H4=>->//.
+  move/public_equiv_eq : H4=>->//.
 
 
   move=>[]HreadyD'[]HreadyDef' Hfirst'.
@@ -905,7 +905,7 @@ Proof.
   move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/public_rel_eq->/public_rel_eq->/public_rel_eq->/public_rel_eq->. 
+  move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
 
   rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
   move=>+ /negP + /negP.
@@ -942,26 +942,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
-  move/public_rel_eq : H2=>->.
+  move/public_equiv_eq : H2=>->.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
 
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. eauto. ssa.
@@ -969,14 +969,14 @@ Proof.
   apply/rel_eqpair2. con. eauto. ssa.
   apply/rel_eqpair2. con.
 
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_rel_eq->//. 
+  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_equiv_eq->//. 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /public_rel_eq ->/public_rel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->//. 
+  move=>[]i0'[]i1'[]->[]-> /public_equiv_eq ->/public_equiv_eq ->. ssa.
 
-  move/public_rel_eq : H4=>->//.  
+  move/public_equiv_eq : H4=>->//.  
   
 
   move=>[[]HreadyD'[]HreadyDef' Hfirst'|].
@@ -996,26 +996,26 @@ Proof.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
   apply/rel_eqpair2. con.
 
-  move/public_rel_eq : H2=>->.
+  move/public_equiv_eq : H2=>->.
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.  
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.  
   apply/rel_eqpair2. con.
 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->. rewrite !pair_rewr //.
-  move/public_rel_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->/public_rel_eq ->. rewrite !pair_rewr //.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
+  move/public_equiv_eq : H1=>->//.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
 
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. eauto. ssa.
@@ -1023,14 +1023,14 @@ Proof.
   apply/rel_eqpair2. con. eauto. ssa.
   apply/rel_eqpair2. con.
 
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_rel_eq->//. 
+  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_equiv_eq->//. 
   move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
   move/eqsum_split.
   case.
-  move=>[]i0'[]i1'[]->[]->_/public_rel_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /public_rel_eq ->/public_rel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->//. 
+  move=>[]i0'[]i1'[]->[]-> /public_equiv_eq ->/public_equiv_eq ->. ssa.
 
-  move/public_rel_eq : H4=>->//.  
+  move/public_equiv_eq : H4=>->//.  
 
   move=>[]HreadyD'[]HreadyDef' Hfirst'.
   rewrite Hfirst Hfirst'. exfalso.
@@ -1041,7 +1041,7 @@ Proof.
   move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/public_rel_eq->/public_rel_eq->/public_rel_eq->/public_rel_eq->. 
+  move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
 
   rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
   rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
@@ -1085,7 +1085,7 @@ Proof.
   move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/public_rel_eq->/public_rel_eq->/public_rel_eq->/public_rel_eq->. 
+  move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
 
   rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
   rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
@@ -1112,7 +1112,7 @@ Proof.
   move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/public_rel_eq->/public_rel_eq->/public_rel_eq->/public_rel_eq->. 
+  move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
 
   rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
   rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.
@@ -1272,12 +1272,12 @@ Proof.
 
   move: H0.
   case/rel_eqpair. rewrite !pair_rewr.
-  move=>+ /public_rel_eq ->.
+  move=>+ /public_equiv_eq ->.
 
   move/eqsum_split.
   case.
   move=>[]i0'[]i1'[]->[]->_. ssa.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->. ssa.
   move=>->.
   destruct (is_handler_pid _).
   have: get_re_sched (restore_invariant v) = get_re_sched (restore_invariant v').
@@ -1288,13 +1288,13 @@ Proof.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
   move/rel_eqpair : H0. case. rewrite !pair_rewr.
 
-  move=>+ /public_rel_eq ->.
-  move/public_rel_eq : H1=>->.
+  move=>+ /public_equiv_eq ->.
+  move/public_equiv_eq : H1=>->.
 
   move/eqsum_split.
   case.
   move=>[]i0'[]i1'[]->[]->_. ssa.
-  move=>[]i0'[]i1'[]->[]->/public_rel_eq ->. ssa.
+  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->. ssa.
 
   move=>->.
   destruct (get_re_sched (restore_invariant v')).
@@ -1311,21 +1311,21 @@ Proof.
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con.  eauto. rewrite !pair_rewr.
 
-  move/public_rel_eq : H4=>->.
+  move/public_equiv_eq : H4=>->.
   move/rel_eqpair2 : H5.
-  case. rewrite !pair_rewr. move=>_ /public_rel_eq ->//.
-  move/public_rel_eq :H2=>->. done.
+  case. rewrite !pair_rewr. move=>_ /public_equiv_eq ->//.
+  move/public_equiv_eq :H2=>->. done.
   apply/rel_eqpair2. con.
   apply/rel_eqpair2. con. done. 
-  move/public_rel_eq : H2=>->. rewrite !pair_rewr.
-  move/rel_eqpair2 : H5. case. rewrite !pair_rewr. move=>_ /public_rel_eq ->. ssa.
+  move/public_equiv_eq : H2=>->. rewrite !pair_rewr.
+  move/rel_eqpair2 : H5. case. rewrite !pair_rewr. move=>_ /public_equiv_eq ->. ssa.
   apply/rel_eqpair2. con. rewrite !pair_rewr.
   move/rel_eqpair2 : H6. case. rewrite !pair_rewr.
-  move/public_rel_eq ->. done.
+  move/public_equiv_eq ->. done.
   rewrite !pair_rewr.
   move/rel_eqpair2 : H6. case. rewrite !pair_rewr.
-  move=>/public_rel_eq -> /public_rel_eq ->//.
-  move/public_rel_eq : H2=>->//.
+  move=>/public_equiv_eq -> /public_equiv_eq ->//.
+  move/public_equiv_eq : H2=>->//.
 
 
   move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
@@ -1334,10 +1334,10 @@ Proof.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.    
 
   move/rel_eqpair : H0. case. rewrite !pair_rewr.
-  move=>_ /public_rel_eq ->.
-  move/public_rel_eq : H1=>->.
-  move/public_rel_eq : H2=>->.
-  move/public_rel_eq : H4=>->.  ssa.
+  move=>_ /public_equiv_eq ->.
+  move/public_equiv_eq : H1=>->.
+  move/public_equiv_eq : H2=>->.
+  move/public_equiv_eq : H4=>->.  ssa.
   rewrite /odflt /oapp /get_prev_pid /get_prev_pid_wrap /get_prev_pid /get_pids !pair_rewr.
   destruct prev'. done.
   destruct scheduler_pid. auto. done.
@@ -1376,7 +1376,7 @@ Proof.
 
   (*map*)
   eapply map_NI.
-  instantiate (1:= eqmaybe_hidden (eqpair (eqsum (private_rel Bool) (public_rel _)) (eqmaybe_hidden (private_rel _)))).
+  instantiate (1:= eqmaybe_hidden (eqpair (eqsum (private_equiv Bool) (public_equiv _)) (eqmaybe_hidden (private_equiv _)))).
   mrw. intros.
   destruct i. destruct i'.
   rewrite !pair_rewr.
@@ -1422,7 +1422,7 @@ Proof.
   eapply maybe_NI.
   eapply par_NI.
   eapply map_NI.
-  instantiate (1:= eqpair_LR false_rel (_)).
+  instantiate (1:= eqpair_LR false_equiv (_)).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 2:eauto.
   clear H0.
@@ -1431,9 +1431,9 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto.
   subst. simpl. case_if. case_if. done. done.
   case_if. done. done.
-  move=>[]x[]y[]->[]->/public_rel_eq->/=. done.
+  move=>[]x[]y[]->[]->/public_equiv_eq->/=. done.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (public_rel _) false_rel).
+  instantiate (1:= eqmaybe_swi (public_equiv _) false_equiv).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1453,7 +1453,7 @@ Proof.
   (*map*)
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR false_rel _).
+  instantiate (1:= eqpair_LR false_equiv _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
@@ -1462,9 +1462,9 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto.
   subst. simpl. case_if. case_if. done. done.
   case_if. done. done.
-  move=>[]x[]y[]->[]->/public_rel_eq->/=. done. eauto.
+  move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (private_rel _) false_rel).
+  instantiate (1:= eqmaybe_swi (private_equiv _) false_equiv).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1486,7 +1486,7 @@ Proof.
   (*map*)
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR false_rel _).
+  instantiate (1:= eqpair_LR false_equiv _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
@@ -1495,9 +1495,9 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto.
   subst. simpl. case_if. case_if. done. done.
   case_if. done. done.
-  move=>[]x[]y[]->[]->/public_rel_eq->/=. done. eauto.
+  move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (public_rel _) false_rel).
+  instantiate (1:= eqmaybe_swi (public_equiv _) false_equiv).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1517,18 +1517,18 @@ Proof.
   (*map*)
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR (private_rel _) _).
+  instantiate (1:= eqpair_LR (private_equiv _) _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
   case/eqsum_split:H.
   move=>[]x[]y[]->[]->. intros.
   simpl in b. destruct b. destruct H. subst. eauto. eauto.
-  move=>[]x[]y[]->[]->/public_rel_eq->/=.
+  move=>[]x[]y[]->[]->/public_equiv_eq->/=.
   destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_hidden (private_rel _)). auto.
+  instantiate (1:= eqmaybe_hidden (private_equiv _)). auto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (private_rel _) (private_rel _)).
+  instantiate (1:= eqmaybe_swi (private_equiv _) (private_equiv _)).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1554,7 +1554,7 @@ Proof.
 
   eapply map_NI. eauto. eauto.
   mrw. intros.
-  move:H. instantiate (1:=eqpair (private_rel _) (public_rel _)).
+  move:H. instantiate (1:=eqpair (private_equiv _) (public_equiv _)).
   move/rel_eqpair. case=>HH _.
   simpl in HH. destruct HH. destruct H. rewrite H0.
   case_if. auto. auto. subst. auto.
@@ -1570,18 +1570,18 @@ Proof.
   (*map*)
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR (private_rel _) _).
+  instantiate (1:= eqpair_LR (private_equiv _) _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
   case/eqsum_split:H.
   move=>[]x[]y[]->[]->. intros.
   simpl in b. destruct b. destruct H. subst. eauto. eauto.
-  move=>[]x[]y[]->[]->/public_rel_eq->/=.
+  move=>[]x[]y[]->[]->/public_equiv_eq->/=.
   destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_hidden (private_rel _)). auto.
+  instantiate (1:= eqmaybe_hidden (private_equiv _)). auto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (private_rel _) (private_rel _)).
+  instantiate (1:= eqmaybe_swi (private_equiv _) (private_equiv _)).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1607,7 +1607,7 @@ Proof.
 
   eapply map_NI. eauto. eauto.
   mrw. intros.
-  move:H. instantiate (1:=eqpair (private_rel _) (public_rel _)).
+  move:H. instantiate (1:=eqpair (private_equiv _) (public_equiv _)).
   move/rel_eqpair. case=>HH _.
   simpl in HH. destruct HH. destruct H. rewrite H0.
   case_if. auto. auto. subst. auto.
@@ -1619,7 +1619,7 @@ Proof.
   apply out_NI.
 
   eapply map_NI.
-  instantiate (1:= eqpair_LR false_rel _).
+  instantiate (1:= eqpair_LR false_equiv _).
   mrw. intros. apply rel_eqpair in H. destruct H.
   apply rel_eqpair_LR2. con. 
   clear H0.
@@ -1628,9 +1628,9 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto.
   subst. simpl. case_if. case_if. done. done.
   case_if. done. done.
-  move=>[]x[]y[]->[]->/public_rel_eq->/=. done. eauto.
+  move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (public_rel _) false_rel).
+  instantiate (1:= eqmaybe_swi (public_equiv _) false_equiv).
   mrw. intros. apply rel_eqmaybe_swi2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
   subst. apply rel_eqmaybe. eauto.
@@ -1647,23 +1647,23 @@ Proof.
   eapply map_NI. eauto. eauto.
   instantiate (1:=eqpair _ _).
   mrw. move=> l i i' /rel_eqpair[] + _.
-  instantiate (1:= public_rel _). move=>/public_rel_eq ->. ssa.
+  instantiate (1:= public_equiv _). move=>/public_equiv_eq ->. ssa.
   eapply sta_NI.
   mrw. intros. move: H0.
-  move/public_rel_eq=>->//.
+  move/public_equiv_eq=>->//.
   mrw. intros. eauto.
   mrw. intros. auto.
   apply out_NI.
 
-  Unshelve. all: apply public_rel.
+  Unshelve. all: apply public_equiv.
 Qed.  
 
 
 (* === Section 6 (payoff): the top result.  model_sliced_userview = map id
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
-   weakening through parse_output (out_rel-related outputs map to
-   out_rel_userview-related ones).  (docs/noninterference.md §6.) === *)
-Lemma model_sliced_userview_NI : NI in_rel (out_rel_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
+   weakening through parse_output (out_equiv-related outputs map to
+   out_equiv_userview-related ones).  (docs/noninterference.md §6.) === *)
+Lemma model_sliced_userview_NI : NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
   eapply map_NI. eauto. eauto.
   2: apply model_sliced_NI.
@@ -1674,7 +1674,7 @@ Proof.
   rewrite !pair_rewr.
   rewrite /parse_output.
   move/rel_eqmaybe2. case.
-  move=>[]x'[]y'[]->[]->/public_rel_eq->//.
+  move=>[]x'[]y'[]->[]->/public_equiv_eq->//.
   move=>[]->->.
   move/rel_eqmaybe2. case.
   move=>[]x'[]y'[]->[]-> H _ _ _ _.
@@ -1688,14 +1688,14 @@ End Parameters.
 
 
 (* === The concrete system, recovered by instantiation. === *)
-Corollary model_sliced_concrete_NI : NI in_rel out_relC model_sliced_concrete.
+Corollary model_sliced_concrete_NI : NI in_equiv out_equivC model_sliced_concrete.
 Proof.
   apply model_sliced_NI.
   apply p_pub_concrete_NI. apply p_priv_concrete_NI. apply scheduler_NI.
 Qed.
 
 Corollary model_sliced_userview_concrete_NI :
-  NI in_rel out_rel_userviewC model_sliced_userview_concrete.
+  NI in_equiv out_equiv_userviewC model_sliced_userview_concrete.
 Proof.
   apply model_sliced_userview_NI.
   apply p_pub_concrete_NI. apply p_priv_concrete_NI. apply scheduler_NI.

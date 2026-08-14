@@ -1,4 +1,4 @@
-# NonInterference — proof / security-relation documentation
+# NonInterference — proof / security-equivalence documentation
 
 *Prose companion to [`theories/noninterference.v`](../theories/noninterference.v).*
 
@@ -15,21 +15,21 @@ security argument. Definitions are as given in
 
 ## Contents
 
-1. [Characterised equivalences (`cRel`): the framework and levels](#1-characterised-equivalences-crel-the-framework-and-levels)
-2. [Base relations: `public_rel`, `private_rel`](#2-base-relations-public_rel-private_rel)
-3. [Composite relations](#3-composite-relations)
-4. [The model's security relations: `in_rel`, `out_rel`, `out_rel_userview`](#4-the-models-security-relations-in_rel-out_rel-out_rel_userview)
+1. [Characterised equivalences (`cEquiv`): the framework and levels](#1-characterised-equivalences-cequiv-the-framework-and-levels)
+2. [Base equivalences: `public_equiv`, `private_equiv`](#2-base-equivalences-public_equiv-private_equiv)
+3. [Composite equivalences](#3-composite-equivalences)
+4. [The model's equivalences: `in_equiv`, `out_equiv`, `out_equiv_userview`](#4-the-models-equivalences-in_equiv-out_equiv-out_equiv_userview)
 5. [`model_immediate` is not non-interfering](#5-model_immediate-is-not-non-interfering)
 6. [`model_sliced` and `model_sliced_userview` are non-interfering](#6-model_sliced-and-model_sliced_userview-are-non-interfering)
-7. [The state relation and `fv_NI` — the hard part](#7-the-state-relation-and-fv_ni--the-hard-part)
+7. [The state equivalence and `fv_NI` — the hard part](#7-the-state-equivalence-and-fv_ni--the-hard-part)
 8. [Model limitations](#8-model-limitations)
 
 
-## 1. Characterised equivalences (`cRel`): the framework and levels
+## 1. Characterised equivalences (`cEquiv`): the framework and levels
 
-A `cRel` ([`definitions.v`](../theories/definitions.v)) is fixed for the input type
-and for the output type: a level-indexed relation saying what an observer at each
-level can tell about values of that type:
+One `cEquiv` ([`definitions.v`](../theories/definitions.v)) is fixed for the input
+type and one for the output type. Each carries two level-indexed fields, which
+together say what an observer at a given level can tell about values of that type:
 
 ```text
 rel l x y   x and y are indistinguishable to an observer at level l
@@ -42,16 +42,18 @@ fields are monotone downwards: whatever a level relates stays related below it, 
 whatever is unobservable at a level stays unobservable below it. A lower observer
 sees less.
 
-The remaining field gives the record its name. `rel l` is an equivalence, and the
-unobservable values must form one of its classes:
+The remaining fields give the record its name. `rel l` is an **equivalence**, so at
+each level it partitions the type into classes; and `dis l` is **characterised** as
+one of them:
 
 ```text
 dis l a0  ->  forall a1, dis l a1 <-> rel l a0 a1
 ```
 
 Take any unobservable value. The values related to it are the other unobservable
-ones and nothing else. So whatever an observer at `l` can see gets compared by the
-underlying relation, while whatever it cannot see collapses into a single class.
+ones and nothing else. So at each level a `cEquiv` cuts the type into classes an
+observer there cannot tell apart, and singles out at most one of those classes —
+possibly none, as under `public_equiv` below — as the one it does not see at all.
 
 ### What `NI` says
 
@@ -75,37 +77,36 @@ unchanged by anything the observer at `l` may not see. The case that matters is
 `l = ⊥`; the counterexample of section 5 refutes the *insertion* clause.
 
 
-## 2. Base relations: `public_rel`, `private_rel`
+## 2. Base equivalences: `public_equiv`, `private_equiv`
 
-**public** and **private** name a whole relation, the one a type is given, whereas
+**public** and **private** name a whole `cEquiv`, the one a type is given, whereas
 **unobservable** is the per-level property `dis l x`. ("Secret" is used informally
 for unobservable at `⊥`.)
 
 ```text
-public_rel A    dis l x = False        rel l x y = (x = y)
-private_rel A   dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨ (l = ⊥)
+public_equiv A    dis l x = False        rel l x y = (x = y)
+private_equiv A   dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨ (l = ⊥)
 ```
 
-Under `public_rel` nothing is ever unobservable, and two values are related only
-when they are equal. So a public value can be neither inserted, removed, nor varied
-without an observer noticing, at any level.
+These are the two extremes of the class picture of section 1. Under `public_equiv`
+every class is a singleton and none of them is distinguished, so a public value can
+be neither inserted, removed, nor varied without an observer noticing, at any
+level. Under `private_equiv` the whole type collapses to a single class at `⊥` and
+that class is the distinguished one, which is what lets non-interference insert,
+remove or replace such a value freely. At every other level `private_equiv` is
+`public_equiv`: singleton classes, nothing distinguished.
 
-Under `private_rel` everything is unobservable at `⊥` and everything is related
-there, which is what lets non-interference insert, remove or replace such a value
-freely. At every other level nothing is unobservable and the relation is again
-equality.
 
-
-## 3. Composite relations
+## 3. Composite equivalences
 
 Each family is one construction taking *which values are secret* as a parameter;
 the variants are that parameter, instantiated. The rest follows from the
 characterisation of section 1: values of the same shape are related
 componentwise, and values of different shape only by both being secret.
 
-**`eqpair IRel ORel : cRel [Times I O]`** — relate pairs componentwise:
+**`eqpair IRel ORel : cEquiv [Times I O]`** — relate pairs componentwise:
 `(a,b) ~ (a',b')` iff `a ~ a'` and `b ~ b'`. Nothing is secret (`dis = False`).
-The model's own relations are built from this one, so it stays a definition in
+The model's own equivalences are built from this one, so it stays a definition in
 its own right rather than an instance carrying a secrecy case that never fires.
 
 **`eqpair_L` / `eqpair_R` / `eqpair_LR`** (`eqpair_aux`) — the gated variants,
@@ -117,7 +118,7 @@ eqpair_R   secret at l iff the RIGHT component is
 eqpair_LR  secret at l iff BOTH components are
 ```
 
-**`eqsum IRel ORel : cRel [Sum I O]`** and **`eqsum_L`** (`eqsum_aux`) — relate a
+**`eqsum IRel ORel : cEquiv [Sum I O]`** and **`eqsum_L`** (`eqsum_aux`) — relate a
 `Sum` tag-by-tag, `inl` by `IRel` and `inr` by `ORel`. Neither ever relates an
 `inl` to an `inr`, so the *tag* stays public even when the payload underneath is
 not; an `inr` is never secret. They differ only in the `inl` case:
@@ -139,10 +140,10 @@ see `None`", `None` being secret exactly when `¬P l`:
 eqmaybe          P l = True        None is public: everyone can see it.
 eqmaybe_private  P l = (l ≠ ⊥)     everyone but ⊥ can see None; None is secret
                                    only at the attacker level ⊥ -- the same
-                                   condition as private_rel.
+                                   condition as private_equiv.
 eqmaybe_hidden   P l = False       nobody can see None; None is secret at every
                                    level (a value whose very presence is hidden).
-eqmaybe_swi      P l = aware BRel  those who are "aware" per a Bool relation BRel
+eqmaybe_swi      P l = aware BRel  those who are "aware" per an equivalence BRel
                                    can see None; used to gate a switch branch.
 ```
 
@@ -151,39 +152,39 @@ The mixed case follows from the characterisation (section 1): `Some v ~ None` at
 in for `Some v` only when `v` is itself a secret the observer may not see.
 
 
-## 4. The model's security relations: `in_rel`, `out_rel`, `out_rel_userview`
+## 4. The model's equivalences: `in_equiv`, `out_equiv`, `out_equiv_userview`
 
-**`in_rel : cRel [T_in]`** is built from `ir_dis` rather than taken as
-`private_rel TInterrupt`:
+**`in_equiv : cEquiv [T_in]`** is built from `ir_dis` rather than taken as
+`private_equiv TInterrupt`:
 
 ```coq
-ir_dis l ir      := ir = DiskInterrupt /\ l = \bot
-in_rel.dis       := ir_dis
-in_rel.rel l     := fun ir ir' => ir = ir' \/ (ir_dis l ir /\ ir_dis l ir')
+ir_dis l ir        := ir = DiskInterrupt /\ l = \bot
+in_equiv.dis       := ir_dis
+in_equiv.rel l     := fun ir ir' => ir = ir' \/ (ir_dis l ir /\ ir_dis l ir')
 ```
 
 The disk interrupt alone is unobservable, and only at `⊥`; every other interrupt
-must be matched even there. `private_rel TInterrupt` would hide the timer as well,
+must be matched even there. `private_equiv TInterrupt` would hide the timer as well,
 and non-interference would then forbid the schedule from depending on it, which is
 the whole basis of `model_sliced`.
 
-**`out_rel Opub Opriv : cRel [T_out Opub Opriv]`** relates two pool outputs
+**`out_equiv Opub Opriv : cEquiv [T_out Opub Opriv]`** relates two pool outputs
 componentwise. A pool output is a six-tuple, one `Option` per slot:
 
 ```text
 ( pub , sys , sch , dfl , dsk , tmr )
 ```
 
-and `out_rel` is the corresponding nest of `eqpair`s, with these components:
+and `out_equiv` is the corresponding nest of `eqpair`s, with these components:
 
-| slot | component relation | value at `⊥` | did the slot run? |
+| slot | component equivalence | value at `⊥` | did the slot run? |
 |---|---|---|---|
-| `pub` public user process | `eqmaybe public_rel` | visible | visible |
-| `sys` private user process | `eqmaybe private_rel` | hidden | visible |
-| `sch` scheduler | `eqmaybe public_rel` | visible | visible |
-| `dfl` default/NOP handler | `eqmaybe_private private_rel` | hidden | hidden |
-| `dsk` disk handler | `eqmaybe_private private_rel` | hidden | hidden |
-| `tmr` timer handler | `eqmaybe public_rel` | visible | visible |
+| `pub` public user process | `eqmaybe public_equiv` | visible | visible |
+| `sys` private user process | `eqmaybe private_equiv` | hidden | visible |
+| `sch` scheduler | `eqmaybe public_equiv` | visible | visible |
+| `dfl` default/NOP handler | `eqmaybe_private private_equiv` | hidden | hidden |
+| `dsk` disk handler | `eqmaybe_private private_equiv` | hidden | hidden |
+| `tmr` timer handler | `eqmaybe public_equiv` | visible | visible |
 
 The timer slot is public, since it reacts only to public scheduled events. The disk
 slot is private because the disk interrupt is, and the default/NOP slot has to be
@@ -191,7 +192,7 @@ private as well: a slice step is filled by one or the other, so the two must loo
 alike.
 
 **The last two columns come apart only for the handlers, and that is where
-scheduling secrecy lives.** The `private_rel` payload hides the *value* in a slot.
+scheduling secrecy lives.** The `private_equiv` payload hides the *value* in a slot.
 Whether the slot ran is decided by the `eqmaybe` variant wrapped around it, since
 that is what fixes who can see `None`. Under plain `eqmaybe`, `None` is public, so
 a `⊥`-observer sees a `Some` where the other run has a `None`: `sys` hides
@@ -205,11 +206,11 @@ formal
 content of "the leak is in the scheduling". Section 6a discharges the obligation
 `eqmaybe_private` creates.
 
-**`out_rel_userview Opub Opriv : cRel [T_out_userview Opub Opriv]`**
+**`out_equiv_userview Opub Opriv : cEquiv [T_out_userview Opub Opriv]`**
 (user-visible output, for `model_sliced_userview`)
 
 ```text
-eqmaybe_hidden (eqsum public_rel private_rel)
+eqmaybe_hidden (eqsum public_equiv private_equiv)
 ```
 
 Only the user-visible channel survives `parse_output`: a public user output on the
@@ -218,7 +219,7 @@ left (exact) or the secret syscall on the right (secret at `⊥`).
 
 ## 5. `model_immediate` is not non-interfering
 
-`model_immediate_not_NI : ~ NI in_rel out_relC model_immediate_concrete`.
+`model_immediate_not_NI : ~ NI in_equiv out_equivC model_immediate_concrete`.
 
 `model_immediate` is parametric like `model_sliced`, but a counterexample should
 exhibit a single system, so the refutation is stated at `model_immediate_concrete`,
@@ -252,29 +253,29 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
        (p_pub : Proc Empty Opub)
        (p_priv : Proc THandlerOutput Opriv)
        (p_sched : Proc Empty Nat),
-  NI (public_rel Empty) (public_rel Opub) p_pub ->
-  NI (private_rel THandlerOutput) (private_rel Opriv) p_priv ->
-  NI (public_rel Empty) (public_rel Nat) p_sched ->
-     NI in_rel (out_rel Opub Opriv)
+  NI (public_equiv Empty) (public_equiv Opub) p_pub ->
+  NI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv ->
+  NI (public_equiv Empty) (public_equiv Nat) p_sched ->
+     NI in_equiv (out_equiv Opub Opriv)
           (model_sliced runtime runs p_pub p_priv p_sched)
-  /\ NI in_rel (out_rel_userview Opub Opriv)
+  /\ NI in_equiv (out_equiv_userview Opub Opriv)
           (model_sliced_userview runtime runs p_pub p_priv p_sched)
 ```
 
 (the two conjuncts are `model_sliced_NI` and `model_sliced_userview_NI`).
 
 `model_sliced_userview = map id parse_output model_sliced`, and the second conjunct
-follows from the first by output weakening: `parse_output` maps `out_rel`-related
-outputs to `out_rel_userview`-related ones.
+follows from the first by output weakening: `parse_output` maps `out_equiv`-related
+outputs to `out_equiv_userview`-related ones.
 
 **Why the result is parametric.** Everything the process pool is built around
 stays fixed; everything it carries is left open:
 
 | parameter | ranges over | side condition |
 |---|---|---|
-| `p_pub` | any process in the public user slot | must be `NI` at `public_rel`/`public_rel` |
-| `p_priv` | any process in the private user slot | must be `NI` at `private_rel`/`private_rel` |
-| `p_sched` | any scheduler | must be `NI` at `public_rel`/`public_rel` |
+| `p_pub` | any process in the public user slot | must be `NI` at `public_equiv`/`public_equiv` |
+| `p_priv` | any process in the private user slot | must be `NI` at `private_equiv`/`private_equiv` |
+| `p_sched` | any scheduler | must be `NI` at `public_equiv`/`public_equiv` |
 | `Opub`, `Opriv` | the two user output alphabets | none |
 | `runtime` | how many steps a handler runs for | none |
 | `runs` | how many handler runs a slice holds | none |
@@ -298,23 +299,23 @@ from the outside in:
 | layer of `model_sliced` | theorem | what it gives |
 |---|---|---|
 | the outer `map inl (inr_or_def def)` and every rewiring of an input or output | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
-| `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output relations must coincide |
+| `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output equivalences must coincide |
 | `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates — **this is where section 7 is discharged** |
 | `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_hidden IRel) ORel (maybe p)` |
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
-| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`false_rel`](#6a-gating-a-slot-why-false_rel-and-where-obliviousness-is-needed) for every public slot |
+| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`false_equiv`](#6a-gating-a-slot-why-false_equiv-and-where-obliviousness-is-needed) for every public slot |
 | the leaves | `out_NI`, or a hypothesis | the handler and padding leaves are constant processes, so `out_NI`; the scheduler and user slots are where the three parametricity hypotheses are consumed |
 | `parse_output` on top of `model_sliced` | `map_NI` again | output weakening, giving `model_sliced_userview_NI` |
 
-Each theorem *derives* the composite's relations from those of its parts rather
-than taking them as given, which accounts for the shape of the relations in
-section 4: `par_NI` imposes `out_rel`'s nest of `eqpair`s on a pool output, and
+Each theorem *derives* the composite's equivalences from those of its parts rather
+than taking them as given, which accounts for the shape of the equivalences in
+section 4: `par_NI` imposes `out_equiv`'s nest of `eqpair`s on a pool output, and
 `swi_NI` imposes its `eqmaybe`s on a gated slot.
 
 Two of these layers carry substantial side conditions. `sta_NI`'s are section 7,
 and `swi_NI`'s occupy the rest of this one.
 
-### 6a. Gating a slot: why `false_rel`, and where obliviousness is needed
+### 6a. Gating a slot: why `false_equiv`, and where obliviousness is needed
 
 `par_NI` peels the pool apart into one goal per slot, so it is enough to look at a
 single slot. Each is built the same way ([`models.md` §3](models.md)): a `swi`
@@ -325,12 +326,12 @@ the current pid.
 map (fun i => (slot_pid i.1 == k, f_proj i.2 k)) id (swi ... (f_proc k))
 ```
 
-Two obligations are left for slot `k`, both parameterised by a Bool relation `BRel`
-we get to choose. `map_NI` asks that the gate map be sound at `BRel`, and its
+Two obligations are left for slot `k`, both parameterised by an equivalence `BRel`
+on Bool we get to choose. `map_NI` asks that the gate map be sound at `BRel`, and its
 second half is the one that bites:
 
 ```coq
-f_PU (eqsum private_rel public_rel) BRel (fun pid => slot_pid pid == k)
+f_PU (eqsum private_equiv public_equiv) BRel (fun pid => slot_pid pid == k)
   (* an unobservable pid must produce an unobservable bit *)
 ```
 
@@ -345,7 +346,7 @@ be unobservable, so the observer can trust the gate. Under `oblivious` every out
 the gated process can produce is unobservable at `l`, so the observer learns
 nothing from it either way.
 
-`cur_pid` is `Sum Bool Nat` classified `eqsum private_rel public_rel` (section 7b),
+`cur_pid` is `Sum Bool Nat` classified `eqsum private_equiv public_equiv` (section 7b),
 so at `⊥` every `inl b` is unobservable while `inr n` is not. What `f_PU` demands
 of `BRel` therefore depends on where `slot_pid` sends those two `inl` values, which
 is `1` for `inl true` and `2` for `inl false` ([models.v:222](../theories/models.v)).
@@ -355,49 +356,49 @@ unobservable pids miss this slot, so the gate map sends them to `false`. `f_PU`
 needs a `BRel` in
 which `false` is unobservable — a sink for the pids the observer may not see, which
 happens not to select this slot anyway. `aware BRel true l` then needs `true` to be
-observable and rigid at every level. `false_rel`
-([definitions.v:252](../theories/definitions.v)) is exactly that relation:
+observable and rigid at every level. `false_equiv`
+([definitions.v:252](../theories/definitions.v)) is exactly that:
 
 ```text
-false_rel   dis l b = (b = false ∧ l = ⊥)      rel l b b' = (b = b')
+false_equiv   dis l b = (b = false ∧ l = ⊥)      rel l b b' = (b = b')
 ```
 
-It is a well-formed `cRel` because `false` is its only unobservable value, so the
+It is a well-formed `cEquiv` because `false` is its only unobservable value, so the
 unobservable values form one class (section 1). With it, `f_PU` holds, and
-`false_rel_aware : forall l, aware false_rel true l`
+`false_equiv_aware : forall l, aware false_equiv true l`
 ([noninterference.v:230](../theories/noninterference.v)) discharges `swi_NI` by the
 left disjunct at every level, no case split needed.
 
 **The disk handler at slot 1, and the same for the default handler at slot 2.**
 Here `inl true` maps to `true` and `inl false` maps to `false`, and both pids are
 unobservable at `⊥`. `f_PU` now demands that *both* booleans be unobservable there,
-which rules `false_rel` out and leaves `private_rel Bool`. But if `true` is
+which rules `false_equiv` out and leaves `private_equiv Bool`. But if `true` is
 unobservable at `⊥` then `aware BRel true ⊥` fails by definition, so the left
 disjunct is gone and the proof must split on the level:
 
-- above `⊥`, `private_rel` collapses to equality, nothing is unobservable, and
+- above `⊥`, `private_equiv` collapses to equality, nothing is unobservable, and
   `aware` applies as before;
 - at `⊥`, the right disjunct is used. The proof builds an `ObliviousTrace`, every
   output step of which must satisfy `dis ORel ⊥ o`.
 
 That last obligation is affordable only because the slot's output was classified
-`eqmaybe_private private_rel` in section 4, which makes both `Some o` and `None`
-unobservable at `⊥`. Under `eqmaybe private_rel` the `None` would be public,
+`eqmaybe_private private_equiv` in section 4, which makes both `Some o` and `None`
+unobservable at `⊥`. Under `eqmaybe private_equiv` the `None` would be public,
 obliviousness would fail, and nothing would hide that the handler ran. Losing
 awareness at `⊥` costs nothing, since the slot's output is private there anyway.
 
 | slot | process | `BRel` | `swi_NI` discharged by |
 |---|---|---|---|
-| 5 | `p_pub_concrete`, public | `false_rel` | `aware`, every level |
-| 4 | `p_priv_concrete`, private | `false_rel` | `aware`, every level |
-| 3 | scheduler | `false_rel` | `aware`, every level |
-| 0 | timer handler | `false_rel` | `aware`, every level |
-| 2 | default/NOP handler | `private_rel` | `oblivious` at `⊥`, `aware` above |
-| 1 | disk handler | `private_rel` | `oblivious` at `⊥`, `aware` above |
+| 5 | `p_pub_concrete`, public | `false_equiv` | `aware`, every level |
+| 4 | `p_priv_concrete`, private | `false_equiv` | `aware`, every level |
+| 3 | scheduler | `false_equiv` | `aware`, every level |
+| 0 | timer handler | `false_equiv` | `aware`, every level |
+| 2 | default/NOP handler | `private_equiv` | `oblivious` at `⊥`, `aware` above |
+| 1 | disk handler | `private_equiv` | `oblivious` at `⊥`, `aware` above |
 
 The line falls between the two secret handlers and everything else.
 `p_priv_concrete` sits on the public side of it: its secrecy travels in the
-`private_rel` payload inside
+`private_equiv` payload inside
 `eqmaybe_swi`, never in its gate.
 
 > The generic theorems in [`theories/theorems.v`](../theories/theorems.v)
@@ -406,7 +407,7 @@ The line falls between the two secret handlers and everything else.
 > such), which avoids constructing streams throughout the proofs.
 
 
-## 7. The state relation and `fv_NI` — the hard part
+## 7. The state equivalence and `fv_NI` — the hard part
 
 ### 7a. What constrains the classification
 
@@ -447,7 +448,7 @@ f_EP  IRel VRel f       :=  dis IRel l i -> rel VRel l (f i v) v
 
 `fv_NI` says the transition maps related states to related states. `f_EP`, for
 *equivalence preserving*, asks for more: an input the observer may not see must not
-visibly move the state. Events are related by `eqsum_L in_rel out_rel`
+visibly move the state. Events are related by `eqsum_L in_equiv out_equiv`
 ([noninterference.v:514](../theories/noninterference.v)), whose `dis` holds only on
 the `inl` side, so `f_EP` constrains the left summand and nothing else. It is a
 condition on `set_pending` alone.
@@ -461,7 +462,7 @@ condition on `set_pending` alone.
   take different branches and produce unrelated states.
 
 Both must hold at once, so the interrupt controller is classified *per bit*:
-`private_pending_rel` pairs a private pending bit with a public mask bit, the only
+`private_pending_equiv` pairs a private pending bit with a public mask bit, the only
 assignment that satisfies both.
 
 `f_EP` also explains why `set_pending` writes one bit and stops. No decision can be
@@ -470,9 +471,9 @@ mask or moving the slice counter would all disturb fields compared by equality a
 `⊥`. Everything the interrupt causes is deferred to the right summand, where the
 input is no longer the thing being varied.
 
-### 7b. `state_type_rel`: the resulting classification
+### 7b. `state_type_equiv`: the resulting classification
 
-The state is nested pairs ([`models.md` §5](models.md)), and `state_type_rel` is the
+The state is nested pairs ([`models.md` §5](models.md)), and `state_type_equiv` is the
 matching nest of `eqpair`s:
 
 ```text
@@ -483,15 +484,15 @@ dfl   = ( pending , mask )             and likewise dsk and tmr
 
 Field by field:
 
-| field | type | relation | at `⊥` |
+| field | type | equivalence | at `⊥` |
 |---|---|---|---|
-| `cur_pid` | Sum Bool Nat | `eqsum private_rel public_rel` | see below |
-| `prev_pid` | Nat | `public_rel` | visible |
-| `re_sched` | Bool | `public_rel` | visible |
-| `ir_count`, the slice counter | Option Nat | `public_rel` | visible |
-| `dfl` | (pending, mask) | `private_pending_rel` | pending hidden, mask visible |
-| `dsk` | (pending, mask) | `private_pending_rel` | pending hidden, mask visible |
-| `tmr` | (pending, mask) | `public_bits_rel` | both visible |
+| `cur_pid` | Sum Bool Nat | `eqsum private_equiv public_equiv` | see below |
+| `prev_pid` | Nat | `public_equiv` | visible |
+| `re_sched` | Bool | `public_equiv` | visible |
+| `ir_count`, the slice counter | Option Nat | `public_equiv` | visible |
+| `dfl` | (pending, mask) | `private_pending_equiv` | pending hidden, mask visible |
+| `dsk` | (pending, mask) | `private_pending_equiv` | pending hidden, mask visible |
+| `tmr` | (pending, mask) | `public_bits_equiv` | both visible |
 
 Every mask bit is public, which is the formal content of "all masks are public".
 
@@ -499,7 +500,7 @@ Every mask bit is public, which is the formal content of "all masks are public".
 the design is doing its work. `inl b` means a handler is running, with `b`
 selecting which; `inr n` is a user or scheduler pid. Since `eqsum` never relates an
 `inl` to an `inr` (section 3), *that* a handler is running stays visible, and so
-does the pid in `inr n`. What `private_rel` hides is the `Bool` inside `inl`: at
+does the pid in `inr n`. What `private_equiv` hides is the `Bool` inside `inl`: at
 `⊥`, `inl true` and `inl false` are related, so the disk handler and the
 default/NOP one look alike.
 
@@ -508,15 +509,15 @@ the only things allowed to differ.
 
 ### 7c. `fv_NI` and the composition-breakdown technique
 
-The core obligation for `model_sliced` is that `state_type_rel` is closed under the
+The core obligation for `model_sliced` is that `state_type_equiv` is closed under the
 whole transition:
 
 ```text
-fv_NI  (eqsum_L in_rel out_rel)  state_type_rel  state_type_rel
+fv_NI  (eqsum_L in_equiv out_equiv)  state_type_equiv  state_type_equiv
        (state_step sliced_preroutine restore_invariant)
 ```
 
-`eqsum_L` relates two inputs by `in_rel` and two outputs by `out_rel`, and never
+`eqsum_L` relates two inputs by `in_equiv` and two outputs by `out_equiv`, and never
 relates an input to an output. So `fv_NI_step_sum` splits the goal along the `⊕`:
 on the left both events are inputs and only `set_pending` runs, on the right both
 are outputs and only the pipeline runs. `fv_NI_comp` then breaks that pipeline into

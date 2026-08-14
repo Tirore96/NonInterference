@@ -13,10 +13,11 @@ the one that leaks and one that does not — and proves each claim.
 
 Both designs are expressed in a small process calculus, `Proc I O`.
 Non-interference is a property of a closed term in that calculus, stated against a
-relation on its input type and one on its output type; each says, level by level,
-which values an observer can tell apart and which it cannot see at all. The
-calculus and its generic non-interference theorems are not ours: they are due to
-Rafnsson et al., *Timing-Sensitive
+*characterised equivalence* on its input type and one on its output type. Each of
+the two fixes, at every security level, a partition of the values into classes an
+observer there cannot tell apart, together with at most one distinguished class
+whose values it does not see at all. The calculus and its generic non-interference
+theorems are not ours: they are due to Rafnsson et al., *Timing-Sensitive
 Noninterference through Composition*,
 [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf).
 The contribution here is the OS models and their proofs, together with the
@@ -89,7 +90,7 @@ concerns the projection alone; the leak is the subject of the next section.
 Non-interference is proved at both observations. Proving it at the six-slot tuple
 is just what a statement about a parallel composition looks like, and it is the
 stronger claim: the attacker sees every slot, including handler and scheduler
-activity. The user-visible result then follows by weakening the output relation.
+activity. The user-visible result then follows by weakening the output equivalence.
 
 ## Threat model
 
@@ -102,10 +103,19 @@ and every classification in the development is expressed with them.
 - A value is **unobservable** at `l` when the observer does not see the event at
   all, so it can be inserted or removed without the observer noticing.
 
-A **public** value is observable at every level and indistinguishable only from
-itself. A **private** value is unobservable at `⊥`, where all private values are
-therefore indistinguishable; above `⊥` it is observable and values must agree
-exactly. (Formally, `public_rel` and `private_rel`, in
+The two notions are tied together. At each level the equivalence partitions a type
+into classes of indistinguishable values, and the unobservable ones are required to
+be exactly one of those classes, or none at all. A level-indexed family of such
+partitions-with-a-distinguished-class is a **characterised equivalence**, `cEquiv`
+in the source, and it is the structure every classification below is an instance of
+([`docs/noninterference.md` §1](docs/noninterference.md)).
+
+The two extremes are the ones used most. A **public** value is observable at every
+level and indistinguishable only from itself: every class a singleton, none of them
+distinguished. A **private** value is unobservable at `⊥`, where all private values
+are therefore indistinguishable: one class, and it is the distinguished one. Above
+`⊥` a private value is observable and values must agree exactly. (Formally,
+`public_equiv` and `private_equiv`, in
 [`docs/noninterference.md` §2](docs/noninterference.md).)
 
 The disk interrupt is the only secret input. The timer interrupt is public, and has
@@ -113,14 +123,14 @@ to be: it changes the schedule of the user space processes, and that schedule is
 public, so its effect is visible to an observer at `⊥` by construction.
 Non-interference must therefore permit the schedule to depend on it.
 
-`NI in_rel out_rel p` is then the standard condition: at every level, inserting or
-removing inputs that are unobservable there, or swapping inputs that are
-indistinguishable there, leaves the traces that observer can see unchanged. The
-classification lives entirely in `in_rel` and `out_rel` — one relation on the input
-type and one on the output type. Each says, at every level, which values are
-**indistinguishable** there (the *L-equivalences* of the original paper) and which
-are **unobservable** there. Every claim made above about what is public or secret is a
-statement about those two relations; they are given in
+`NI in_equiv out_equiv p` is then the noninterference statement: at every level,
+inserting or removing inputs that are unobservable there, or swapping inputs that
+are indistinguishable there, leaves the traces that observer can see unchanged. The
+classification lives entirely in `in_equiv` and `out_equiv`, one characterised
+equivalence on the input type and one on the output type. Their equivalence part is
+the *L-equivalences* of the original paper; the distinguished class is what makes
+insertion and deletion possible at all. Every claim made above about what is public
+or secret is a statement about those two, which are given in
 [`docs/noninterference.md` §4](docs/noninterference.md).
 
 ## The leak
@@ -169,9 +179,9 @@ Three machine-checked theorems, in
 
 | Theorem | Statement | Meaning |
 |---|---|---|
-| `model_immediate_not_NI` | `~ NI in_rel out_relC model_immediate_concrete` | The naive design leaks: a secret disk interrupt is observable. |
-| `model_sliced_NI` | `NI in_rel (out_rel Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
-| `model_sliced_userview_NI` | `NI in_rel (out_rel_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
+| `model_immediate_not_NI` | `~ NI in_equiv out_equivC model_immediate_concrete` | The naive design leaks: a secret disk interrupt is observable. |
+| `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
+| `model_sliced_userview_NI` | `NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
 
 Two of the parameters are numbers. The **handler length** `runtime` is how many
 output steps every handler runs for before it signals completion with `Notify`;
@@ -186,10 +196,10 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
        (p_pub : Proc Empty Opub)
        (p_priv : Proc THandlerOutput Opriv)
        (p_sched : Proc Empty Nat),
-  NI (public_rel Empty) (public_rel Opub) p_pub ->
-  NI (private_rel THandlerOutput) (private_rel Opriv) p_priv ->
-  NI (public_rel Empty) (public_rel Nat) p_sched ->
-  NI in_rel (out_rel_userview Opub Opriv)
+  NI (public_equiv Empty) (public_equiv Opub) p_pub ->
+  NI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv ->
+  NI (public_equiv Empty) (public_equiv Nat) p_sched ->
+  NI in_equiv (out_equiv_userview Opub Opriv)
      (model_sliced_userview runtime runs p_pub p_priv p_sched)
 ```
 
@@ -232,17 +242,17 @@ This compiles the four-file chain in dependency order
 
 | Path | What it is |
 |---|---|
-| [`theories/definitions.v`](theories/definitions.v) | The process calculus, traces, `NI`, and the security relations. |
+| [`theories/definitions.v`](theories/definitions.v) | The process calculus, traces, `NI`, and the security equivalences. |
 | [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); this repository uses them as prior work. |
 | [`theories/models.v`](theories/models.v) | In three parts: the skeleton both designs share, ending in the generic `model`; the two designs, as `model` at two triples of arguments; and one concrete system, with the example traces. |
-| [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state relations, and the three theorems above. |
+| [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state equivalences, and the three theorems above. |
 | [`docs/models.md`](docs/models.md) | **What the models are** — long-form companion to `models.v`. |
-| [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering** — the security relations and the proof, companion to `noninterference.v`. |
+| [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering** — the security equivalences and the proof, companion to `noninterference.v`. |
 
 ## Where to read next
 
 - For the **models** — every process, the state layout, and the design rationale
   behind the sliced design — read [`docs/models.md`](docs/models.md).
-- For the **proof** — the security relations, how the generic theorems compose, and
-  the one hard obligation (`fv_NI`, closure of the state relation under the state
+- For the **proof** — the security equivalences, how the generic theorems compose,
+  and the one hard obligation (`fv_NI`, closure of the state equivalence under the
   transition) — read [`docs/noninterference.md`](docs/noninterference.md).

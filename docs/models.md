@@ -10,8 +10,8 @@ process is given with the `@` and `Ty` annotations erased (section 0 says why th
 source needs them); no proof code is reproduced.
 
 > Why one instantiation is non-interfering and the other is not — the security
-> relations, the relation each input and output type carries, and the central proof
-> obligation
+> equivalences, the characterised equivalence each input and output type carries,
+> and the central proof obligation
 > — is in [`noninterference.md`](noninterference.md), the companion to
 > [`theories/noninterference.v`](../theories/noninterference.v).
 
@@ -270,8 +270,8 @@ The `cur_pid` split is the one choice here worth a second look: the `inl` side h
 **exactly the two private pids**, the disk and default handlers, and the `inr` side
 everything public — including the timer handler, which is `inr 0`. It is a handler,
 but not a private one, so the split is not "handler versus not". Drawing it on this
-line is what lets the state relation classify a whole pid in one place, as
-`eqsum private_rel public_rel`, with the proof case-splitting on the tag
+line is what lets the state equivalence classify a whole pid in one place, as
+`eqsum private_equiv public_equiv`, with the proof case-splitting on the tag
 ([`noninterference.md` §7b](noninterference.md)).
 
 **The slot types**, tabulated in section 2. `f_O` is parameterised by the two

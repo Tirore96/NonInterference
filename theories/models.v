@@ -639,7 +639,7 @@ Definition model_sliced_userview (runtime runs : nat) (Opub Opriv : Ty)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out_userview Opub Opriv) :=
   map id (@parse_output Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 
-Definition out_rel_userview (Opub Opriv : Ty) : cRel [T_out_userview Opub Opriv] := eqmaybe_hidden (eqsum (public_rel Opub) (private_rel Opriv)).
+Definition out_equiv_userview (Opub Opriv : Ty) : cEquiv [T_out_userview Opub Opriv] := eqmaybe_hidden (eqsum (public_equiv Opub) (private_equiv Opriv)).
 
 
 (* #################################################################
@@ -778,7 +778,7 @@ Ltac sta_state_reduce :=
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.
 
-Lemma trace_immediate_no_dI' : forall l, Trace (public_rel _) l immediate_no_dI' model_immediate_concrete.
+Lemma trace_immediate_no_dI' : forall l, Trace (public_equiv _) l immediate_no_dI' model_immediate_concrete.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -796,7 +796,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.
 
-Lemma trace_immediate_with_dI' : forall l, Trace (public_rel _) l immediate_with_dI' model_immediate_concrete.
+Lemma trace_immediate_with_dI' : forall l, Trace (public_equiv _) l immediate_with_dI' model_immediate_concrete.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -820,7 +820,7 @@ Definition sliced_with_dI' : seqtype' := [::out_get';dI';out_get';out_get';tI';o
 
 Ltac rewr ::= rewrite /model_immediate_concrete /model_immediate /model /reactive_system /pool_concrete /pool /process_pool /slot_initial /p_pub_concrete /alternate /p_priv_concrete /pool_input /tI_o /ir_handler /f_proj /scheduler /low_out /model_sliced_concrete /model_sliced /pool_concrete /pool /pool_input /f_proj.
 
-Lemma trace_sliced_no_dI' : forall l, Trace (public_rel _) l sliced_no_dI' model_sliced_concrete.
+Lemma trace_sliced_no_dI' : forall l, Trace (public_equiv _) l sliced_no_dI' model_sliced_concrete.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -835,7 +835,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.
 
-Lemma trace_sliced_with_dI' : forall l, Trace (public_rel _) l sliced_with_dI' model_sliced_concrete.
+Lemma trace_sliced_with_dI' : forall l, Trace (public_equiv _) l sliced_with_dI' model_sliced_concrete.
 Proof.
   intros.
   rewr;simpl;rewr;simpl;rewr;simpl;rewr.
@@ -854,7 +854,7 @@ Qed.
 (* -- model_sliced_userview traces -- *)
 
 Definition map_tr (I O O' : Ty) (f : [O] -> [O']) (s : seq ([I] + [O])) := seq.map (fun x => match x with | inl x' => inl x' | inr y => inr (f y) end) s.
-Lemma Trace_map : forall (A B B' : Ty) (p : Proc A B) (f : [B] -> [B']) (s : seq ([A] + [B])) (BRel : cRel [B]) (BRel' : cRel [B']) l,
+Lemma Trace_map : forall (A B B' : Ty) (p : Proc A B) (f : [B] -> [B']) (s : seq ([A] + [B])) (BRel : cEquiv [B]) (BRel' : cEquiv [B']) l,
     f_NI BRel BRel' f ->
     Trace BRel l s p -> Trace BRel' l (map_tr f s) (map id f p).
 Proof.
@@ -874,14 +874,14 @@ Proof. ssa. Qed.
 Lemma good_with_dI_eq : map_tr (@parse_output TPublicOutput TTypeSyscall) sliced_with_dI' = good_with_dI.
 Proof. ssa. Qed.
 
-Lemma trace_no_dI : forall l, Trace (public_rel _) l good_no_dI model_sliced_userview_concrete.
+Lemma trace_no_dI : forall l, Trace (public_equiv _) l good_no_dI model_sliced_userview_concrete.
 Proof.
   intros. rewrite -good_no_dI_eq. eapply Trace_map.
   2:eapply trace_sliced_no_dI'.
   mrw. ssa. subst. done.
 Qed.
 
-Lemma trace_with_dI : forall l, Trace (public_rel _) l good_with_dI model_sliced_userview_concrete.
+Lemma trace_with_dI : forall l, Trace (public_equiv _) l good_with_dI model_sliced_userview_concrete.
 Proof.
   intros. rewrite -good_with_dI_eq. eapply Trace_map.
   2:eapply trace_sliced_with_dI'.
