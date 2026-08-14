@@ -47,45 +47,28 @@ Exactly one slot runs per step, chosen by the current pid. The global state hold
 pending and unmasked — plus a time-slice counter, used only by the non-interfering
 design.
 
-### What goes in and what comes out
-
-Each model is a process `Proc T_in (T_out …)`, so it has exactly one input type and
-one output type, and everything the environment can do to it or see of it passes
-through those two.
-
-**Input: one interrupt.** `T_in` is `TInterrupt`, whose three values are
-`TimerInterrupt`, `DiskInterrupt` and `DefaultInterrupt`. That is the entire input
-type — the environment can do nothing to a model except deliver an interrupt. There
-is no "no interrupt" value: an input step *is* an arrival, and a quiet stretch is
-simply the absence of input events, which is what makes "the attacker cannot tell
-whether a disk interrupt occurred" a statement the calculus can express. An
-arriving interrupt is only recorded as pending; when its handler runs, or whether
-it runs at all, is decided later by the model.
-
-Because interrupts are the whole of the input, classifying the timer differently
-from the disk is a classification of three values of one type, and it lives in
-`in_equiv` alone: `DiskInterrupt` is unobservable at `⊥`, `TimerInterrupt` and
-`DefaultInterrupt` are public there and everywhere.
-
-**Output: what the pool emitted this step.** `model_immediate` and `model_sliced`
-emit the six-slot tuple `T_out Opub Opriv`, one `Option` per slot in the order
-`pub, sys, sch, dfl, dsk, tmr`. `model_sliced_userview` emits
-`T_out_userview Opub Opriv`, which is `Option (Sum Opub Opriv)` — a public output, a
-syscall, or nothing. Output is where the classification varies from slot to slot,
-in `out_equiv`.
-
 ## The three models
 
 Everything below refers to these. All three are in
 [`theories/models.v`](theories/models.v).
 
-| Model | Output it exposes | |
-|---|---|---|
-| `model_immediate` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
-| `model_sliced` | the same full pool output | the fixed design; non-interfering |
-| `model_sliced_userview` | only what the two user space processes emit: a public output or a syscall, every other slot erased | `model_sliced` behind a projection; the headline result |
+| Model | Type | Output it exposes | |
+|---|---|---|---|
+| `model_immediate` | `Proc TInterrupt (T_out Opub Opriv)` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
+| `model_sliced` | `Proc TInterrupt (T_out Opub Opriv)` | the same full pool output | the fixed design; non-interfering |
+| `model_sliced_userview` | `Proc TInterrupt (T_out_userview Opub Opriv)` | only what the two user space processes emit: a public output or a syscall, every other slot erased | `model_sliced` behind a projection; the headline result |
 
-The three differ along two independent axes, and it helps to keep them apart.
+`Opub` and `Opriv` are the two user processes' output alphabets, parameters
+throughout, which is why both output types are written over them. The input type
+takes no parameters and all three share it: an interrupt *is* an input.
+`TInterrupt` (`T_in` in the source) has three values — `TimerInterrupt`,
+`DiskInterrupt`, `DefaultInterrupt` — and delivering one is the only thing the
+environment can do to a model, which records it as pending and decides later
+whether to service it. So classifying the disk interrupt secret and the timer
+public is a classification of three values of a single type, and it lives entirely
+in `in_equiv`.
+
+The models then differ along two independent axes, and it helps to keep them apart.
 
 **Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
 types, same pool, same state layout. Both are the *same* generic definition,
