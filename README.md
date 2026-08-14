@@ -47,6 +47,33 @@ Exactly one slot runs per step, chosen by the current pid. The global state hold
 pending and unmasked — plus a time-slice counter, used only by the non-interfering
 design.
 
+### What goes in and what comes out
+
+Each model is a process `Proc T_in (T_out …)`, so it has exactly one input type and
+one output type, and everything the environment can do to it or see of it passes
+through those two.
+
+**Input: one interrupt.** `T_in` is `TInterrupt`, whose three values are
+`TimerInterrupt`, `DiskInterrupt` and `DefaultInterrupt`. That is the entire input
+type — the environment can do nothing to a model except deliver an interrupt. There
+is no "no interrupt" value: an input step *is* an arrival, and a quiet stretch is
+simply the absence of input events, which is what makes "the attacker cannot tell
+whether a disk interrupt occurred" a statement the calculus can express. An
+arriving interrupt is only recorded as pending; when its handler runs, or whether
+it runs at all, is decided later by the model.
+
+Because interrupts are the whole of the input, classifying the timer differently
+from the disk is a classification of three values of one type, and it lives in
+`in_equiv` alone: `DiskInterrupt` is unobservable at `⊥`, `TimerInterrupt` and
+`DefaultInterrupt` are public there and everywhere.
+
+**Output: what the pool emitted this step.** `model_immediate` and `model_sliced`
+emit the six-slot tuple `T_out Opub Opriv`, one `Option` per slot in the order
+`pub, sys, sch, dfl, dsk, tmr`. `model_sliced_userview` emits
+`T_out_userview Opub Opriv`, which is `Option (Sum Opub Opriv)` — a public output, a
+syscall, or nothing. Output is where the classification varies from slot to slot,
+in `out_equiv`.
+
 ## The three models
 
 Everything below refers to these. All three are in
@@ -74,7 +101,7 @@ behaviour; they are literally the same process. `model_sliced_userview` is
 processes. Below, `·` is `None` and `Nfy` is `Notify`:
 
 ```text
-                     pub     sys     pid     dfl     dsk     tmr      parse_output
+                     pub     sys     sch     dfl     dsk     tmr      parse_output
   public output   (  Get  ,   ·   ,   ·   ,   ·   ,   ·   ,   ·   )  ---------->   Get
   disk handler    (   ·   ,   ·   ,   ·   ,   ·   ,  Nfy  ,   ·   )  ---------->   ·
   syscall         (   ·   ,  Sys  ,   ·   ,   ·   ,   ·   ,   ·   )  ---------->   Sys
@@ -118,9 +145,9 @@ are therefore indistinguishable: one class, and it is the distinguished one. Abo
 `public_equiv` and `private_equiv`, in
 [`docs/noninterference.md` §2](docs/noninterference.md).)
 
-The disk interrupt is the only secret input. The timer interrupt is public, and has
-to be: it changes the schedule of the user space processes, and that schedule is
-public, so its effect is visible to an observer at `⊥` by construction.
+Of the three interrupts the disk one is the only secret, and the timer one has to
+be public: it changes the schedule of the user space processes, and that schedule
+is public, so its effect is visible to an observer at `⊥` by construction.
 Non-interference must therefore permit the schedule to depend on it.
 
 `NI in_equiv out_equiv p` is then the noninterference statement: at every level,
