@@ -51,10 +51,10 @@ dis l a0  ->  forall a1, dis l a1 <-> rel l a0 a1
 
 Take any unobservable value. The values related to it are the other unobservable
 ones and nothing else. So at each level a `cEquiv` cuts the type into classes an
-observer there cannot tell apart, and one of them is the **unobservable class**, the
-one the observer does not see at all. That class is empty whenever the level hides
-nothing, as under `public_equiv` below, and the characterisation holds vacuously
-there.
+observer there cannot tell apart, and one of them is the **distinguished class**,
+the one the observer does not see at all. That class is empty whenever the level
+hides nothing, as under `public_equiv` below, and the characterisation holds
+vacuously there.
 
 ### What `NI` says
 
@@ -90,12 +90,12 @@ private_equiv A   dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨
 ```
 
 These are the two extremes of the class picture of section 1. Under `public_equiv`
-every class is a singleton and the unobservable class is empty. At any level, then,
+every class is a singleton and the distinguished class is empty. At any level, then,
 a public value can be neither inserted, removed, nor varied without an observer
 noticing. Under `private_equiv` the whole type collapses to a single class at `⊥`,
-and that class is the unobservable one. Non-interference may therefore insert,
+and that class is the distinguished one. Non-interference may therefore insert,
 remove or replace such a value freely. At every other level `private_equiv` is
-`public_equiv`: singleton classes, and the unobservable class empty.
+`public_equiv`: singleton classes, and the distinguished class empty.
 
 
 ## 3. Composite equivalences
@@ -365,7 +365,7 @@ false_equiv   dis l b = (b = false ∧ l = ⊥)      rel l b b' = (b = b')
 ```
 
 It is a well-formed `cEquiv` because `false` is its only unobservable value, so at
-`⊥` the unobservable class is the singleton `{false}`, and above `⊥` it is empty
+`⊥` the distinguished class is the singleton `{false}`, and above `⊥` it is empty
 (section 1). With it, `f_PU` holds, and
 `false_equiv_aware : forall l, aware false_equiv true l`
 ([noninterference.v:230](../theories/noninterference.v)) discharges `swi_NI` by the

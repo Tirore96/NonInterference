@@ -15,9 +15,9 @@ Both designs are expressed in a small process calculus, `Proc I O`.
 Non-interference is a property of a closed term in that calculus. Stating it takes a
 *characterised equivalence* on the input type and one on the output type. At each
 security level, such an equivalence cuts the values into classes an observer there
-cannot tell apart. One of those classes is the **unobservable** one, holding the
-values that observer does not see at all, and it is empty when the level hides
-nothing. The calculus and its generic non-interference
+cannot tell apart. One of those classes is **distinguished**: it holds the values
+that observer does not see at all, and it is empty when the level hides nothing.
+The calculus and its generic non-interference
 theorems are not ours: they are due to Rafnsson et al., *Timing-Sensitive
 Noninterference through Composition*,
 [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf).
@@ -111,18 +111,18 @@ and every classification in the development is expressed with them.
 
 The two notions are tied together. At each level the equivalence partitions a type
 into classes of indistinguishable values, and the unobservable values are required
-to be exactly one of those classes, the **unobservable class**. It is empty when the
-level hides nothing. One such partition per level, each with its unobservable class,
-makes a **characterised equivalence**: `cEquiv` in the source
-([`docs/noninterference.md` §1](docs/noninterference.md)). Every classification below
-is an instance of it.
+to be exactly one of those classes, the **distinguished class**. It is empty when
+the level hides nothing. One such partition per level, each with its distinguished
+class, makes a **characterised equivalence**: `cEquiv` in the source
+([`docs/noninterference.md` §1](docs/noninterference.md)). Every classification
+below is an instance of it.
 
 The two extremes are the ones used most. A **public** value is observable at every
 level and indistinguishable only from itself: every class a singleton, and the
-unobservable class empty. A **private** value is unobservable at `⊥`, where all
+distinguished class empty. A **private** value is unobservable at `⊥`, where all
 private values are therefore indistinguishable: one class, and it is the
-unobservable one. Above
-`⊥` a private value is observable and values must agree exactly. (Formally,
+distinguished one. Above `⊥` a private value is observable and values must agree
+exactly. (Formally,
 `public_equiv` and `private_equiv`, in
 [`docs/noninterference.md` §2](docs/noninterference.md).)
 
@@ -136,7 +136,7 @@ inserting or removing inputs that are unobservable there, or swapping inputs tha
 are indistinguishable there, leaves the traces that observer can see unchanged. The
 classification lives entirely in `in_equiv` and `out_equiv`, one characterised
 equivalence on the input type and one on the output type. Their equivalence part is
-the *L-equivalences* of the original paper; the unobservable class is what makes
+the *L-equivalences* of the original paper; the distinguished class is what makes
 insertion and deletion possible at all. Every claim made above about what is public
 or secret is a statement about those two, which are given in
 [`docs/noninterference.md` §4](docs/noninterference.md).
