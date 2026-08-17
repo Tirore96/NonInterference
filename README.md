@@ -12,11 +12,11 @@ gap in that process's output is visible. The development formalises both designs
 the one that leaks and one that does not — and proves each claim.
 
 Both designs are expressed in a small process calculus, `Proc I O`.
-Non-interference is a property of a closed term in that calculus, stated against a
-*characterised equivalence* on its input type and one on its output type. Each of
-the two fixes, at every security level, a partition of the values into classes an
-observer there cannot tell apart, together with at most one distinguished class
-whose values it does not see at all. The calculus and its generic non-interference
+Non-interference is a property of a closed term in that calculus. Stating it takes a
+*characterised equivalence* on the input type and one on the output type. At each
+security level, such an equivalence cuts the values into classes an observer there
+cannot tell apart. At most one of those classes is distinguished: its values the
+observer does not see at all. The calculus and its generic non-interference
 theorems are not ours: they are due to Rafnsson et al., *Timing-Sensitive
 Noninterference through Composition*,
 [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf).
@@ -43,9 +43,9 @@ otherwise, and a `p_pub_concrete` that repeatedly issues `GetRequest`. Only the
 interrupt handlers are fixed: they are the mechanism under study.
 
 Exactly one slot runs per step, chosen by the current pid. The global state holds a
-`(pending, mask)` bit pair per interrupt — an interrupt is serviced when it is
-pending and unmasked — plus a time-slice counter, used only by the non-interfering
-design.
+`(pending, mask)` bit pair per interrupt, plus a time-slice counter that only the
+non-interfering design uses. An interrupt is serviced when it is pending and
+unmasked.
 
 ## The three models
 
@@ -58,15 +58,14 @@ Everything below refers to these. All three are in
 | `model_sliced` | `Proc TInterrupt (T_out Opub Opriv)` | the same full pool output | the fixed design; non-interfering |
 | `model_sliced_userview` | `Proc TInterrupt (T_out_userview Opub Opriv)` | only what the two user space processes emit: a public output or a syscall, every other slot erased | `model_sliced` behind a projection; the headline result |
 
-`Opub` and `Opriv` are the two user processes' output alphabets, parameters
-throughout, which is why both output types are written over them. The input type
-takes no parameters and all three share it: an interrupt *is* an input.
-`TInterrupt` (`T_in` in the source) has three values — `TimerInterrupt`,
-`DiskInterrupt`, `DefaultInterrupt` — and delivering one is the only thing the
-environment can do to a model, which records it as pending and decides later
-whether to service it. So classifying the disk interrupt secret and the timer
-public is a classification of three values of a single type, and it lives entirely
-in `in_equiv`.
+`Opub` and `Opriv` are the two user processes' output alphabets. They are parameters
+throughout, so both output types are written over them. The input type takes no
+parameters, and all three models share it: an interrupt *is* an input. `TInterrupt`
+(`T_in` in the source) has three values, `TimerInterrupt`, `DiskInterrupt` and
+`DefaultInterrupt`. Delivering one is the only thing the environment can do to a
+model; the model records it as pending and decides later whether to service it.
+Classifying the disk interrupt secret and the timer public therefore splits three
+values of a single type, and that split lives entirely in `in_equiv`.
 
 The models then differ along two independent axes, and it helps to keep them apart.
 
@@ -97,10 +96,10 @@ Exactly one slot is `Some` per step, so each row above is a single output step.
 `model_immediate` emits the same six-slot tuple as `model_sliced`, so the diagram
 concerns the projection alone; the leak is the subject of the next section.
 
-Non-interference is proved at both observations. Proving it at the six-slot tuple
-is just what a statement about a parallel composition looks like, and it is the
-stronger claim: the attacker sees every slot, including handler and scheduler
-activity. The user-visible result then follows by weakening the output equivalence.
+Non-interference is proved at both observations. The six-slot tuple is the natural
+statement for a parallel composition, and it is the stronger claim: the attacker
+sees every slot, handler and scheduler activity included. The user-visible result
+then follows by weakening the output equivalence.
 
 ## Threat model
 
@@ -115,10 +114,10 @@ and every classification in the development is expressed with them.
 
 The two notions are tied together. At each level the equivalence partitions a type
 into classes of indistinguishable values, and the unobservable ones are required to
-be exactly one of those classes, or none at all. A level-indexed family of such
-partitions-with-a-distinguished-class is a **characterised equivalence**, `cEquiv`
-in the source, and it is the structure every classification below is an instance of
-([`docs/noninterference.md` §1](docs/noninterference.md)).
+be exactly one of those classes, or none at all. One such partition per level, each
+with its distinguished class, makes a **characterised equivalence**: `cEquiv` in the
+source ([`docs/noninterference.md` §1](docs/noninterference.md)). Every
+classification below is an instance of it.
 
 The two extremes are the ones used most. A **public** value is observable at every
 level and indistinguishable only from itself: every class a singleton, none of them
@@ -128,10 +127,10 @@ are therefore indistinguishable: one class, and it is the distinguished one. Abo
 `public_equiv` and `private_equiv`, in
 [`docs/noninterference.md` §2](docs/noninterference.md).)
 
-Of the three interrupts the disk one is the only secret, and the timer one has to
-be public: it changes the schedule of the user space processes, and that schedule
-is public, so its effect is visible to an observer at `⊥` by construction.
-Non-interference must therefore permit the schedule to depend on it.
+Of the three interrupts the disk one is the only secret. The timer one has to be
+public, because it moves the user space processes' schedule, and that schedule is
+public. An observer at `⊥` therefore sees its effect by construction, and
+non-interference must permit the schedule to depend on it.
 
 `NI in_equiv out_equiv p` is then the noninterference statement: at every level,
 inserting or removing inputs that are unobservable there, or swapping inputs that
@@ -173,12 +172,12 @@ process was displaced — interrupting the secret process produces the same gap 
 the schedule.
 
 `model_sliced` closes it by taking away the disk interrupt's power to interrupt a
-user process. Handler execution still depends on the timer — the time slice is
-started when the **timer** handler completes — but that dependence is public and
-therefore harmless. What a secret interrupt can no longer do is cause a handler to
-run at a moment of its own choosing: handlers run only inside the slice, all take
-the same number of steps, and a default "NOP" handler fills any part of the slice
-that no real interrupt claims. A secret handler run therefore replaces a NOP run
+user process. Handler execution still depends on the timer, since the **timer**
+handler's completion starts the time slice. That dependence is public and therefore
+harmless. What a secret interrupt can no longer do is pick the moment a handler
+runs. Handlers run only inside the slice and all take the same number of steps, and
+a default "NOP" handler fills any part of the slice that no real interrupt claims.
+A secret handler run therefore replaces a NOP run
 rather than displacing a user process, and the public schedule is identical either
 way.
 
@@ -193,11 +192,10 @@ Three machine-checked theorems, in
 | `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
 | `model_sliced_userview_NI` | `NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
 
-Two of the parameters are numbers. The **handler length** `runtime` is how many
-output steps every handler runs for before it signals completion with `Notify`;
-the **slice size** `runs` is how many complete handler runs fit in one time slice,
-so a slice lasts `runs * runtime` output steps and always ends on a handler
-boundary.
+Two of the parameters are numbers. The **handler length** `runtime` counts the output
+steps every handler takes before it signals completion with `Notify`. The **slice
+size** `runs` counts the complete handler runs that fit in one time slice. A slice
+therefore lasts `runs * runtime` output steps and always ends on a handler boundary.
 
 The two positive results are parametric. In full:
 
@@ -214,10 +212,9 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
 ```
 
 So the theorem covers the interrupt-and-scheduling mechanism in general:
-arbitrary userspace and scheduler, arbitrary output alphabets, arbitrary
-handler length and slice size — the last two with no side condition, because
-`time_slice runtime runs = runs * runtime` makes "the slice ends on a handler
-boundary" structural rather than assumed.
+arbitrary userspace and scheduler, arbitrary output alphabets, arbitrary handler
+length and slice size. The last two carry no side condition. `time_slice runtime
+runs = runs * runtime` makes the slice end on a handler boundary by construction.
 
 `model_sliced_concrete_NI` and `model_sliced_userview_concrete_NI` recover the
 concrete system by instantiating with `p_pub_concrete_NI`, `p_priv_concrete_NI`
@@ -230,10 +227,10 @@ one system.
 
 The development is constructive except for one import of classical logic,
 `Require Import Classical` at [`theories/theorems.v:739`](theories/theorems.v). The
-law of excluded middle is used only in the switch non-interference lemma `swi_NI`,
-because a premise of that theorem is stated with a predicate, `aware`, that is not
-constructively decidable; a decision procedure for it would remove the need for
-excluded middle.
+law of excluded middle appears only in the switch non-interference lemma `swi_NI`.
+A premise of that lemma uses the predicate `aware`, which is not constructively
+decidable. A decision procedure for `aware` would remove the need for excluded
+middle.
 
 ## Building
 

@@ -9,11 +9,11 @@ then one concrete system to run them on. Names are those of the source, and ever
 process is given with the `@` and `Ty` annotations erased (section 0 says why the
 source needs them); no proof code is reproduced.
 
-> Why one instantiation is non-interfering and the other is not — the security
-> equivalences, the characterised equivalence each input and output type carries,
-> and the central proof obligation
-> — is in [`noninterference.md`](noninterference.md), the companion to
-> [`theories/noninterference.v`](../theories/noninterference.v).
+> Why one instantiation is non-interfering and the other is not belongs to
+> [`noninterference.md`](noninterference.md), the companion to
+> [`theories/noninterference.v`](../theories/noninterference.v). That document gives
+> the security equivalences, the characterised equivalence each input and output type
+> carries, and the central proof obligation.
 
 | Model | Type | What it is |
 |---|---|---|
@@ -102,9 +102,9 @@ on an output step:
 > inductive `Ty` (`Nat`, `Bool`, `Unit`, `Times`, `Option`, `Sum`, ...) rather than
 > over Coq's `Set`, with `[t]` interpreting a `t : Ty` as the `Set` it encodes.
 > Going through `Ty` rather than through `Set` directly is what makes reductions
-> invertible, which the negative result needs: to refute non-interference one must
-> show a trace is *not* accepted. The cost is the explicit annotations in the source,
-> which this document strips away.
+> invertible. The negative result needs that, since refuting non-interference means
+> showing a trace is *not* accepted. The cost is the explicit annotations in the
+> source, which this document strips away.
 
 The whole development ends by proving `NI` of `model_sliced_userview`. What `Trace`
 and `NI` mean, and the equivalences they are indexed by, are in
@@ -122,17 +122,16 @@ model runtime init handler_preroutine restore_invariant p_pub p_priv p_sched =
       : Proc T_in (T_out Opub Opriv)
 ```
 
-An operating system as a single process: a **process pool** (section 3) — three
-interrupt handlers, a scheduler, two user processes — closed into a self-driving
-whole by a **stateful wrapper** (section 4) that threads the global state and
-decides, on every step, whose turn it is (sections 5 and 6).
+An operating system as a single process. At its centre sits a **process pool**
+(section 3): three interrupt handlers, a scheduler, two user processes. A **stateful
+wrapper** (section 4) closes the pool into a self-driving whole, threading the global
+state and deciding on every step whose turn it is (sections 5 and 6).
 
-It receives interrupts, and on each output step emits one tuple holding every
-slot's value.
-Nothing in it is committed to a security design: that is entirely the job of the
-three parameters `init`, `handler_preroutine` and `restore_invariant`, which section 7
-sets out and Part II fixes in two different ways — once so that a secret interrupt
-leaks, once so that it does not.
+It receives interrupts, and on each output step emits one tuple holding every slot's
+value. Nothing in it is committed to a security design. That is entirely the job of
+the three parameters `init`, `handler_preroutine` and `restore_invariant`. Section 7
+sets them out, and Part II fixes them in two different ways: once so that a secret
+interrupt leaks, once so that it does not.
 
 Sections 2 to 6 define each piece, bottom-up.
 
@@ -163,8 +162,7 @@ and the handler never signals completion. Nothing breaks; the handler simply nev
 finishes.)
 
 **The slot map.** `slot_I` and `slot_O` give the input and output types of pool slot
-`n`, and
-`slot_procs` gives its process:
+`n`, and `slot_procs` gives its process:
 
 | slot | process | input | output |
 |---|---|---|---|
@@ -218,14 +216,14 @@ process_pool cur_pid n f_initial f_I f_O T' f_proj f_pid f_proc =
     : Proc (Times cur_pid T') (times_on n f_O)
 ```
 
-Reading a single slot `k` from the inside out: `f_proc k` is the slot's process, and
-`map id (fun o => (true, o))` tags everything it emits with the constant bit `true`;
+Read a single slot `k` from the inside out. `f_proc k` is the slot's process, and
+`map id (fun o => (true, o))` tags everything it emits with the constant bit `true`.
 `maybe` makes the input optional, so on an input step the slot's process steps only
-if handed `Some`; `swi (f_initial k)` gates it, emitting the slot's value only in
-phase `true`, and the constant `true` tag closes the phase again — so a selected slot
-takes exactly one output step and then waits to be re-selected (every process is
-cooperative); the outer `map` builds the switch's input, the pair of the bit
-`f_pid cur_pid == k` and the slot's payload `f_proj T' k`.
+if handed `Some`. `swi (f_initial k)` gates it, emitting the slot's value only in
+phase `true`, and the constant `true` tag closes the phase again. A selected slot
+therefore takes exactly one output step and then waits to be re-selected, every
+process being cooperative. The outer `map` builds the switch's input, the pair of the
+bit `f_pid cur_pid == k` and the slot's payload `f_proj T' k`.
 
 `par` lays the slots side by side and `times_on n f_O` is the nested product of all
 slot outputs, each wrapped in `Option`. The net effect on an output step: the slot
@@ -303,8 +301,8 @@ f_proj = fun i n => match n with
 
 This is why every other slot can declare its input `Empty`: `f_proj` hands them
 `None`, on which `maybe` leaves the slot's process unstepped. It has to be a `match`
-rather than the `if n == 4 then i else None` it looks like, because the result type
-`[Option (f_I n)]` varies with `n` — only in the `4` branch is it
+rather than the `if n == 4 then i else None` it looks like. The result type
+`[Option (f_I n)]` varies with `n`, and only in the `4` branch is it
 `Option THandlerOutput`. It typechecks as a dependent pattern match.
 
 
@@ -322,14 +320,14 @@ reactive_system state state_update def p pool_input =
         (map pool_input inr (maybe p)))))
 ```
 
-From the inside out: `maybe p` runs the pool, idling on `None`; `map pool_input inr`
-rewires it at both ends — on an input step `pool_input` builds the pool's input, and
-on an output step `inr` tags the pool's output for the feedback channel; `sta
-state_update ... state` holds the global state and advances it on every event,
-external input or fed-back output; `loop` ties output back to input; and the outer
-`map` presents external inputs on the left and, on the way out, applies
-`inr_or_def def x = if x is inr x' then x' else def`, substituting `def` — the
-all-`None` tuple — when there is no genuine external output yet.
+From the inside out: `maybe p` runs the pool, idling on `None`. `map pool_input inr`
+rewires it at both ends: on an input step `pool_input` builds the pool's input, and
+on an output step `inr` tags the pool's output for the feedback channel.
+`sta state_update ... state` holds the global state and advances it on every event,
+external input or fed-back output. `loop` ties output back to input. The outer `map`
+presents external inputs on the left, and on the way out applies
+`inr_or_def def x = if x is inr x' then x' else def`. That substitutes `def`, the
+all-`None` tuple, when there is no genuine external output yet.
 
 `state_update` is `state_step ...` (section 6). `pool_input` decides, from the state
 and the event that just occurred, whether the pool steps at all and on what:
@@ -371,9 +369,9 @@ state_type = ((cur_pid, prev_pid), (re_sched, (ir_count, ic)))
 | `ic` | `Times ir_bits (Times ir_bits ir_bits)` | the interrupt controller: one `ir_bits` per interrupt, in order default, disk, timer |
 | `ir_bits` | `Times pending mask` | `pending` — an interrupt of this kind has arrived and awaits service; `mask` — service is currently blocked |
 
-A handler is *selectable* for an interrupt kind iff
-it is pending and not masked (`ir_ready`); `first_ready` picks the highest-priority
-ready one, in the fixed order timer > disk > default.
+A handler is *selectable* for an interrupt kind iff it is pending and not masked
+(`ir_ready`). `first_ready` picks the highest-priority ready one, in the fixed order
+timer > disk > default.
 
 
 ## 6. State transitions
@@ -451,9 +449,9 @@ is allowed to run*:
 - **`restore_invariant : [state_type] -> [state_type]`** — consulted by `initiate_next`,
   after the "is a handler already running" test and before `first_ready` picks the
   next one. It is the design's last chance to constrain the state that the choice is
-  made from. Its real use is re-imposing an invariant that the
-  compositional proof has forgotten, so that the choice can be shown to come out the
-  same in two related executions ([`noninterference.md` §7d](noninterference.md)).
+  made from. Its real use is re-imposing an invariant that the compositional proof
+  has forgotten, so that the choice comes out the same in two related executions
+  ([`noninterference.md` §7d](noninterference.md)).
 
 Between them: `init` says what is runnable at rest, `handler_preroutine` says when
 that changes, and `restore_invariant` says what must hold when the choice is made.
@@ -516,10 +514,10 @@ immediate_preroutine o v =
 invariant to restore.
 
 **Why it leaks.** Nothing constrains *when* a handler runs. Since all masks are
-clear, an interrupt is serviced as soon as it arrives, and its handler runs for its
-full `runtime` steps in place of whichever process was running — pushing every later
-public output back by that much.
-`model_immediate_not_NI` turns that into a counterexample
+clear, an interrupt is serviced as soon as it arrives. Its handler then runs for its
+full `runtime` steps in place of whichever process was running, pushing every later
+public output back by that much. `model_immediate_not_NI` turns that into a
+counterexample
 ([`noninterference.md` §5](noninterference.md)); section 11 shows it in the model's
 own traces.
 
@@ -639,7 +637,7 @@ restore_invariant v =
 (ii) the NOP and disk masks are always toggled together
 ```
 
-Both are invariants, and neither is available to the proof: writing `state_step` as a
+Both are invariants, and neither is available to the proof. Writing `state_step` as a
 composition of independent stages (section 6) buys tractability at the cost of
 forgetting what the previous stage established. See
 [`noninterference.md` §7d](noninterference.md) for details.
@@ -695,11 +693,11 @@ slice_runs      = 2      (* a slice is two complete handler runs, so four steps 
 
 `p_pub_concrete` does nothing but repeatedly issue the public request `GetRequest`.
 
-`p_priv_concrete` issues a `Syscall` in any cycle where it received a `Notify` —
-the disk handler telling it a disk event occurred, over the wire of section 4 —
-and a harmless
-`NOP` otherwise. Which of the two it emits is secret-dependent, but that is not
-itself the leak: both are classified secret, so the attacker cannot tell them apart
+`p_priv_concrete` issues a `Syscall` in any cycle where it received a `Notify`, and a
+harmless `NOP` otherwise. That `Notify` is the disk handler telling it a disk event
+occurred, over the wire of section 4. Which of the two it emits is secret-dependent,
+but that is not itself the leak: both are classified secret, so the attacker cannot
+tell them apart
 ([`noninterference.md` §4](noninterference.md)). What must not leak is the
 *scheduling*. It is built from a reusable two-phase process,
 
@@ -712,13 +710,12 @@ alternate x y z pred =
 ```
 
 which emits `x` when it has received a `pred`-matching value since it last emitted,
-and `y` otherwise: a one-bit accumulator latches on a match, the loop feedback clears
+and `y` otherwise. A one-bit accumulator latches on a match, the loop feedback clears
 it once per cycle, and the outer `map` reads the tag.
 
-`scheduler` is a round-robin over the two user processes — the cell toggles 0/1 from
-1 and the emitted value adds 2, so the pid alternates 2, 3, 2, 3, i.e. private then
-public.
-Its input type is `Empty`: it only proposes the next process id.
+`scheduler` is a round-robin over the two user processes. The cell toggles 0/1 from
+1 and the emitted value adds 2, so the pid alternates 2, 3, 2, 3, private then
+public. Its input type is `Empty`: it only proposes the next process id.
 
 ```coq
 model_immediate_concrete       = model_immediate       handler_runtime            p_pub_concrete p_priv_concrete scheduler

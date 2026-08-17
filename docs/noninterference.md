@@ -37,10 +37,9 @@ dis l x     x is unobservable at level l, so non-interference is allowed
             to vary it freely
 ```
 
-Levels form a lattice whose least and most exposed level `⊥` is the attacker. Both
-fields are monotone downwards: whatever a level relates stays related below it, and
-whatever is unobservable at a level stays unobservable below it. A lower observer
-sees less.
+Levels form a lattice, and the attacker sits at its least level `⊥`. Both fields are
+monotone downwards: whatever a level relates stays related below it, and whatever is
+unobservable at a level stays unobservable below it. A lower observer sees less.
 
 The remaining fields give the record its name. `rel l` is an **equivalence**, so at
 each level it partitions the type into classes; and `dis l` is **characterised** as
@@ -52,8 +51,9 @@ dis l a0  ->  forall a1, dis l a1 <-> rel l a0 a1
 
 Take any unobservable value. The values related to it are the other unobservable
 ones and nothing else. So at each level a `cEquiv` cuts the type into classes an
-observer there cannot tell apart, and singles out at most one of those classes —
-possibly none, as under `public_equiv` below — as the one it does not see at all.
+observer there cannot tell apart. It then singles out at most one class as the one
+the observer does not see at all, and may single out none, as `public_equiv` below
+does.
 
 ### What `NI` says
 
@@ -89,20 +89,20 @@ private_equiv A   dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨
 ```
 
 These are the two extremes of the class picture of section 1. Under `public_equiv`
-every class is a singleton and none of them is distinguished, so a public value can
-be neither inserted, removed, nor varied without an observer noticing, at any
-level. Under `private_equiv` the whole type collapses to a single class at `⊥` and
-that class is the distinguished one, which is what lets non-interference insert,
+every class is a singleton and none of them is distinguished. At any level, then, a
+public value can be neither inserted, removed, nor varied without an observer
+noticing. Under `private_equiv` the whole type collapses to a single class at `⊥`,
+and that class is the distinguished one. Non-interference may therefore insert,
 remove or replace such a value freely. At every other level `private_equiv` is
 `public_equiv`: singleton classes, nothing distinguished.
 
 
 ## 3. Composite equivalences
 
-Each family is one construction taking *which values are secret* as a parameter;
-the variants are that parameter, instantiated. The rest follows from the
-characterisation of section 1: values of the same shape are related
-componentwise, and values of different shape only by both being secret.
+Each family is one construction that takes *which values are secret* as a parameter.
+The variants below are that one construction at different values of the parameter.
+The rest follows from the characterisation of section 1: values of the same shape
+are related componentwise, and values of different shape only by both being secret.
 
 **`eqpair IRel ORel : cEquiv [Times I O]`** — relate pairs componentwise:
 `(a,b) ~ (a',b')` iff `a ~ a'` and `b ~ b'`. Nothing is secret (`dis = False`).
@@ -194,17 +194,17 @@ alike.
 **The last two columns come apart only for the handlers, and that is where
 scheduling secrecy lives.** The `private_equiv` payload hides the *value* in a slot.
 Whether the slot ran is decided by the `eqmaybe` variant wrapped around it, since
-that is what fixes who can see `None`. Under plain `eqmaybe`, `None` is public, so
-a `⊥`-observer sees a `Some` where the other run has a `None`: `sys` hides
-`Syscall` from `NOP` but not the fact that `p_priv_concrete` produced something. Under
-`eqmaybe_private`, `None` is unobservable at `⊥` and may be related to `Some o`, so a
-disk handler run and a step where nothing happened are the same observation.
+that is what fixes who can see `None`. Under plain `eqmaybe`, `None` is public, so a
+`⊥`-observer sees a `Some` where the other run has a `None`. That is why `sys` hides
+`Syscall` from `NOP` but not the fact that `p_priv_concrete` produced something.
+Under `eqmaybe_private`, `None` is unobservable at `⊥` and may be related to
+`Some o`, so a disk handler run and a step where nothing happened are the same
+observation.
 
 For `p_priv_concrete` hiding the value is enough, since when it runs is public
 anyway. For the two secret handlers the fact of running must go too, which is the
-formal
-content of "the leak is in the scheduling". Section 6a discharges the obligation
-`eqmaybe_private` creates.
+formal content of "the leak is in the scheduling". Section 6a discharges the
+obligation `eqmaybe_private` creates.
 
 **`out_equiv_userview Opub Opriv : cEquiv [T_out_userview Opub Opriv]`**
 (user-visible output, for `model_sliced_userview`)
@@ -353,10 +353,10 @@ is `1` for `inl true` and `2` for `inl false` ([models.v:222](../theories/models
 
 **`p_pub_concrete` at slot 5, and the same for slots 4, 3 and 0.** Both
 unobservable pids miss this slot, so the gate map sends them to `false`. `f_PU`
-needs a `BRel` in
-which `false` is unobservable — a sink for the pids the observer may not see, which
-happens not to select this slot anyway. `aware BRel true l` then needs `true` to be
-observable and rigid at every level. `false_equiv`
+therefore needs a `BRel` in which `false` is unobservable. `false` becomes a sink
+for exactly those pids the observer may not see, none of which select this slot.
+`aware BRel true l` then needs `true` to be observable and rigid at every level.
+`false_equiv`
 ([definitions.v:252](../theories/definitions.v)) is exactly that:
 
 ```text
@@ -398,8 +398,7 @@ awareness at `⊥` costs nothing, since the slot's output is private there anywa
 
 The line falls between the two secret handlers and everything else.
 `p_priv_concrete` sits on the public side of it: its secrecy travels in the
-`private_equiv` payload inside
-`eqmaybe_swi`, never in its gate.
+`private_equiv` payload inside `eqmaybe_swi`, never in its gate.
 
 > The generic theorems in [`theories/theorems.v`](../theories/theorems.v)
 > mechanise results from separate prior work; the mechanisation replaces the
@@ -535,16 +534,16 @@ its three stages, leaving one goal apiece:
 never comes up.
 
 Each goal is self-contained, which is the point of splitting. The cost is that a
-stage is proved over *all* pairs of related states and cannot assume its input came
+stage is proved over *all* pairs of related states. It cannot assume its input came
 from the stage before it, so it must hold even for states no real run produces.
 Section 7d recovers what that loses.
 
 ### 7d. `restore_invariant`: putting the forgotten invariant back
 
-Two facts hold of every state `model_sliced` can reach: while the time slice is
-live, the NOP (default) handler's pending bit is true, the disk and NOP masks are
-false and the timer mask is true; and the disk and NOP masks are always toggled
-together. Because `fv_NI_comp` forgets them, `restore_invariant` writes them back
+Two facts hold of every state `model_sliced` can reach. First, while the time slice
+is live, the NOP (default) handler's pending bit is true, the disk and NOP masks are
+false and the timer mask is true. Second, the disk and NOP masks are always toggled
+together. Because `fv_NI_comp` forgets both, `restore_invariant` writes them back
 into the interrupt controller just before `initiate_next` runs:
 
 - it sets the controller's flags from `timeslice_live`, restoring "slice live ⇒ NOP
@@ -579,9 +578,8 @@ the mask bits never encode secret timing.
 The payoff comes in the final stage. With public masks, two related states agree on
 all mask bits and take the same branches through `initiate_next`. Variable-length
 handlers would force the masks private, since a secret handler's running time would
-otherwise leak through the public mask toggles, and `fv_NI` would then have to be
-proved across diverging branches. Avoiding that is why the model fixes handler
-length.
+otherwise leak through the public mask toggles. `fv_NI` would then have to be proved
+across diverging branches. Avoiding that is why the model fixes handler length.
 
 **(c) Further modelling choices**, built into the construction rather than argued
 for:
@@ -595,5 +593,6 @@ for:
 - **Fixed pool size and layout.** Six slots, the last of them padding. The
   scheduler and user slot *processes* are parameters, but their number and position
   are fixed by the output projections `is_sched_out`, `tI_out`, `dI_out` and
-  `default_ir_out`, tuple patterns that hardwire two user slots before the scheduler
-  slot. Varying the count changes the state transition and lands inside `fv_NI`.
+  `default_ir_out`. Those are tuple patterns, and they hardwire two user slots ahead
+  of the scheduler slot. Varying the count changes the state transition and lands
+  inside `fv_NI`.
