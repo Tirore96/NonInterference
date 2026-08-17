@@ -109,7 +109,9 @@ and every classification in the development is expressed with them.
 - A value is **unobservable** at `l` when the observer does not see the event at
   all, so it can be inserted or removed without the observer noticing.
 
-The two notions are tied together. At each level the equivalence partitions a type
+Unobservability is relevant only for input. Non-interference does not state anything about unobservability of output. This is because non-interference requires a process to be invariant, up to indistinguishability of output when unobservables are inserted/removed, and indistinguishable values are swapped.
+
+Indistinguishability and unobservability are notions that are tied together. At each level the equivalence partitions a type
 into classes of indistinguishable values, and the unobservable values are required
 to be exactly one of those classes, the **distinguished class**. It is empty when
 the level hides nothing. One such partition per level, each with its distinguished
@@ -126,10 +128,13 @@ exactly. (Formally,
 `public_equiv` and `private_equiv`, in
 [`docs/noninterference.md` §2](docs/noninterference.md).)
 
-For interrupts, the input of the models, the characterised equivalence `in_equiv`
-marks the disk interrupt unobservable at `⊥`. The other interrupts are
-left observable and all values are indistinguishable only from itself.
-Of the three interrupts the disk one is the only secret.
+Model input is interrupts classified by characterised equivalence `in_equiv`
+which marks disk interrupt unobservable at `⊥`. Other interrupts are
+left observable and all values are indistinguishable only from themselves.
+
+Model output of `model_sliced` is a six-tuple where optionality indicates which process is currently scheduled. The precise definition of the classification of this six-tuple exposes some technical details, why we defer this
+to [`docs/noninterference.md` §4](docs/noninterference.md). Intuitively, `⊥` is allowed to distinugish when most of the processes are scheduled. 
+
 
 `NI in_equiv out_equiv p` is then the noninterference statement: at every level,
 inserting or removing inputs that are unobservable there, or swapping inputs that
