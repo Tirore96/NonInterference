@@ -1538,10 +1538,16 @@ Proof.
   apply swi_NI.
   intros.
   destruct (eqVneq l \bot). subst. right.
+  (* At bot the gate cannot be trusted, so we show instead that the whole
+     switch stays inside one indistinguishability class: everything it emits
+     is related to None. *)
+  eapply oblivious_swi with (b0:=false) (o0:=Nothing). ssa.
+  move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by (simpl; right).
+  by move: (Ha _ Hr)=>[].
   intro. intros.
   elim: H. intros. con.
   intros. econ. done.
-  intros. econ. 2:done. ssa.
+  intros. econ. 2:done. de o.
   left. intro. intros.
   move/private_not_bot' : H=>->//. ssa.
   intro. subst. rewrite eqxx in i. done.
@@ -1591,10 +1597,16 @@ Proof.
   apply swi_NI.
   intros.
   destruct (eqVneq l \bot). subst. right.
+  (* At bot the gate cannot be trusted, so we show instead that the whole
+     switch stays inside one indistinguishability class: everything it emits
+     is related to None. *)
+  eapply oblivious_swi with (b0:=false) (o0:=Nothing). ssa.
+  move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by (simpl; right).
+  by move: (Ha _ Hr)=>[].
   intro. intros.
   elim: H. intros. con.
   intros. econ. done.
-  intros. econ. 2:done. ssa.
+  intros. econ. 2:done. de o.
   left. intro. intros.
   move/private_not_bot' : H=>->//. ssa.
   intro. subst. rewrite eqxx in i. done.

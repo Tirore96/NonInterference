@@ -60,6 +60,12 @@ Bundling the two fields into one record, with the characterisation as a field, i
 the mechanisation's own choice; the paper states the same information as
 *L-equivalences* (README, "Departures from the paper").
 
+The two fields are not used symmetrically. `NI` licenses inserting and deleting
+inputs only, so `dis IRel` is what its insertion and deletion clauses turn on, while
+outputs are compared through `rel ORel` alone. An output type is given a `cEquiv`
+because that is the one record the theorems consume, and its distinguished class
+then serves only to say which outputs are indistinguishable.
+
 ### What `NI` says
 
 ```coq
@@ -343,13 +349,23 @@ f_PU (eqsum private_equiv public_equiv) BRel (fun pid => slot_pid pid == k)
 and `swi_NI` asks, at every level,
 
 ```coq
-aware BRel true l  \/  oblivious (eqpair_R BRel ORel) (f_proc k) l
+aware BRel true l  \/  oblivious (eqmaybe_swi ORel BRel) (swi b (f_proc k)) l
 ```
 
 Under `aware BRel true l` a value related to `true` must *be* `true` and must not
-be unobservable, so the observer can trust the gate. Under `oblivious` every output
-the gated process can produce is unobservable at `l`, so the observer learns
-nothing from it either way.
+be unobservable, so the observer can trust the gate. Under `oblivious` the gated
+slot never leaves one indistinguishability class at `l`:
+
+```coq
+oblivious ORel p l  :=  exists o0, forall s, Trace ORel l s p ->
+                                   ObliviousTrace ORel l o0 s
+```
+
+where `ObliviousTrace ORel l o0 s` asks that every output in `s` satisfy
+`rel ORel l o0 o`, for the one reference output `o0`. The observer sees the same
+class whatever the input does, so it learns nothing from the slot either way. Only
+`rel` is involved, which is what non-interference constrains on the output side
+(section 1).
 
 `cur_pid` is `Sum Bool Nat` classified `eqsum private_equiv public_equiv` (section 7b),
 so at `⊥` every `inl b` is unobservable while `inr n` is not. What `f_PU` demands
@@ -384,14 +400,34 @@ disjunct is gone and the proof must split on the level:
 
 - above `⊥`, `private_equiv` collapses to equality, nothing is unobservable, and
   `aware` applies as before;
-- at `⊥`, the right disjunct is used. The proof builds an `ObliviousTrace`, every
-  output step of which must satisfy `dis ORel ⊥ o`.
+- at `⊥`, the right disjunct is used, with `None` as the reference output. A step
+  where the slot is gated off emits `None` itself, and a step where it runs emits
+  `Some o`, so the obligation is `rel (eqmaybe_swi ORel BRel) ⊥ None (Some o)`.
 
-That last obligation is affordable only because the slot's output was classified
-`eqmaybe_private private_equiv` in section 4, which makes both `Some o` and `None`
-unobservable at `⊥`. Under `eqmaybe private_equiv` the `None` would be public,
-obliviousness would fail, and nothing would hide that the handler ran. Losing
-awareness at `⊥` costs nothing, since the slot's output is private there anyway.
+`oblivious_swi` ([theorems.v](../theories/theorems.v)) discharges that from two
+facts, both of them relations:
+
+```coq
+rel (eqmaybe_swi ORel BRel) l None (Some o0)      (* None sits in the class *)
+oblivious_at (eqpair_R BRel ORel) (b0,o0) p l     (* and the slot stays in it *)
+```
+
+Every `Some o` the slot emits is then related to `None` by transitivity through
+`Some o0`. Where the slot's own relation holds by two outputs being unobservable,
+the characterisation of section 1 turns that straight back into relatedness, so no
+step of the argument mentions `dis`.
+
+What the model has to prove is the first line, at `⊥`, with `o0` any handler
+output. `eqmaybe_swi` relates `None` to a `Some` exactly when the observer cannot
+see the gate and the payload is unobservable, so this is where the classification of
+section 4 comes back in: the slot's `private_equiv` payload is what makes a disk
+handler run and a step where nothing happened the same observation. Under a public
+`None` the two would come apart and obliviousness would fail. Losing awareness at
+`⊥` costs nothing, since the slot's output is private there anyway.
+
+So the distinguished class enters only through how `eqmaybe_swi` *defines*
+relatedness, and never through obliviousness or through `swi_NI`, neither of which
+mentions it (README, "Departures from the paper").
 
 | slot | process | `BRel` | `swi_NI` discharged by |
 |---|---|---|---|

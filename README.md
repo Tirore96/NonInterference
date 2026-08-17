@@ -111,15 +111,16 @@ and every classification in the development is expressed with them.
 
 Only the input side's unobservability enters the statement of non-interference:
 inserting or removing unobservable inputs, or swapping indistinguishable ones, must
-leave the output indistinguishable. The output type's distinguished class earns its
-keep in the *proof* instead
-([`docs/noninterference.md` §6a](docs/noninterference.md)).
+leave the output indistinguishable. Outputs are never inserted or removed, so an
+output type's distinguished class serves only to say which outputs are
+indistinguishable ([`docs/noninterference.md` §1](docs/noninterference.md)).
 
 Indistinguishability and unobservability are tied together. At each level the
-equivalence partitions a type into classes of indistinguishable values, and the unobservable values are required
-to be exactly one of those classes, the **distinguished class**. It is empty when
-the level hides nothing. One such partition per level, each with its distinguished
-class, makes a **characterised equivalence**: `cEquiv` in the source
+equivalence partitions a type into classes of indistinguishable values, and the
+unobservable values are required to be exactly one of those classes, the
+**distinguished class**. It is empty when the level hides nothing. One such
+partition per level, each with its distinguished class, makes a **characterised
+equivalence**: `cEquiv` in the source
 ([`docs/noninterference.md` §1](docs/noninterference.md)). Every classification
 below is an instance of it. Characterised equivalences are an alternative,
 mechanisation-friendly formulation of the *L-equivalences* of the original paper;
@@ -231,7 +232,7 @@ one system.
 ## Departures from the paper
 
 The calculus and the generic theorems are Rafnsson et al.'s. Mechanising them
-changed two definitions, and neither change weakens what is proved.
+changed three definitions, and no change weakens what is proved.
 
 **Characterised equivalences in place of L-equivalences.** A `cEquiv` bundles the
 level-indexed equivalence together with its distinguished class, and requires the
@@ -239,6 +240,20 @@ two to fit: the unobservable values are exactly one class. The paper's
 L-equivalences carry the same information; holding it in one record, with the fit as
 a field, is what the composition theorems consume
 ([`docs/noninterference.md` §1](docs/noninterference.md)).
+
+**Obliviousness by class.** Non-interference constrains outputs only through
+indistinguishability, so asking that a process's outputs be *unobservable* was
+stronger than needed. `oblivious ORel p l` here says they all fall in **one class**:
+there is a reference output `o0` such that every output the process can produce is
+related to it at `l`. `swi_NI` is stated with that, and so is `oblivious_swi`, the
+sufficient condition the models use, so no output-side `dis` appears in either.
+Where an argument had used unobservability of two outputs, the characterisation
+supplies their relatedness instead. The distinguished field stays on output types
+because they are the same `cEquiv` records as on the input side, and a second
+construction without it would cost more than it saves. The one thing still reading
+it on the output side is `eqmaybe_swi`'s definition of when `None` and `Some o` are
+indistinguishable ([`docs/noninterference.md` §6a](docs/noninterference.md)), which
+could be given directly if the field were dropped.
 
 **Finite traces in place of streams.** The paper works with infinite streams of
 labels and states definitions such as `oblivious` coinductively. Here a trace is a

@@ -525,13 +525,22 @@ Proof.
 Qed.
 Hint Resolve rel_eq.
 
-Inductive ObliviousTrace {I O : Ty} (ORel : cEquiv [O]) (l : level) : seq ([I] + [O]) -> Prop :=
- | OT_nil : ObliviousTrace ORel l nil
- | OT_cons_in i s :  ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inl i)::s)
- | OT_cons_out o s :  dis ORel l o -> ObliviousTrace ORel l s -> ObliviousTrace ORel l ((inr o)::s).
+(* [ObliviousTrace ORel l o0 s]: every output in [s] is indistinguishable from
+   the reference output [o0] at level [l], so an observer there sees the same
+   class throughout.  The reference is a plain output value, not a member of the
+   distinguished class: obliviousness is a statement about indistinguishability
+   only.  Prose: docs/noninterference.md section 6a. *)
+Inductive ObliviousTrace {I O : Ty} (ORel : cEquiv [O]) (l : level) (o0 : [O]) : seq ([I] + [O]) -> Prop :=
+ | OT_nil : ObliviousTrace ORel l o0 nil
+ | OT_cons_in i s :  ObliviousTrace ORel l o0 s -> ObliviousTrace ORel l o0 ((inl i)::s)
+ | OT_cons_out o s :  rel ORel l o0 o -> ObliviousTrace ORel l o0 s -> ObliviousTrace ORel l o0 ((inr o)::s).
 
+Definition oblivious_at {I O : Ty} (ORel : cEquiv [O]) (o0 : [O]) (p : Proc I O) (l : level) :=
+  forall s, Trace ORel l s p -> ObliviousTrace ORel l o0 s.
+
+(* [p] never leaves one indistinguishability class at [l]. *)
 Definition oblivious  {I O : Ty} (ORel : cEquiv [O]) (p : Proc I O)  (l : level) :=
-  forall s, Trace ORel l s p -> ObliviousTrace ORel l s.
+  exists o0, oblivious_at ORel o0 p l.
 
 Definition aware_or_oblivious  {I O : Ty} (ORel : cEquiv [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware ORel o l \/ oblivious ORel p l.
 
