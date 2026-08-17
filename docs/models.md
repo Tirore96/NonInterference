@@ -446,9 +446,9 @@ is allowed to run*:
   between reopening as soon as a handler says it is done, and reopening only at a
   fixed boundary.
 
-- **`restore_invariant : [state_type] -> [state_type]`** is consulted by `initiate_next`,
-  after the "is a handler already running" test and before `first_ready` picks the
-  next one. It is the design's last chance to constrain the state that the choice is
+- **`restore_invariant : [state_type] -> [state_type]`** is consulted by
+  `initiate_next`, after the "is a handler already running" test and before
+  `first_ready` picks the next one. It is the design's last chance to constrain the state that the choice is
   made from. Its real use is re-imposing an invariant that the compositional proof
   has forgotten, so that the choice comes out the same in two related executions
   ([`noninterference.md` §7d](noninterference.md)).

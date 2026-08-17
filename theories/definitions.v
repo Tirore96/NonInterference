@@ -69,8 +69,9 @@ Definition order (b1 b2 : level) := b1 <= b2.
 
 (* A characterised equivalence on [A].  At each level, [rel l] is an equivalence,
    so it partitions [A] into classes an observer at that level cannot tell apart,
-   and the last field characterises [dis l] as one of those classes -- or as empty,
-   when nothing is unobservable there.  Both fields weaken downwards: a lower
+   and the last field characterises [dis l] as one of those classes, the
+   unobservable class, which is empty when the level hides nothing.
+   Both fields weaken downwards: a lower
    observer sees less.  Prose: docs/noninterference.md section 1. *)
 Record cEquiv (A : Set) :=
         CEquiv {
