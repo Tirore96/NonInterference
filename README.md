@@ -64,14 +64,12 @@ parameters, and all three models share it: an interrupt *is* an input. `TInterru
 (`T_in` in the source) has three values, `TimerInterrupt`, `DiskInterrupt` and
 `DefaultInterrupt`. Delivering one is the only thing the environment can do to a
 model; the model records it as pending and decides later whether to service it.
-Classifying the disk interrupt secret and the timer public therefore splits three
-values of a single type, and that split lives entirely in `in_equiv`.
 
 The models then differ along two independent axes, and it helps to keep them apart.
 
 **Axis 1: behaviour (`model_immediate` vs `model_sliced`).** Same input and output
 types, same pool, same state layout. Both are the *same* generic definition,
-`model`, at a different triple of arguments: the initial state,
+`model`, at a different triple of arguments: `init`,
 `handler_preroutine`, and `restore_invariant`, tabulated in
 [`docs/models.md` §8](docs/models.md). That difference is the whole security
 story: one leaks, the other does not.
