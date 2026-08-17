@@ -126,10 +126,14 @@ exactly. (Formally,
 `public_equiv` and `private_equiv`, in
 [`docs/noninterference.md` §2](docs/noninterference.md).)
 
-Of the three interrupts the disk one is the only secret. The timer one has to be
-public, because it moves the user space processes' schedule, and that schedule is
-public. An observer at `⊥` therefore sees its effect by construction, and
-non-interference must permit the schedule to depend on it.
+For interrupts, the input of the models, the characterised equivalence `in_equiv`
+marks the disk interrupt unobservable at `⊥`. The other interrupts are
+left observable and all values are indistinguishable only from itself.
+Of the three interrupts the disk one is the only secret. The timer one
+has to be public, because it moves the user space processes' schedule,
+and that schedule is public. An observer at `⊥` therefore sees its
+effect by construction, and non-interference must permit the schedule
+to depend on it.
 
 `NI in_equiv out_equiv p` is then the noninterference statement: at every level,
 inserting or removing inputs that are unobservable there, or swapping inputs that
