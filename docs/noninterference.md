@@ -56,6 +56,10 @@ the one the observer does not see at all. That class is empty whenever the level
 hides nothing, as under `public_equiv` below, and the characterisation holds
 vacuously there.
 
+Bundling the two fields into one record, with the characterisation as a field, is
+the mechanisation's own choice; the paper states the same information as
+*L-equivalences* (README, "Departures from the paper").
+
 ### What `NI` says
 
 ```coq
@@ -404,8 +408,9 @@ The line falls between the two secret handlers and everything else.
 
 > The generic theorems in [`theories/theorems.v`](../theories/theorems.v)
 > mechanise results from separate prior work; the mechanisation replaces the
-> original coinductive definitions with inductive ones (`oblivious` above is one
-> such), which avoids constructing streams throughout the proofs.
+> original coinductive definitions over streams with inductive ones over finite
+> traces (`oblivious` above is one such), which avoids constructing streams
+> throughout the proofs. See [`models.md` §0](models.md) for why that loses nothing.
 
 
 ## 7. The state equivalence and `fv_NI`: the hard part

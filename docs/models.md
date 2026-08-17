@@ -49,11 +49,20 @@ Everything below is built from a small process calculus (defined in
 non-interference theorems are due to Rafnsson et al., *Timing-Sensitive
 Noninterference through Composition* ([POST
 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf));
-mechanising them is part of the contribution of this development. The
-mechanisation departs from the paper in one respect: **definitions the paper gives
-coinductively are given inductively here**. `oblivious`, for instance, is stated
-over the traces a process admits rather than over an infinite stream. The proofs
-are substantially simpler for it, since they never have to construct streams.
+mechanising them is part of the contribution of this development. The mechanisation
+departs from the paper in two respects. The first is local to the security
+equivalences and is taken up in [`noninterference.md` §1](noninterference.md): a
+**characterised equivalence** replaces the paper's L-equivalences, bundling the
+level-indexed equivalence with its distinguished class.
+
+The second shows up everywhere: **the paper's streams of labels are finite lists
+here, and definitions it gives coinductively are given inductively**. A trace is the
+list of labels along zero or more reductions, and `oblivious`, for instance, is
+stated over the traces a process admits rather than over an infinite stream. Nothing
+is lost, since interference must show up after finitely many steps: two runs an
+observer can separate already differ on some finite prefix, so quantifying over
+prefixes of every length says what quantifying over streams says. The proofs are
+substantially simpler for it, since they never have to construct streams.
 
 A process has type `Proc I O`, where `I` and `O` are its input and output types.
 
@@ -448,8 +457,8 @@ is allowed to run*:
 
 - **`restore_invariant : [state_type] -> [state_type]`** is consulted by
   `initiate_next`, after the "is a handler already running" test and before
-  `first_ready` picks the next one. It is the design's last chance to constrain the state that the choice is
-  made from. Its real use is re-imposing an invariant that the compositional proof
+  `first_ready` picks the next one. It is the design's last chance to constrain the
+  state that the choice is made from. Its real use is re-imposing an invariant that the compositional proof
   has forgotten, so that the choice comes out the same in two related executions
   ([`noninterference.md` §7d](noninterference.md)).
 

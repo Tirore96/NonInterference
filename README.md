@@ -109,42 +109,43 @@ and every classification in the development is expressed with them.
 - A value is **unobservable** at `l` when the observer does not see the event at
   all, so it can be inserted or removed without the observer noticing.
 
-Unobservability is relevant only for input. Non-interference does not state anything about unobservability of output. This is because non-interference requires a process to be invariant, up to indistinguishability of output when unobservables are inserted/removed, and indistinguishable values are swapped.
+Only the input side's unobservability enters the statement of non-interference:
+inserting or removing unobservable inputs, or swapping indistinguishable ones, must
+leave the output indistinguishable. The output type's distinguished class earns its
+keep in the *proof* instead
+([`docs/noninterference.md` §6a](docs/noninterference.md)).
 
-Indistinguishability and unobservability are notions that are tied together. At each level the equivalence partitions a type
-into classes of indistinguishable values, and the unobservable values are required
+Indistinguishability and unobservability are tied together. At each level the
+equivalence partitions a type into classes of indistinguishable values, and the unobservable values are required
 to be exactly one of those classes, the **distinguished class**. It is empty when
 the level hides nothing. One such partition per level, each with its distinguished
 class, makes a **characterised equivalence**: `cEquiv` in the source
 ([`docs/noninterference.md` §1](docs/noninterference.md)). Every classification
-below is an instance of it.
+below is an instance of it. Characterised equivalences are an alternative,
+mechanisation-friendly formulation of the *L-equivalences* of the original paper;
+the distinguished class is what makes insertion and deletion possible at all.
 
 The two extremes are the ones used most. A **public** value is observable at every
 level and indistinguishable only from itself: every class a singleton, and the
 distinguished class empty. A **private** value is unobservable at `⊥`, where all
 private values are therefore indistinguishable: one class, and it is the
 distinguished one. Above `⊥` a private value is observable and values must agree
-exactly. (Formally,
-`public_equiv` and `private_equiv`, in
+exactly. (Formally, `public_equiv` and `private_equiv`, in
 [`docs/noninterference.md` §2](docs/noninterference.md).)
 
-Model input is interrupts classified by characterised equivalence `in_equiv`
-which marks disk interrupt unobservable at `⊥`. Other interrupts are
-left observable and all values are indistinguishable only from themselves.
+The model's input is interrupts, classified by the characterised equivalence
+`in_equiv`, which marks the disk interrupt unobservable at `⊥`. The other interrupts
+stay observable, and every interrupt is indistinguishable only from itself.
 
-Model output of `model_sliced` is a six-tuple where optionality indicates which process is currently scheduled. The precise definition of the classification of this six-tuple exposes some technical details, why we defer this
-to [`docs/noninterference.md` §4](docs/noninterference.md). Intuitively, `⊥` is allowed to distinugish when most of the processes are scheduled. 
-
+The model's output, for `model_sliced`, is the six-slot tuple, where which slot is
+`Some` says which process just ran. Classifying that tuple brings in technical
+detail, so the definition is deferred to
+[`docs/noninterference.md` §4](docs/noninterference.md). Intuitively, `⊥` is allowed
+to see when most of the slots run; the two secret handlers are the exception.
 
 `NI in_equiv out_equiv p` is then the noninterference statement: at every level,
 inserting or removing inputs that are unobservable there, or swapping inputs that
-are indistinguishable there, leaves the traces that observer can see unchanged. The
-classification lives entirely in `in_equiv` and `out_equiv`, one characterised
-equivalence on the input type and one on the output type. Their equivalence part is
-the *L-equivalences* of the original paper; the distinguished class is what makes
-insertion and deletion possible at all. Every claim made above about what is public
-or secret is a statement about those two, which are given in
-[`docs/noninterference.md` §4](docs/noninterference.md).
+are indistinguishable there, leaves the traces that observer can see unchanged.
 
 ## The leak
 
@@ -226,6 +227,28 @@ and `scheduler_NI`.
 `model_immediate` is parametric in the same way, but the counterexample is stated
 at the concrete instance `model_immediate_concrete`: exhibiting a leak needs only
 one system.
+
+## Departures from the paper
+
+The calculus and the generic theorems are Rafnsson et al.'s. Mechanising them
+changed two definitions, and neither change weakens what is proved.
+
+**Characterised equivalences in place of L-equivalences.** A `cEquiv` bundles the
+level-indexed equivalence together with its distinguished class, and requires the
+two to fit: the unobservable values are exactly one class. The paper's
+L-equivalences carry the same information; holding it in one record, with the fit as
+a field, is what the composition theorems consume
+([`docs/noninterference.md` §1](docs/noninterference.md)).
+
+**Finite traces in place of streams.** The paper works with infinite streams of
+labels and states definitions such as `oblivious` coinductively. Here a trace is a
+finite list, the labels of zero or more reductions
+([`theories/definitions.v:208`](theories/definitions.v)), and `oblivious` quantifies
+over the traces a process admits. Nothing is lost, because interference has to show
+up after finitely many steps: if an observer can separate two runs, it can already
+separate some finite prefix of them. Quantifying over prefixes of every length
+therefore says what quantifying over streams says, and the proofs never have to
+construct a stream.
 
 ## Logical foundations
 
