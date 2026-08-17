@@ -1,4 +1,4 @@
-# NonInterference — proof / security-equivalence documentation
+# NonInterference: proof and security-equivalence documentation
 
 *Prose companion to [`theories/noninterference.v`](../theories/noninterference.v).*
 
@@ -21,7 +21,7 @@ security argument. Definitions are as given in
 4. [The model's equivalences: `in_equiv`, `out_equiv`, `out_equiv_userview`](#4-the-models-equivalences-in_equiv-out_equiv-out_equiv_userview)
 5. [`model_immediate` is not non-interfering](#5-model_immediate-is-not-non-interfering)
 6. [`model_sliced` and `model_sliced_userview` are non-interfering](#6-model_sliced-and-model_sliced_userview-are-non-interfering)
-7. [The state equivalence and `fv_NI` — the hard part](#7-the-state-equivalence-and-fv_ni--the-hard-part)
+7. [The state equivalence and `fv_NI`: the hard part](#7-the-state-equivalence-and-fv_ni-the-hard-part)
 8. [Model limitations](#8-model-limitations)
 
 
@@ -104,12 +104,12 @@ The variants below are that one construction at different values of the paramete
 The rest follows from the characterisation of section 1: values of the same shape
 are related componentwise, and values of different shape only by both being secret.
 
-**`eqpair IRel ORel : cEquiv [Times I O]`** — relate pairs componentwise:
+**`eqpair IRel ORel : cEquiv [Times I O]`** relates pairs componentwise:
 `(a,b) ~ (a',b')` iff `a ~ a'` and `b ~ b'`. Nothing is secret (`dis = False`).
 The model's own equivalences are built from this one, so it stays a definition in
 its own right rather than an instance carrying a secrecy case that never fires.
 
-**`eqpair_L` / `eqpair_R` / `eqpair_LR`** (`eqpair_aux`) — the gated variants,
+**`eqpair_L` / `eqpair_R` / `eqpair_LR`** (`eqpair_aux`) are the gated variants,
 where the *pair* may be secret and two related states can then differ there:
 
 ```text
@@ -118,7 +118,7 @@ eqpair_R   secret at l iff the RIGHT component is
 eqpair_LR  secret at l iff BOTH components are
 ```
 
-**`eqsum IRel ORel : cEquiv [Sum I O]`** and **`eqsum_L`** (`eqsum_aux`) — relate a
+**`eqsum IRel ORel : cEquiv [Sum I O]`** and **`eqsum_L`** (`eqsum_aux`) relate a
 `Sum` tag-by-tag, `inl` by `IRel` and `inr` by `ORel`. Neither ever relates an
 `inl` to an `inr`, so the *tag* stays public even when the payload underneath is
 not; an `inr` is never secret. They differ only in the `inl` case:
@@ -132,7 +132,7 @@ eqsum_L    an inl is secret exactly when its payload is
 condition on the input summand alone.
 
 **`eqmaybe VRel` and variants (`eqmaybe_private` / `eqmaybe_hidden` / `eqmaybe_swi`,
-via `eqmaybe_aux`)** — relate `Option` values. On `Some`/`Some` they defer to
+via `eqmaybe_aux`)** relate `Option` values. On `Some`/`Some` they defer to
 `VRel`; they differ only in a level-predicate `P l` = "the observer at `l` can
 see `None`", `None` being secret exactly when `¬P l`:
 
@@ -299,8 +299,8 @@ from the outside in:
 | layer of `model_sliced` | theorem | what it gives |
 |---|---|---|
 | the outer `map inl (inr_or_def def)` and every rewiring of an input or output | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
-| `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)` — note input and output equivalences must coincide |
-| `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates — **this is where section 7 is discharged** |
+| `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)`; note input and output equivalences must coincide |
+| `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates; **this is where section 7 is discharged** |
 | `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_hidden IRel) ORel (maybe p)` |
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
 | `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`false_equiv`](#6a-gating-a-slot-why-false_equiv-and-where-obliviousness-is-needed) for every public slot |
@@ -406,7 +406,7 @@ The line falls between the two secret handlers and everything else.
 > such), which avoids constructing streams throughout the proofs.
 
 
-## 7. The state equivalence and `fv_NI` — the hard part
+## 7. The state equivalence and `fv_NI`: the hard part
 
 ### 7a. What constrains the classification
 
@@ -433,8 +433,8 @@ An arriving interrupt does nothing but record itself. Everything it eventually
 causes sits in the right summand, on a later output step where the input is no
 longer the thing being varied.
 
-Composition is componentwise — `(f ⊕ g) ∘ (f' ⊕ g') = (f ∘ f') ⊕ (g ∘ g')` — so the
-two summands can be reasoned about separately, which is what section 7c does.
+Composition is componentwise, `(f ⊕ g) ∘ (f' ⊕ g') = (f ∘ f') ⊕ (g ∘ g')`, so the two
+summands can be reasoned about separately, which is what section 7c does.
 
 `sta_NI` needs two side conditions on this transition, and they push in opposite
 directions:
@@ -527,7 +527,7 @@ its three stages, leaving one goal apiece:
 | `set_pending` | input | an arriving interrupt sets a pending bit, and related inputs give related states |
 | `check_scheduler` | output | the scheduler pid is public, so the `cur_pid` update agrees |
 | `handler_preroutine` | output | the slice bookkeeping reads only the public `ir_count` and masks, so it agrees |
-| `initiate_next` | output | related states must pick the same branch of "what runs next" — the hard one, see 7d |
+| `initiate_next` | output | related states must pick the same branch of "what runs next"; the hard one, see 7d |
 
 `f_EP` needs no such breakdown. Since `eqsum_L` makes only an `inl` unobservable,
 `f_EP_step_sum` reduces it to a condition on `set_pending`, and the output summand

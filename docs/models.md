@@ -1,4 +1,4 @@
-# NonInterference — model documentation
+# NonInterference: model documentation
 
 *Prose companion to [`theories/models.v`](../theories/models.v).*
 
@@ -23,7 +23,7 @@ source needs them); no proof code is reproduced.
 
 ## Contents
 
-**Part I — the generic model.**
+**Part I: the generic model.**
 [0. Preliminaries](#0-preliminaries-the-process-algebra) ·
 [1. The generic model](#1-the-generic-model) ·
 [2. Interrupt handler and slot map](#2-interrupt-handler-and-slot-map) ·
@@ -33,11 +33,11 @@ source needs them); no proof code is reproduced.
 [6. State transitions](#6-state-transitions) ·
 [7. The generic model, and its three parameters](#7-the-generic-model-and-its-three-parameters)
 
-**Part II — the two designs.**
+**Part II: the two designs.**
 [8. Side by side](#8-the-two-designs-side-by-side) ·
 [9. `model_sliced_userview`](#9-model_sliced_userview)
 
-**Part III — one concrete system.**
+**Part III: one concrete system.**
 [10. A concrete system](#10-a-concrete-system) ·
 [11. Adequacy: the example traces](#11-adequacy-the-example-traces)
 
@@ -51,7 +51,7 @@ Noninterference through Composition* ([POST
 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf));
 mechanising them is part of the contribution of this development. The
 mechanisation departs from the paper in one respect: **definitions the paper gives
-coinductively are given inductively here** — `oblivious`, for instance, is stated
+coinductively are given inductively here**. `oblivious`, for instance, is stated
 over the traces a process admits rather than over an infinite stream. The proofs
 are substantially simpler for it, since they never have to construct streams.
 
@@ -64,7 +64,7 @@ A process moves in one of two ways:
    p ──o──▶ p'     p emits the output o
 ```
 
-in any order — nothing forces them to alternate. A **trace** is the sequence of
+in any order; nothing forces them to alternate. A **trace** is the sequence of
 values along one such run, each marked as received or emitted, and it is all
 non-interference looks at. Precise definitions are in
 [`noninterference.md` §1](noninterference.md).
@@ -74,27 +74,27 @@ Throughout, *emit* means an output step and *receive* an input step.
 There are seven constructors, described here by what each does on an input step and
 on an output step:
 
-- **`out o`** — the constant process. It receives any value and is unchanged; it
+- **`out o`** is the constant process. It receives any value and is unchanged; it
   emits the fixed `o` and is unchanged.
-- **`map f g p`** — rewires `p` on both sides. Receiving `i`, it hands `p` the
+- **`map f g p`** rewires `p` on both sides. Receiving `i`, it hands `p` the
   value `f i`. Emitting, it lets `p` emit some `o` and emits `g o` in its place.
   (`Proc I' O → Proc I O'`)
-- **`sta f g v p`** — gives `p` a state cell holding `v`, and *exposes* that cell in
+- **`sta f g v p`** gives `p` a state cell holding `v`, and *exposes* that cell in
   what it emits. Receiving `i`, the cell becomes `f i v` and `p` receives the pair
   `(f i v, i)`. Emitting, `p` emits some `o`, the cell becomes `g o v`, and the whole
-  process emits the pair `(g o v, o)` — the new state alongside `p`'s value.
-- **`swi b p`** — a one-bit "switch" in phase `b`, wrapping a `p` that emits values
+  process emits the pair `(g o v, o)`, the new state alongside `p`'s value.
+- **`swi b p`** is a one-bit "switch" in phase `b`, wrapping a `p` that emits values
   tagged with a Bool. Receiving `(b', i)`, the phase flips to `xor b b'` and `p`
   receives `i`. Emitting in phase `false`, it emits `None` and `p` does not step at
   all; emitting in phase `true`, `p` emits a tagged `(c, o)`, the switch emits
   `Some o` and the phase becomes `xor true c`. `swi` is how a pool slot is gated on /
   off (section 3).
-- **`par p1 p2`** — receiving `i`, both `p1` and `p2` receive it. Emitting, both emit,
+- **`par p1 p2`**: receiving `i`, both `p1` and `p2` receive it. Emitting, both emit,
   and `par` emits the pair of their two values.
-- **`loop p`** — feedback. Receiving `i`, `p` receives it. Emitting is two steps of
+- **`loop p`** is feedback. Receiving `i`, `p` receives it. Emitting is two steps of
   `p`: `p` emits some `o`, that same `o` is immediately fed back to `p` as an input
   step, and `loop p` emits `o`. (`Proc I I → Proc I I`)
-- **`maybe p`** — makes the input optional. Receiving `None`, `p` does not step;
+- **`maybe p`** makes the input optional. Receiving `None`, `p` does not step;
   receiving `Some i`, `p` receives `i`. Emitting passes straight through: `p` emits
   `o` and so does `maybe p`. (`Proc I O → Proc (Option I) O`)
 
@@ -111,7 +111,7 @@ and `NI` mean, and the equivalences they are indexed by, are in
 [`noninterference.md` §1](noninterference.md).
 
 
-# Part I — the generic model
+# Part I: the generic model
 
 ## 1. The generic model
 
@@ -151,13 +151,13 @@ ir_handler runtime =
 
 Its state cell counts modulo `runtime` and the emitted value is read off the
 *updated* cell: `Notify` when it is 0, `Nothing` otherwise. So each activation emits
-`runtime - 1` `Nothing`s and then a `Notify` signalling completion — a fixed number
+`runtime - 1` `Nothing`s and then a `Notify` signalling completion, a fixed number
 of output steps. Its input type is `Empty`: a handler is driven entirely by the
 interrupt controller and never consumes input.
 
 `runtime` is a parameter. The security argument needs only that all three handlers
 share it, so that a secret handler's run is exactly as long as the filler run it
-replaces. (`runtime = 0` degenerates — `n %% 0 = n`, so the cell never returns to 0
+replaces. (`runtime = 0` degenerates: `n %% 0 = n`, so the cell never returns to 0
 and the handler never signals completion. Nothing breaks; the handler simply never
 finishes.)
 
@@ -266,14 +266,14 @@ f_initial = fun n => n == 5        (* slot 5 alone starts open *)
 
 The `cur_pid` split is the one choice here worth a second look: the `inl` side holds
 **exactly the two private pids**, the disk and default handlers, and the `inr` side
-everything public — including the timer handler, which is `inr 0`. It is a handler,
+everything public, including the timer handler, which is `inr 0`. It is a handler,
 but not a private one, so the split is not "handler versus not". Drawing it on this
 line is what lets the state equivalence classify a whole pid in one place, as
 `eqsum private_equiv public_equiv`, with the proof case-splitting on the tag
 ([`noninterference.md` §7b](noninterference.md)).
 
 **The slot types**, tabulated in section 2. `f_O` is parameterised by the two
-alphabets — this is where `Opub` and `Opriv` enter the pool's output type:
+alphabets, and this is where `Opub` and `Opriv` enter the pool's output type:
 
 ```coq
 f_I            = fun n => match n with
@@ -345,7 +345,7 @@ Its result is the *optional* input of `maybe p`, so the two branches mean:
   state, which leaves setting a single private bit as the only thing the input step
   can afford to do. See [`noninterference.md` §7a](noninterference.md).
 - **`event = inr o`, a fed-back pool output** → `Some (pid, payload)`. The `pid` is
-  `get_cur_pid v`, which selects the slot that runs next — this is how the state's
+  `get_cur_pid v`, which selects the slot that runs next. This is how the state's
   scheduling decision reaches the pool. The `payload` is `dI_out o`, the disk
   handler's slot from the output just produced, which `f_proj` (section 3) delivers
   to slot 4 alone. That is the wire carrying a disk `Notify` to the private user
@@ -367,7 +367,7 @@ state_type = ((cur_pid, prev_pid), (re_sched, (ir_count, ic)))
 | `re_sched` | `Bool` | reschedule flag: control should go to the scheduler rather than back to the interrupted process |
 | `ir_count` | `Option Nat` | the handler time-slice counter: `None` when disabled, `Some n` when `n` handler output-steps remain, `Some 0` when the slice is over |
 | `ic` | `Times ir_bits (Times ir_bits ir_bits)` | the interrupt controller: one `ir_bits` per interrupt, in order default, disk, timer |
-| `ir_bits` | `Times pending mask` | `pending` — an interrupt of this kind has arrived and awaits service; `mask` — service is currently blocked |
+| `ir_bits` | `Times pending mask` | `pending`: an interrupt of this kind has arrived and awaits service; `mask`: service is currently blocked |
 
 A handler is *selectable* for an interrupt kind iff it is pending and not masked
 (`ir_ready`). `first_ready` picks the highest-priority ready one, in the fixed order
@@ -389,16 +389,16 @@ state_step handler_preroutine restore_invariant =
            (initiate_next(restore_invariant) ∘ handler_preroutine ∘ check_scheduler)
 ```
 
-- **`set_pending`** — on an arriving interrupt, set that interrupt's `pending` bit.
+- **`set_pending`**: on an arriving interrupt, set that interrupt's `pending` bit.
   This is the whole of the input summand; that it does nothing else is a security
   requirement, argued in [`noninterference.md` §7a](noninterference.md).
-- **`check_scheduler`** — on a scheduler output, set `cur_pid` to the scheduled pid.
-  It reads that output with `is_sched_out`, which matches `(None, (None, (Some n, _)))`
-  — so the two user slots are checked for `None`-ness and nothing more. No stage
+- **`check_scheduler`**: on a scheduler output, set `cur_pid` to the scheduled pid.
+  It reads that output with `is_sched_out`, which matches `(None, (None, (Some n, _)))`,
+  so the two user slots are checked for `None`-ness and nothing more. No stage
   reads a user-slot *value*, which is why the state transition is independent of what
   userspace does.
-- **`handler_preroutine`** — a parameter; see section 7.
-- **`initiate_next(restore_invariant)`** — decide who runs next:
+- **`handler_preroutine`** is a parameter; see section 7.
+- **`initiate_next(restore_invariant)`** decides who runs next:
 
   ```coq
   initiate_next bc v =
@@ -434,19 +434,19 @@ stay fixed for both the interfering and the non-interfering model. What is left 
 is a triple, and each part of it is a distinct point of control over *when a handler
 is allowed to run*:
 
-- **`init : [state_type]`** — the state the model starts in. Because a handler is
+- **`init : [state_type]`** is the state the model starts in. Because a handler is
   serviceable exactly when it is pending and unmasked, the initial masks decide which
   interrupts can be serviced before anything at all has happened. It also decides
   whether the time-slice counter is enabled (`Some _`) or switched off (`None`).
 
-- **`handler_preroutine : [T_out] -> [state_type] -> [state_type]`** — runs on each
+- **`handler_preroutine : [T_out] -> [state_type] -> [state_type]`** runs on each
   pool *output*, immediately before `initiate_next`. It is the only place a design
   sees a handler announce completion, and so the only place it can reopen masks. It
-  therefore decides **when the next handler becomes eligible** — the difference
+  therefore decides **when the next handler becomes eligible**: the difference
   between reopening as soon as a handler says it is done, and reopening only at a
   fixed boundary.
 
-- **`restore_invariant : [state_type] -> [state_type]`** — consulted by `initiate_next`,
+- **`restore_invariant : [state_type] -> [state_type]`** is consulted by `initiate_next`,
   after the "is a handler already running" test and before `first_ready` picks the
   next one. It is the design's last chance to constrain the state that the choice is
   made from. Its real use is re-imposing an invariant that the compositional proof
@@ -457,7 +457,7 @@ Between them: `init` says what is runnable at rest, `handler_preroutine` says wh
 that changes, and `restore_invariant` says what must hold when the choice is made.
 
 
-# Part II — the two designs
+# Part II: the two designs
 
 ## 8. The two designs, side by side
 
@@ -469,7 +469,7 @@ story.
 | **`init`** | all masks clear; counter `None` (disabled) | all masks set except the timer's; counter `Some 0` |
 | **`handler_preroutine`** | `immediate_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_preroutine`: reload the slice on a timer `Notify`, unmask at fixed boundaries, tick the slice |
 | **`restore_invariant`** | `id` (no bookkeeping) | restore the time-slice invariant: force the default mask to equal the disk mask |
-| **When a handler stops** | when it emits its **secret** `Notify` — *secret-driven* | at a fixed **public** time-slice boundary — *slice-driven* |
+| **When a handler stops** | when it emits its **secret** `Notify` (*secret-driven*) | at a fixed **public** time-slice boundary (*slice-driven*) |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
 | **Non-interfering?** | **No** (`model_immediate_not_NI`) | **Yes** (`model_sliced_NI`, for any non-interfering userspace) |
 | **Why** | a handler runs as soon as its interrupt is serviced, so a secret interrupt displaces the scheduled process and the gap is visible | handlers run only within the public slice, replacing NOP filler, so the schedule is unchanged |
@@ -482,7 +482,7 @@ reach a fixed length by padding.
 
 ### 8a. `model_immediate`
 
-The baseline, interrupts handled the ordinary way — `model` at the triple
+The baseline, interrupts handled the ordinary way. It is `model` at the triple
 `(initial_state_immediate, immediate_preroutine, id)`:
 
 ```coq
@@ -523,7 +523,7 @@ own traces.
 
 ### 8b. `model_sliced`
 
-The fixed design — `model` at the triple `(initial_state_sliced,
+The fixed design, `model` at the triple `(initial_state_sliced,
 sliced_preroutine runtime runs, restore_invariant)`:
 
 ```coq
@@ -566,7 +566,7 @@ initiate_ir runtime runs o v =
 
 *`check_handler_completed` reopens the masks at a boundary.* Because the slice is
 *defined* as `runs * runtime`, it always ends on a handler boundary, and the counter
-is a nonzero multiple of `runtime` precisely when a handler has just finished — which
+is a nonzero multiple of `runtime` precisely when a handler has just finished, which
 is what `handler_completed` computes.
 
 ```coq
@@ -671,10 +671,10 @@ model_sliced_userview runtime runs p_pub p_priv p_sched =
     : Proc T_in (T_out_userview Opub Opriv)
 ```
 
-Of the six output slots only two survive — the public one re-tagged `inl` and the
-secret one `inr`; every other slot, and any all-`None` tuple, projects to `None`.
+Of the six output slots only two survive, the public one re-tagged `inl` and the
+secret one `inr`. Every other slot, and any all-`None` tuple, projects to `None`.
 
-# Part III — one concrete system
+# Part III: one concrete system
 
 ## 10. A concrete system
 
@@ -726,15 +726,15 @@ model_sliced_userview_concrete = model_sliced_userview handler_runtime slice_run
 
 ## 11. Adequacy: the example traces
 
-Each design is exercised on two runs of the concrete system — one with no disk
-interrupt, one with a disk interrupt — and each run is proved to be an accepted
+Each design is exercised on two runs of the concrete system, one with no disk
+interrupt and one with a disk interrupt, and each run is proved to be an accepted
 trace. Reading a design's two runs against each other is what exhibits its
 behaviour, so both are shown aligned, with `≠` marking every row on which they
 differ.
 
 Every output is a six-slot tuple with exactly one slot `Some` at a time, and for each
 run we show only that value. A user process's value appears bare (`Get`, `NOP`,
-`Sys`); everything else is labelled by the slot it came from — `sch hi` / `sch lo` for
+`Sys`); everything else is labelled by the slot it came from: `sch hi` / `sch lo` for
 the scheduler naming the private or the public process, and `tmr` / `dsk` / `dfl` for
 the timer, disk and default handlers. A handler emits `Nth` (`Nothing`) on each step
 and `Nfy` (`Notify`) on the one that completes it, so an `Nth`/`Nfy` pair is exactly
@@ -775,7 +775,7 @@ the public output stream, and everything after it shifts down.
 ### `model_sliced`: the same two runs, and the projection
 
 `trace_sliced_no_dI'` against `trace_sliced_with_dI'`, in the same layout. Each run
-now carries its own `user view` column — the sequence `model_sliced_userview` emits,
+now carries its own `user view` column, the sequence `model_sliced_userview` emits,
 i.e. that run under `parse_output`. They are two distinct traces, and the point of
 the theorem is that they are *indistinguishable* at `⊥`.
 
@@ -818,14 +818,14 @@ as pending, and the public process carries on emitting. Only when the timer hand
 completes does a slice open, and only inside that slice may a handler run.
 
 **Inside the slice, the disk handler substitutes for a NOP run.** That is the only
-structural difference between the two runs — the `≠` at the first of the two handler
+structural difference between the two runs, the `≠` at the first of the two handler
 runs.
 
 **The projection erases the substitution entirely.** Both `dsk` and `dfl` sit in
 slots `parse_output` discards, so each run's user view is `·` on every handler step
 and every scheduled pid. Comparing the two view columns against each other, the only
 place they differ at all is the secret process reacting to its notification, `NOP`
-against `Sys` — and both of those are classified secret, so an observer at `⊥` cannot
+against `Sys`, and both of those are classified secret, so an observer at `⊥` cannot
 tell them apart.
 
 

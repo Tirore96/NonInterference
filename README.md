@@ -1,15 +1,15 @@
 # NonInterference
 
 A Rocq/Coq development proving **non-interference** for a model of an operating
-system that handles interrupts. One interrupt — the disk interrupt — is secret;
+system that handles interrupts. One interrupt, the disk interrupt, is secret;
 the theorem says an attacker watching the system's output cannot tell whether it
 occurred.
 
 The interesting part is that a naive interrupt handler *does* leak it, and not
 through any data it computes: it leaks through **scheduling**. Servicing a secret
 interrupt takes CPU time away from the process that was running, and the resulting
-gap in that process's output is visible. The development formalises both designs —
-the one that leaks and one that does not — and proves each claim.
+gap in that process's output is visible. The development formalises both designs,
+the one that leaks and the one that does not, and proves each claim.
 
 Both designs are expressed in a small process calculus, `Proc I O`.
 Non-interference is a property of a closed term in that calculus. Stating it takes a
@@ -69,14 +69,14 @@ values of a single type, and that split lives entirely in `in_equiv`.
 
 The models then differ along two independent axes, and it helps to keep them apart.
 
-**Axis 1: behaviour — `model_immediate` vs `model_sliced`.** Same input and output
+**Axis 1: behaviour (`model_immediate` vs `model_sliced`).** Same input and output
 types, same pool, same state layout. Both are the *same* generic definition,
 `model`, at a different triple of arguments: the initial state,
 `handler_preroutine`, and `restore_invariant`, tabulated in
 [`docs/models.md` §8](docs/models.md). That difference is the whole security
 story: one leaks, the other does not.
 
-**Axis 2: observation — `model_sliced` vs `model_sliced_userview`.** Same
+**Axis 2: observation (`model_sliced` vs `model_sliced_userview`).** Same
 behaviour; they are literally the same process. `model_sliced_userview` is
 `model_sliced` with a projection on its output,
 `map id parse_output model_sliced`, which erases every slot but the two user space
@@ -147,7 +147,7 @@ or secret is a statement about those two, which are given in
 A disk interrupt makes the disk handler run immediately, displacing whichever
 process was scheduled. The handler runs for its full length, then control returns
 to the displaced process. Below, and in the counterexample, that length is two
-output steps — the concrete instance of the parameter `runtime`.
+output steps, the concrete instance of the parameter `runtime`.
 
 The attacker never sees the handler run: in the full pool output the handler's slot
 is classified secret, and in the user-visible output that slot does not exist at
@@ -168,8 +168,8 @@ steps carries nothing:
 
 Two public requests are enough to refute non-interference, and that is exactly the
 counterexample `model_immediate_not_NI` constructs. The leak does not depend on which
-process was displaced — interrupting the secret process produces the same gap in
-the schedule.
+process was displaced: interrupting the secret process produces the same gap in the
+schedule.
 
 `model_sliced` closes it by taking away the disk interrupt's power to interrupt a
 user process. Handler execution still depends on the timer, since the **timer**
@@ -189,8 +189,8 @@ Three machine-checked theorems, in
 | Theorem | Statement | Meaning |
 |---|---|---|
 | `model_immediate_not_NI` | `~ NI in_equiv out_equivC model_immediate_concrete` | The naive design leaks: a secret disk interrupt is observable. |
-| `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output — for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
-| `model_sliced_userview_NI` | `NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output — the headline result. |
+| `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output, for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
+| `model_sliced_userview_NI` | `NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output, the headline result. |
 
 Two of the parameters are numbers. The **handler length** `runtime` counts the output
 steps every handler takes before it signals completion with `Notify`. The **slice
@@ -253,13 +253,13 @@ This compiles the four-file chain in dependency order
 | [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); this repository uses them as prior work. |
 | [`theories/models.v`](theories/models.v) | In three parts: the skeleton both designs share, ending in the generic `model`; the two designs, as `model` at two triples of arguments; and one concrete system, with the example traces. |
 | [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state equivalences, and the three theorems above. |
-| [`docs/models.md`](docs/models.md) | **What the models are** — long-form companion to `models.v`. |
-| [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering** — the security equivalences and the proof, companion to `noninterference.v`. |
+| [`docs/models.md`](docs/models.md) | **What the models are.** Long-form companion to `models.v`. |
+| [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering.** The security equivalences and the proof, companion to `noninterference.v`. |
 
 ## Where to read next
 
-- For the **models** — every process, the state layout, and the design rationale
-  behind the sliced design — read [`docs/models.md`](docs/models.md).
-- For the **proof** — the security equivalences, how the generic theorems compose,
-  and the one hard obligation (`fv_NI`, closure of the state equivalence under the
-  transition) — read [`docs/noninterference.md`](docs/noninterference.md).
+- For the **models**, read [`docs/models.md`](docs/models.md): every process, the
+  state layout, and the design rationale behind the sliced design.
+- For the **proof**, read [`docs/noninterference.md`](docs/noninterference.md): the
+  security equivalences, how the generic theorems compose, and the one hard
+  obligation (`fv_NI`, closure of the state equivalence under the transition).

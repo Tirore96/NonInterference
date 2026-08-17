@@ -16,7 +16,7 @@ Open Scope order_scope.
 Require Export NonInterference.theories.models.
 
 (* ===================================================================
-   NonInterference — the concrete security equivalences and the results.
+   NonInterference: the concrete security equivalences and the results.
 
    Prose companion: docs/noninterference.md (kept in sync with the
    section banners below).  Structure:
@@ -103,7 +103,7 @@ Opaque state_step pool_input initial_state_immediate def f_proj.
    bot-trace of two public requests; insert a disk interrupt at the front
    (secret at bot); its pending flag reschedules the disk handler, which then
    runs its full two steps, so the expected second public output becomes None.
-   Two public outputs suffice to refute NI.  Short by necessity —
+   Two public outputs suffice to refute NI.  Short by necessity:
    inversion on reductions is expensive.  (docs/noninterference.md §5.) === *)
 Lemma model_immediate_not_NI : ~ NI in_equiv out_equivC model_immediate_concrete.
 Proof.
