@@ -109,34 +109,30 @@ and every classification in the development is expressed with them.
 - A value is **unobservable** at `l` when the observer does not see the event at
   all, so it can be inserted or removed without the observer noticing.
 
-Only the input side's unobservability enters the statement of non-interference:
-inserting or removing unobservable inputs, or swapping indistinguishable ones, must
-leave the output indistinguishable. Outputs are never inserted or removed, so an
-output type's distinguished class serves only to say which outputs are
-indistinguishable ([`docs/noninterference.md` §1](docs/noninterference.md)).
-
-Indistinguishability and unobservability are tied together. At each level the
-equivalence partitions a type into classes of indistinguishable values, and the
-unobservable values are required to be exactly one of those classes, the
-**distinguished class**. It is empty when the level hides nothing. One such
-partition per level, each with its distinguished class, makes a **characterised
-equivalence**: `cEquiv` in the source
+The two notions are tied together. At each level the equivalence partitions a type
+into classes of indistinguishable values, and the unobservable values are required
+to be exactly one of those classes, the **distinguished class**, empty when the
+level hides nothing. One such partition per level, each with its distinguished
+class, makes a **characterised equivalence**: `cEquiv` in the source
 ([`docs/noninterference.md` §1](docs/noninterference.md)). Every classification
-below is an instance of it. Characterised equivalences are an alternative,
-mechanisation-friendly formulation of the *L-equivalences* of the original paper;
-the distinguished class is what makes insertion and deletion possible at all.
+below is an instance of it.
 
-The two extremes are the ones used most. A **public** value is observable at every
-level and indistinguishable only from itself: every class a singleton, and the
-distinguished class empty. A **private** value is unobservable at `⊥`, where all
-private values are therefore indistinguishable: one class, and it is the
-distinguished one. Above `⊥` a private value is observable and values must agree
-exactly. (Formally, `public_equiv` and `private_equiv`, in
-[`docs/noninterference.md` §2](docs/noninterference.md).)
+Two instances do most of the work, and they are also the clearest way to read the
+definition. One says what this development means by a **public** value, the other
+what it means by a **private** one:
 
-The model's input is interrupts, classified by the characterised equivalence
-`in_equiv`, which marks the disk interrupt unobservable at `⊥`. The other interrupts
-stay observable, and every interrupt is indistinguishable only from itself.
+- **public** (`public_equiv`). The observer sees the value at every level, and
+  tells any two different values apart. Every class is a singleton, and the
+  distinguished class is empty.
+- **private** (`private_equiv`). At `⊥` the observer sees nothing of the value:
+  all private values sit in a single class, and that class is the distinguished
+  one. At every other level it behaves like `public_equiv`.
+
+(Both in [`docs/noninterference.md` §2](docs/noninterference.md).)
+
+The model's input is interrupts, classified by `in_equiv`, which marks the disk
+interrupt unobservable at `⊥`. The other interrupts stay observable, and the
+observer tells any two interrupts apart.
 
 The model's output, for `model_sliced`, is the six-slot tuple, where which slot is
 `Some` says which process just ran. Classifying that tuple brings in technical
@@ -241,11 +237,12 @@ L-equivalences carry the same information; holding it in one record, with the fi
 a field, is what the composition theorems consume
 ([`docs/noninterference.md` §1](docs/noninterference.md)).
 
-**Obliviousness by class.** Non-interference constrains outputs only through
-indistinguishability, so asking that a process's outputs be *unobservable* was
-stronger than needed. `oblivious ORel p l` here says they all fall in **one class**:
-there is a reference output `o0` such that every output the process can produce is
-related to it at `l`. `swi_NI` is stated with that, and so is `oblivious_swi`, the
+**Obliviousness by class.** Only inputs are ever inserted or deleted, so
+non-interference constrains outputs through indistinguishability alone
+([`docs/noninterference.md` §1](docs/noninterference.md)). Asking that a process's
+outputs be *unobservable* was therefore stronger than needed. `oblivious ORel p l`
+here says they all fall in **one class**: there is a reference output `o0` such
+that every output the process can produce is related to it at `l`. `swi_NI` is stated with that, and so is `oblivious_swi`, the
 sufficient condition the models use, so no output-side `dis` appears in either.
 Where an argument had used unobservability of two outputs, the characterisation
 supplies their relatedness instead. The distinguished field stays on output types
