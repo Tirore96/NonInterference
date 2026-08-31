@@ -58,7 +58,10 @@ vacuously there.
 
 Bundling the two fields into one record, with the characterisation as a field, is
 the mechanisation's own choice; the paper states the same information as
-*L-equivalences* (README, "Departures from the paper").
+*L-equivalences* (README, "Departures from the paper"). Both records, the
+translations between them, and the statement that the choice does not change which
+processes are non-interfering (`NI_lEquiv`) are in
+[`adequacy.v`](../theories/adequacy.v).
 
 The two fields are not used symmetrically. `NI` licenses inserting and deleting
 inputs only, so `dis IRel` is what its insertion and deletion clauses turn on, while
@@ -86,6 +89,12 @@ Traces are compared through `ORel` at `l`, so outputs are determined only up to
 `rel ORel l`. Together the clauses say that the set of traces visible at `l` is
 unchanged by anything the observer at `l` may not see. The case that matters is
 `l = ⊥`; the counterexample of section 5 refutes the *insertion* clause.
+
+The paper states the same property as a coinductive simulation over streams,
+applying its clauses at the head and reaching later positions by coinduction rather
+than at a position `n` directly. That definition is mechanised as `PNI` in
+[`adequacy.v`](../theories/adequacy.v), where `NI_paper` proves the two hold of the
+same processes (README, "Departures from the paper").
 
 
 ## 2. Base equivalences: `public_equiv`, `private_equiv`
@@ -428,6 +437,15 @@ handler run and a step where nothing happened the same observation. Under a publ
 So the distinguished class enters only through how `eqmaybe_swi` *defines*
 relatedness, and never through obliviousness or through `swi_NI`, neither of which
 mentions it (README, "Departures from the paper").
+
+That this is a weakening of the paper's condition, and a strict one, is checked in
+[`adequacy.v` §3](../theories/adequacy.v). `ObliviousAt` is the paper's shape, read
+off the states a process can reach rather than the traces it admits, and
+`ObliviousAt_iff` says the two agree. `ObliviousDis` is the paper's condition, that
+every reachable output be unobservable, and `oblivious_of_ObliviousDis` says it
+implies the one used here. The converse fails: under `public_equiv` a constant
+process stays in one class (`oblivious_out_public`) while nothing is unobservable at
+all (`not_ObliviousDis_public`).
 
 | slot | process | `BRel` | `swi_NI` discharged by |
 |---|---|---|---|

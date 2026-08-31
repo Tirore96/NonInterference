@@ -59,11 +59,16 @@ indistinguishability class rather than in the distinguished one (§6a).
 The third shows up everywhere: **the paper's streams of labels are finite lists
 here, and definitions it gives coinductively are given inductively**. A trace is the
 list of labels along zero or more reductions, and `oblivious`, for instance, is
-stated over the traces a process admits rather than over an infinite stream. Nothing
-is lost, since interference must show up after finitely many steps: two runs an
-observer can separate already differ on some finite prefix, so quantifying over
-prefixes of every length says what quantifying over streams says. The proofs are
-substantially simpler for it, since they never have to construct streams.
+stated over the traces a process admits rather than over an infinite stream. The
+proofs are substantially simpler for it, since they never have to construct
+streams. Nothing is lost, and that is a theorem rather than an assumption:
+[`adequacy.v`](../theories/adequacy.v) states `Trace` and `NI` over streams, as
+`STrace` and `SNI`, and `NI_SNI` shows the two readings accept the same processes.
+It holds because finite and stream behaviour determine each other, reduction here
+being a total deterministic function, and because inserting an input commutes with
+taking prefixes. The paper's own coinductive definition is in the same file, and
+`NI_paper` relates it to the one used here. The README gives the argument under
+"Departures from the paper".
 
 A process has type `Proc I O`, where `I` and `O` are its input and output types.
 
@@ -80,6 +85,17 @@ non-interference looks at. Precise definitions are in
 [`noninterference.md` §1](noninterference.md).
 
 Throughout, *emit* means an output step and *receive* an input step.
+
+Both kinds of step are **total** and **deterministic**. Whatever state a process is
+in, it can receive any input of its type and it can emit, and in each case there is
+exactly one way to do so: the successor is determined, and on an output step so is
+the value emitted. The two relations are therefore functions, and
+[`adequacy.v`](../theories/adequacy.v) gives them as the functions `stepI` and
+`stepO` and proves the relations agree with them. Nothing in the models relies on
+this, and the reader can take the arrows above at face value. It matters once
+traces are compared with streams, where totality is what lets a finite run be
+continued and determinism is what makes the finite runs of one stream fit together
+into a single infinite one.
 
 There are seven constructors, described here by what each does on an input step and
 on an output step:

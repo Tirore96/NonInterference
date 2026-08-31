@@ -142,7 +142,7 @@ to see when most of the slots run; the two secret handlers are the exception.
 
 `NI in_equiv out_equiv p` is then the noninterference statement: at every level,
 inserting or removing inputs that are unobservable there, or swapping inputs that
-are indistinguishable there, leaves the traces that observer can see unchanged.
+are indistinguishable there, leaves the traces that observer can see indistinguishable.
 
 ## The leak
 
@@ -232,10 +232,16 @@ changed three definitions, and no change weakens what is proved.
 
 **Characterised equivalences in place of L-equivalences.** A `cEquiv` bundles the
 level-indexed equivalence together with its distinguished class, and requires the
-two to fit: the unobservable values are exactly one class. The paper's
-L-equivalences carry the same information; holding it in one record, with the fit as
-a field, is what the composition theorems consume
-([`docs/noninterference.md` §1](docs/noninterference.md)).
+two to fit: the unobservable values are exactly one class. The paper instead
+adjoins a special element to the value set and defines unobservability as being
+indistinguishable from that element. Both presentations are mechanised in
+[`theories/adequacy.v`](theories/adequacy.v), where `lEquiv` is the paper's, with
+`None` for the special element. The two translations are inverse to each other
+(`cEquiv_of_lEquivK`, `lEquiv_of_cEquivK`), and `NI_lEquiv` draws the conclusion:
+the choice of presentation does not change which processes are non-interfering.
+What the characterisation field supplies is transitivity through the special
+element, which is why the two records carry the same information. Bundling it into
+the record is a mechanisation convenience, not a change of notion.
 
 **Obliviousness by class.** Only inputs are ever inserted or deleted, so
 non-interference constrains outputs through indistinguishability alone
@@ -252,15 +258,51 @@ it on the output side is `eqmaybe_swi`'s definition of when `None` and `Some o` 
 indistinguishable ([`docs/noninterference.md` §6a](docs/noninterference.md)), which
 could be given directly if the field were dropped.
 
+[`theories/adequacy.v`](theories/adequacy.v) separates the two changes and checks
+both. `ObliviousAt` is the paper's shape, quantified over the states a process can
+reach rather than over the traces it admits, and `ObliviousAt_iff` says the two
+agree; neither direction of that needs reduction to be a function. `ObliviousDis` is
+the paper's condition, and `oblivious_of_ObliviousDis` says it implies the condition
+used here. The converse fails, so the weakening is strict: under `public_equiv` a
+constant process stays in one class (`oblivious_out_public`) while nothing is
+unobservable at all (`not_ObliviousDis_public`).
+
 **Finite traces in place of streams.** The paper works with infinite streams of
 labels and states definitions such as `oblivious` coinductively. Here a trace is a
 finite list, the labels of zero or more reductions
 ([`theories/definitions.v:208`](theories/definitions.v)), and `oblivious` quantifies
-over the traces a process admits. Nothing is lost, because interference has to show
-up after finitely many steps: if an observer can separate two runs, it can already
-separate some finite prefix of them. Quantifying over prefixes of every length
-therefore says what quantifying over streams says, and the proofs never have to
-construct a stream.
+over the traces a process admits. What says this loses nothing is `NI_SNI` in
+[`theories/adequacy.v`](theories/adequacy.v). `STrace` and `SNI` are `Trace` and
+`NI` read over streams, clause for clause, and the two readings hold of exactly the
+same processes.
+
+Two properties carry that proof. The first is that finite and stream behaviour
+determine each other. `Trace` speaks only about finite lists, so all one ever has
+about a process running along a stream is one derivation per prefix length, and
+`sprefix_STrace` assembles that family into a single infinite derivation. This is
+where "interference must show up after finitely many steps" stops being an
+intuition and becomes a step in a proof, and it is where reduction has to be
+**deterministic**: derivations for different lengths need not pass through the same
+intermediate processes, and the construction must commit at each step to one
+successor that serves every length at once. The converse lemma, `Trace_STrace`,
+continues a finite trace into a stream at all, and for that reduction has to be
+**total**. Both hold here because reduction is a function: `adequacy.v` defines
+`stepI` and `stepO` and proves the two relations agree with them.
+
+The second property is that insertion commutes with prefixing
+(`sprefix_sinsert_le`, `sprefix_sinsert_gt`). A prefix shorter than the insertion
+point does not see the inserted input, and a longer one sees it in the same place.
+`NI`'s clauses are implications between trace facts perturbed by `insert`, so the
+two properties together give the equivalence.
+
+**The paper's own statement.** Definition 3 there is a coinductive simulation with
+four clauses, and Definition 4 asks that a process simulate every stream it
+performs. Both are in [`theories/adequacy.v`](theories/adequacy.v), as `simulation`
+and `PNI`, clause for clause, and `NI_paper` proves that `PNI` and `NI` hold of the
+same processes. What separates the two is shape alone. The paper applies its clauses
+at the head of the stream and reaches every later position by coinduction, while
+`NI` applies them at position `n` directly. Reading position `n` as the head of the
+residual after `n` steps is what the proof turns on, in both directions.
 
 ## Logical foundations
 
@@ -279,9 +321,10 @@ From the repository root:
 make
 ```
 
-This compiles the four-file chain in dependency order
-(`definitions → theorems → models → noninterference`). The build requires Rocq/Coq
-9.0.1 with `mathcomp`, `deriving` and `HB` (Hierarchy Builder); see
+This compiles the main chain in dependency order
+(`definitions → theorems → models → noninterference`), and `adequacy.v`, which
+sits beside it and depends only on `definitions.v`. The build requires Rocq/Coq
+9.0.1 with `mathcomp`, `deriving`, `HB` (Hierarchy Builder) and `paco`; see
 [`_CoqProject`](_CoqProject).
 
 ## Repository map
@@ -292,6 +335,7 @@ This compiles the four-file chain in dependency order
 | [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); this repository uses them as prior work. |
 | [`theories/models.v`](theories/models.v) | In three parts: the skeleton both designs share, ending in the generic `model`; the two designs, as `model` at two triples of arguments; and one concrete system, with the example traces. |
 | [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state equivalences, and the three theorems above. |
+| [`theories/adequacy.v`](theories/adequacy.v) | The paper's presentations, and the results that departing from them costs nothing: L-equivalences, streams, obliviousness over reachable states, and the paper's own coinductive definition of non-interference. Nothing else depends on it. |
 | [`docs/models.md`](docs/models.md) | **What the models are.** Long-form companion to `models.v`. |
 | [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering.** The security equivalences and the proof, companion to `noninterference.v`. |
 

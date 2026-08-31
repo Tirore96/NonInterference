@@ -6,3 +6,4 @@ theories/definitions.v
 theories/theorems.v
 theories/models.v
 theories/noninterference.v
+theories/adequacy.v
