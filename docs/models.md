@@ -50,25 +50,23 @@ non-interference theorems are due to Rafnsson et al., *Timing-Sensitive
 Noninterference through Composition* ([POST
 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf));
 mechanising them is part of the contribution of this development. The mechanisation
-departs from the paper in three respects, listed in the README under "Departures
-from the paper". Two are local to the security equivalences and are taken up in
+departs from the paper in four respects, each proved adequate in
+[`adequacy.v`](../theories/adequacy.v) and set out one at a time in
+[`departures.md`](departures.md). Two are local to the security equivalences and
+are taken up in
 [`noninterference.md`](noninterference.md): a **characterised equivalence** replaces
 the paper's L-equivalences (§1), and obliviousness asks that a process stay in one
 indistinguishability class rather than in the distinguished one (§6a).
 
-The third shows up everywhere: **the paper's streams of labels are finite lists
+One of the other two shows up everywhere and is worth carrying while reading:
+**the paper's streams of labels are finite lists
 here, and definitions it gives coinductively are given inductively**. A trace is the
 list of labels along zero or more reductions, and `oblivious`, for instance, is
 stated over the traces a process admits rather than over an infinite stream. The
 proofs are substantially simpler for it, since they never have to construct
 streams. Nothing is lost, and that is a theorem rather than an assumption:
-[`adequacy.v`](../theories/adequacy.v) states `Trace` and `NI` over streams, as
-`STrace` and `SNI`, and `NI_SNI` shows the two readings accept the same processes.
-It holds because finite and stream behaviour determine each other, reduction here
-being a total deterministic function, and because inserting an input commutes with
-taking prefixes. The paper's own coinductive definition is in the same file, and
-`NI_paper` relates it to the one used here. The README gives the argument under
-"Departures from the paper".
+`NI_SNI` states `Trace` and `NI` over streams and proves the two readings accept
+the same processes ([`departures.md` §3](departures.md)).
 
 A process has type `Proc I O`, where `I` and `O` are its input and output types.
 

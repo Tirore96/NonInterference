@@ -15,9 +15,10 @@ Open Scope order_scope.
 
 Require Export NonInterference.theories.definitions.
 
-(* Two presentations this development departs from, and the results that say the
-   departures cost nothing: L-equivalences (section 1) and streams (section 2).
-   Prose: README, "Departures from the paper". *)
+(* The paper's presentations, and the results that say departing from them costs
+   nothing: L-equivalences (section 1), streams (section 2), obliviousness over
+   reachable states (section 3), and the paper's own coinductive definition of
+   non-interference (section 4).  Prose: docs/departures.md. *)
 
 (* ----------------------------------------------------------------------- *)
 (** * 1. L-equivalences                                                     *)

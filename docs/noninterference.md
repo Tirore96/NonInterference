@@ -58,7 +58,7 @@ vacuously there.
 
 Bundling the two fields into one record, with the characterisation as a field, is
 the mechanisation's own choice; the paper states the same information as
-*L-equivalences* (README, "Departures from the paper"). Both records, the
+*L-equivalences* ([`departures.md` §1](departures.md)). Both records, the
 translations between them, and the statement that the choice does not change which
 processes are non-interfering (`NI_lEquiv`) are in
 [`adequacy.v`](../theories/adequacy.v).
@@ -94,7 +94,7 @@ The paper states the same property as a coinductive simulation over streams,
 applying its clauses at the head and reaching later positions by coinduction rather
 than at a position `n` directly. That definition is mechanised as `PNI` in
 [`adequacy.v`](../theories/adequacy.v), where `NI_paper` proves the two hold of the
-same processes (README, "Departures from the paper").
+same processes ([`departures.md` §2](departures.md)).
 
 
 ## 2. Base equivalences: `public_equiv`, `private_equiv`
@@ -436,7 +436,7 @@ handler run and a step where nothing happened the same observation. Under a publ
 
 So the distinguished class enters only through how `eqmaybe_swi` *defines*
 relatedness, and never through obliviousness or through `swi_NI`, neither of which
-mentions it (README, "Departures from the paper").
+mentions it ([`departures.md` §4](departures.md)).
 
 That this is a weakening of the paper's condition, and a strict one, is checked in
 [`adequacy.v` §3](../theories/adequacy.v). `ObliviousAt` is the paper's shape, read

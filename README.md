@@ -227,82 +227,15 @@ one system.
 
 ## Departures from the paper
 
-The calculus and the generic theorems are Rafnsson et al.'s. Mechanising them
-changed three definitions, and no change weakens what is proved.
+Mechanising Rafnsson et al. changed four definitions: the security equivalences,
+the shape of `NI`, traces as finite lists rather than streams, and obliviousness by
+class rather than by unobservability. Each is proved adequate in
+[`theories/adequacy.v`](theories/adequacy.v), which restates the paper's version
+and shows it holds of exactly the same processes. Nothing in the models or the
+proof depends on that file.
 
-**Characterised equivalences in place of L-equivalences.** A `cEquiv` bundles the
-level-indexed equivalence together with its distinguished class, and requires the
-two to fit: the unobservable values are exactly one class. The paper instead
-adjoins a special element to the value set and defines unobservability as being
-indistinguishable from that element. Both presentations are mechanised in
-[`theories/adequacy.v`](theories/adequacy.v), where `lEquiv` is the paper's, with
-`None` for the special element. The two translations are inverse to each other
-(`cEquiv_of_lEquivK`, `lEquiv_of_cEquivK`), and `NI_lEquiv` draws the conclusion:
-the choice of presentation does not change which processes are non-interfering.
-What the characterisation field supplies is transitivity through the special
-element, which is why the two records carry the same information. Bundling it into
-the record is a mechanisation convenience, not a change of notion.
-
-**Obliviousness by class.** Only inputs are ever inserted or deleted, so
-non-interference constrains outputs through indistinguishability alone
-([`docs/noninterference.md` §1](docs/noninterference.md)). Asking that a process's
-outputs be *unobservable* was therefore stronger than needed. `oblivious ORel p l`
-here says they all fall in **one class**: there is a reference output `o0` such
-that every output the process can produce is related to it at `l`. `swi_NI` is stated with that, and so is `oblivious_swi`, the
-sufficient condition the models use, so no output-side `dis` appears in either.
-Where an argument had used unobservability of two outputs, the characterisation
-supplies their relatedness instead. The distinguished field stays on output types
-because they are the same `cEquiv` records as on the input side, and a second
-construction without it would cost more than it saves. The one thing still reading
-it on the output side is `eqmaybe_swi`'s definition of when `None` and `Some o` are
-indistinguishable ([`docs/noninterference.md` §6a](docs/noninterference.md)), which
-could be given directly if the field were dropped.
-
-[`theories/adequacy.v`](theories/adequacy.v) separates the two changes and checks
-both. `ObliviousAt` is the paper's shape, quantified over the states a process can
-reach rather than over the traces it admits, and `ObliviousAt_iff` says the two
-agree; neither direction of that needs reduction to be a function. `ObliviousDis` is
-the paper's condition, and `oblivious_of_ObliviousDis` says it implies the condition
-used here. The converse fails, so the weakening is strict: under `public_equiv` a
-constant process stays in one class (`oblivious_out_public`) while nothing is
-unobservable at all (`not_ObliviousDis_public`).
-
-**Finite traces in place of streams.** The paper works with infinite streams of
-labels and states definitions such as `oblivious` coinductively. Here a trace is a
-finite list, the labels of zero or more reductions
-([`theories/definitions.v:208`](theories/definitions.v)), and `oblivious` quantifies
-over the traces a process admits. What says this loses nothing is `NI_SNI` in
-[`theories/adequacy.v`](theories/adequacy.v). `STrace` and `SNI` are `Trace` and
-`NI` read over streams, clause for clause, and the two readings hold of exactly the
-same processes.
-
-Two properties carry that proof. The first is that finite and stream behaviour
-determine each other. `Trace` speaks only about finite lists, so all one ever has
-about a process running along a stream is one derivation per prefix length, and
-`sprefix_STrace` assembles that family into a single infinite derivation. This is
-where "interference must show up after finitely many steps" stops being an
-intuition and becomes a step in a proof, and it is where reduction has to be
-**deterministic**: derivations for different lengths need not pass through the same
-intermediate processes, and the construction must commit at each step to one
-successor that serves every length at once. The converse lemma, `Trace_STrace`,
-continues a finite trace into a stream at all, and for that reduction has to be
-**total**. Both hold here because reduction is a function: `adequacy.v` defines
-`stepI` and `stepO` and proves the two relations agree with them.
-
-The second property is that insertion commutes with prefixing
-(`sprefix_sinsert_le`, `sprefix_sinsert_gt`). A prefix shorter than the insertion
-point does not see the inserted input, and a longer one sees it in the same place.
-`NI`'s clauses are implications between trace facts perturbed by `insert`, so the
-two properties together give the equivalence.
-
-**The paper's own statement.** Definition 3 there is a coinductive simulation with
-four clauses, and Definition 4 asks that a process simulate every stream it
-performs. Both are in [`theories/adequacy.v`](theories/adequacy.v), as `simulation`
-and `PNI`, clause for clause, and `NI_paper` proves that `PNI` and `NI` hold of the
-same processes. What separates the two is shape alone. The paper applies its clauses
-at the head of the stream and reaches every later position by coinduction, while
-`NI` applies them at position `n` directly. Reading position `n` as the head of the
-residual after `n` steps is what the proof turns on, in both directions.
+[`docs/departures.md`](docs/departures.md) takes the four one at a time, with what
+the paper does, what is done here, why, and which result closes the gap.
 
 ## Logical foundations
 
@@ -336,6 +269,7 @@ sits beside it and depends only on `definitions.v`. The build requires Rocq/Coq
 | [`theories/models.v`](theories/models.v) | In three parts: the skeleton both designs share, ending in the generic `model`; the two designs, as `model` at two triples of arguments; and one concrete system, with the example traces. |
 | [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state equivalences, and the three theorems above. |
 | [`theories/adequacy.v`](theories/adequacy.v) | The paper's presentations, and the results that departing from them costs nothing: L-equivalences, streams, obliviousness over reachable states, and the paper's own coinductive definition of non-interference. Nothing else depends on it. |
+| [`docs/departures.md`](docs/departures.md) | **How this differs from the paper.** The four departures and the results that justify them, companion to `adequacy.v`. |
 | [`docs/models.md`](docs/models.md) | **What the models are.** Long-form companion to `models.v`. |
 | [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering.** The security equivalences and the proof, companion to `noninterference.v`. |
 
@@ -346,3 +280,5 @@ sits beside it and depends only on `definitions.v`. The build requires Rocq/Coq
 - For the **proof**, read [`docs/noninterference.md`](docs/noninterference.md): the
   security equivalences, how the generic theorems compose, and the one hard
   obligation (`fv_NI`, closure of the state equivalence under the transition).
+- To **scrutinise the definitions** against the paper they come from, read
+  [`docs/departures.md`](docs/departures.md).

@@ -1,0 +1,14 @@
+We are pivoting roles. The document we have built is content-complete, but we need to optimize its cognitive presentation. Do not rewrite the whole document. 
+
+Run a "Reader Journey Audit" inside a <thinking> tag using these steps:
+
+1. THE COGNITIVE LOAD SQUEEZE: Scan our existing text sentence by sentence. Look ONLY for places where a reader must hold more than two abstract ideas in their head at the same time. 
+2. CRITICALITY RANKING: If you find issues, list them. If a section is already perfectly smooth, write "NO ACTION REQUIRED" for that section. Do not invent problems.
+3. FRICTION ANALYSIS: For any flawed sentence, explain the exact mechanism of the bottleneck (e.g., "The reader stalls here because Concept X relies on Concept Y, which is not introduced until three sentences later").
+4. REVISED SCALPEL: Rewrite ONLY those specific sentences. Apply a strict 20-word limit per sentence and replace abstract verbs with physical actions.
+
+Output your final response using this exact structure for each identified issue:
+- **Location**: [Quote the original sentence or paragraph]
+- **The Bottleneck**: [1 short sentence explaining why the reader stalls]
+- **The Fix**: [The smooth, revised version]
+
