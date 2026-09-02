@@ -425,9 +425,9 @@ state_step handler_preroutine restore_invariant =
 - **`initiate_next(restore_invariant)`** decides who runs next:
 
   ```coq
-  initiate_next bc v =
+  initiate_next ri v =
     if masks_set v then v                     (* a handler is running *)
-    else let v := bc v in                     (* apply bc *)
+    else let v := ri v in                     (* apply ri *)
          if first_ready v is Some ir then initiate_handler ir v
          else if is_handler_pid v             (* did handler just finish? *)
               then if get_re_sched v then initiate_scheduler v
