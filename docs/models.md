@@ -163,7 +163,10 @@ Sections 2 to 6 define each piece, bottom-up.
 ## 2. Interrupt handler and slot map
 
 The only leaf process the generic model itself fixes is the interrupt handler. The
-scheduler and the two user processes are parameters, supplied in section 10.
+scheduler and the two user processes are supplied from outside, in section 10.
+Nothing in the security argument depends on which ones;
+[`noninterference.md` §8](noninterference.md) says
+exactly what the theorems leave open.
 
 **`ir_handler runtime : Proc Empty THandlerOutput`**
 
@@ -179,11 +182,11 @@ Its state cell counts modulo `runtime` and the emitted value is read off the
 of output steps. Its input type is `Empty`: a handler is driven entirely by the
 interrupt controller and never consumes input.
 
-`runtime` is a parameter. The security argument needs only that all three handlers
-share it, so that a secret handler's run is exactly as long as the filler run it
-replaces. (`runtime = 0` degenerates: `n %% 0 = n`, so the cell never returns to 0
-and the handler never signals completion. Nothing breaks; the handler simply never
-finishes.)
+`runtime` is not fixed to a particular number. The security argument needs only
+that all three handlers share it, so that a secret handler's run is exactly as long
+as the filler run it replaces. (`runtime = 0` degenerates: `n %% 0 = n`, so the
+cell never returns to 0 and the handler never signals completion. Nothing breaks;
+the handler simply never finishes.)
 
 **The slot map.** `slot_I` and `slot_O` give the input and output types of pool slot
 `n`, and `slot_procs` gives its process:
@@ -207,9 +210,8 @@ slot_procs runtime p_pub p_priv p_sched n =
   end
 ```
 
-`Opub` and `Opriv`, the alphabets the two user processes emit over, are parameters
-for the same reason the processes are: nothing in the generic model inspects a
-user-slot *value*, only whether the slot produced one (section 6).
+`Opub` and `Opriv` are the alphabets the two user processes emit over, left open
+alongside the processes themselves.
 
 Slots 0, 1 and 2 are three *separate* handlers reusing one definition; what
 distinguishes them is their own pending and mask bits in the interrupt controller

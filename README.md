@@ -35,13 +35,11 @@ A process pool of six slots, driven by a global state and a feedback loop:
 | 4 | the secret user process | consumes the disk handler's notifications |
 | 5 | the public user process | emits on the public channel |
 
-Slots 3, 4 and 5 are **parameters** of the development: the results below hold for
-any scheduler and any two user processes that are themselves non-interfering at the
-classification their slot declares, over arbitrary output alphabets. The concrete
-instance used for the example traces is a round-robin scheduler, a
-`p_priv_concrete` that issues a `Syscall` if the disk handler notified it and `NOP`
-otherwise, and a `p_pub_concrete` that repeatedly issues `GetRequest`. Only the
-interrupt handlers are fixed: they are the mechanism under study.
+Slots 3, 4 and 5 are not fixed by the model. The system described throughout uses a
+round-robin scheduler, a `p_priv_concrete` that issues a `Syscall` if the disk
+handler notified it and `NOP` otherwise, and a `p_pub_concrete` that repeatedly
+issues `GetRequest`. Only the interrupt handlers are fixed: they are the mechanism
+under study.
 
 Exactly one slot runs per step, chosen by the current pid. The global state holds a
 `(pending, mask)` bit pair per interrupt, plus a time-slice counter that only the
@@ -59,9 +57,9 @@ Everything below refers to these. All three are in
 | `model_sliced` | `Proc TInterrupt (T_out Opub Opriv)` | the same full pool output | the fixed design; non-interfering |
 | `model_sliced_userview` | `Proc TInterrupt (T_out_userview Opub Opriv)` | only what the two user space processes emit: a public output or a syscall, every other slot erased | `model_sliced` behind a projection; the headline result |
 
-`Opub` and `Opriv` are the two user processes' output alphabets. They are parameters
-throughout, so both output types are written over them. The input type takes no
-parameters, and all three models share it: an interrupt *is* an input. `TInterrupt`
+`Opub` and `Opriv` are the two user processes' output alphabets, which is why both
+output types are written over them. The input type takes no parameters, and all
+three models share it: an interrupt *is* an input. `TInterrupt`
 (`T_in` in the source) has three values, `TimerInterrupt`, `DiskInterrupt` and
 `DefaultInterrupt`. Delivering one is the only thing the environment can do to a
 model; the model records it as pending and decides later whether to service it.
@@ -191,39 +189,25 @@ Three machine-checked theorems, in
 | Theorem | Statement | Meaning |
 |---|---|---|
 | `model_immediate_not_NI` | `~ NI in_equiv out_equivC model_immediate_concrete` | The naive design leaks: a secret disk interrupt is observable. |
-| `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched)` | The fixed design is non-interfering even on the full pool output, for *any* non-interfering userspace and scheduler, at any handler length and slice size. |
-| `model_sliced_userview_NI` | `NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched)` | It is therefore non-interfering on the user-visible output, the headline result. |
+| `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) model_sliced` | The fixed design is non-interfering even on the full pool output, where handler and scheduler activity is visible. |
+| `model_sliced_userview_NI` | `NI in_equiv (out_equiv_userview Opub Opriv) model_sliced_userview` | It is therefore non-interfering on the user-visible output, the headline result. |
 
-Two of the parameters are numbers. The **handler length** `runtime` counts the output
-steps every handler takes before it signals completion with `Notify`. The **slice
-size** `runs` counts the complete handler runs that fit in one time slice. A slice
+The models' arguments are elided in the table. The two positive results assume that
+the scheduler and the two user processes are themselves non-interfering at the
+classification their slot declares. Two numbers
+appear alongside them. The **handler length** `runtime` counts the output steps
+every handler takes before it signals completion with `Notify`. The **slice size**
+`runs` counts the complete handler runs that fit in one time slice. A slice
 therefore lasts `runs * runtime` output steps and always ends on a handler boundary.
 
-The two positive results are parametric. In full:
-
-```coq
-forall (Opub Opriv : Ty) (runtime runs : nat)
-       (p_pub : Proc Empty Opub)
-       (p_priv : Proc THandlerOutput Opriv)
-       (p_sched : Proc Empty Nat),
-  NI (public_equiv Empty) (public_equiv Opub) p_pub ->
-  NI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv ->
-  NI (public_equiv Empty) (public_equiv Nat) p_sched ->
-  NI in_equiv (out_equiv_userview Opub Opriv)
-     (model_sliced_userview runtime runs p_pub p_priv p_sched)
-```
-
-So the theorem covers the interrupt-and-scheduling mechanism in general:
-arbitrary userspace and scheduler, arbitrary output alphabets, arbitrary handler
-length and slice size. The last two carry no side condition. `time_slice runtime
-runs = runs * runtime` makes the slice end on a handler boundary by construction.
-
-`model_sliced_concrete_NI` and `model_sliced_userview_concrete_NI` recover the
-concrete system by instantiating with `p_pub_concrete_NI`, `p_priv_concrete_NI`
-and `scheduler_NI`.
-`model_immediate` is parametric in the same way, but the counterexample is stated
-at the concrete instance `model_immediate_concrete`: exhibiting a leak needs only
-one system.
+The theorems are not about this one system. Neither proof looks at which scheduler
+is running, at what the user processes emit, or at how long the handlers run for
+(only that they all run for the same length), so none of those is fixed: what is
+proved is a property of the interrupt-and-scheduling mechanism, and the concrete
+system is one instance of it. The counterexample needs
+only one system, so it is stated at the concrete instance.
+[`docs/noninterference.md` §8](docs/noninterference.md) makes that precise, once
+the argument it depends on has been given.
 
 ## Departures from the paper
 

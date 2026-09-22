@@ -22,7 +22,8 @@ security argument. Definitions are as given in
 5. [`model_immediate` is not non-interfering](#5-model_immediate-is-not-non-interfering)
 6. [`model_sliced` and `model_sliced_userview` are non-interfering](#6-model_sliced-and-model_sliced_userview-are-non-interfering)
 7. [The state equivalence and `fv_NI`: the hard part](#7-the-state-equivalence-and-fv_ni-the-hard-part)
-8. [Model limitations](#8-model-limitations)
+8. [How general the result is](#8-how-general-the-result-is)
+9. [Model limitations](#9-model-limitations)
 
 
 ## 1. Characterised equivalences (`cEquiv`): the framework and levels
@@ -241,10 +242,9 @@ left (exact) or the secret syscall on the right (secret at `⊥`).
 
 `model_immediate_not_NI : ~ NI in_equiv out_equivC model_immediate_concrete`.
 
-`model_immediate` is parametric like `model_sliced`, but a counterexample should
-exhibit a single system, so the refutation is stated at `model_immediate_concrete`,
-the instance at the concrete user processes, scheduler and alphabets
-([`models.md` §10](models.md)).
+A counterexample should exhibit a single system, so the refutation is stated at
+`model_immediate_concrete`, the instance at the concrete user processes, scheduler
+and alphabets ([`models.md` §10](models.md)).
 
 Non-interference requires that inserting a secret input anywhere in a trace leaves
 it a trace. The counterexample refutes that clause with a two-step trace:
@@ -269,48 +269,24 @@ arrival of its interrupt.
 ## 6. `model_sliced` and `model_sliced_userview` are non-interfering
 
 ```coq
-forall (Opub Opriv : Ty) (runtime runs : nat)
-       (p_pub : Proc Empty Opub)
-       (p_priv : Proc THandlerOutput Opriv)
-       (p_sched : Proc Empty Nat),
-  NI (public_equiv Empty) (public_equiv Opub) p_pub ->
-  NI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv ->
-  NI (public_equiv Empty) (public_equiv Nat) p_sched ->
-     NI in_equiv (out_equiv Opub Opriv)
-          (model_sliced runtime runs p_pub p_priv p_sched)
-  /\ NI in_equiv (out_equiv_userview Opub Opriv)
-          (model_sliced_userview runtime runs p_pub p_priv p_sched)
+model_sliced_NI          : NI in_equiv (out_equiv Opub Opriv) model_sliced
+model_sliced_userview_NI : NI in_equiv (out_equiv_userview Opub Opriv)
+                              model_sliced_userview
 ```
 
-(the two conjuncts are `model_sliced_NI` and `model_sliced_userview_NI`).
+The arguments of the two models are elided above; section 8 gives one of the
+statements in full. Both hold whenever the three slot processes are themselves
+non-interfering at the classification their slot declares: `p_pub` and the scheduler at
+`public_equiv`/`public_equiv`, `p_priv` at `private_equiv`/`private_equiv`.
 
-`model_sliced_userview = map id parse_output model_sliced`, and the second conjunct
+`model_sliced_userview = map id parse_output model_sliced`, and the second result
 follows from the first by output weakening: `parse_output` maps `out_equiv`-related
 outputs to `out_equiv_userview`-related ones.
 
-**Why the result is parametric.** Everything the process pool is built around
-stays fixed; everything it carries is left open:
-
-| parameter | ranges over | side condition |
-|---|---|---|
-| `p_pub` | any process in the public user slot | must be `NI` at `public_equiv`/`public_equiv` |
-| `p_priv` | any process in the private user slot | must be `NI` at `private_equiv`/`private_equiv` |
-| `p_sched` | any scheduler | must be `NI` at `public_equiv`/`public_equiv` |
-| `Opub`, `Opriv` | the two user output alphabets | none |
-| `runtime` | how many steps a handler runs for | none |
-| `runs` | how many handler runs a slice holds | none |
-
-Two features of the design buy this:
-
-- **The pool's own transition never reads a user slot's output value.**
-  `is_sched_out` matches `(None,(None,(Some n,_)))`, inspecting the user slots only
-  for `None`-ness, so no user behaviour reaches the schedule.
-- **`fv_NI` (section 7) never mentions the slot processes**, so the one hard
-  obligation is unaffected by what fills them.
-
-Instantiating them with `p_pub_concrete_NI`, `p_priv_concrete_NI` and
-`scheduler_NI` recovers the concrete system (`model_sliced_concrete_NI`,
-`model_sliced_userview_concrete_NI`).
+Read the two statements here at one system: a scheduler, two user processes, a
+handler length and a slice size. None of those is fixed by the theorem, and
+[section 8](#8-how-general-the-result-is) says precisely what is left open, once the
+proof below has made clear what the argument rests on.
 
 `model_sliced_NI` is assembled from the generic composition theorems, one per
 constructor of the calculus, so the proof follows the structure of the term itself
@@ -620,7 +596,74 @@ The hard `initiate_next` stage can then assume related states take the same bran
 because `restore_invariant` has already run and made the deciding mask bits agree.
 
 
-## 8. Model limitations
+## 8. How general the result is
+
+Everything up to here has been read at one system. It is worth being precise about
+how much of that system the theorem actually fixes, because the answer is: very
+little. Discharging the section variables of
+[`noninterference.v`](../theories/noninterference.v), `model_sliced_userview_NI`
+reads in full:
+
+```coq
+forall (Opub Opriv : Ty) (runtime runs : nat)
+       (p_pub : Proc Empty Opub)
+       (p_priv : Proc THandlerOutput Opriv)
+       (p_sched : Proc Empty Nat),
+  NI (public_equiv Empty) (public_equiv Opub) p_pub ->
+  NI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv ->
+  NI (public_equiv Empty) (public_equiv Nat) p_sched ->
+  NI in_equiv (out_equiv_userview Opub Opriv)
+     (model_sliced_userview runtime runs p_pub p_priv p_sched)
+```
+
+`model_sliced_NI` is the same statement at `out_equiv`, on the full pool output.
+The claim is therefore about the interrupt-and-scheduling mechanism rather than
+about one operating system: everything the pool is built around stays fixed, and
+everything it carries is left open.
+
+**What is left open.**
+
+| parameter | ranges over | side condition |
+|---|---|---|
+| `p_pub` | any process in the public user slot | must be `NI` at `public_equiv`/`public_equiv` |
+| `p_priv` | any process in the private user slot | must be `NI` at `private_equiv`/`private_equiv` |
+| `p_sched` | any scheduler | must be `NI` at `public_equiv`/`public_equiv` |
+| `Opub`, `Opriv` | the two user output alphabets | none |
+| `runtime` | how many steps a handler runs for | none |
+| `runs` | how many handler runs a slice holds | none |
+
+The three side conditions are the expected ones: the mechanism cannot make a
+leaking user process secure, so each slot is assumed non-interfering at its own
+classification and the theorem adds that composing them through this mechanism
+leaks nothing further. The last three carry no side condition at all.
+`time_slice runtime runs = runs * runtime` makes the slice end on a handler
+boundary by construction, so no arithmetic relation between the two numbers has to
+be assumed.
+
+**Why they can be left open.** Two features of the design buy it:
+
+- **The pool's own transition never reads a user slot's output value.**
+  `is_sched_out` matches `(None,(None,(Some n,_)))`, inspecting the user slots only
+  for `None`-ness, so no user behaviour reaches the schedule.
+- **`fv_NI` (section 7) never mentions the slot processes**, so the one hard
+  obligation is unaffected by what fills them.
+
+**What stays fixed.** The three interrupt handlers, which are the mechanism under
+study, and the shape of the pool around them: six slots, the last of them padding.
+The scheduler and user slot *processes* are open, but their number and position are
+not. The output projections `is_sched_out`, `tI_out`, `dI_out` and `default_ir_out`
+are tuple patterns, and they hardwire two user slots ahead of the scheduler slot.
+Varying the count changes the state transition and lands inside `fv_NI`.
+
+**Recovering one system.** Instantiating with `p_pub_concrete_NI`,
+`p_priv_concrete_NI` and `scheduler_NI` gives the concrete system back, as
+`model_sliced_concrete_NI` and `model_sliced_userview_concrete_NI`. The refutation
+goes the other way: `model_immediate` is open in exactly the same parameters, but a
+counterexample need exhibit only one system, so `model_immediate_not_NI` is stated
+at `model_immediate_concrete` (section 5).
+
+
+## 9. Model limitations
 
 Two simplifications keep the proof tractable. Both are limitations of the model
 rather than of the technique, and either could be lifted at the cost of a harder
@@ -651,9 +694,3 @@ for:
   unmodelled ([`models.md` §3](models.md)).
 - **No interrupt nesting.** All masks are set while a handler runs, so a handler can
   never itself be interrupted.
-- **Fixed pool size and layout.** Six slots, the last of them padding. The
-  scheduler and user slot *processes* are parameters, but their number and position
-  are fixed by the output projections `is_sched_out`, `tI_out`, `dI_out` and
-  `default_ir_out`. Those are tuple patterns, and they hardwire two user slots ahead
-  of the scheduler slot. Varying the count changes the state transition and lands
-  inside `fv_NI`.
