@@ -31,7 +31,7 @@ Require Export NonInterference.theories.models.
 
 (* --- Section 4: the input equivalence.  in_equiv is CUSTOM: ir_dis makes
    ONLY the disk interrupt secret, and only at bot; the timer interrupt stays
-   public.  (docs/noninterference.md §4.) --- *)
+   public.  (docs/noninterference.md §1.) --- *)
 Definition ir_dis (l : level) (ir : [TInterrupt]) := ir = DiskInterrupt /\ l = \bot.
 Definition in_equiv : cEquiv [T_in].
   refine (@CEquiv _
@@ -104,7 +104,7 @@ Opaque state_step pool_input initial_state_immediate def f_proj.
    (secret at bot); its pending flag reschedules the disk handler, which then
    runs its full two steps, so the expected second public output becomes None.
    Two public outputs suffice to refute NI.  Short by necessity:
-   inversion on reductions is expensive.  (docs/noninterference.md §5.) === *)
+   inversion on reductions is expensive.  (docs/noninterference.md §2.) === *)
 Lemma model_immediate_not_NI : ~ NI in_equiv out_equivC model_immediate_concrete.
 Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
@@ -245,7 +245,7 @@ Qed.
    pending bits secret via private_pending_equiv; cur_pid's inl/inr tag PUBLIC but the
    bool inside inl (which handler) secret;
    re_sched, ir_count (the slice), scheduler/user pid all public.
-   (docs/noninterference.md §7a.) === *)
+   (docs/noninterference.md §4a.) === *)
 Definition pids_equiv : cEquiv [pids] := eqpair (eqsum (private_equiv _) (public_equiv _)) (public_equiv _).
 Definition private_pending_equiv : cEquiv [ir_bits] := eqpair (private_equiv _) (public_equiv _).
 Definition public_bits_equiv : cEquiv [ir_bits] := eqpair (public_equiv _) (public_equiv _).
@@ -302,7 +302,8 @@ Qed.
    is, which is why f_EP_step_sum reduces to a condition on set_pending alone.
    Cost: every
    stage is proved over ALL related states, forgetting the reachable subset --
-   restore_invariant repairs this before initiate_next.  (docs §7c, §7d.) === *)
+   restore_invariant repairs this before initiate_next, and on every reachable
+   state it changes nothing (models.v, restore_invariant_noop).  (docs §4c, §4d.) === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
@@ -486,7 +487,7 @@ Qed.
 (* === Section 6: model_sliced is non-interfering.  Assembled from the generic
    composition theorems (par_NI, sta_NI, swi_NI, map/output-weakening) applied
    to the pool; the only non-mechanical obligation is fv_NI of the state
-   transition (section 7).  (docs/noninterference.md §6.)
+   transition (section 7).  (docs/noninterference.md §3.)
 
    The result holds for *any* scheduler and any two user processes that are
    themselves non-interfering at the classification their slot declares.  That
@@ -511,6 +512,46 @@ Variable p_sched : Proc Empty Nat.
 Hypothesis p_pub_NI : NI (public_equiv Empty) (public_equiv Opub) p_pub.
 Hypothesis p_priv_NI : NI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv.
 Hypothesis p_sched_NI : NI (public_equiv Empty) (public_equiv Nat) p_sched.
+
+(* The slice stages write two fields the same way in both related states: the
+   NOP pending bit (private) at each handler boundary, and re_sched (public) when
+   the slice opens.  Writing a field identically preserves the relation. *)
+Lemma update_pending_rel : forall l v v' ir b,
+  rel state_type_equiv l v v' ->
+  rel state_type_equiv l (update_ir_pending v ir b) (update_ir_pending v' ir b).
+Proof.
+  intros l v v' ir b.
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 /rel_eqpair[]/rel_eqpair[]H3 H4/rel_eqpair[]/rel_eqpair[]H5 H6/rel_eqpair[]H7 H8.
+  move: H0 H1 H2 H3 H4 H5 H6 H7 H8.
+  move: v=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+  rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_pending /update_ir_bits /update_ir_bits' !pair_rewr.
+  move=> H0 H1 H2 H3 H4 H5 H6 H7 H8.
+  rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_pending /update_ir_bits /update_ir_bits' !pair_rewr.
+  apply/rel_eqpair2;con;first ssa.
+  apply/rel_eqpair2;con;first ssa.
+  apply/rel_eqpair2.
+  rewrite !pair_rewr.
+  con. done.
+  destruct ir; rewrite /get_ir_bits /get_ir_bits' /get_ic /get_bool_state !pair_rewr;
+  repeat (apply/rel_eqpair2; con); rewrite ?pair_rewr; try done; try apply rel_eq; eauto.
+Qed.
+
+Lemma update_re_sched_rel : forall l v v' b,
+  rel state_type_equiv l v v' ->
+  rel state_type_equiv l (update_re_sched v b) (update_re_sched v' b).
+Proof.
+  intros l v v' b.
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 H3.
+  move: H0 H1 H2 H3.
+  move: v=> [[cur prev]] [re_sched] [ir_count] ic.
+  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] ic'.
+  rewrite /update_re_sched /get_bool_state /update_bool_state !pair_rewr.
+  move=> H0 H1 H2 H3.
+  apply/rel_eqpair2; con; rewrite !pair_rewr; first done.
+  apply/rel_eqpair2; con; rewrite !pair_rewr; first by apply rel_eq.
+  apply/rel_eqpair2; con; rewrite !pair_rewr; done.
+Qed.
 
 Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
@@ -636,6 +677,7 @@ Proof.
   move=>->.
 
   destruct ((tI_out i')). destruct h. done.
+  apply update_re_sched_rel.
   apply/rel_eqpair2. con;ssa. done.
 
 
@@ -655,6 +697,7 @@ Proof.
   move=>->.
   destruct (handler_completed runtime (get_ir_count v')).
 
+  apply update_pending_rel.
   apply/rel_eqpair2. con. ssa.
   apply/rel_eqpair2. con. ssa.  
   apply/rel_eqpair2. con. ssa.
@@ -1674,7 +1717,7 @@ Qed.
 (* === Section 6 (payoff): the top result.  model_sliced_userview = map id
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
    weakening through parse_output (out_equiv-related outputs map to
-   out_equiv_userview-related ones).  (docs/noninterference.md §6.) === *)
+   out_equiv_userview-related ones).  (docs/noninterference.md §3.) === *)
 Lemma model_sliced_userview_NI : NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
   eapply map_NI. eauto. eauto.

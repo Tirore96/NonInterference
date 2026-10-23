@@ -5,9 +5,11 @@
 There is one generic model. Instantiating it one way gives a design that leaks a
 secret interrupt through scheduling; instantiating it another way gives one that
 does not. This document defines the generic model, then the two instantiations,
-then one concrete system to run them on. Names are those of the source, and every
-process is given with the `@` and `Ty` annotations erased (section 0 says why the
-source needs them); no proof code is reproduced.
+then one concrete system to run them on. The process calculus they are written in
+is set out in [`background.md`](background.md), which is worth reading first. Names
+are those of the source, and every process is given with the `@` and `Ty`
+annotations erased ([`background.md` §1](background.md) says why the source needs
+them); no proof code is reproduced.
 
 > Why one instantiation is non-interfering and the other is not belongs to
 > [`noninterference.md`](noninterference.md), the companion to
@@ -18,13 +20,12 @@ source needs them); no proof code is reproduced.
 | Model | Type | What it is |
 |---|---|---|
 | `model_immediate` | `Proc T_in (T_out Opub Opriv)` | Interrupts handled the ordinary way: a handler runs as soon as its interrupt is serviced. Secret interrupts leak through scheduling. |
-| `model_sliced` | `Proc T_in (T_out Opub Opriv)` | Interrupt masking controlled so that a secret interrupt can be serviced without disturbing the public schedule. Like `model_immediate`, its output exposes every pool slot. |
-| `model_sliced_userview` | `Proc T_in (T_out_userview Opub Opriv)` | `model_sliced` behind a projection of the pool's output that erases every slot but the two user space processes. This is the model the headline theorem is about. |
+| `model_sliced` | `Proc T_in (T_out Opub Opriv)` | Interrupt masking controlled so that a secret interrupt can be serviced without disturbing the public schedule. Like `model_immediate`, its output exposes every pool slot. This is the model the headline theorem is about. |
+| `model_sliced_userview` | `Proc T_in (T_out_userview Opub Opriv)` | `model_sliced` behind a projection of the pool's output that erases every slot but the two user space processes. Its non-interference follows from that of `model_sliced`. |
 
 ## Contents
 
 **Part I: the generic model.**
-[0. Preliminaries](#0-preliminaries-the-process-algebra) ·
 [1. The generic model](#1-the-generic-model) ·
 [2. Interrupt handler and slot map](#2-interrupt-handler-and-slot-map) ·
 [3. Process pool](#3-process-pool) ·
@@ -39,100 +40,7 @@ source needs them); no proof code is reproduced.
 
 **Part III: one concrete system.**
 [10. A concrete system](#10-a-concrete-system) ·
-[11. Adequacy: the example traces](#11-adequacy-the-example-traces)
-
-
-## 0. Preliminaries: the process algebra
-
-Everything below is built from a small process calculus (defined in
-[`theories/definitions.v`](../theories/definitions.v)). The calculus and its
-non-interference theorems are due to Rafnsson et al., *Timing-Sensitive
-Noninterference through Composition* ([POST
-2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf));
-mechanising them is part of the contribution of this development. The mechanisation
-departs from the paper in four respects, each proved adequate in
-[`adequacy.v`](../theories/adequacy.v) and set out one at a time in
-[`departures.md`](departures.md). Two are local to the security equivalences and
-are taken up in
-[`noninterference.md`](noninterference.md): a **characterised equivalence** replaces
-the paper's L-equivalences (§1), and obliviousness asks that a process stay in one
-indistinguishability class rather than in the distinguished one (§6a).
-
-One of the other two shows up everywhere and is worth carrying while reading:
-**the paper's streams of labels are finite lists
-here, and definitions it gives coinductively are given inductively**. A trace is the
-list of labels along zero or more reductions, and `oblivious`, for instance, is
-stated over the traces a process admits rather than over an infinite stream. The
-proofs are substantially simpler for it, since they never have to construct
-streams. Nothing is lost, and that is a theorem rather than an assumption:
-`NI_SNI` states `Trace` and `NI` over streams and proves the two readings accept
-the same processes ([`departures.md` §3](departures.md)).
-
-A process has type `Proc I O`, where `I` and `O` are its input and output types.
-
-A process moves in one of two ways:
-
-```text
-   p ──i──▶ p'     p receives the input i
-   p ──o──▶ p'     p emits the output o
-```
-
-in any order; nothing forces them to alternate. A **trace** is the sequence of
-values along one such run, each marked as received or emitted, and it is all
-non-interference looks at. Precise definitions are in
-[`noninterference.md` §1](noninterference.md).
-
-Throughout, *emit* means an output step and *receive* an input step.
-
-Both kinds of step are **total** and **deterministic**. Whatever state a process is
-in, it can receive any input of its type and it can emit, and in each case there is
-exactly one way to do so: the successor is determined, and on an output step so is
-the value emitted. The two relations are therefore functions, and
-[`adequacy.v`](../theories/adequacy.v) gives them as the functions `stepI` and
-`stepO` and proves the relations agree with them. Nothing in the models relies on
-this, and the reader can take the arrows above at face value. It matters once
-traces are compared with streams, where totality is what lets a finite run be
-continued and determinism is what makes the finite runs of one stream fit together
-into a single infinite one.
-
-There are seven constructors, described here by what each does on an input step and
-on an output step:
-
-- **`out o`** is the constant process. It receives any value and is unchanged; it
-  emits the fixed `o` and is unchanged.
-- **`map f g p`** rewires `p` on both sides. Receiving `i`, it hands `p` the
-  value `f i`. Emitting, it lets `p` emit some `o` and emits `g o` in its place.
-  (`Proc I' O → Proc I O'`)
-- **`sta f g v p`** gives `p` a state cell holding `v`, and *exposes* that cell in
-  what it emits. Receiving `i`, the cell becomes `f i v` and `p` receives the pair
-  `(f i v, i)`. Emitting, `p` emits some `o`, the cell becomes `g o v`, and the whole
-  process emits the pair `(g o v, o)`, the new state alongside `p`'s value.
-- **`swi b p`** is a one-bit "switch" in phase `b`, wrapping a `p` that emits values
-  tagged with a Bool. Receiving `(b', i)`, the phase flips to `xor b b'` and `p`
-  receives `i`. Emitting in phase `false`, it emits `None` and `p` does not step at
-  all; emitting in phase `true`, `p` emits a tagged `(c, o)`, the switch emits
-  `Some o` and the phase becomes `xor true c`. `swi` is how a pool slot is gated on /
-  off (section 3).
-- **`par p1 p2`**: receiving `i`, both `p1` and `p2` receive it. Emitting, both emit,
-  and `par` emits the pair of their two values.
-- **`loop p`** is feedback. Receiving `i`, `p` receives it. Emitting is two steps of
-  `p`: `p` emits some `o`, that same `o` is immediately fed back to `p` as an input
-  step, and `loop p` emits `o`. (`Proc I I → Proc I I`)
-- **`maybe p`** makes the input optional. Receiving `None`, `p` does not step;
-  receiving `Some i`, `p` receives `i`. Emitting passes straight through: `p` emits
-  `o` and so does `maybe p`. (`Proc I O → Proc (Option I) O`)
-
-> **Why `I` and `O` are drawn from `Ty`.** In the mechanisation they range over an
-> inductive `Ty` (`Nat`, `Bool`, `Unit`, `Times`, `Option`, `Sum`, ...) rather than
-> over Coq's `Set`, with `[t]` interpreting a `t : Ty` as the `Set` it encodes.
-> Going through `Ty` rather than through `Set` directly is what makes reductions
-> invertible. The negative result needs that, since refuting non-interference means
-> showing a trace is *not* accepted. The cost is the explicit annotations in the
-> source, which this document strips away.
-
-The whole development ends by proving `NI` of `model_sliced_userview`. What `Trace`
-and `NI` mean, and the equivalences they are indexed by, are in
-[`noninterference.md` §1](noninterference.md).
+[11. Example traces](#11-example-traces)
 
 
 # Part I: the generic model
@@ -165,7 +73,7 @@ Sections 2 to 6 define each piece, bottom-up.
 The only leaf process the generic model itself fixes is the interrupt handler. The
 scheduler and the two user processes are supplied from outside, in section 10.
 Nothing in the security argument depends on which ones;
-[`noninterference.md` §8](noninterference.md) says
+[`noninterference.md` §5](noninterference.md) says
 exactly what the theorems leave open.
 
 **`ir_handler runtime : Proc Empty THandlerOutput`**
@@ -296,7 +204,7 @@ everything public, including the timer handler, which is `inr 0`. It is a handle
 but not a private one, so the split is not "handler versus not". Drawing it on this
 line is what lets the state equivalence classify a whole pid in one place, as
 `eqsum private_equiv public_equiv`, with the proof case-splitting on the tag
-([`noninterference.md` §7b](noninterference.md)).
+([`noninterference.md` §4b](noninterference.md)).
 
 **The slot types**, tabulated in section 2. `f_O` is parameterised by the two
 alphabets, and this is where `Opub` and `Opriv` enter the pool's output type:
@@ -369,7 +277,7 @@ Its result is the *optional* input of `maybe p`, so the two branches mean:
   `set_pending` (section 6). That it does *nothing else* is a security
   requirement: an interrupt the observer may not see must not visibly move the
   state, which leaves setting a single private bit as the only thing the input step
-  can afford to do. See [`noninterference.md` §7a](noninterference.md).
+  can afford to do. See [`noninterference.md` §4a](noninterference.md).
 - **`event = inr o`, a fed-back pool output** → `Some (pid, payload)`. The `pid` is
   `get_cur_pid v`, which selects the slot that runs next. This is how the state's
   scheduling decision reaches the pool. The `payload` is `dI_out o`, the disk
@@ -417,7 +325,7 @@ state_step handler_preroutine restore_invariant =
 
 - **`set_pending`**: on an arriving interrupt, set that interrupt's `pending` bit.
   This is the whole of the input summand; that it does nothing else is a security
-  requirement, argued in [`noninterference.md` §7a](noninterference.md).
+  requirement, argued in [`noninterference.md` §4a](noninterference.md).
 - **`check_scheduler`**: on a scheduler output, set `cur_pid` to the scheduled pid.
   It reads that output with `is_sched_out`, which matches `(None, (None, (Some n, _)))`,
   so the two user slots are checked for `None`-ness and nothing more. No stage
@@ -442,7 +350,7 @@ state_step handler_preroutine restore_invariant =
   the output summand, it runs only on output events.
 
 Why the output summand is a composition rather than one update, and what that
-costs, is in [`noninterference.md` §7c](noninterference.md).
+costs, is in [`noninterference.md` §4c](noninterference.md).
 
 
 ## 7. The generic model, and its three parameters
@@ -474,14 +382,15 @@ is allowed to run*:
 
 - **`restore_invariant : [state_type] -> [state_type]`** is consulted by
   `initiate_next`, after the "is a handler already running" test and before
-  `first_ready` picks the next one. It is the design's last chance to constrain the
-  state that the choice is made from. Its real use is re-imposing an invariant that
-  the compositional proof has forgotten, so that the choice comes out the same in
-  two related executions
-  ([`noninterference.md` §7d](noninterference.md)).
+  `first_ready` picks the next one. It writes into the state an invariant that the
+  design itself maintains. On a real run it therefore changes nothing; this is a
+  theorem for `model_sliced` (section 8b). It is there for the proof, which reasons
+  about each stage of the transition separately and so loses the invariant along
+  the way ([`noninterference.md` §4d](noninterference.md)).
 
-Between them: `init` says what is runnable at rest, `handler_preroutine` says when
-that changes, and `restore_invariant` says what must hold when the choice is made.
+Between them: `init` says what is runnable at rest and `handler_preroutine` says
+when that changes. `restore_invariant` adds no behaviour; it states what must hold
+when the choice is made.
 
 
 # Part II: the two designs
@@ -494,11 +403,11 @@ story.
 | | `model_immediate` | `model_sliced` |
 |---|---|---|
 | **`init`** | all masks clear; counter `None` (disabled) | all masks set except the timer's; counter `Some 0` |
-| **`handler_preroutine`** | `immediate_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_preroutine`: reload the slice on a timer `Notify`, unmask at fixed boundaries, tick the slice |
-| **`restore_invariant`** | `id` (no bookkeeping) | restore the time-slice invariant: force the default mask to equal the disk mask |
+| **`handler_preroutine`** | `immediate_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_preroutine`: on a timer `Notify`, open a slice and ask to reschedule; at each boundary inside it, reopen the masks and queue a NOP run; tick the slice and close it |
+| **`restore_invariant`** | `id` (no bookkeeping) | re-impose the time-slice invariant; the identity on every reachable state |
 | **When a handler stops** | when it emits its **secret** `Notify` (*secret-driven*) | at a fixed **public** time-slice boundary (*slice-driven*) |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
-| **Non-interfering?** | **No** (`model_immediate_not_NI`) | **Yes** (`model_sliced_NI`, for any non-interfering userspace) |
+| **Non-interfering?** | **No** (`model_immediate_not_NI`) | **Yes** (`model_sliced_NI`) |
 | **Why** | a handler runs as soon as its interrupt is serviced, so a secret interrupt displaces the scheduled process and the gap is visible | handlers run only within the public slice, replacing NOP filler, so the schedule is unchanged |
 
 Handlers must all run for the same length of time, or the schedule would again
@@ -545,7 +454,7 @@ clear, an interrupt is serviced as soon as it arrives. Its handler then runs for
 full `runtime` steps in place of whichever process was running, pushing every later
 public output back by that much. `model_immediate_not_NI` turns that into a
 counterexample
-([`noninterference.md` §5](noninterference.md)); section 11 shows it in the model's
+([`noninterference.md` §2](noninterference.md)); section 11 shows it in the model's
 own traces.
 
 ### 8b. `model_sliced`
@@ -576,25 +485,31 @@ stages:
 sliced_preroutine o = check_ir_count ∘ check_handler_completed ∘ initiate_ir o
 ```
 
-Read right to left: `initiate_ir` opens a slice, `check_handler_completed` reopens
-the masks at a boundary inside it, and `check_ir_count` ticks the slice and closes
-it. Taking them in that order:
+Read right to left: `initiate_ir` opens a slice, `check_handler_completed` starts
+the next handler run at a boundary inside it, and `check_ir_count` ticks the slice
+and closes it. Taking them in that order:
 
 *`initiate_ir` opens a slice.* When the timer handler completes, it loads the counter
 to `time_slice runtime runs`. The slice is `runs` complete handler executions long,
-so that many can take place before it ends:
+so that many can take place before it ends. It also asks for a reschedule, as the
+timer's completion does in `model_immediate`; the request is honoured when control
+next leaves the handlers, at the end of the slice:
 
 ```coq
 time_slice runtime runs = runs * runtime
 initiate_ir runtime runs o v =
-  if tI_out o is Some Notify then update_ir_count v (Some (time_slice runtime runs))
+  if tI_out o is Some Notify
+  then update_re_sched (update_ir_count v (Some (time_slice runtime runs))) true
   else v
 ```
 
-*`check_handler_completed` reopens the masks at a boundary.* Because the slice is
+*`check_handler_completed` starts the next run at a boundary.* Because the slice is
 *defined* as `runs * runtime`, it always ends on a handler boundary, and the counter
 is a nonzero multiple of `runtime` precisely when a handler has just finished, which
-is what `handler_completed` computes.
+is what `handler_completed` computes. There it reopens the disk and NOP masks, keeps
+the timer masked, and makes the NOP handler pending. That last step is the
+**filler**: a handler is always ready at a boundary, so a run takes place whether or
+not a disk interrupt is waiting, and if one is, the disk handler takes priority.
 
 ```coq
 handler_completed runtime c =
@@ -604,7 +519,9 @@ handler_completed runtime c =
   end
 
 check_handler_completed runtime v =
-  if handler_completed runtime (ir_count v) then set_tI (unset_masks v) else v
+  if handler_completed runtime (ir_count v)
+  then update_ir_pending (set_tI (unset_masks v)) DefaultInterrupt true
+  else v
 ```
 
 *`check_ir_count` ticks, and closes.* Its `Some 0` case is the mirror image of
@@ -627,12 +544,12 @@ Together, at the concrete instance of section 10, where a slice of 4 is two runs
 ```text
   ir_count    what just happened            masks after this step
   ────────────────────────────────────────────────────────────────────────
-  Some 4  ──▶ timer handler completed  ──▶  disk + NOP unmasked, timer masked
-                (slice starts)                 │
+  Some 4  ──▶ timer handler completed  ──▶  disk + NOP unmasked, timer masked,
+                (slice starts)                 │   NOP pending
   Some 3  ──▶ (mid-run)                ──▶    unchanged
                                               ▼
-  Some 2  ──▶ a disk/NOP handler       ──▶  disk + NOP unmasked, timer masked
-                completed                      │   (so the second run can start)
+  Some 2  ──▶ a disk/NOP handler       ──▶  disk + NOP unmasked, timer masked,
+                completed                      │   NOP pending (the second run)
   Some 1  ──▶ (mid-run)                ──▶    unchanged
                                               ▼
   Some 0  ──▶ slice over               ──▶  disk + NOP masked, timer unmasked,
@@ -643,39 +560,55 @@ Together, at the concrete instance of section 10, where a slice of 4 is two runs
 are exactly the boundaries `handler_completed` marks, and at both the secret handlers
 are the ones left runnable.
 
-**`restore_invariant`** sets the interrupt controller's flags from whether the
-slice is live, ORing them into the state, and then forces the default mask to equal
-the disk mask:
+**`restore_invariant`** writes the time-slice invariant into the state, just before
+`initiate_next` chooses what runs next:
 
 ```coq
 timeslice_live c = (c is Some (S n))
 
 restore_invariant v =
   let b := timeslice_live (ir_count v) in
-  let ic := (true, (None, ((b,~~b), ((false,~~b), (false,b))))) in
+  let ic := (false, (None, ((b,~~b), ((false,~~b), (false,b))))) in
   let v := update_bool_state v (or_bool_state (bool_state v) ic) in
   update_ir_mask v DefaultInterrupt (get_ir_mask v DiskInterrupt)
 ```
 
-*Why it is needed.* Two facts hold of every state the model can actually reach:
+The tuple `ic` is ORed into the state: the leading `false` leaves `re_sched` alone,
+`None` leaves the counter alone, and the rest are the `(pending, mask)` bits of the
+NOP, disk and timer handlers in that order.
+
+The invariant has two parts:
 
 ```text
 (i)  slice live  ⇒  NOP pending, NOP and disk unmasked, timer masked
+     slice over  ⇒  NOP and disk masked
 (ii) the NOP and disk masks are always toggled together
 ```
 
-Both are invariants, and neither is available to the proof. Writing `state_step` as a
-composition of independent stages (section 6) buys tractability at the cost of
-forgetting what the previous stage established. See
-[`noninterference.md` §7d](noninterference.md) for details.
+*It changes nothing on a real run.* The three stages above already maintain both
+parts, so whenever `initiate_next` applies `restore_invariant`, the state it is given
+satisfies them and comes back unchanged. That is a theorem, `restore_invariant_noop`
+in [`models.v`](../theories/models.v), proved for every sequence of events from the
+initial state (not only those a process pool can produce) and using no axioms. It
+assumes `runtime ≠ 1`. With one-step handlers the last boundary inside a slice ticks
+the counter to `Some 0` in the same step, so the slice already reads as over when
+the choice is made, and `restore_invariant` masks the handler that boundary had just
+enabled. Non-interference holds at `runtime = 1` all the same; only the no-op claim
+needs the assumption.
+
+*Why it is there at all.* The proof establishes `fv_NI` one stage of the transition
+at a time, and each stage must then hold for every pair of related states, including
+states no run reaches. That forgets the invariant. Writing it back unconditionally,
+just before the choice, gives the hardest stage the invariant for free
+([`noninterference.md` §4d](noninterference.md)).
 
 **Why it does not leak.** A handler can now run only inside a slice, every handler
-runs for the same `runtime` steps, and the default/NOP handler fills any part of a
-slice no real interrupt claims. A secret handler run therefore takes the place of a
-NOP run rather than displacing a user process: a slice containing a disk run has the
-same shape as one containing only filler, and the public schedule around it is
-unchanged. `model_sliced_NI` proves this
-([`noninterference.md` §6](noninterference.md)); section 11 shows it in the model's
+runs for the same `runtime` steps, and every boundary queues a NOP run, so the
+default/NOP handler fills any part of a slice no real interrupt claims. A secret
+handler run therefore takes the place of a NOP run rather than displacing a user
+process: a slice containing a disk run has the same shape as one containing only
+filler, and the public schedule around it is unchanged. `model_sliced_NI` proves this
+([`noninterference.md` §3](noninterference.md)); section 11 shows it in the model's
 own traces.
 
 
@@ -725,7 +658,7 @@ harmless `NOP` otherwise. That `Notify` is the disk handler telling it a disk ev
 occurred, over the wire of section 4. Which of the two it emits is secret-dependent,
 but that is not itself the leak: both are classified secret, so the attacker cannot
 tell them apart
-([`noninterference.md` §4](noninterference.md)). What must not leak is the
+([`noninterference.md` §1](noninterference.md)). What must not leak is the
 *scheduling*. It is built from a reusable two-phase process,
 
 ```coq
@@ -751,7 +684,7 @@ model_sliced_userview_concrete = model_sliced_userview handler_runtime slice_run
 ```
 
 
-## 11. Adequacy: the example traces
+## 11. Example traces
 
 Each design is exercised on two runs of the concrete system, one with no disk
 interrupt and one with a disk interrupt, and each run is proved to be an accepted

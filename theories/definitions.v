@@ -72,7 +72,7 @@ Definition order (b1 b2 : level) := b1 <= b2.
    and the last field characterises [dis l] as one of those classes, the
    distinguished class, which is empty when the level hides nothing.  Both
    fields weaken downwards: a lower observer sees less.
-   Prose: docs/noninterference.md section 1. *)
+   Prose: docs/background.md section 2. *)
 Record cEquiv (A : Set) :=
         CEquiv {
            dis : level -> A -> Prop;
@@ -529,7 +529,7 @@ Hint Resolve rel_eq.
    the reference output [o0] at level [l], so an observer there sees the same
    class throughout.  The reference is a plain output value, not a member of the
    distinguished class: obliviousness is a statement about indistinguishability
-   only.  Prose: docs/noninterference.md section 6a. *)
+   only.  Prose: docs/noninterference.md section 3a. *)
 Inductive ObliviousTrace {I O : Ty} (ORel : cEquiv [O]) (l : level) (o0 : [O]) : seq ([I] + [O]) -> Prop :=
  | OT_nil : ObliviousTrace ORel l o0 nil
  | OT_cons_in i s :  ObliviousTrace ORel l o0 s -> ObliviousTrace ORel l o0 ((inl i)::s)

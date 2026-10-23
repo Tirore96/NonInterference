@@ -121,7 +121,7 @@ from it.
 
 **Why.** Only inputs are ever inserted or deleted, so non-interference constrains
 outputs through indistinguishability alone
-([`noninterference.md` §1](noninterference.md)). Requiring the distinguished class
+([`background.md` §2](background.md)). Requiring the distinguished class
 was therefore stronger than needed, and it forced output types to carry a non-empty
 `dis`. Under the weaker condition, neither `swi_NI` nor `oblivious_swi` mentions
 `dis` at all.

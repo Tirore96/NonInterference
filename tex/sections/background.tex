@@ -1,0 +1,171 @@
+\section{Background: Composable Timing-Sensitive Non-Interference}\label{sec:background}
+
+This section recalls the calculus and definitions of Rafnsson et
+al.~\cite{rafnsson2017}, in the form we mechanise. The form differs from the
+original in four places, discussed in \cref{sec:departures}.
+
+\subsection{Processes, traces and time}
+
+A process $p : \Proc{I}{O}$ has an input type $I$ and an output type $O$. It moves
+in one of two ways, by receiving an input ($p \xrightarrow{?i} p'$) or by emitting
+an output ($p \xrightarrow{!o} p'$), in any order. Both kinds of step are total and
+deterministic: in every state a process can receive any input and can emit, and the
+successor (and on an output step the value emitted) is determined. A \emph{trace} is
+the sequence of labels along a finite run.
+
+Time is counted in output steps. Every output step is one tick of a clock the
+observer shares, and on every tick a process emits a value; there is no silent tick.
+Where nothing happens, the value says so (in our models a component that did not run
+emits \code{None}), and that absence is itself observable. Input steps take no time. This
+is what makes the setting timing-sensitive: delaying an output by one step changes
+the trace exactly as changing its value would.
+
+Processes are built from seven constructors (\cref{tab:constructors}). The
+operating system of \cref{sec:model} is a single closed term over them.
+
+\begin{table}[t]
+\centering
+\caption{The constructors, by their behaviour on an input and on an output step.}
+\label{tab:constructors}
+\small
+\begin{tabularx}{\columnwidth}{@{}lL@{}}
+\toprule
+constructor & behaviour \\
+\midrule
+\code{out o} & receives anything and is unchanged; emits the constant \code{o} \\
+\code{map f g p} & hands \code{p} the input \code{f i}; emits \code{g o} when \code{p} emits \code{o} \\
+\code{sta f g v p} & a state cell \code{v}: on input \code{i} the cell becomes \code{f i v} and \code{p}
+  receives the pair; on output \code{o} of \code{p} the cell becomes \code{g o v} and the pair
+  of new cell and \code{o} is emitted \\
+\code{swi b p} & a one-bit switch: in phase \code{false} it emits \code{None} and \code{p} does not
+  step; in phase \code{true} it emits \code{Some o} for \code{p}'s tagged output \code{(c,o)}, and
+  the tag \code{c} and the inputs flip the phase \\
+\code{par p1 p2} & both receive every input; both emit, and the pair is emitted \\
+\code{loop p} & feedback: \code{p} emits \code{o}, \code{o} is fed back to \code{p} as an input, and \code{o}
+  is emitted \\
+\code{maybe p} & optional input: \code{p} ignores \code{None} and receives \code{i} on \code{Some i} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Characterised equivalences and non-interference}
+
+Security is stated relative to a lattice of levels. Everything in this paper can be
+read with two: the attacker $\bot$, and $\top$, who sees everything
+(\cref{sec:generality} discusses arbitrary lattices). Each input and output type
+carries a \emph{characterised equivalence} (\m{cEquiv}), a record of two
+level-indexed predicates:
+\begin{itemize}
+\item $\rel\;l\;x\;y$: an observer at $l$ cannot tell $x$ from $y$;
+\item $\dis\;l\;x$: an observer at $l$ does not see $x$ at all, so $x$ may be
+  inserted or removed freely.
+\end{itemize}
+$\rel\;l$ is an equivalence, and $\dis\;l$ is \emph{characterised} as one of its
+classes:
+\[
+\dis\;l\;a_0 \;\Rightarrow\; \forall a_1.\;
+  (\dis\;l\;a_1 \Leftrightarrow \rel\;l\;a_0\;a_1).
+\]
+So at each level the type is partitioned into classes the observer cannot tell
+apart, and one of them, the \emph{distinguished class}, holds the values the
+observer does not see. It is empty when the level hides nothing.
+
+Let $\mathit{insert}\;n\;i\;t$ place input $i$ at position $n$ of trace $t$, and let
+$\mathsf{Trace}$ compare outputs up to $\rel_{O}\;l$.
+
+\begin{definition}[Non-interference]
+$\NI\;\mathit{IRel}\;\mathit{ORel}\;p$ holds when for every level $l$, every trace
+$t$, position $n$ and inputs $i, i'$:
+\begin{enumerate}
+\item (substitution) if $\rel_I\;l\;i\;i'$ and $\mathit{insert}\;n\;i\;t$ is a trace
+  of $p$, then so is $\mathit{insert}\;n\;i'\;t$;
+\item (insertion) if $\dis_I\;l\;i$ and $t$ is a trace of $p$, then so is
+  $\mathit{insert}\;n\;i\;t$;
+\item (deletion) if $\dis_I\;l\;i$ and $\mathit{insert}\;n\;i\;t$ is a trace of
+  $p$, then so is $t$.
+\end{enumerate}
+\end{definition}
+
+The set of traces visible at $l$ is thus unchanged by anything the observer at $l$
+may not see. All the content is at $\bot$: at $\top$ nothing is unobservable and
+indistinguishable means equal, so the clauses hold trivially.
+
+\subsection{Equivalences}
+
+Two equivalences do most of the work. Under \m{public_equiv} nothing is unobservable
+and values are related iff equal, at every level. Under \m{private_equiv} every value
+is unobservable at $\bot$, where all values are related, and the equivalence is
+\m{public_equiv} at $\top$.
+
+Composite equivalences are built from these. \m{eqpair} relates pairs componentwise,
+and its variants \m{eqpair_L}, \m{eqpair_R} and \m{eqpair_LR} make the pair secret when
+its left, right, or both components are. \m{eqsum} relates a sum tag by tag and never
+relates an \code{inl} to an \code{inr}, so the tag stays public even when the payload is not;
+\m{eqsum_L} makes an \code{inl} secret exactly when its payload is. The \m{eqmaybe} family
+relates \code{Option} values, deferring to an inner equivalence on \code{Some} and differing
+in who can see \code{None} (\cref{tab:eqmaybe}). By the characterisation law, \code{Some v}
+and \code{None} are related at $l$ exactly when both are unobservable there.
+
+\begin{table}[t]
+\centering
+\caption{Who can see \texttt{None} under the \texttt{eqmaybe} family. To the
+  attacker, \texttt{eqmaybe\_private} and \texttt{eqmaybe\_hidden} agree.}
+\label{tab:eqmaybe}
+\small
+\begin{tabularx}{\columnwidth}{@{}lLL@{}}
+\toprule
+equivalence & $\bot$ sees \texttt{None} & $\top$ sees \texttt{None} \\
+\midrule
+\m{eqmaybe}         & yes & yes \\
+\m{eqmaybe_private} & no  & yes \\
+\m{eqmaybe_hidden}  & no  & no \\
+\code{eqmaybe_swi BRel} & iff $\bot$ is aware under \code{BRel} & iff $\top$ is aware \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Compositional theorems}\label{sec:composition}
+
+The calculus comes with one non-interference theorem per constructor
+(\cref{tab:composition}). Each derives the equivalences of the composite from those
+of its parts, which is what gives the equivalences of a large model their shape.
+Two carry substantial side conditions. \m{sta_NI} asks that the state update map
+related states to related states,
+\[
+\mathit{fv\_NI}:\quad \rel\;l\;i\;i' \wedge \rel\;l\;v\;v' \;\Rightarrow\;
+  \rel\;l\;(f\;i\;v)\;(f\;i'\;v'),
+\]
+and that an unobservable input not visibly move the state,
+$\mathit{f\_EP}:\; \dis\;l\;i \Rightarrow \rel\;l\;(f\;i\;v)\;v$. \m{swi_NI} asks, at
+each level, that the observer either can trust the gate bit (it is \emph{aware}) or
+learns nothing from the gated process because all its outputs fall in one class (it
+is \emph{oblivious}).
+
+\begin{table*}[t]
+\centering
+\caption{The composition theorems, slightly simplified. $I$ and $O$ are the input
+  and output equivalences, $V$ the state equivalence and $B$ the gate equivalence.}
+\label{tab:composition}
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lLL@{}}
+\toprule
+theorem & from & to \\
+\midrule
+\m{out_NI} & --- & $\NI\;I\;O\;(\mathsf{out}\;o)$ \\
+\m{map_NI} & $\NI\;I'\;O\;p$, side conditions on $f$ and $g$
+  & $\NI\;I\;O'\;(\mathsf{map}\;f\;g\;p)$ \\
+\m{sta_NI} & $\NI\;(\mathsf{eqpair\_R}\;V\;I)\;O\;p$, $\mathit{fv\_NI}$,
+  $\mathit{f\_EP}$
+  & $\NI\;I\;(\mathsf{eqpair}\;V\;O)\;(\mathsf{sta}\;f\;g\;v\;p)$ \\
+\m{swi_NI} & $\NI\;I\;(\mathsf{eqpair\_LR}\;B\;O)\;p$, aware or oblivious at
+  each level
+  & $\NI\;(\mathsf{eqpair\_LR}\;B\;I)$\newline
+    \hspace*{1em}$(\mathsf{eqmaybe\_swi}\;O\;B)\;(\mathsf{swi}\;b\;p)$ \\
+\m{par_NI} & $\NI\;I\;O_1\;p_1$ and $\NI\;I\;O_2\;p_2$
+  & $\NI\;I\;(\mathsf{eqpair}\;O_1\;O_2)\;(\mathsf{par}\;p_1\;p_2)$ \\
+\m{loop_NI} & $\NI\;I\;I\;p$ & $\NI\;I\;I\;(\mathsf{loop}\;p)$ \\
+\m{maybe_NI} & $\NI\;I\;O\;p$
+  & $\NI\;(\mathsf{eqmaybe\_hidden}\;I)\;O\;(\mathsf{maybe}\;p)$ \\
+\bottomrule
+\end{tabularx}
+\end{table*}

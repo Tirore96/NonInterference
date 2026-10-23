@@ -490,7 +490,7 @@ Definition initiate_prev_pid  (v : [state_type]) := update_prev_pid (update_cur_
 Definition initiate_next (restore_invariant :  [state_type] -> [state_type]) :  [state_type] -> [state_type] :=
   fun v => if (masks_set v) then v (*handler running*) else
              let v := restore_invariant v (*apply time slice logic to bools*) in
-             if first_ready v is Some ir then initiate_handler ir v (*first or later handler in the time slice is initiated here, enforced that at least one will run due to restore_invariant*) else
+             if first_ready v is Some ir then initiate_handler ir v (*first or later handler in the time slice is initiated here; inside a slice the NOP handler is always pending, so one runs*) else
                if is_handler_pid v then if get_re_sched v then initiate_scheduler v else initiate_prev_pid v  (*mask not set but we are in handler pid, we have just finished the time slice*) else
                  v (*we are running in user space*).
 
@@ -543,12 +543,17 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
                                                      mask but the timer's set
      handler preroutine   immediate_preroutine       sliced_preroutine runtime runs
                           a finished handler         a finished timer handler opens
-                          unmasks everything, so     a slice; the slice is counted
-                          a pending interrupt is     down and closed on a handler
-                          serviced at once           boundary
+                          unmasks everything, so     a slice and requests a
+                          a pending interrupt is     reschedule; each handler
+                          serviced at once           boundary inside it reopens the
+                                                     masks and queues a NOP run; the
+                                                     slice is counted down and
+                                                     closed on a handler boundary
      restore_invariant          id                         restore_invariant
-                          nothing                    off-slice, forces the disk and
-                                                     default handlers masked
+                          nothing                    re-imposes the slice invariant
+                                                     for the proof; the identity on
+                                                     every reachable state
+                                                     (restore_invariant_noop)
 
    In [model_immediate] a secret interrupt is therefore serviced the moment it
    arrives, displacing whatever was running; in [model_sliced] it can only be
@@ -591,11 +596,18 @@ Definition handler_completed (runtime : nat) (c : [ir_count]) :=
   | None => false
   end.
 
+(* The timer handler's completion opens a slice and, as in [model_immediate],
+   requests a reschedule for when control next leaves the handlers. *)
 Definition initiate_ir (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type]) : [state_type] :=
-  if tI_out o is Some Notify then update_ir_count v (Some (time_slice runtime runs)) else v.
+  if tI_out o is Some Notify
+  then update_re_sched (update_ir_count v (Some (time_slice runtime runs))) true else v.
 
+(* At each handler boundary inside a slice: reopen the disk and NOP masks, keep
+   the timer masked, and make the NOP handler pending, so that the next handler
+   run happens whether or not a disk interrupt is waiting.  This is the filler. *)
 Definition check_handler_completed (runtime : nat) (v : [state_type]) : [state_type] :=
-  if handler_completed runtime (get_ir_count v) then set_tI (unset_masks v) else v.
+  if handler_completed runtime (get_ir_count v)
+  then update_ir_pending (set_tI (unset_masks v)) DefaultInterrupt true else v.
 
 Definition check_ir_count (v : [state_type]) : [state_type] :=
     match (get_ir_count v) with
@@ -606,14 +618,18 @@ Definition check_ir_count (v : [state_type]) : [state_type] :=
 
 Definition timeslice_live (c : [ir_count]) := match c with | Some n => 0 < n | _ => false end.
 
-(*If timeslice is not live, we enforce that disk and default handlers are masked, and pending default is false.
- This allows us to infer that for v and v' that are related, that if v is ready as disk handler or default, then v' will also be ready.
- The reasoning chain is:
-v is ready -> time slice is live for v -> time slice is live for v' -> pending for default is true (which combined with unset_handler_masks invariant that it always turns off masks when a handler is done, ensures that default handler always can fire if v can fire disk or default handler
- *)
+(* restore_invariant writes the time-slice invariant into the state just before
+   [initiate_next] chooses: inside a slice the NOP handler is pending and the
+   timer masked, outside it the disk and NOP handlers are masked, and the NOP
+   mask equals the disk mask.  The design already maintains all of this, so on
+   every reachable state it changes nothing (restore_invariant_noop, below).  It
+   exists for the proof: stated unconditionally, it lets the [fv_NI] argument
+   for [initiate_next] use the invariant without carrying reachability, and so
+   conclude that if one of two related states has the disk or NOP handler ready,
+   so does the other. *)
 
 Definition restore_invariant v := let b := timeslice_live (get_ir_count v) in
-                            let ic := (true,(None,((b,~~b),((false,~~b),(false,b))))) in
+                            let ic := (false,(None,((b,~~b),((false,~~b),(false,b))))) in
                             let v := update_bool_state v (or_bool_state (get_bool_state v) ic) in
                             let m := get_ir_mask v DiskInterrupt in
                             update_ir_mask v DefaultInterrupt m.
@@ -629,6 +645,209 @@ Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
   model runtime initial_state_sliced (@sliced_preroutine runtime runs Opub Opriv) restore_invariant
     p_pub p_priv p_sched.
+
+
+(* -- restore_invariant is the identity wherever it is applied --
+
+   [restore_invariant] is stated unconditionally so that the compositional proof
+   of [fv_NI] can rely on the time-slice invariant without carrying reachability.
+   The design itself establishes that invariant: [check_handler_completed] queues
+   the NOP handler at each boundary, and [initiate_ir] requests a reschedule when
+   a slice opens.  So on every state [initiate_next] actually reaches,
+   [restore_invariant] changes nothing (restore_invariant_noop).
+
+   The statement quantifies over arbitrary event sequences, not only those a
+   process pool can produce, so it needs no reasoning about processes.  It needs
+   [runtime != 1]: with one-step handlers the last inner boundary ticks the
+   counter to [Some 0], the slice already reads as over, and restore_invariant
+   masks the handler that boundary had just enabled. *)
+
+Section SlicedInvariant.
+Variables (runtime runs : nat) (Opub Opriv : Ty).
+Hypothesis runtime_ne1 : runtime != 1.
+
+(* Between steps: the NOP and disk masks agree; outside a slice they are set;
+   inside a slice a handler is running. *)
+Definition sliced_inv (v : [state_type]) : bool :=
+  (get_ir_mask v DefaultInterrupt == get_ir_mask v DiskInterrupt) &&
+  (if timeslice_live (get_ir_count v) then masks_set v
+   else get_ir_mask v DiskInterrupt).
+
+(* The state [initiate_next] makes its choice from. *)
+Definition choice_state (o : [T_out Opub Opriv]) v :=
+  sliced_preroutine runtime runs o (check_scheduler o v).
+
+(* At that point: as [sliced_inv], except that at a handler boundary inside a
+   slice the masks are open and the NOP handler is pending. *)
+Definition choice_inv (w : [state_type]) : bool :=
+  (get_ir_mask w DefaultInterrupt == get_ir_mask w DiskInterrupt) &&
+  (if timeslice_live (get_ir_count w)
+   then masks_set w || [&& get_ir_pending w DefaultInterrupt,
+                          get_ir_mask w TimerInterrupt,
+                          ~~ get_ir_mask w DiskInterrupt &
+                          ~~ get_ir_mask w DefaultInterrupt]
+   else get_ir_mask w DiskInterrupt).
+
+Lemma masks_setE v : masks_set v =
+  [&& get_ir_mask v TimerInterrupt, get_ir_mask v DiskInterrupt & get_ir_mask v DefaultInterrupt].
+Proof. by rewrite /masks_set /= andbT. Qed.
+
+(* One lemma per stage of [choice_state], stated on the fields the invariant reads. *)
+Lemma check_scheduler_bits (o : [T_out Opub Opriv]) v :
+  [/\ get_ir_count (check_scheduler o v) = get_ir_count v,
+      forall ir, get_ir_mask (check_scheduler o v) ir = get_ir_mask v ir &
+      forall ir, get_ir_pending (check_scheduler o v) ir = get_ir_pending v ir].
+Proof. rewrite /check_scheduler. by case: (is_sched_out o). Qed.
+
+Lemma initiate_ir_mask (o : [T_out Opub Opriv]) v ir :
+  get_ir_mask (initiate_ir runtime runs o v) ir = get_ir_mask v ir.
+Proof. by rewrite /initiate_ir; case: (tI_out o) => [[|]|]. Qed.
+
+Lemma initiate_ir_count (o : [T_out Opub Opriv]) v :
+  get_ir_count (initiate_ir runtime runs o v) =
+  if tI_out o is Some Notify then Some (time_slice runtime runs) else get_ir_count v.
+Proof. by rewrite /initiate_ir; case: (tI_out o) => [[|]|]. Qed.
+
+Lemma chc_count v : get_ir_count (check_handler_completed runtime v) = get_ir_count v.
+Proof. rewrite /check_handler_completed. by case: (handler_completed _ _). Qed.
+
+Lemma chc_id v : handler_completed runtime (get_ir_count v) = false ->
+  check_handler_completed runtime v = v.
+Proof. by rewrite /check_handler_completed => ->. Qed.
+
+Lemma chc_bits v : handler_completed runtime (get_ir_count v) ->
+  [/\ get_ir_mask (check_handler_completed runtime v) DefaultInterrupt = false,
+      get_ir_mask (check_handler_completed runtime v) DiskInterrupt = false,
+      get_ir_mask (check_handler_completed runtime v) TimerInterrupt = true &
+      get_ir_pending (check_handler_completed runtime v) DefaultInterrupt = true].
+Proof. rewrite /check_handler_completed => ->. by move: v => [[? ?] [? [? [[? ?] [[? ?] [? ?]]]]]]. Qed.
+
+Lemma cic_tick v n : get_ir_count v = Some n.+1 ->
+  [/\ get_ir_count (check_ir_count v) = Some n,
+      forall ir, get_ir_mask (check_ir_count v) ir = get_ir_mask v ir &
+      forall ir, get_ir_pending (check_ir_count v) ir = get_ir_pending v ir].
+Proof. rewrite /check_ir_count => ->. by split => // -[]. Qed.
+
+Lemma cic_close v : get_ir_count v = Some 0 ->
+  [/\ get_ir_count (check_ir_count v) = None,
+      get_ir_mask (check_ir_count v) DefaultInterrupt = true &
+      get_ir_mask (check_ir_count v) DiskInterrupt = true].
+Proof. rewrite /check_ir_count => ->. by move: v => [[? ?] [? [? [[? ?] [[? ?] [? ?]]]]]]. Qed.
+
+Lemma cic_none v : get_ir_count v = None -> check_ir_count v = v.
+Proof. by rewrite /check_ir_count => ->. Qed.
+
+(* Opening a slice lands on a boundary, and every boundary is at least 2. *)
+Lemma hc_slice : time_slice runtime runs != 0 ->
+  handler_completed runtime (Some (time_slice runtime runs)).
+Proof. by move=> H; rewrite /handler_completed H /time_slice modnMl. Qed.
+
+Lemma hc_ge2 m : handler_completed runtime (Some m) -> (2 <= m)%N.
+Proof.
+rewrite /handler_completed => /andP [Hm Hd].
+case: runtime runtime_ne1 Hd => [|[|r]] // _.
+- by rewrite modn0 (negbTE Hm).
+- move=> Hd. have Hdv : (r.+2 %| m)%N by [].
+  apply: leq_trans (dvdn_leq _ Hdv) => //. by rewrite lt0n.
+Qed.
+
+Lemma choice_inv_step (o : [T_out Opub Opriv]) v : sliced_inv v -> choice_inv (choice_state o v).
+Proof.
+move=> Hv.
+have -> : choice_state o v =
+          check_ir_count (check_handler_completed runtime (initiate_ir runtime runs o (check_scheduler o v))) by [].
+case: (check_scheduler_bits o v) => Cc Cm Cp.
+set v1 := initiate_ir runtime runs o (check_scheduler o v).
+have M1 : forall ir, get_ir_mask v1 ir = get_ir_mask v ir by move=> ir; rewrite initiate_ir_mask Cm.
+have C1 : get_ir_count v1 = if tI_out o is Some Notify then Some (time_slice runtime runs) else get_ir_count v
+  by rewrite initiate_ir_count Cc.
+move: Hv; rewrite /sliced_inv /choice_inv masks_setE => /andP [/eqP Hdk Hl].
+case HC: (handler_completed runtime (get_ir_count v1)).
+- (* a boundary: masks open, NOP pending, and the slice is still live *)
+  case: (chc_bits HC) => Bd Bk Bt Bp.
+  move: HC; case E1: (get_ir_count v1) => [m|] // HC.
+  have Hm := hc_ge2 HC.
+  case: m Hm E1 HC => [|[|k]] // _ E1 _.
+  have E2 : get_ir_count (check_handler_completed runtime v1) = Some k.+2 by rewrite chc_count.
+  case: (cic_tick E2) => -> Tm Tp.
+  by rewrite /timeslice_live masks_setE !Tm !Tp Bd Bk Bt Bp.
+- rewrite (chc_id HC).
+  case E1: (get_ir_count v1) => [[|[|k]]|].
+  + by case: (cic_close E1) => -> -> ->.
+  + case: (cic_tick E1) => -> Tm Tp.
+    rewrite /timeslice_live !Tm !M1 Hdk eqxx.
+    move: C1 Hl; rewrite E1.
+    case: (tI_out o) => [[|]|].
+    * by move<-; rewrite /timeslice_live masks_setE => /and3P [].
+    * case=> /esym /eqP; rewrite /time_slice muln_eq1 => /andP [_ /eqP r1].
+      by move: runtime_ne1; rewrite r1.
+    * by move<-; rewrite /timeslice_live masks_setE => /and3P [].
+  + case: (cic_tick E1) => -> Tm Tp.
+    rewrite /timeslice_live !Tm !M1 Hdk eqxx /=.
+    move: C1 Hl HC; rewrite E1.
+    case: (tI_out o) => [[|]|].
+    * move<- => Hl _; rewrite masks_setE !Tm !M1.
+      by move: Hl => /= ->.
+    * case=> Hs Hl; rewrite Hs hc_slice //; by rewrite -Hs.
+    * move<- => Hl _; rewrite masks_setE !Tm !M1.
+      by move: Hl => /= ->.
+  + rewrite (cic_none E1) E1 !M1 Hdk eqxx /=.
+    move: C1 Hl; rewrite E1.
+    by case: (tI_out o) => [[|]|] // <-.
+Qed.
+
+Lemma restore_invariant_id w : choice_inv w -> ~~ masks_set w -> restore_invariant w = w.
+Proof.
+move: w => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]].
+case: c => [[|n]|]; move: rs dp dm kp km tp tm => [] [] [] [] [] [] [];
+  vm_compute; intros; solve [discriminate | reflexivity].
+Qed.
+
+Lemma sliced_inv_step (e : [Sum T_in (T_out Opub Opriv)]) v :
+  sliced_inv v ->
+  sliced_inv (state_step (@sliced_preroutine runtime runs Opub Opriv) restore_invariant e v).
+Proof.
+case: e => [i|o] Hv.
+- move: v Hv => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] Hv.
+  by case: i.
+- have -> : state_step (@sliced_preroutine runtime runs Opub Opriv) restore_invariant (inr o) v =
+            initiate_next restore_invariant (choice_state o v) by [].
+  have := choice_inv_step o Hv; move: (choice_state o v) => w Hw.
+  rewrite /initiate_next.
+  case Ms: (masks_set w).
+  + move: Hw; rewrite /choice_inv /sliced_inv Ms => /andP [-> H].
+    by case: (timeslice_live _) H.
+  + rewrite restore_invariant_id //; last by rewrite Ms.
+    case FR: (first_ready w) => [ir|].
+    * move: w {Hw Ms FR} => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]].
+      by case: ir; case: cur => [b|m]; case: c => [[|n]|].
+    * have NL : ~~ timeslice_live (get_ir_count w).
+        apply/negP => L; move: Hw FR; rewrite /choice_inv L Ms /= => /andP [_ /and4P [Hp _ _ Hdm]].
+        have Rd : ir_ready w DefaultInterrupt by rewrite /ir_ready Hp Hdm.
+        rewrite /first_ready /=.
+        by case: (ir_ready w TimerInterrupt); case: (ir_ready w DiskInterrupt); rewrite ?Rd.
+      have Hinv : sliced_inv w by move: Hw; rewrite /choice_inv /sliced_inv (negbTE NL).
+      move: w Hinv {Hw Ms FR NL} => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] Hinv.
+      by case: (is_handler_pid _); first case: (get_re_sched _).
+Qed.
+
+(* The state after any sequence of events, starting from [initial_state_sliced]. *)
+Definition sliced_run (es : seq [Sum T_in (T_out Opub Opriv)]) :=
+  foldl (fun v e => state_step (@sliced_preroutine runtime runs Opub Opriv) restore_invariant e v)
+        initial_state_sliced es.
+
+Lemma sliced_run_inv es : sliced_inv (sliced_run es).
+Proof.
+rewrite /sliced_run; elim/last_ind: es => [|es e IH] //.
+by rewrite foldl_rcons; apply: sliced_inv_step.
+Qed.
+
+Theorem restore_invariant_noop es o :
+  ~~ masks_set (choice_state o (sliced_run es)) ->
+  restore_invariant (choice_state o (sliced_run es)) = choice_state o (sliced_run es).
+Proof. by apply: restore_invariant_id; apply: choice_inv_step; apply: sliced_run_inv. Qed.
+
+End SlicedInvariant.
 
 
 (* === 9. model_sliced_userview === *)
@@ -711,7 +930,7 @@ Lemma handler_completed_reachable n :
 Proof. by case: n => [|[|[|[|[|n]]]]]. Qed.
 
 
-(* === 11. Adequacy: example traces ===
+(* === 11. Example traces ===
 
    Each model is exercised on two runs of the concrete system: one with no disk
    interrupt and one with a disk interrupt arriving at the same point.  Reading

@@ -1,0 +1,148 @@
+% Draft for IEEE CSF, translated from the repository documentation (README.md,
+% docs/*.md).  Class: IEEEtran in conference mode, as CSF requires.
+% TODO: check the current CSF call for the page limit and whether submissions
+% must be anonymised (if so, replace the author block below).
+\PassOptionsToPackage{obeyspaces,spaces}{url}
+\documentclass[conference]{IEEEtran}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\hypersetup{colorlinks,linkcolor=black,citecolor=black,urlcolor=blue!50!black}
+\usepackage[capitalise,nameinlink]{cleveref}
+
+% ---------------------------------------------------------------- listings
+\lstdefinelanguage{Coq}{
+  morekeywords={match,with,end,if,then,else,let,in,fun,forall,exists,
+    Definition,Lemma,Theorem,Inductive,Fixpoint,Record,is},
+  sensitive=true,
+  morecomment=[s]{(*}{*)},
+}
+\lstset{
+  language=Coq,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{black!60},
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  xleftmargin=1em,
+  escapeinside={(@}{@)},
+}
+% \code{name} typesets an identifier from the source.  It is a url-style command,
+% so underscores need no escaping and long names may break after an underscore.
+\DeclareUrlCommand\code{\urlstyle{tt}}
+\makeatletter
+\g@addto@macro\UrlBreaks{\do\_}
+\Urlmuskip=0mu\relax  % no letter-spacing in justified columns
+\makeatother
+\emergencystretch=1.5em
+
+% ---------------------------------------------------------------- macros
+\newcommand{\Proc}[2]{\mathsf{Proc}\;#1\;#2}
+\newcommand{\NI}{\mathsf{NI}}
+\newcommand{\rel}{\mathsf{rel}}
+\newcommand{\dis}{\mathsf{dis}}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+% ---------------------------------------------------------------- mechanisation
+% Every link to the mechanisation goes through \mech, so the target is set here
+% and nowhere else.  \anonymoustrue for submission (Anonymous GitHub mirror of the
+% repository), \anonymousfalse for the camera-ready (the repository itself).
+% For now the links point to the public repository; switch to \anonymoustrue once
+% the mirror exists and its id is filled in below.
+\newif\ifanonymous
+\anonymousfalse
+\ifanonymous
+  % TODO: replace XXXX by the id Anonymous GitHub assigns.
+  \newcommand{\repobase}{https://anonymous.4open.science/r/NonInterference-XXXX}
+  \newcommand{\repofile}[1]{\repobase/#1}
+\else
+  \newcommand{\repobase}{https://github.com/Tirore96/NonInterference}
+  \newcommand{\repofile}[1]{\repobase/blob/main/#1}
+\fi
+% \m{name}: the Rocq name, linked to the line that defines it.  File and line come
+% from mechlinks.tex, which mechlinks.py regenerates from ../theories/*.v before
+% every latexmk build, so line numbers stay current.  A name not in the table is
+% typeset without a link and reported as a warning.
+\newcommand{\mechdef}[3]{%
+  \expandafter\def\csname mechfile@#1\endcsname{#2}%
+  \expandafter\def\csname mechline@#1\endcsname{#3}}
+\DeclareRobustCommand{\m}[1]{%
+  \ifcsname mechfile@#1\endcsname
+    \href{\repofile{\csname mechfile@#1\endcsname}\#L\csname mechline@#1\endcsname}{\code{#1}}%
+  \else
+    \code{#1}\PackageWarning{mechlinks}{No definition found for `#1'}%
+  \fi}
+% \mechfile{path}{text}: link to a whole file of the mechanisation.
+\newcommand{\mechfile}[2]{\href{\repofile{#1}}{\code{#2}}}
+\input{mechlinks}
+
+% IEEEtran defines no theorem environments.
+\newtheorem{theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+
+\begin{document}
+
+\title{Timing-Sensitive Non-Interference\\for Interrupt Handling,\\
+  Compositionally and Mechanically}
+
+% TODO: complete the author list and affiliations.
+\author{\IEEEauthorblockN{Willard Rafnsson}
+\IEEEauthorblockA{IT University of Copenhagen, Denmark\\
+wilr@itu.dk}
+\and
+\IEEEauthorblockN{Dawit Tirore}
+\IEEEauthorblockA{IT University of Copenhagen, Denmark\\
+dati@itu.dk}}
+
+\maketitle
+
+\begin{abstract}
+The security of a computer system rests on its operating system, which ties
+software to hardware and decides which process runs, when, and on whose behalf. A key part of
+this is interrupt handling. Servicing an interrupt takes time away from whichever
+process was scheduled. If a public process keeps issuing requests whose results an
+attacker can see, the handler shows up as a gap in that stream, and the attacker
+learns that the interrupt occurred. Such timing leaks through
+interrupt handling arise in several operating systems
+\todo{examples, with citations}. Leaks of this kind are studied in information flow
+control, where their absence is stated as non-interference. In this paper we use
+the process calculus of Rafnsson et al.\ to model interrupt handling as a process,
+and prove in Rocq that it is interfering: a secret disk interrupt is observable
+through the schedule alone. We then model the corresponding non-interfering
+variant, obtained by altering how interrupts are processed: they are serviced only
+inside publicly timed slices, and unused slice time is filled with a dummy handler.
+We prove it timing-sensitive non-interfering for any scheduler and user processes
+that are themselves non-interfering. The implementation of the modified interrupt
+processing is carried out in separate work \todo{cite X}.
+\end{abstract}
+
+\begin{IEEEkeywords}
+non-interference, timing channels, interrupts, process calculi, compositional
+verification, Rocq
+\end{IEEEkeywords}
+
+\input{sections/intro}
+\input{sections/background}
+\input{sections/model}
+\input{sections/designs}
+\input{sections/proof}
+\input{sections/generality}
+\input{sections/mechanisation}
+\input{sections/related}
+\input{sections/conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

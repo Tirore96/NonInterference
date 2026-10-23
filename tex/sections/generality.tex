@@ -1,0 +1,65 @@
+\section{How General the Result Is}\label{sec:generality}
+
+\Cref{thm:main} is not about one system. Discharging the section variables of the
+mechanisation, it reads in full:
+\begin{lstlisting}
+forall (Opub Opriv : Ty) (runtime runs : nat)
+       (p_pub : Proc Empty Opub)
+       (p_priv : Proc THandlerOutput Opriv)
+       (p_sched : Proc Empty Nat),
+  NI (public_equiv Empty) (public_equiv Opub)
+     p_pub ->
+  NI (private_equiv THandlerOutput)
+     (private_equiv Opriv) p_priv ->
+  NI (public_equiv Empty) (public_equiv Nat)
+     p_sched ->
+  NI in_equiv (out_equiv Opub Opriv)
+     (model_sliced runtime runs
+                   p_pub p_priv p_sched)
+\end{lstlisting}
+Everything the pool is built around stays fixed; everything it carries is left
+open (\cref{tab:open}). The side conditions are the expected ones: the mechanism
+cannot make a leaking process secure, so each slot is assumed non-interfering at its
+own classification, and the theorem says that composing them through this mechanism
+leaks nothing further. The handler length and slice size carry no side condition,
+because the slice is \emph{defined} as $\mathit{runs}\cdot\mathit{runtime}$ and so
+ends on a handler boundary by construction.
+
+\begin{table}[t]
+\centering
+\caption{What \cref{thm:main} leaves open.}
+\label{tab:open}
+\footnotesize
+\begin{tabularx}{\columnwidth}{@{}lLl@{}}
+\toprule
+parameter & ranges over & side condition \\
+\midrule
+\code{p_pub} & any public user process & $\NI$ at \m{public_equiv} \\
+\code{p_priv} & any private user process & $\NI$ at \m{private_equiv} \\
+\code{p_sched} & any scheduler & $\NI$ at \m{public_equiv} \\
+\code{Opub}, \code{Opriv} & the user processes' output alphabets & none \\
+\code{runtime} & handler length & none \\
+\code{runs} & handler runs per slice & none \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Two features of the design make this possible. The state update never reads the
+\emph{value} a user slot emits, only whether it emitted (the scheduler-output test
+inspects the user slots for \code{None} and nothing more), so no user behaviour reaches
+the schedule. And the state obligation \m{fv_NI} never mentions the slot processes, so
+the one hard obligation is unaffected by what fills them.
+
+What stays fixed is the mechanism under study, the three handlers, and the shape of
+the pool around it: six slots in a fixed order. The order is hard-wired in the
+projections that read the pool's output, and varying the number of user slots would
+change the state transition and with it the proof of \m{fv_NI}.
+
+\paragraph{Levels} We have read levels as two. The mechanisation works over an
+arbitrary bounded lattice, where a characterised equivalence must also be monotone
+downwards (what a level relates stays related below it, and likewise for
+unobservability), and $\NI$ quantifies over every level. Nothing in the proof depends
+on the lattice having two points, because every equivalence in the models
+distinguishes $\bot$ from all other levels and nothing more. The level case splits
+in the proof are $l = \bot$ against $l \neq \bot$, and the second case covers every
+other level of any lattice at once.

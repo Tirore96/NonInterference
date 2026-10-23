@@ -1,0 +1,109 @@
+\section{Introduction}\label{sec:intro}
+
+The security of a computer system rests on its operating system. The operating
+system ties software to hardware: it owns the devices, decides which process runs and when, and stands
+between processes that must not learn about each other. Whatever an operating
+system lets one process observe about another is a potential leak, and that
+includes \emph{when} things happen, not only what values are computed.
+
+A key part of this mediation is interrupt handling. Interrupts are how an operating
+system learns that something happened: a disk transfer completed, a packet arrived,
+a timer expired. Some of these events are secret. Whether a particular process just
+received data from the disk may reveal what it is doing, so an operating system
+that keeps such an event secret has to hide not only the data it carries but also
+the fact that it happened at all.
+
+Ordinary interrupt handling does not hide it. When the interrupt arrives, its
+handler runs at once, displacing whatever process was scheduled; the handler takes
+a few steps, and then the displaced process resumes. Suppose a public process keeps
+issuing requests whose results an attacker can see. While the handler runs, those
+requests stop, and the attacker sees a gap in the stream exactly as long as the
+handler (\cref{fig:leak}). The interrupt has leaked through the \emph{schedule}.
+Timing leaks through interrupt handling of this kind arise in several operating
+systems \todo{examples, with citations}.
+
+\begin{figure}[t]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+step & 1 & 2 & 3 & 4 \\
+\midrule
+no disk interrupt   & \code{Get} & \code{Get} & \code{Get} & \code{Get} \\
+with disk interrupt & \code{Get} & ---   & ---   & \code{Get} \\
+\bottomrule
+\end{tabular}
+\caption{What the attacker sees of the public process under ordinary interrupt
+  handling. The disk handler runs at steps 2 and 3, and the two public requests due
+  then never arrive. The attacker never sees the handler; it sees the gap.}
+\label{fig:leak}
+\end{figure}
+
+Leaks of this kind are the subject of information flow
+control~\cite{sabelfeld2003}, where the absence of a leak is stated as
+non-interference~\cite{goguen1982}: varying what the attacker may not see must not
+change what it does see. For timing leaks, ``what it sees'' must include when each
+output appears~\cite{agat2000}.
+
+In this paper we use the process calculus of Rafnsson, Jia and
+Bauer~\cite{rafnsson2017} to state and prove such properties of interrupt handling.
+Its notion of non-interference is timing-sensitive, and its non-interference
+theorems compose: if the parts of a process are non-interfering at suitable
+equivalences, so is the whole. We model an operating system with interrupt handling
+as one closed process in this calculus. Inside it, the two user processes (one
+public, one private), the scheduler and one handler per kind of interrupt run as
+concurrent processes in a pool, and a global state, holding the interrupt
+controller, decides at each step which of them runs. Interrupts arrive as inputs to
+the whole system, and at each step the pool emits the output of the process that
+ran. We prove in
+Rocq\footnote{The mechanisation is available at \url{\repobase}.} that ordinary
+interrupt handling is interfering (\m{model_immediate_not_NI}): the leak of
+\cref{fig:leak} is a counterexample.
+
+We then model the corresponding non-interfering variant, obtained by altering how
+interrupts are processed. The idea is to take away a secret interrupt's power to
+choose \emph{when} its handler runs. Interrupts are serviced only inside time slices
+opened by the public timer, every handler run takes the same number of steps, and
+any part of a slice that no real interrupt claims is filled with a dummy ``NOP''
+handler. A secret handler run then replaces a NOP run instead of displacing a user
+process, and the public schedule is the same whether or not the interrupt occurred.
+We prove this variant non-interfering (\m{model_sliced_NI}), even to an attacker who
+sees, at every step, which process in the pool ran, the scheduler and the handlers
+included. The two designs are instances of a single generic model and differ only
+in three arguments. The result is general in two ways. It holds for every scheduler
+and every pair of user processes that are themselves non-interfering. And it holds
+for every choice of the two numbers that fix the timing of the design: the number
+of steps one handler run takes, and the number of handler runs that fit in one
+time slice.
+
+The model fixes \emph{what} the modified interrupt processing must do; how to
+implement it in an operating system is carried out in separate work
+\todo{cite X}.
+
+\paragraph{Contributions}
+\begin{itemize}
+\item A mechanised, timing-sensitive non-interference proof for interrupt handling
+  (\cref{sec:designs,sec:proof}), and a mechanised counterexample for the ordinary
+  design (\cref{sec:leak}). The proof is compositional: it applies one generic
+  theorem per constructor of the model, and leaves one substantial obligation
+  specific to interrupt handling (\cref{sec:fvni}).
+\item Requirements on any implementation of interrupt handling that is to be
+  non-interfering, forced by the proof rather than chosen by us
+  (\cref{sec:proof}). The arrival of a secret interrupt may only record that it is
+  pending; every decision it influences, such as starting its handler, must be
+  deferred to a point fixed by public time. Whether a secret handler ran must be
+  indistinguishable from whether a dummy handler ran, so the time reserved for
+  handlers must be fixed in advance and always used up. And the interrupt
+  controller must be split by secrecy: which interrupts are pending is secret,
+  while the masks that decide what runs next may depend only on public
+  information. The implementation in \todo{cite X} follows these requirements.
+\item A mechanisation of the calculus and its composition theorems. Our
+  definitions depart from the original in four places, and for each we prove that
+  the departure changes nothing or only weakens a side condition
+  (\cref{sec:mechanisation}).
+\end{itemize}
+
+\Cref{sec:background} recalls the calculus and the definition of non-interference.
+\Cref{sec:model} presents the generic model and \cref{sec:designs} the two designs.
+\Cref{sec:proof} gives the proof, \cref{sec:generality} states precisely how general
+it is, and \cref{sec:mechanisation} describes the mechanisation.
+\Cref{sec:related,sec:conclusion} discuss related work and limitations.

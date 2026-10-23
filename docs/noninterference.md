@@ -3,7 +3,9 @@
 *Prose companion to [`theories/noninterference.v`](../theories/noninterference.v).*
 
 [`models.md`](models.md) describes the three models; this document gives the
-security argument. Definitions are as given in
+security argument. It builds on [`background.md`](background.md), which sets out the
+characterised equivalences, `NI`, the generic equivalences such as `eqpair` and
+`eqmaybe`, and the composition theorems. Definitions are as given in
 [`definitions.v`](../theories/definitions.v) and
 [`noninterference.v`](../theories/noninterference.v).
 
@@ -15,165 +17,15 @@ security argument. Definitions are as given in
 
 ## Contents
 
-1. [Characterised equivalences (`cEquiv`): the framework and levels](#1-characterised-equivalences-cequiv-the-framework-and-levels)
-2. [Base equivalences: `public_equiv`, `private_equiv`](#2-base-equivalences-public_equiv-private_equiv)
-3. [Composite equivalences](#3-composite-equivalences)
-4. [The model's equivalences: `in_equiv`, `out_equiv`, `out_equiv_userview`](#4-the-models-equivalences-in_equiv-out_equiv-out_equiv_userview)
-5. [`model_immediate` is not non-interfering](#5-model_immediate-is-not-non-interfering)
-6. [`model_sliced` and `model_sliced_userview` are non-interfering](#6-model_sliced-and-model_sliced_userview-are-non-interfering)
-7. [The state equivalence and `fv_NI`: the hard part](#7-the-state-equivalence-and-fv_ni-the-hard-part)
-8. [How general the result is](#8-how-general-the-result-is)
-9. [Model limitations](#9-model-limitations)
+1. [The model's equivalences: `in_equiv`, `out_equiv`, `out_equiv_userview`](#1-the-models-equivalences-in_equiv-out_equiv-out_equiv_userview)
+2. [`model_immediate` is not non-interfering](#2-model_immediate-is-not-non-interfering)
+3. [`model_sliced` and `model_sliced_userview` are non-interfering](#3-model_sliced-and-model_sliced_userview-are-non-interfering)
+4. [The state equivalence and `fv_NI`: the hard part](#4-the-state-equivalence-and-fv_ni-the-hard-part)
+5. [How general the result is](#5-how-general-the-result-is)
+6. [Model limitations](#6-model-limitations)
 
 
-## 1. Characterised equivalences (`cEquiv`): the framework and levels
-
-One `cEquiv` ([`definitions.v`](../theories/definitions.v)) is fixed for the input
-type and one for the output type. Each carries two level-indexed fields, which
-together say what an observer at a given level can tell about values of that type:
-
-```text
-rel l x y   x and y are indistinguishable to an observer at level l
-dis l x     x is unobservable at level l, so non-interference is allowed
-            to vary it freely
-```
-
-Levels form a lattice, and the attacker sits at its least level `⊥`. Both fields are
-monotone downwards: whatever a level relates stays related below it, and whatever is
-unobservable at a level stays unobservable below it. A lower observer sees less.
-
-The remaining fields give the record its name. `rel l` is an **equivalence**, so at
-each level it partitions the type into classes; and `dis l` is **characterised** as
-one of them:
-
-```text
-dis l a0  ->  forall a1, dis l a1 <-> rel l a0 a1
-```
-
-Take any unobservable value. The values related to it are the other unobservable
-ones and nothing else. So at each level a `cEquiv` cuts the type into classes an
-observer there cannot tell apart, and one of them is the **distinguished class**,
-the one the observer does not see at all. That class is empty whenever the level
-hides nothing, as under `public_equiv` below, and the characterisation holds
-vacuously there.
-
-Bundling the two fields into one record, with the characterisation as a field, is
-the mechanisation's own choice; the paper states the same information as
-*L-equivalences* ([`departures.md` §1](departures.md)). Both records, the
-translations between them, and the statement that the choice does not change which
-processes are non-interfering (`NI_lEquiv`) are in
-[`adequacy.v`](../theories/adequacy.v).
-
-The two fields are not used symmetrically. `NI` licenses inserting and deleting
-inputs only, so `dis IRel` is what its insertion and deletion clauses turn on, while
-outputs are compared through `rel ORel` alone. An output type is given a `cEquiv`
-because that is the one record the theorems consume, and its distinguished class
-then serves only to say which outputs are indistinguishable.
-
-### What `NI` says
-
-```coq
-NI IRel ORel p := forall l, NI_l IRel ORel l p
-```
-
-and `NI_l` ([definitions.v:229](../theories/definitions.v)) is three clauses, all
-quantified over traces `t` and positions `n`, with `insert n (inl i) t` placing an
-input `i` at position `n`:
-
-| clause | statement | reading |
-|---|---|---|
-| substitution | `rel IRel l i i'` → `Trace (insert n i t)` → `Trace (insert n i' t)` | swapping an input for an indistinguishable one keeps it a trace |
-| insertion | `dis IRel l i` → `Trace t` → `Trace (insert n i t)` | an unobservable input may be added anywhere |
-| deletion | `dis IRel l i` → `Trace (insert n i t)` → `Trace t` | and removed again |
-
-Traces are compared through `ORel` at `l`, so outputs are determined only up to
-`rel ORel l`. Together the clauses say that the set of traces visible at `l` is
-unchanged by anything the observer at `l` may not see. The case that matters is
-`l = ⊥`; the counterexample of section 5 refutes the *insertion* clause.
-
-The paper states the same property as a coinductive simulation over streams,
-applying its clauses at the head and reaching later positions by coinduction rather
-than at a position `n` directly. That definition is mechanised as `PNI` in
-[`adequacy.v`](../theories/adequacy.v), where `NI_paper` proves the two hold of the
-same processes ([`departures.md` §2](departures.md)).
-
-
-## 2. Base equivalences: `public_equiv`, `private_equiv`
-
-**public** and **private** name a whole `cEquiv`, the one a type is given, whereas
-**unobservable** is the per-level property `dis l x`. ("Secret" is used informally
-for unobservable at `⊥`.)
-
-```text
-public_equiv A    dis l x = False        rel l x y = (x = y)
-private_equiv A   dis l x = (l = ⊥)      rel l x y = (l ≠ ⊥ ∧ x = y) ∨ (l = ⊥)
-```
-
-These are the two extremes of the class picture of section 1. Under `public_equiv`
-every class is a singleton and the distinguished class is empty. At any level, then,
-a public value can be neither inserted, removed, nor varied without an observer
-noticing. Under `private_equiv` the whole type collapses to a single class at `⊥`,
-and that class is the distinguished one. Non-interference may therefore insert,
-remove or replace such a value freely. At every other level `private_equiv` is
-`public_equiv`: singleton classes, and the distinguished class empty.
-
-
-## 3. Composite equivalences
-
-Each family is one construction that takes *which values are secret* as a parameter.
-The variants below are that one construction at different values of the parameter.
-The rest follows from the characterisation of section 1: values of the same shape
-are related componentwise, and values of different shape only by both being secret.
-
-**`eqpair IRel ORel : cEquiv [Times I O]`** relates pairs componentwise:
-`(a,b) ~ (a',b')` iff `a ~ a'` and `b ~ b'`. Nothing is secret (`dis = False`).
-The model's own equivalences are built from this one, so it stays a definition in
-its own right rather than an instance carrying a secrecy case that never fires.
-
-**`eqpair_L` / `eqpair_R` / `eqpair_LR`** (`eqpair_aux`) are the gated variants,
-where the *pair* may be secret and two related states can then differ there:
-
-```text
-eqpair_L   secret at l iff the LEFT component is (the right is irrelevant)
-eqpair_R   secret at l iff the RIGHT component is
-eqpair_LR  secret at l iff BOTH components are
-```
-
-**`eqsum IRel ORel : cEquiv [Sum I O]`** and **`eqsum_L`** (`eqsum_aux`) relate a
-`Sum` tag-by-tag, `inl` by `IRel` and `inr` by `ORel`. Neither ever relates an
-`inl` to an `inr`, so the *tag* stays public even when the payload underneath is
-not; an `inr` is never secret. They differ only in the `inl` case:
-
-```text
-eqsum      nothing is secret
-eqsum_L    an inl is secret exactly when its payload is
-```
-
-`eqsum_L` is the one the state cell uses (section 7a), where it makes `f_EP` a
-condition on the input summand alone.
-
-**`eqmaybe VRel` and variants (`eqmaybe_private` / `eqmaybe_hidden` / `eqmaybe_swi`,
-via `eqmaybe_aux`)** relate `Option` values. On `Some`/`Some` they defer to
-`VRel`; they differ only in a level-predicate `P l` = "the observer at `l` can
-see `None`", `None` being secret exactly when `¬P l`:
-
-```text
-eqmaybe          P l = True        None is public: everyone can see it.
-eqmaybe_private  P l = (l ≠ ⊥)     everyone but ⊥ can see None; None is secret
-                                   only at the attacker level ⊥ -- the same
-                                   condition as private_equiv.
-eqmaybe_hidden   P l = False       nobody can see None; None is secret at every
-                                   level (a value whose very presence is hidden).
-eqmaybe_swi      P l = aware BRel  those who are "aware" per an equivalence BRel
-                                   can see None; used to gate a switch branch.
-```
-
-The mixed case follows from the characterisation (section 1): `Some v ~ None` at
-`l` iff both are secret there, i.e. iff `¬P l` and `dis VRel l v`. `None` can stand
-in for `Some v` only when `v` is itself a secret the observer may not see.
-
-
-## 4. The model's equivalences: `in_equiv`, `out_equiv`, `out_equiv_userview`
+## 1. The model's equivalences: `in_equiv`, `out_equiv`, `out_equiv_userview`
 
 **`in_equiv : cEquiv [T_in]`** is built from `ir_dis` rather than taken as
 `private_equiv TInterrupt`:
@@ -224,7 +76,7 @@ observation.
 
 For `p_priv_concrete` hiding the value is enough, since when it runs is public
 anyway. For the two secret handlers the fact of running must go too, which is the
-formal content of "the leak is in the scheduling". Section 6a discharges the
+formal content of "the leak is in the scheduling". Section 3a discharges the
 obligation `eqmaybe_private` creates.
 
 **`out_equiv_userview Opub Opriv : cEquiv [T_out_userview Opub Opriv]`**
@@ -238,7 +90,7 @@ Only the user-visible channel survives `parse_output`: a public user output on t
 left (exact) or the secret syscall on the right (secret at `⊥`).
 
 
-## 5. `model_immediate` is not non-interfering
+## 2. `model_immediate` is not non-interfering
 
 `model_immediate_not_NI : ~ NI in_equiv out_equivC model_immediate_concrete`.
 
@@ -266,7 +118,7 @@ because a handler runs only at publicly determined slice boundaries, never on
 arrival of its interrupt.
 
 
-## 6. `model_sliced` and `model_sliced_userview` are non-interfering
+## 3. `model_sliced` and `model_sliced_userview` are non-interfering
 
 ```coq
 model_sliced_NI          : NI in_equiv (out_equiv Opub Opriv) model_sliced
@@ -274,7 +126,7 @@ model_sliced_userview_NI : NI in_equiv (out_equiv_userview Opub Opriv)
                               model_sliced_userview
 ```
 
-The arguments of the two models are elided above; section 8 gives one of the
+The arguments of the two models are elided above; section 5 gives one of the
 statements in full. Both hold whenever the three slot processes are themselves
 non-interfering at the classification their slot declares: `p_pub` and the scheduler at
 `public_equiv`/`public_equiv`, `p_priv` at `private_equiv`/`private_equiv`.
@@ -285,7 +137,7 @@ outputs to `out_equiv_userview`-related ones.
 
 Read the two statements here at one system: a scheduler, two user processes, a
 handler length and a slice size. None of those is fixed by the theorem, and
-[section 8](#8-how-general-the-result-is) says precisely what is left open, once the
+[section 5](#5-how-general-the-result-is) says precisely what is left open, once the
 proof below has made clear what the argument rests on.
 
 `model_sliced_NI` is assembled from the generic composition theorems, one per
@@ -296,22 +148,22 @@ from the outside in:
 |---|---|---|
 | the outer `map inl (inr_or_def def)` and every rewiring of an input or output | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
 | `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)`; note input and output equivalences must coincide |
-| `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates; **this is where section 7 is discharged** |
+| `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates; **this is where section 4 is discharged** |
 | `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_hidden IRel) ORel (maybe p)` |
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
-| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`false_equiv`](#6a-gating-a-slot-why-false_equiv-and-where-obliviousness-is-needed) for every public slot |
+| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`false_equiv`](#3a-gating-a-slot-why-false_equiv-and-where-obliviousness-is-needed) for every public slot |
 | the leaves | `out_NI`, or a hypothesis | the handler and padding leaves are constant processes, so `out_NI`; the scheduler and user slots are where the three parametricity hypotheses are consumed |
 | `parse_output` on top of `model_sliced` | `map_NI` again | output weakening, giving `model_sliced_userview_NI` |
 
 Each theorem *derives* the composite's equivalences from those of its parts rather
 than taking them as given, which accounts for the shape of the equivalences in
-section 4: `par_NI` imposes `out_equiv`'s nest of `eqpair`s on a pool output, and
+section 1: `par_NI` imposes `out_equiv`'s nest of `eqpair`s on a pool output, and
 `swi_NI` imposes its `eqmaybe`s on a gated slot.
 
-Two of these layers carry substantial side conditions. `sta_NI`'s are section 7,
+Two of these layers carry substantial side conditions. `sta_NI`'s are section 4,
 and `swi_NI`'s occupy the rest of this one.
 
-### 6a. Gating a slot: why `false_equiv`, and where obliviousness is needed
+### 3a. Gating a slot: why `false_equiv`, and where obliviousness is needed
 
 `par_NI` peels the pool apart into one goal per slot, so it is enough to look at a
 single slot. Each is built the same way ([`models.md` §3](models.md)): a `swi`
@@ -350,9 +202,9 @@ where `ObliviousTrace ORel l o0 s` asks that every output in `s` satisfy
 `rel ORel l o0 o`, for the one reference output `o0`. The observer sees the same
 class whatever the input does, so it learns nothing from the slot either way. Only
 `rel` is involved, which is what non-interference constrains on the output side
-(section 1).
+([`background.md` §2](background.md)).
 
-`cur_pid` is `Sum Bool Nat` classified `eqsum private_equiv public_equiv` (section 7b),
+`cur_pid` is `Sum Bool Nat` classified `eqsum private_equiv public_equiv` (section 4b),
 so at `⊥` every `inl b` is unobservable while `inr n` is not. What `f_PU` demands
 of `BRel` therefore depends on where `slot_pid` sends those two `inl` values, which
 is `1` for `inl true` and `2` for `inl false` ([models.v:222](../theories/models.v)).
@@ -363,17 +215,17 @@ therefore needs a `BRel` in which `false` is unobservable. `false` becomes a sin
 for exactly those pids the observer may not see, none of which select this slot.
 `aware BRel true l` then needs `true` to be observable and rigid at every level.
 `false_equiv`
-([definitions.v:252](../theories/definitions.v)) is exactly that:
+([definitions.v:235](../theories/definitions.v)) is exactly that:
 
 ```text
 false_equiv   dis l b = (b = false ∧ l = ⊥)      rel l b b' = (b = b')
 ```
 
 It is a well-formed `cEquiv` because `false` is its only unobservable value, so at
-`⊥` the distinguished class is the singleton `{false}`, and above `⊥` it is empty
-(section 1). With it, `f_PU` holds, and
+`⊥` the distinguished class is the singleton `{false}`, and at `⊤` it is empty
+([`background.md` §2](background.md)). With it, `f_PU` holds, and
 `false_equiv_aware : forall l, aware false_equiv true l`
-([noninterference.v:230](../theories/noninterference.v)) discharges `swi_NI` by the
+([noninterference.v:238](../theories/noninterference.v)) discharges `swi_NI` by the
 left disjunct at every level, no case split needed.
 
 **The disk handler at slot 1, and the same for the default handler at slot 2.**
@@ -383,8 +235,8 @@ which rules `false_equiv` out and leaves `private_equiv Bool`. But if `true` is
 unobservable at `⊥` then `aware BRel true ⊥` fails by definition, so the left
 disjunct is gone and the proof must split on the level:
 
-- above `⊥`, `private_equiv` collapses to equality, nothing is unobservable, and
-  `aware` applies as before;
+- at `⊤`, `private_equiv` is equality, nothing is unobservable, and `aware` applies
+  as before;
 - at `⊥`, the right disjunct is used, with `None` as the reference output. A step
   where the slot is gated off emits `None` itself, and a step where it runs emits
   `Some o`, so the obligation is `rel (eqmaybe_swi ORel BRel) ⊥ None (Some o)`.
@@ -399,29 +251,21 @@ oblivious_at (eqpair_R BRel ORel) (b0,o0) p l     (* and the slot stays in it *)
 
 Every `Some o` the slot emits is then related to `None` by transitivity through
 `Some o0`. Where the slot's own relation holds by two outputs being unobservable,
-the characterisation of section 1 turns that straight back into relatedness, so no
-step of the argument mentions `dis`.
+the characterisation ([`background.md` §2](background.md)) turns that straight back
+into relatedness, so no step of the argument mentions `dis`.
 
 What the model has to prove is the first line, at `⊥`, with `o0` any handler
 output. `eqmaybe_swi` relates `None` to a `Some` exactly when the observer cannot
 see the gate and the payload is unobservable, so this is where the classification of
-section 4 comes back in: the slot's `private_equiv` payload is what makes a disk
+section 1 comes back in: the slot's `private_equiv` payload is what makes a disk
 handler run and a step where nothing happened the same observation. Under a public
 `None` the two would come apart and obliviousness would fail. Losing awareness at
 `⊥` costs nothing, since the slot's output is private there anyway.
 
 So the distinguished class enters only through how `eqmaybe_swi` *defines*
 relatedness, and never through obliviousness or through `swi_NI`, neither of which
-mentions it ([`departures.md` §4](departures.md)).
-
-That this is a weakening of the paper's condition, and a strict one, is checked in
-[`adequacy.v` §3](../theories/adequacy.v). `ObliviousAt` is the paper's shape, read
-off the states a process can reach rather than the traces it admits, and
-`ObliviousAt_iff` says the two agree. `ObliviousDis` is the paper's condition, that
-every reachable output be unobservable, and `oblivious_of_ObliviousDis` says it
-implies the one used here. The converse fails: under `public_equiv` a constant
-process stays in one class (`oblivious_out_public`) while nothing is unobservable at
-all (`not_ObliviousDis_public`).
+mentions it. The paper asks for more, that every output be unobservable; the
+weakening and its adequacy are in [`departures.md` §4](departures.md).
 
 | slot | process | `BRel` | `swi_NI` discharged by |
 |---|---|---|---|
@@ -429,23 +273,16 @@ all (`not_ObliviousDis_public`).
 | 4 | `p_priv_concrete`, private | `false_equiv` | `aware`, every level |
 | 3 | scheduler | `false_equiv` | `aware`, every level |
 | 0 | timer handler | `false_equiv` | `aware`, every level |
-| 2 | default/NOP handler | `private_equiv` | `oblivious` at `⊥`, `aware` above |
-| 1 | disk handler | `private_equiv` | `oblivious` at `⊥`, `aware` above |
+| 2 | default/NOP handler | `private_equiv` | `oblivious` at `⊥`, `aware` at `⊤` |
+| 1 | disk handler | `private_equiv` | `oblivious` at `⊥`, `aware` at `⊤` |
 
 The line falls between the two secret handlers and everything else.
 `p_priv_concrete` sits on the public side of it: its secrecy travels in the
 `private_equiv` payload inside `eqmaybe_swi`, never in its gate.
 
-> The generic theorems in [`theories/theorems.v`](../theories/theorems.v)
-> mechanise results from separate prior work; the mechanisation replaces the
-> original coinductive definitions over streams with inductive ones over finite
-> traces (`oblivious` above is one such), which avoids constructing streams
-> throughout the proofs. See [`models.md` §0](models.md) for why that loses nothing.
+## 4. The state equivalence and `fv_NI`: the hard part
 
-
-## 7. The state equivalence and `fv_NI`: the hard part
-
-### 7a. What constrains the classification
+### 4a. What constrains the classification
 
 The state transition is driven by an event, which is an interrupt arriving on the
 left or a pool output on the right:
@@ -471,7 +308,7 @@ causes sits in the right summand, on a later output step where the input is no
 longer the thing being varied.
 
 Composition is componentwise, `(f ⊕ g) ∘ (f' ⊕ g') = (f ∘ f') ⊕ (g ∘ g')`, so the two
-summands can be reasoned about separately, which is what section 7c does.
+summands can be reasoned about separately, which is what section 4c does.
 
 `sta_NI` needs two side conditions on this transition, and they push in opposite
 directions:
@@ -485,7 +322,7 @@ f_EP  IRel VRel f       :=  dis IRel l i -> rel VRel l (f i v) v
 `fv_NI` says the transition maps related states to related states. `f_EP`, for
 *equivalence preserving*, asks for more: an input the observer may not see must not
 visibly move the state. Events are related by `eqsum_L in_equiv out_equiv`
-([noninterference.v:514](../theories/noninterference.v)), whose `dis` holds only on
+([noninterference.v:560](../theories/noninterference.v)), whose `dis` holds only on
 the `inl` side, so `f_EP` constrains the left summand and nothing else. It is a
 condition on `set_pending` alone.
 
@@ -507,7 +344,7 @@ mask or moving the slice counter would all disturb fields compared by equality a
 `⊥`. Everything the interrupt causes is deferred to the right summand, where the
 input is no longer the thing being varied.
 
-### 7b. `state_type_equiv`: the resulting classification
+### 4b. `state_type_equiv`: the resulting classification
 
 The state is nested pairs ([`models.md` §5](models.md)), and `state_type_equiv` is the
 matching nest of `eqpair`s:
@@ -535,15 +372,15 @@ Every mask bit is public, which is the formal content of "all masks are public".
 `cur_pid` is the one field whose parts are classified differently, and it is where
 the design is doing its work. `inl b` means a handler is running, with `b`
 selecting which; `inr n` is a user or scheduler pid. Since `eqsum` never relates an
-`inl` to an `inr` (section 3), *that* a handler is running stays visible, and so
-does the pid in `inr n`. What `private_equiv` hides is the `Bool` inside `inl`: at
+`inl` to an `inr` ([`background.md` §4](background.md)), *that* a handler is
+running stays visible, and so does the pid in `inr n`. What `private_equiv` hides is the `Bool` inside `inl`: at
 `⊥`, `inl true` and `inl false` are related, so the disk handler and the
 default/NOP one look alike.
 
 Across two `⊥`-related states, that bit and the `dfl` and `dsk` pending bits are
 the only things allowed to differ.
 
-### 7c. `fv_NI` and the composition-breakdown technique
+### 4c. `fv_NI` and the composition-breakdown technique
 
 The core obligation for `model_sliced` is that `state_type_equiv` is closed under the
 whole transition:
@@ -563,7 +400,7 @@ its three stages, leaving one goal apiece:
 |---|---|---|
 | `set_pending` | input | an arriving interrupt sets a pending bit, and related inputs give related states |
 | `check_scheduler` | output | the scheduler pid is public, so the `cur_pid` update agrees |
-| `handler_preroutine` | output | the slice bookkeeping reads only the public `ir_count` and masks, so it agrees |
+| `handler_preroutine` | output | the slice bookkeeping reads only the public `ir_count` and masks, and writes the same values into both states (the masks, the private NOP pending bit, the public `re_sched`), so it agrees |
 | `initiate_next` | output | related states must pick the same branch of "what runs next"; the hard one, see 7d |
 
 `f_EP` needs no such breakdown. Since `eqsum_L` makes only an `inl` unobservable,
@@ -573,30 +410,42 @@ never comes up.
 Each goal is self-contained, which is the point of splitting. The cost is that a
 stage is proved over *all* pairs of related states. It cannot assume its input came
 from the stage before it, so it must hold even for states no real run produces.
-Section 7d recovers what that loses.
+Section 4d recovers what that loses.
 
-### 7d. `restore_invariant`: putting the forgotten invariant back
+### 4d. `restore_invariant`: putting the forgotten invariant back
 
 Two facts hold of every state `model_sliced` can reach. First, while the time slice
-is live, the NOP (default) handler's pending bit is true, the disk and NOP masks are
-false and the timer mask is true. Second, the disk and NOP masks are always toggled
-together. Because `fv_NI_comp` forgets both, `restore_invariant` writes them back
-into the interrupt controller just before `initiate_next` runs:
+is live and no handler is running, the NOP (default) handler is pending, the disk and
+NOP masks are clear and the timer mask is set; once the slice is over, the disk and
+NOP masks are set. Second, the disk and NOP masks are always toggled together. The
+design maintains both: each handler boundary reopens the masks and queues a NOP run,
+and every mask update touches the disk and NOP masks alike
+([`models.md` §8b](models.md)).
 
-- it sets the controller's flags from `timeslice_live`, restoring "slice live ⇒ NOP
-  pending, disk/NOP unmasked, timer masked". The flags are ORed in, so a state that
-  already has them set is untouched. Since `timeslice_live` reads only the public
-  `ir_count`, the same flags are set in two related states;
-- it forces the default (NOP) mask to equal the disk mask. On any state that
-  already satisfies the invariant this is a no-op, but stated unconditionally it
-  lets the `sta` non-interference argument assume the two masks are in sync without
-  having to recover that fact from an earlier stage.
+`fv_NI_comp` forgets both facts, because each stage is proved over all related
+states. `restore_invariant` writes them back into the interrupt controller just
+before `initiate_next` runs:
+
+- it sets the controller's flags from `timeslice_live`, ORing them in. Since
+  `timeslice_live` reads only the public `ir_count`, the same flags are set in two
+  related states;
+- it forces the default (NOP) mask to equal the disk mask, so the `initiate_next`
+  argument can assume the two are in sync.
 
 The hard `initiate_next` stage can then assume related states take the same branch,
 because `restore_invariant` has already run and made the deciding mask bits agree.
 
+None of this changes the model's behaviour. `restore_invariant_noop`
+([`models.v`](../theories/models.v)) proves that wherever `initiate_next` applies
+`restore_invariant`, after any sequence of events from the initial state, it returns
+the state unchanged. The proof is about the state machine alone: it states the
+invariant, shows every event preserves it, and shows `restore_invariant` is the
+identity on the states where it holds. It assumes `runtime ≠ 1`, for the reason
+given in [`models.md` §8b](models.md). So `restore_invariant` is a device for the
+proof that provably does nothing at run time, rather than a part of the design.
 
-## 8. How general the result is
+
+## 5. How general the result is
 
 Everything up to here has been read at one system. It is worth being precise about
 how much of that system the theorem actually fixes, because the answer is: very
@@ -645,8 +494,19 @@ be assumed.
 - **The pool's own transition never reads a user slot's output value.**
   `is_sched_out` matches `(None,(None,(Some n,_)))`, inspecting the user slots only
   for `None`-ness, so no user behaviour reaches the schedule.
-- **`fv_NI` (section 7) never mentions the slot processes**, so the one hard
+- **`fv_NI` (section 4) never mentions the slot processes**, so the one hard
   obligation is unaffected by what fills them.
+
+**Levels.** These documents read levels as two, the attacker `⊥` and an observer
+`⊤` who sees everything. The mechanisation works over an arbitrary bounded lattice
+(the parameters `d` and `L` of [`definitions.v`](../theories/definitions.v)). There
+a `cEquiv` must also be monotone downwards: whatever a level relates stays related
+below it, and whatever is unobservable at a level stays unobservable below it. `NI`
+quantifies over every level. Nothing in the proofs depends on the lattice having two
+points, because every equivalence in the models distinguishes `⊥` from all other
+levels and nothing more. The level case splits in the proof (section 3a) are
+`l = ⊥` against `l ≠ ⊥`, and the second case covers every other level of any
+lattice at once.
 
 **What stays fixed.** The three interrupt handlers, which are the mechanism under
 study, and the shape of the pool around them: six slots, the last of them padding.
@@ -660,22 +520,25 @@ Varying the count changes the state transition and lands inside `fv_NI`.
 `model_sliced_concrete_NI` and `model_sliced_userview_concrete_NI`. The refutation
 goes the other way: `model_immediate` is open in exactly the same parameters, but a
 counterexample need exhibit only one system, so `model_immediate_not_NI` is stated
-at `model_immediate_concrete` (section 5).
+at `model_immediate_concrete` (section 2).
 
 
-## 9. Model limitations
+## 6. Model limitations
 
 Two simplifications keep the proof tractable. Both are limitations of the model
 rather than of the technique, and either could be lifted at the cost of a harder
-`fv_NI` (section 7).
+`fv_NI` (section 4).
 
 **(a) Only one secret interrupt.** The NOP (default) handler exists purely for
-privacy, as the disk handler's indistinguishable partner, and has no interrupt of
-its own. Several secret interrupts would need a correspondingly richer
+privacy, as the disk handler's indistinguishable partner, and the design schedules
+it itself, at every handler boundary. `DefaultInterrupt` is nonetheless an input,
+because the same type names the handler's bits in the interrupt controller; the
+environment delivering it is a public event that sets a private pending bit, and the
+proof covers it. Several secret interrupts would need a correspondingly richer
 indistinguishability argument.
 
 **(b) Same-length handler execution.** Every handler runs for the same fixed number
-of output steps, which is what lets all masks be public (7b). Handlers finish on
+of output steps, which is what lets all masks be public (4b). Handlers finish on
 public time-slice boundaries, never after a secret-dependent number of steps, so
 the mask bits never encode secret timing.
 
@@ -694,3 +557,8 @@ for:
   unmodelled ([`models.md` §3](models.md)).
 - **No interrupt nesting.** All masks are set while a handler runs, so a handler can
   never itself be interrupted.
+- **One-step handlers are degenerate.** At `runtime = 1` a slice loses its last
+  handler run: the boundary that should start it ticks the counter to `Some 0` in
+  the same step, so the slice already reads as over. Non-interference still holds,
+  since it says nothing about how many runs a slice contains, but
+  `restore_invariant_noop` excludes this case ([`models.md` §8b](models.md)).

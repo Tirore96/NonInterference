@@ -1,0 +1,80 @@
+\section{Mechanisation}\label{sec:mechanisation}
+
+The development is about 6{,}000 lines of Rocq 9.0.1, available at
+\url{\repobase}, using Mathematical
+Components~\cite{mathcomp} and, for the coinductive definitions of the original
+paper, paco~\cite{paco} (\cref{tab:files}).
+
+\begin{table}[t]
+\centering
+\caption{The development.}
+\label{tab:files}
+\footnotesize
+\begin{tabularx}{\columnwidth}{@{}lrL@{}}
+\toprule
+file & lines & contents \\
+\midrule
+\mechfile{theories/definitions.v}{definitions.v} & 896 & the calculus, traces, $\NI$, the equivalences \\
+\mechfile{theories/theorems.v}{theorems.v} & 1358 & the composition theorems \\
+\mechfile{theories/models.v}{models.v} & 1109 & the generic model, both designs, \cref{thm:noop}, example traces \\
+\mechfile{theories/noninterference.v}{noninterference.v} & 1757 & the model's equivalences, \cref{thm:leak,thm:main} \\
+\mechfile{theories/adequacy.v}{adequacy.v} & 953 & the original definitions and the adequacy results \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Types} Input and output types range over an inductive universe \m{Ty} of
+codes, interpreted into \code{Set}, rather than over \code{Set} directly. This makes
+reductions invertible, which the negative result needs: refuting non-interference
+means showing that a trace is \emph{not} admitted.
+
+\paragraph{Axioms} \Cref{thm:leak} rests on \code{eq_rect_eq} and on the two
+parameters that fix the security lattice; \cref{thm:main} and its corollary also
+use excluded middle, in exactly one place. A premise of \m{swi_NI} case-splits on
+awareness, which is not constructively decidable in general; a decision procedure
+for it would remove the axiom. \Cref{thm:noop} uses no axioms.
+
+\subsection{Departures from the original definitions}\label{sec:departures}
+
+Mechanising the calculus changed four definitions (\cref{tab:departures}). For each,
+the original is written out in \code{adequacy.v} and related to ours; that file depends
+only on the definitions, nothing depends on it, and it uses no axioms beyond the
+lattice parameters.
+
+\begin{table*}[t]
+\centering
+\caption{The four departures from the original paper, and the results relating
+  them. Departures 2 and 3 compose: \m{NI_paper} states that the original
+  definition and ours hold of the same processes.}
+\label{tab:departures}
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}lLLl@{}}
+\toprule
+ & original & here & result \\
+\midrule
+1 & L-equivalences: an equivalence on values extended with a distinguished element
+  & \m{cEquiv}: separate $\rel$ and $\dis$ fields tied by the characterisation law
+  & \m{NI_lEquiv} \\
+2 & a coinductive simulation, four clauses applied at the head of a stream
+  & three closure clauses, at an arbitrary position
+  & \m{PNI_of_SNI}, \m{SNI_of_PNI} \\
+3 & infinite streams of labels & finite traces & \m{NI_SNI} \\
+4 & obliviousness: every reachable output unobservable
+  & every output in one class & \m{oblivious_of_ObliviousDis} \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+Departures 1 to 3 change nothing: the two versions hold of exactly the same
+processes. Departure 1 needs no choice principle, because the original's
+distinguished element is adjoined to the value set rather than chosen from it.
+Departure 3 rests on two properties: finite and infinite behaviour determine each
+other, which needs reduction to be deterministic (to assemble finite runs into one
+infinite run) and total (to continue a finite run); and insertion commutes with
+taking prefixes. Departure 4 is a strict weakening of a side condition of \m{swi_NI}:
+the original condition implies ours, and a constant process under \m{public_equiv}
+satisfies ours but not the original. It is the weakening that lets \m{swi_NI} and the
+obliviousness argument of \cref{sec:gating} avoid unobservability altogether.
+
+These results concern definitions. The composition theorems were proved afresh for
+our definitions; the original paper's proofs were not replayed.

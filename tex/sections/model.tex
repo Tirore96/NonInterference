@@ -1,0 +1,119 @@
+\section{An Operating System as One Process}\label{sec:model}
+
+Both designs are instances of one generic model, an operating system written as a
+single closed process:
+\begin{lstlisting}
+model runtime init handler_preroutine
+      restore_invariant p_pub p_priv p_sched =
+  reactive_system init
+    (state_step handler_preroutine
+                restore_invariant) def
+    (pool runtime p_pub p_priv p_sched)
+    pool_input
+  : Proc T_in (T_out Opub Opriv)
+\end{lstlisting}
+At its centre is a \emph{process pool} of six slots. A \emph{stateful wrapper}
+closes the pool into a self-driving whole: it threads a global state, and on every
+step decides whose turn it is. The model receives interrupts and, on each output
+step, emits a tuple holding every slot's value. Nothing in it is committed to a
+security design; that is the job of the three arguments \code{init},
+\code{handler_preroutine} and \m{restore_invariant} (\cref{sec:parameters}).
+
+\subsection{The pool}
+
+\Cref{tab:slots} lists the slots. The three handlers reuse one process,
+\code{ir_handler runtime}, which counts its output steps modulo \code{runtime} and emits
+\code{Notify} on the step that completes a run and \code{Nothing} otherwise; every handler run
+is therefore exactly \code{runtime} steps long. The scheduler and the two user processes
+are arguments of the model. Only the private user process takes an input, the disk
+handler's output, so that it can react to a disk event.
+
+\begin{table*}[t]
+\centering
+\caption{The six slots of the pool.}
+\label{tab:slots}
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}clllL@{}}
+\toprule
+slot & process & input & output & classification \\
+\midrule
+0 & timer handler & \code{Empty} & \code{THandlerOutput} & public \\
+1 & disk handler & \code{Empty} & \code{THandlerOutput} & secret, and so is whether it ran \\
+2 & default (NOP) handler & \code{Empty} & \code{THandlerOutput} & secret, and so is whether it ran \\
+3 & scheduler & \code{Empty} & \code{Nat} & public \\
+4 & private user process & \code{THandlerOutput} & \code{Opriv} & value secret \\
+5 & public user process & \code{Empty} & \code{Opub} & public \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+The generic procedure \m{process_pool} wires the slots into one process. Each slot is
+a \code{swi} whose gate bit is computed from the current process identifier (pid): the
+slot whose index matches the pid emits its value, and every other slot emits \code{None}.
+Each slot's output is tagged with the constant \code{true}, which closes its switch after
+one output step, so a selected process takes exactly one step and then waits to be
+selected again. \code{par} lays the slots side by side. On every output step, then,
+exactly one slot is \code{Some}, and the attacker's view of the output says which process
+ran.
+
+The pid type is $\mathsf{Sum}\;\mathsf{Bool}\;\mathsf{Nat}$. Its \code{inl} side holds
+exactly the two secret handlers, the disk handler and the NOP handler, and its \code{inr}
+side everything else, the timer handler included. Drawing the line there lets the
+proof classify a whole pid in one place (\cref{sec:state-equiv}).
+
+\subsection{The stateful wrapper and the state}
+
+\m{reactive_system} adds a global state cell (\code{sta}) and a feedback loop (\code{loop})
+around the pool. An external interrupt does not make the pool step; it only updates
+the state. A pool output is fed back, updates the state, and tells the pool which
+slot runs next.
+
+The state holds the current and previous pid, a reschedule flag \m{re_sched}, a
+time-slice counter \m{ir_count} (\code{None} when no slice is open), and an interrupt
+controller with a (pending, mask) bit pair for each of the timer, disk and default
+interrupts. An interrupt can be serviced when it is pending and not masked; the
+function \m{first_ready} picks the highest-priority such interrupt, in the order timer,
+disk, default.
+
+The state update runs once per event, either an interrupt arriving or a pool output:
+\begin{lstlisting}
+state_step handler_preroutine restore_invariant =
+  step_sum set_pending
+    (initiate_next restore_invariant
+     (@$\circ$@) handler_preroutine (@$\circ$@) check_scheduler)
+\end{lstlisting}
+On an interrupt, \m{set_pending} sets that interrupt's pending bit and does nothing
+else. On an output, \m{check_scheduler} adopts a pid proposed by the scheduler,
+\code{handler_preroutine} reacts to the output (\cref{sec:parameters}), and
+\m{initiate_next} decides who runs next:
+\begin{lstlisting}
+initiate_next ri v =
+  if masks_set v then v   (* handler running *)
+  else let v := ri v in
+    if first_ready v is Some ir
+    then initiate_handler ir v
+    else if is_handler_pid v (* handler done *)
+    then if get_re_sched v
+         then initiate_scheduler v
+         else initiate_prev_pid v
+    else v                (* stay in user space *)
+\end{lstlisting}
+\m{initiate_handler} saves the current user pid, points the current pid at the
+handler, sets all masks and clears the handler's pending bit.
+\m{initiate_scheduler} hands control to the scheduler and clears \m{re_sched}.
+
+\subsection{The three arguments}\label{sec:parameters}
+
+The pool, the state layout, \m{set_pending}, \m{check_scheduler} and \m{initiate_next} are
+shared by both designs. What is left free is a triple, each part a distinct point of
+control over \emph{when a handler may run}:
+\begin{itemize}
+\item \code{init} is the initial state. Its masks decide which interrupts can be serviced
+  before anything has happened, and its counter whether time slicing is enabled.
+\item \code{handler_preroutine} runs on each pool output, before \m{initiate_next}. It is
+  the only place a design sees a handler announce completion, and so the only place
+  it can reopen masks: it decides when the next handler becomes eligible.
+\item \m{restore_invariant} is applied by \m{initiate_next} just before the choice. It
+  adds no behaviour. It writes into the state an invariant the design already
+  maintains, for the benefit of the proof (\cref{sec:restore}).
+\end{itemize}
