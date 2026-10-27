@@ -6,9 +6,14 @@ set -euo pipefail
 TEXBIN="$HOME/.TinyTeX/bin/x86_64-linux"
 [ -x "$TEXBIN/pdflatex" ] || curl -fsSL "https://yihui.org/tinytex/install-bin-unix.sh" | sh
 
+# The packages the paper loads, and the helpers they load in turn (as listed by
+# a full local build's log).
 pkgs="latexmk ieeetran cleveref mathtools booktabs listings mathpartir pgf
       amsfonts amscls etoolbox refcount rerunfilecheck epstopdf-pkg url psnfss
-      times courier helvetic symbol xcolor hyperref"
+      times courier helvetic symbol xcolor hyperref
+      grfext hycolor kvoptions kvsetkeys kvdefinekeys bigintcalc bitset intcalc
+      gettitlestring iftex infwarerr ltxcmds pdfescape pdftexcmds stringenc
+      uniquecounter auxhook atbegshi atveryend letltxmacro"
 # Install only what is missing.
 missing=""
 for p in $pkgs; do
