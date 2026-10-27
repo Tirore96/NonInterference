@@ -1,9 +1,13 @@
-name: build
+name: paper
 
+# Compile the paper and publish it, only when it can have changed.  The paper
+# depends on theories/ as well: its code links carry line numbers.
 on:
   push:
     branches: [main]
+    paths: [tex/**, theories/**, .github/workflows/paper.yml]
   pull_request:
+    paths: [tex/**, theories/**, .github/workflows/paper.yml]
   workflow_dispatch:
 
 # A newer push to the same branch cancels the run in progress.
@@ -11,41 +15,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The two jobs are independent and run in parallel: the PDF is published as soon
-# as the paper builds, without waiting for the proofs.
 jobs:
-  proofs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: coq-community/docker-coq-action@v1
-        with:
-          # Rocq 9.0 with MathComp 2.5.0 and Hierarchy Builder preinstalled.
-          custom_image: mathcomp/mathcomp:2.5.0-rocq-prover-9.0
-          before_install: |
-            startGroup "Fix permissions"
-              sudo chown -R 1000:1000 .
-            endGroup
-          install: |
-            startGroup "Install deriving and paco"
-              opam repo add rocq-released https://rocq-prover.org/opam/released || true
-              opam update -y
-              opam install -y coq-deriving.0.2.2 coq-paco.4.2.3
-              opam list
-            endGroup
-          script: |
-            startGroup "Build"
-              rocq makefile -f _CoqProject -o Makefile
-              make -j2
-            endGroup
-            startGroup "Check axioms"
-              sh ci/check_axioms.sh
-            endGroup
-          after_script: |
-            startGroup "Restore permissions"
-              sudo chown -R 1001:116 .
-            endGroup
-
   paper:
     runs-on: ubuntu-latest
     permissions:

@@ -1,0 +1,29 @@
+name: setup-check
+
+# Run each setup script on a fresh Ubuntu machine, as a cloud environment
+# would, and check that the result builds its part.  The two parts run in
+# parallel; each only when its own script changes, or by hand.
+on:
+  push:
+    branches: [main]
+    paths: [ci/setup-*.sh, ci/build.sh, .github/workflows/setup-check.yml]
+  workflow_dispatch:
+
+jobs:
+  rocq:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/setup-cloud.sh rocq
+      - run: bash ci/build.sh proofs
+      - name: Re-run setup (should be quick)
+        run: time bash ci/setup-cloud.sh rocq
+
+  tex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/setup-cloud.sh tex
+      - run: bash ci/build.sh paper
+      - name: Re-run setup (should be quick)
+        run: time bash ci/setup-cloud.sh tex
