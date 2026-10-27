@@ -14,11 +14,11 @@ paper, paco~\cite{paco} (\cref{tab:files}).
 \toprule
 file & lines & contents \\
 \midrule
-\mechfile{theories/definitions.v}{definitions.v} & 896 & the calculus, traces, $\NI$, the equivalences \\
-\mechfile{theories/theorems.v}{theorems.v} & 1358 & the composition theorems \\
-\mechfile{theories/models.v}{models.v} & 1109 & the generic model, both policies, \cref{thm:noop}, example traces \\
-\mechfile{theories/noninterference.v}{noninterference.v} & 1757 & the model's equivalences, \cref{thm:leak,thm:main} \\
-\mechfile{theories/adequacy.v}{adequacy.v} & 953 & the original definitions and the adequacy results \\
+\mechfile{theories/definitions.v}{definitions.v} & 908 & the calculus, traces, $\NI$, the equivalences \\
+\mechfile{theories/theorems.v}{theorems.v} & 1337 & the composition theorems \\
+\mechfile{theories/models.v}{models.v} & 1079 & the generic model, both policies, \cref{thm:noop}, example traces \\
+\mechfile{theories/noninterference.v}{noninterference.v} & 1749 & the model's equivalences, \cref{thm:leak,thm:main} \\
+\mechfile{theories/adequacy.v}{adequacy.v} & 904 & the original definitions, the equivalences with ours, \cref{thm:leak,thm:main} in the original's terms \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -28,46 +28,35 @@ codes, interpreted into \code{Set}, rather than over \code{Set} directly. This m
 reductions invertible, which the negative result needs: refuting non-interference
 means showing that a trace is \emph{not} admitted.
 
-\paragraph{Axioms} \Cref{thm:leak} rests on \code{eq_rect_eq} and on the two
-parameters that fix the security lattice; \cref{thm:main} and its corollary also
-use excluded middle, in exactly one place. A premise of \m{swi_NI} case-splits on
-awareness, which is not constructively decidable in general; a decision procedure
-for it would remove the axiom. \Cref{thm:noop} uses no axioms.
+\paragraph{Axioms} The development assumes nothing beyond the two parameters
+that fix the security lattice: no classical logic, and no uniqueness of identity
+proofs. The latter is what dependent elimination on the type-indexed reduction
+relations would need; we invert reductions through determinism of reduction
+instead, one lemma per rule (\m{inv_mapO} and its siblings).
 
-\subsection{Departures from the original definitions}\label{sec:departures}
+\subsection{Non-interference over finite traces}\label{sec:departures}
 
-Mechanising the calculus changed four definitions (\cref{sec:background}). For
-each, the original is written out in \mechfile{theories/adequacy.v}{adequacy.v} and
-related to ours. That file depends only on the definitions, nothing depends on it,
-and it uses no axioms beyond the lattice parameters.
+Our definitions follow Rafnsson et al., with one essential departure. The original
+defines non-interference as a coinductive simulation over infinite streams of
+labels, whose clauses apply at the head of a stream. We quantify over finite traces
+instead, with closure clauses that apply at an arbitrary position (Definition 1).
+This makes every proof in the development an induction on a trace.
 
-\paragraph{Characterised equivalences} The original equips each type with an
-$\mathcal{L}$-equivalence over $V \cup \{\unobs\}$: the distinguished value $\unobs$
-is adjoined to the values, and $x \doteq_\ell \unobs$ says that $x$ is unobservable.
-We use \m{cEquiv}, which keeps the values as they are and adds unobservability as a
-separate predicate, the field $\dis$, tied to the equivalence $\rel$ by the
-characterisation law. \Cref{sec:background} writes $x \doteq_\ell \unobs$ for
-$\dis$. \m{NI_lEquiv} shows that the two give the same notion of non-interference.
+The original definition is written out in \mechfile{theories/adequacy.v}{adequacy.v},
+and \m{NI_paper} proves the two equivalent. The proof passes through infinite
+streams (\m{NI_SNI}) and rests on two properties: finite and infinite behaviour
+determine each other, which needs reduction to be deterministic (to assemble
+finite runs into one infinite run) and never to block (to continue a finite run);
+and insertion commutes with taking prefixes. Obliviousness, the other definition
+that quantifies over behaviour, is likewise stated over traces and equivalent to
+the original (\m{ObliviousDis_iff}). As a consequence, \cref{thm:leak,thm:main}
+also hold with non-interference read as in the original, hypotheses included
+(\m{model_immediate_not_NI_paper}, \m{model_sliced_NI_paper}).
 
-\paragraph{Closure at a position} The original defines non-interference as a
-coinductive simulation whose four clauses apply at the head of a stream. We state
-three closure clauses that apply at an arbitrary position. \m{PNI_of_SNI} and
-\m{SNI_of_PNI} prove the two equivalent.
-
-\paragraph{Finite traces} The original quantifies over infinite streams of labels;
-we quantify over finite traces. \m{NI_SNI} proves the two equivalent. It rests on
-two properties: finite and infinite behaviour determine each other, which needs
-reduction to be deterministic (to assemble finite runs into one infinite run) and
-never to block (to continue a finite run); and insertion commutes with taking prefixes.
-Composed with the previous result, \m{NI_paper} states that the original definition
-and ours hold of the same processes.
-
-\paragraph{Obliviousness by class} The side condition of \m{swi_NI} asks that the
-observer be oblivious to a process. The original reads this as every reachable
-output being unobservable; we ask only that every output lie in one class.
-\m{oblivious_of_ObliviousDis} shows that the original condition implies ours, and
-a constant process under \m{public_equiv} satisfies ours but not the original, so
-the weakening is strict. It is what lets \m{swi_NI} and the obliviousness argument
-of \cref{sec:gating} avoid unobservability altogether.
+One further difference is only notational. The original adjoins the distinguished
+value $\unobs$ to every type; we keep the values as they are and make
+unobservability a predicate, tied to the equivalence by the characterisation law.
+\m{NI_lEquiv} shows that the two give the same notion of non-interference, and
+this paper uses the original notation throughout.
 
 The composition theorems themselves are proved directly for our definitions.

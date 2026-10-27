@@ -7,18 +7,19 @@ From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
 From HB Require Import structures.
 From deriving Require Import deriving.
-Require Import Stdlib.Program.Equality.
 From Paco Require Import paco.
 
 Import Order.TTheory.
 Open Scope order_scope.
 
 Require Export NonInterference.theories.definitions.
+Require Import NonInterference.theories.models NonInterference.theories.noninterference.
 
 (* The paper's presentations, and the results that say departing from them costs
    nothing: L-equivalences (section 1), streams (section 2), obliviousness over
    reachable states (section 3), and the paper's own coinductive definition of
-   non-interference (section 4).  Prose: docs/departures.md. *)
+   non-interference (section 4).  Section 5 states the main results in the
+   paper's own terms.  Paper: Section VII-A. *)
 
 (* ----------------------------------------------------------------------- *)
 (** * 1. L-equivalences                                                     *)
@@ -250,79 +251,11 @@ Definition SNI (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (p : Proc I O)
 
 (** ** Reduction is a total function *)
 
-(* Both reduction relations are deterministic and defined everywhere, so a
-   process is a machine that can always take one more step.  This is what lets a
-   finite trace be extended to a stream. *)
-Fixpoint stepI (I O : Ty) (p : Proc I O) : [I] -> Proc I O :=
-  match p in Proc I O return [I] -> Proc I O with
-  | @out _ _ o => fun _ => out o
-  | @map _ _ _ _ f g q => fun i => map f g (stepI q (f i))
-  | @sta _ _ _ f g v q => fun i => sta f g (f i v) (stepI q (f i v, i))
-  | @swi _ _ b q => fun i => swi (xor b i.1) (stepI q i.2)
-  | @par _ _ _ q1 q2 => fun i => par (stepI q1 i) (stepI q2 i)
-  | @loop _ q => fun i => loop (stepI q i)
-  | @maybe _ _ q => fun i => match i with
-                        | None => maybe q
-                        | Some i' => maybe (stepI q i')
-                        end
-  end.
+(* Both reduction relations are deterministic and defined everywhere ([stepI],
+   [stepO], [reduceI_step] and [reduceO_step] in definitions.v), so a process is a
+   machine that can always take one more step.  This is what lets a finite trace
+   be extended to a stream. *)
 
-Fixpoint stepO (I O : Ty) (p : Proc I O) : [O] * Proc I O :=
-  match p in Proc I O return [O] * Proc I O with
-  | @out _ _ o => (o, out o)
-  | @map _ _ _ _ f g q => let: (o,q') := stepO q in (g o, map f g q')
-  | @sta _ _ _ f g v q => let: (o,q') := stepO q in ((g o v, o), sta f g (g o v) q')
-  | @swi _ _ b q => match b with
-               | true => let: (bo,q') := stepO q in (Some bo.2, swi (xor true bo.1) q')
-               | false => (None, swi false q)
-               end
-  | @par _ _ _ q1 q2 => let: (o1,q1') := stepO q1 in let: (o2,q2') := stepO q2 in
-                 ((o1,o2), par q1' q2')
-  | @loop _ q => let: (o,q') := stepO q in (o, loop (stepI q' o))
-  | @maybe _ _ q => let: (o,q') := stepO q in (o, maybe q')
-  end.
-
-Lemma reduceI_step : forall (I O : Ty) (p : Proc I O) i, reduceI p i (stepI p i).
-Proof.
-  intros I O p. induction p; intros; simpl; eauto.
-  - destruct i as [b' i]. econstructor; eauto.
-  - destruct i as [i'|]; eauto.
-Qed.
-
-Lemma reduceI_det : forall (I O : Ty) (p : Proc I O) i p',
-    reduceI p i p' -> p' = stepI p i.
-Proof.
-  intros I O p i p' H. induction H; simpl; subst.
-  all: try rewrite IHreduceI.
-  all: try rewrite IHreduceI1.
-  all: try rewrite IHreduceI2.
-  all: reflexivity.
-Qed.
-
-Lemma reduceO_step : forall (I O : Ty) (p : Proc I O), reduceO p (stepO p).1 (stepO p).2.
-Proof.
-  intros I O p. induction p; simpl; eauto.
-  - destruct (stepO p); simpl in *; eauto.
-  - destruct (stepO p); simpl in *; eauto.
-  - destruct b.
-    + destruct (stepO p) as [[b' o] q]; simpl in *. econstructor; eauto.
-    + econstructor.
-  - destruct (stepO p1); destruct (stepO p2); simpl in *; eauto.
-  - destruct (stepO p) as [o q]; simpl in *. econstructor; eauto.
-    apply reduceI_step.
-  - destruct (stepO p); simpl in *; eauto.
-Qed.
-
-Lemma reduceO_det : forall (I O : Ty) (p : Proc I O) o p',
-    reduceO p o p' -> (o,p') = stepO p.
-Proof.
-  intros I O p o p' H. induction H; simpl; subst.
-  all: try (apply reduceI_det in H0; subst).
-  all: try rewrite -IHreduceO.
-  all: try rewrite -IHreduceO1.
-  all: try rewrite -IHreduceO2.
-  all: reflexivity.
-Qed.
 
 (** ** Finite traces are the prefixes of stream traces *)
 
@@ -344,15 +277,15 @@ Proof.
   - pfold. apply STR1 with (p':=stepI p i). apply reduceI_step.
     right. apply CIH. intros n. move: (H n.+1) => Hn. simpl in Hn.
     inversion Hn; subst.
-    match goal with Hr : reduceI _ _ _ |- _ => apply reduceI_det in Hr; subst end.
+    match goal with Hr : reduceI _ _ _ |- _ => apply reduceI_fun in Hr; subst end.
     auto.
   - move: (H 1) => H1. simpl in H1. inversion H1; subst.
-    match goal with Hr : reduceO _ _ _ |- _ => move: (reduceO_det Hr) => Ho end.
+    match goal with Hr : reduceO _ _ _ |- _ => move: (reduceO_fun Hr) => Ho end.
     pfold. apply STR2 with (o':=(stepO p).1) (p':=(stepO p).2). apply reduceO_step.
     rewrite -Ho. auto.
     right. apply CIH. intros n. move: (H n.+1) => Hn. simpl in Hn.
     inversion Hn; subst.
-    match goal with Hr : reduceO _ _ _ |- _ => move: (reduceO_det Hr) => Ho' end.
+    match goal with Hr : reduceO _ _ _ |- _ => move: (reduceO_fun Hr) => Ho' end.
     rewrite -Ho'. auto.
 Qed.
 
@@ -416,9 +349,9 @@ Lemma Trace_STrace : forall (I O : Ty) (ORel : cEquiv [O]) l t (p : Proc I O),
 Proof.
   intros I O ORel l t p H. induction H; simpl.
   - apply STrace_follow.
-  - move: (reduceI_det H) => Hd. subst. pfold.
+  - move: (reduceI_fun H) => Hd. subst. pfold.
     apply STR1 with (p':=stepI p i). auto. left. auto.
-  - move: (reduceO_det H) => Hd. rewrite -Hd. simpl. pfold.
+  - move: (reduceO_fun H) => Hd. rewrite -Hd. simpl. pfold.
     apply STR2 with (o':=o') (p':=p'); auto.
 Qed.
 
@@ -492,66 +425,8 @@ Proof. intros. split. apply SNI_of_NI. apply NI_of_SNI. Qed.
 
 (* The paper (Definition 10) states obliviousness coinductively over reductions:
    every output a process can reach is unobservable.  Here it is stated over the
-   traces a process admits, and it asks for one indistinguishability class rather
-   than for the distinguished one.  The two departures are separated below.
-   [ObliviousAt] is the paper's shape at this development's condition, and
-   [ObliviousDis] is the paper's condition. *)
+   traces a process admits ([oblivious]).  The two agree. *)
 
-Variant ObliviousAtF (I O : Ty) (ORel : cEquiv [O]) (l : level) (o0 : [O])
-        (R : Proc I O -> Prop) : Proc I O -> Prop :=
-| OAF p : (forall i p', reduceI p i p' -> R p') ->
-          (forall o p', reduceO p o p' -> rel ORel l o0 o /\ R p') ->
-          ObliviousAtF ORel l o0 R p.
-
-Lemma monotone_ObliviousAtF : forall (I O : Ty) (ORel : cEquiv [O]) l o0,
-    monotone1 (@ObliviousAtF I O ORel l o0).
-Proof.
-  intros I O ORel l o0 x0 r r' IN LE. inv IN. constructor.
-  - intros. apply LE. eauto.
-  - intros. move: (H0 _ _ H1) => [Hr Hp]. split; auto.
-Qed.
-Hint Resolve monotone_ObliviousAtF : paco.
-
-Definition ObliviousAt (I O : Ty) (ORel : cEquiv [O]) (l : level) (o0 : [O])
-  (p : Proc I O) := paco1 (@ObliviousAtF I O ORel l o0) bot1 p.
-
-(* Shape: quantifying over reachable states and quantifying over admitted traces
-   come to the same thing.  Neither direction needs reduction to be a function. *)
-Lemma ObliviousAt_oblivious_at : forall (I O : Ty) (ORel : cEquiv [O]) l o0 (p : Proc I O),
-    ObliviousAt ORel l o0 p -> oblivious_at ORel o0 p l.
-Proof.
-  intros I O ORel l o0 p H s Hs. revert H.
-  induction Hs as [q | q i q' t Hred Hs IH | q o' o q' t Hred Hrel Hs IH];
-    intros HO.
-  - constructor.
-  - punfold HO. destruct HO as [r Hi Ho]. constructor. apply IH.
-    move: (Hi _ _ Hred). intros [X|X]; [auto | destruct X].
-  - punfold HO. destruct HO as [r Hi Ho]. move: (Ho _ _ Hred) => [Hr HO'].
-    constructor. eapply rel_trans; eauto. apply IH.
-    destruct HO' as [X|X]; [auto | destruct X].
-Qed.
-
-Lemma oblivious_at_ObliviousAt : forall (I O : Ty) (ORel : cEquiv [O]) l o0 (p : Proc I O),
-    oblivious_at ORel o0 p l -> ObliviousAt ORel l o0 p.
-Proof.
-  intros I O ORel l o0. pcofix CIH. intros p H. pfold. constructor.
-  - intros i p' Hred. right. apply CIH. intros s Hs.
-    move: (H (inl i :: s) (TR1 Hred Hs)) => Ho. inversion Ho; subst. auto.
-  - intros o p' Hred. split.
-    + move: (H [:: inr o] (TR2 Hred (rel_eq ORel o l) (TR0 ORel l p'))) => Ho.
-      inversion Ho; subst. auto.
-    + right. apply CIH. intros s Hs.
-      move: (H (inr o :: s) (TR2 Hred (rel_eq ORel o l) Hs)) => Ho.
-      inversion Ho; subst. auto.
-Qed.
-
-Theorem ObliviousAt_iff : forall (I O : Ty) (ORel : cEquiv [O]) l o0 (p : Proc I O),
-    ObliviousAt ORel l o0 p <-> oblivious_at ORel o0 p l.
-Proof.
-  intros. split. apply ObliviousAt_oblivious_at. apply oblivious_at_ObliviousAt.
-Qed.
-
-(* The paper's condition: every reachable output is unobservable. *)
 Variant ObliviousDisF (I O : Ty) (ORel : cEquiv [O]) (l : level)
         (R : Proc I O -> Prop) : Proc I O -> Prop :=
 | ODF p : (forall i p', reduceI p i p' -> R p') ->
@@ -570,56 +445,40 @@ Hint Resolve monotone_ObliviousDisF : paco.
 Definition ObliviousDis (I O : Ty) (ORel : cEquiv [O]) (l : level) (p : Proc I O) :=
   paco1 (@ObliviousDisF I O ORel l) bot1 p.
 
-(* Unobservable outputs are all in one class, so the paper's condition is one way
-   of meeting this development's. *)
-Lemma ObliviousDis_ObliviousAt : forall (I O : Ty) (ORel : cEquiv [O]) l (p : Proc I O) o0,
-    dis ORel l o0 -> ObliviousDis ORel l p -> ObliviousAt ORel l o0 p.
-Proof.
-  intros I O ORel l p o0 Hd. move: p. pcofix CIH. intros p H.
-  punfold H. destruct H as [q Hi Ho]. pfold. constructor.
-  - intros i p' Hred. right. apply CIH.
-    move: (Hi _ _ Hred). intros [X|X]; [auto | destruct X].
-  - intros o p' Hred. move: (Ho _ _ Hred) => [Hdo HD]. split.
-    + apply dis_dis_rel; assumption.
-    + right. apply CIH. destruct HD as [X|X]; [auto | destruct X].
-Qed.
-
-(* Every process emits, so a reference output is always available. *)
-Theorem oblivious_of_ObliviousDis : forall (I O : Ty) (ORel : cEquiv [O]) l (p : Proc I O),
+(* Quantifying over reachable states and quantifying over admitted traces come
+   to the same thing.  Neither direction needs reduction to be a function. *)
+Lemma ObliviousDis_oblivious : forall (I O : Ty) (ORel : cEquiv [O]) l (p : Proc I O),
     ObliviousDis ORel l p -> oblivious ORel p l.
 Proof.
-  intros I O ORel l p H.
-  have Hd : dis ORel l (stepO p).1.
-  { punfold H. destruct H as [q Hi Ho]. move: (Ho _ _ (reduceO_step q)) => [] //. }
-  exists (stepO p).1. apply ObliviousAt_oblivious_at.
-  apply (@ObliviousDis_ObliviousAt I O ORel l p ((stepO p).1) Hd H).
+  intros I O ORel l p H s Hs. revert H.
+  induction Hs as [q | q i q' t Hred Hs IH | q o' o q' t Hred Hrel Hs IH];
+    intros HO.
+  - constructor.
+  - punfold HO. destruct HO as [r Hi Ho]. constructor. apply IH.
+    move: (Hi _ _ Hred). intros [X|X]; [auto | destruct X].
+  - punfold HO. destruct HO as [r Hi Ho]. move: (Ho _ _ Hred) => [Hd HO'].
+    constructor. eapply dis_rel_l; eauto. apply IH.
+    destruct HO' as [X|X]; [auto | destruct X].
 Qed.
 
-(* The converse fails, so the weakening is strict.  A constant process under
-   [public_equiv] stays in one class, the singleton holding its own output, and
-   [public_equiv] leaves the distinguished class empty. *)
-Lemma ObliviousAt_out : forall (I O : Ty) (ORel : cEquiv [O]) l (o : [O]),
-    ObliviousAt ORel l o (@out I O o).
+Lemma oblivious_ObliviousDis : forall (I O : Ty) (ORel : cEquiv [O]) l (p : Proc I O),
+    oblivious ORel p l -> ObliviousDis ORel l p.
 Proof.
-  intros I O ORel l o. pcofix CIH. pfold. constructor.
-  - intros i p' Hred. move: (reduceI_det Hred) => /= ->. right. apply CIH.
-  - intros o1 p' Hred. move: (reduceO_det Hred) => /= [] -> ->.
-    split. apply rel_eq. right. apply CIH.
+  intros I O ORel l. pcofix CIH. intros p H. pfold. constructor.
+  - intros i p' Hred. right. apply CIH. intros s Hs.
+    move: (H (inl i :: s) (TR1 Hred Hs)) => Ho. inversion Ho; subst. auto.
+  - intros o p' Hred. split.
+    + move: (H [:: inr o] (TR2 Hred (rel_eq ORel o l) (TR0 ORel l p'))) => Ho.
+      inversion Ho; subst. auto.
+    + right. apply CIH. intros s Hs.
+      move: (H (inr o :: s) (TR2 Hred (rel_eq ORel o l) Hs)) => Ho.
+      inversion Ho; subst. auto.
 Qed.
 
-Lemma oblivious_out_public : forall (I O : Ty) (o : [O]) l,
-    oblivious (public_equiv O) (@out I O o) l.
+Theorem ObliviousDis_iff : forall (I O : Ty) (ORel : cEquiv [O]) l (p : Proc I O),
+    ObliviousDis ORel l p <-> oblivious ORel p l.
 Proof.
-  intros I O o l. exists o. apply ObliviousAt_oblivious_at. apply ObliviousAt_out.
-Qed.
-
-(* Under [public_equiv] the distinguished class is empty and every process emits,
-   so nothing at all meets the paper's condition. *)
-Lemma not_ObliviousDis_public : forall (I O : Ty) (p : Proc I O) l,
-    ~ ObliviousDis (public_equiv O) l p.
-Proof.
-  intros I O p l H. punfold H. destruct H as [q Hi Ho].
-  move: (Ho _ _ (reduceO_step q)) => [] //.
+  intros. split. apply ObliviousDis_oblivious. apply oblivious_ObliviousDis.
 Qed.
 
 (* ----------------------------------------------------------------------- *)
@@ -747,9 +606,9 @@ Proof.
   intros I O ORel l. pcofix CIH. intros s p H. punfold H.
   destruct H as [q i q' s0 Hred HR | q o' o q' s0 Hred Hrel HR];
     rewrite (sunfoldE (runS q _)); simpl; pfold.
-  - move: (reduceI_det Hred) => Heq. apply SRI. right. apply CIH.
+  - move: (reduceI_fun Hred) => Heq. apply SRI. right. apply CIH.
     rewrite -Heq. pclearbot. eauto.
-  - move: (reduceO_det Hred) => Heq. apply SRO.
+  - move: (reduceO_fun Hred) => Heq. apply SRO.
     rewrite -Heq. simpl. auto.
     right. apply CIH. rewrite -Heq. simpl. pclearbot. eauto.
 Qed.
@@ -808,10 +667,10 @@ Lemma STrace_sapp : forall (I O : Ty) (ORel : cEquiv [O]) l t s (p : Proc I O),
 Proof.
   intros I O ORel l t. induction t as [|[i|o] t IH]; intros s p H; simpl; auto.
   - punfold H. inv H. apply IH.
-    match goal with Hr : reduceI _ _ _ |- _ => move: (reduceI_det Hr) => Heq end.
+    match goal with Hr : reduceI _ _ _ |- _ => move: (reduceI_fun Hr) => Heq end.
     rewrite -Heq. pclearbot. auto.
   - punfold H. inv H. apply IH.
-    match goal with Hr : reduceO _ _ _ |- _ => move: (reduceO_det Hr) => Heq end.
+    match goal with Hr : reduceO _ _ _ |- _ => move: (reduceO_fun Hr) => Heq end.
     rewrite -Heq. simpl. pclearbot. auto.
 Qed.
 
@@ -820,7 +679,7 @@ Lemma STrace_scons_out : forall (I O : Ty) (ORel : cEquiv [O]) l o s (p : Proc I
     rel ORel l (stepO p).1 o /\ STrace ORel l s (stepO p).2.
 Proof.
   intros I O ORel l o s p H. punfold H. inv H.
-  match goal with Hr : reduceO _ _ _ |- _ => move: (reduceO_det Hr) => Heq end.
+  match goal with Hr : reduceO _ _ _ |- _ => move: (reduceO_fun Hr) => Heq end.
   rewrite -Heq. simpl. split. auto. pclearbot. auto.
 Qed.
 
@@ -951,3 +810,26 @@ Proof.
   - apply NI_of_SNI. apply SNI_of_PNI. auto.
   - apply PNI_of_SNI. apply SNI_of_NI. auto.
 Qed.
+
+(* ----------------------------------------------------------------------- *)
+(** * 5. The main results in the paper's terms                              *)
+
+(* The two model results, with non-interference read as Definition 4 of
+   Rafnsson et al., hypotheses included. *)
+Corollary model_sliced_NI_paper :
+  forall (Opub Opriv : Ty) (runtime runs : nat) (p_pub : Proc Empty Opub)
+         (p_priv : Proc THandlerOutput Opriv) (p_sched : Proc Empty Nat),
+  PNI (public_equiv Empty) (public_equiv Opub) p_pub ->
+  PNI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv ->
+  PNI (public_equiv Empty) (public_equiv Nat) p_sched ->
+  PNI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
+Proof.
+  move=> Opub Opriv runtime runs p_pub p_priv p_sched
+         /NI_paper Hpub /NI_paper Hpriv /NI_paper Hsched.
+  apply NI_paper. by apply model_sliced_NI.
+Qed.
+
+Corollary model_immediate_not_NI_paper :
+  ~ PNI in_equiv out_equiv_concrete model_immediate_concrete.
+Proof. move/NI_paper. exact model_immediate_not_NI. Qed.
+

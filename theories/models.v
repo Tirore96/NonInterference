@@ -8,7 +8,6 @@ From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
 From HB Require Import structures.
 From deriving Require Import deriving.
-Require Import Coq.Program.Equality.
 Require Import Coq.Classes.DecidableClass.
 Import Order.TTheory.
 Open Scope order_scope.
@@ -942,8 +941,8 @@ Proof. by case: n => [|[|[|[|[|n]]]]]. Qed.
 
 (* === 11. Example traces ===
 
-   Each model is exercised on two runs of the concrete system: one with no disk
-   interrupt and one with a disk interrupt arriving at the same point.  Reading
+   Each model is exercised on two runs of the concrete system, on the same input
+   schedule: one with no disk interrupt and one with a disk interrupt.  Reading
    the two [model_immediate] traces against each other shows the leak -- the
    public process loses output steps to the handler -- and the two
    [model_sliced] traces show that it is gone.  The [model_sliced_userview]
@@ -989,11 +988,22 @@ Definition seqtype' := seq Tsum'.
 Definition seqtype := seq ([T_in] + [T_out_userviewC]).
 
 
-(* -- model_immediate traces -- *)
-Definition immediate_no_dI' : seqtype' :=   [::out_get';                                     tI';out_get';tmr_step';tmr_done';sched_priv';out_nop'(*nop*);tI';out_nop';tmr_step';tmr_done';sched_pub';out_get'].
-Definition immediate_with_dI' : seqtype' := [::out_get';dI';out_get';dsk_step';dsk_done';out_get';tI';out_get';tmr_step';tmr_done';sched_priv';out_syscall'(*sys*);tI';out_nop';tmr_step';tmr_done';sched_pub';out_get'].
+(* -- the four runs --
 
-Ltac rewr := rewrite /model_immediate_concrete /model_immediate /model /reactive_system /pool_concrete /pool /process_pool /slot_initial /p_pub_concrete /alternate /p_priv_concrete /pool_input /tI_o /ir_handler /f_proj /scheduler /low_out.
+   All four share one input schedule: the disk interrupt (if any) after step 1,
+   the timer interrupt after step 3; each has twelve output steps.  Without the
+   disk interrupt the two policies behave alike.  With it, model_immediate hands
+   steps 3-4 to the disk handler, taking them from the public process, while
+   model_sliced records the interrupt as pending and runs the disk handler in
+   place of the first NOP run of the slice.  Each "with" run minus its [dI'] is
+   the matching "no" run, so each pair is an instance of the deletion clause of
+   NI. *)
+Definition immediate_no_dI' : seqtype' := [::out_get';out_get';out_get';tI';out_get';tmr_step';tmr_done';sched_priv';out_nop';out_nop';out_nop';out_nop';out_nop'].
+Definition immediate_with_dI' : seqtype' := [::out_get';dI';out_get';dsk_step';tI';dsk_done';tmr_step';tmr_done';sched_priv';out_syscall';out_nop';out_nop';out_nop';out_nop'].
+Definition sliced_no_dI' : seqtype' := [::out_get';out_get';out_get';tI';out_get';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_priv';out_nop'].
+Definition sliced_with_dI' : seqtype' := [::out_get';dI';out_get';out_get';tI';out_get';tmr_step';tmr_done';dsk_step';dsk_done';nop_step';nop_done';sched_priv';out_syscall'].
+
+Ltac rewr := rewrite /model_immediate_concrete /model_immediate /model /reactive_system /pool_concrete /pool /process_pool /slot_initial /p_pub_concrete /alternate /p_priv_concrete /pool_input /tI_o /ir_handler /f_proj /scheduler /low_out /model_sliced_concrete /model_sliced /pool_concrete /pool /pool_input /f_proj.
 
 Ltac lsolv := try solve [ reduce_tac;reduce_tac | reduce_tac;try solve [reduce_once | econ];simpl;first (reduce_tac;reduce_tac)];simpl.
 Ltac reduce_tac2 :=
@@ -1007,77 +1017,26 @@ Ltac sta_state_reduce :=
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.
 
-Lemma trace_immediate_no_dI' : forall l, Trace (public_equiv _) l immediate_no_dI' model_immediate_concrete.
-Proof.
-  intros.
-  rewr;simpl;rewr;simpl;rewr;simpl;rewr.
+Ltac trace_step := (first [econ;[idtac | econ | idtac] | econ];
+  reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans;sta_state_reduce).
+(* the last element is proved by hand, to avoid evar holes in the proof *)
+Ltac trace_last := (first [econ;[idtac | econ | idtac] | econ];
+  reduce_tac2;try solve [reflexivity| reduce_tac2;reduce_tac2];simpl;try swi_instans);
+  econ; reduce_tac2;reduce_tac2; econ; econ; reduce_tac; econ; econ;
+  reduce_tac; econ; econ; reduce_tac; econ; econ; reduce_tac; econ;
+  econ; reduce_tac; econ; econ; reduce_tac; econ.
 
-  sta_state_reduce.
+Lemma trace_immediate_no_dI' l : Trace (public_equiv _) l immediate_no_dI' model_immediate_concrete.
+Proof. rewr;simpl;rewr;simpl;rewr;simpl;rewr. sta_state_reduce. do 12 trace_step. trace_last. Qed.
 
-   do 12 (first [econ;[idtac | econ | idtac] | econ];
-         reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans;sta_state_reduce).
+Lemma trace_immediate_with_dI' l : Trace (public_equiv _) l immediate_with_dI' model_immediate_concrete.
+Proof. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 13 trace_step. trace_last. Qed.
 
-  (*proved the last element of the trace manually to avoid evar holes in proof*)
-   (first [econ;[idtac | econ | idtac] | econ];
-    reduce_tac2;try solve [reflexivity| reduce_tac2;reduce_tac2];simpl;try swi_instans).
-   econ. reduce_tac2;reduce_tac2. econ. econ. reduce_tac. econ. econ.
-   reduce_tac. econ. econ. reduce_tac. econ. econ. reduce_tac. econ.
-   econ. reduce_tac. econ. econ. reduce_tac. econ.
-Qed.
+Lemma trace_sliced_no_dI' l : Trace (public_equiv _) l sliced_no_dI' model_sliced_concrete.
+Proof. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 12 trace_step. trace_last. Qed.
 
-Lemma trace_immediate_with_dI' : forall l, Trace (public_equiv _) l immediate_with_dI' model_immediate_concrete.
-Proof.
-  intros.
-  rewr;simpl;rewr;simpl;rewr;simpl;rewr.
-
-  do 17(first [econ;[idtac | econ | idtac] | econ];
-        reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans;sta_state_reduce).
-
-  (*proved the last element of the trace manually to avoid evar holes in proof*)
-   (first [econ;[idtac | econ | idtac] | econ];
-    reduce_tac2;try solve [reflexivity| reduce_tac2;reduce_tac2];simpl;try swi_instans).
-   econ. reduce_tac2;reduce_tac2. econ. econ. reduce_tac. econ. econ.
-   reduce_tac. econ. econ. reduce_tac. econ. econ. reduce_tac. econ.
-   econ. reduce_tac. econ. econ. reduce_tac. econ.
-Qed.
-
-
-(* -- model_sliced traces -- *)
-Definition sliced_no_dI' : seqtype' :=   [::out_get';                      tI';out_get';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_priv';out_nop'(*nop*);tI';out_nop';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_pub';out_get'].
-Definition sliced_with_dI' : seqtype' := [::out_get';dI';out_get';out_get';tI';out_get';tmr_step';tmr_done';dsk_step'      ;dsk_done'      ;nop_step';nop_done';sched_priv';out_syscall'(*sys*);tI';out_nop';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_pub';out_get'].
-
-
-Ltac rewr ::= rewrite /model_immediate_concrete /model_immediate /model /reactive_system /pool_concrete /pool /process_pool /slot_initial /p_pub_concrete /alternate /p_priv_concrete /pool_input /tI_o /ir_handler /f_proj /scheduler /low_out /model_sliced_concrete /model_sliced /pool_concrete /pool /pool_input /f_proj.
-
-Lemma trace_sliced_no_dI' : forall l, Trace (public_equiv _) l sliced_no_dI' model_sliced_concrete.
-Proof.
-  intros.
-  rewr;simpl;rewr;simpl;rewr;simpl;rewr.
-
-  do 20(first [econ;[idtac | econ | idtac] | econ];
-        reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans;sta_state_reduce).
-
-   (first [econ;[idtac | econ | idtac] | econ];
-    reduce_tac2;try solve [reflexivity| reduce_tac2;reduce_tac2];simpl;try swi_instans).
-   econ. reduce_tac2;reduce_tac2. econ. econ. reduce_tac. econ. econ.
-   reduce_tac. econ. econ. reduce_tac. econ. econ. reduce_tac. econ.
-   econ. reduce_tac. econ. econ. reduce_tac. econ.
-Qed.
-
-Lemma trace_sliced_with_dI' : forall l, Trace (public_equiv _) l sliced_with_dI' model_sliced_concrete.
-Proof.
-  intros.
-  rewr;simpl;rewr;simpl;rewr;simpl;rewr.
-
-  do 23(first [econ;[idtac | econ | idtac] | econ];
-        reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans;sta_state_reduce).
-
-   (first [econ;[idtac | econ | idtac] | econ];
-    reduce_tac2;try solve [reflexivity| reduce_tac2;reduce_tac2];simpl;try swi_instans).
-   econ. reduce_tac2;reduce_tac2. econ. econ. reduce_tac. econ. econ.
-   reduce_tac. econ. econ. reduce_tac. econ. econ. reduce_tac. econ.
-   econ. reduce_tac. econ. econ. reduce_tac. econ.
-Qed.
+Lemma trace_sliced_with_dI' l : Trace (public_equiv _) l sliced_with_dI' model_sliced_concrete.
+Proof. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 13 trace_step. trace_last. Qed.
 
 
 (* -- model_sliced_userview traces -- *)
@@ -1094,8 +1053,8 @@ Proof.
 Qed.
 
 
-Definition good_no_dI : seqtype :=   [::out_get;                      tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_nop(*nop*);tI;out_nop;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_get].
-Definition good_with_dI : seqtype := [::out_get;dI;out_get;out_get;tI;out_get;w_None;w_None;w_None      ;w_None      ;w_None;w_None;w_None;out_syscall(*sys*);tI;out_nop;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_get].
+Definition good_no_dI : seqtype := [::out_get;out_get;out_get;tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_nop].
+Definition good_with_dI : seqtype := [::out_get;dI;out_get;out_get;tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_syscall].
 
 Lemma good_no_dI_eq : map_tr (@parse_output TPublicOutput TTypeSyscall) sliced_no_dI' = good_no_dI.
 Proof. ssa. Qed.

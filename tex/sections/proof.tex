@@ -21,10 +21,10 @@ section is about \cref{thm:main}.
 
 \subsection{The equivalences}\label{sec:equivs}
 
-\paragraph{Input} \m{in_equiv} makes the disk interrupt, and only the disk interrupt,
+\m{in_equiv} makes the disk interrupt, and only the disk interrupt,
 unobservable at $\Lo$. The timer stays public, because the sliced policy schedules by it.
 
-\paragraph{Output} A pool output is a six-tuple of options, one per slot, and
+A pool output is a six-tuple of options, one per slot, and
 \m{out_equiv} is the corresponding nest of \m{eqpair}s (\cref{tab:out-equiv}). Its two
 columns come apart only for the two secret handlers, and that is where scheduling
 secrecy lives. The payload equivalence hides a slot's \emph{value}. Whether the slot
@@ -84,10 +84,8 @@ observer be aware of the gate or oblivious to the slot:
   \Ob(\mathsf{swi}\;b\;p,\; \mathsf{eqmaybe\_aware}(\eqv{O},\eqv{B})).
 \]
 Awareness means a bit related to \code{true} is \code{true} and observable, so the observer can
-trust the gate. Obliviousness means there is a reference output $o_0$ such that every
-output of the slot is related to it: whatever the input does, the observer sees the
-same class. This is weaker than the original condition (\cref{sec:departures}), and the
-argument below needs the weaker form.
+trust the gate. Obliviousness means the observer sees none of the slot's outputs,
+whatever the input does.
 
 At $\Lo$ the two pids of the secret handlers are unobservable. For a slot neither of
 them selects, both map to \code{false}, so a $\eqv{B}$ in which \code{false} alone is unobservable
@@ -98,12 +96,11 @@ the public and private user slots, the scheduler and the timer handler.
 For the disk and NOP slots, one secret pid maps to \code{true} and the other to \code{false},
 so \m{f_PU} demands that both bits be unobservable, which leaves only \m{private_equiv}.
 But then \code{true} is unobservable at $\Lo$ and awareness fails there. At $\Hi$
-awareness still holds; at $\Lo$ the proof uses obliviousness, with \code{None} as the
-reference output. A step where the slot is gated off emits \code{None}, and a step where
-it runs emits \code{Some o}, so the obligation is that \code{None} and \code{Some o} are related at
-$\Lo$. Under \m{eqmaybe_aware} that holds exactly when the gate is hidden and the
-payload unobservable, which the \m{private_equiv} payload of \cref{tab:out-equiv}
-provides. The line therefore falls between the two secret handlers and everything
+awareness still holds; at $\Lo$ the proof uses obliviousness. A step where the slot is
+gated off emits \code{None}, and a step where it runs emits \code{Some o}, so both must be
+unobservable at $\Lo$. Under \m{eqmaybe_aware}, \code{None} is unobservable exactly
+when the gate is hidden, and \code{Some o} when the payload is, which the
+\m{private_equiv} payload of \cref{tab:out-equiv} provides. The line therefore falls between the two secret handlers and everything
 else; the private user process sits on the public side, its secrecy carried by its
 payload and never by its gate.
 
@@ -144,10 +141,8 @@ timer bits & \m{public_bits_equiv} & visible \\
 \end{tabularx}
 \end{table}
 
-The pid type is $\mathsf{Sum}\;\mathsf{Bool}\;\mathsf{Nat}$. Its \code{inl} side
-holds exactly the two secret handlers, the disk handler and the NOP handler, and its
-\code{inr} side everything else, the timer handler included. Drawing the line there
-lets the proof classify a whole pid in one place.
+The \code{inl} side of the pid type holds exactly the two secret handlers
+(\cref{sec:global-state}), which lets the proof classify a whole pid in one place.
 
 The current pid is where the policy does its work. Since \m{eqsum} never relates an
 \code{inl} to an \code{inr}, the fact \emph{that} a handler is running stays visible, as does

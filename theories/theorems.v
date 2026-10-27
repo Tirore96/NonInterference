@@ -7,7 +7,6 @@ From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
 From HB Require Import structures.
 From deriving Require Import deriving.
-Require Import Stdlib.Program.Equality.
 Require Import Stdlib.Classes.DecidableClass.
 
 Import Order.TTheory.
@@ -277,21 +276,12 @@ Fixpoint threaded (V I O : Ty) (f : [I]->[V]->[V]) (g : [O]->[V]->[V]) (v : [V])
 (* below holds, and the map case closes because the subprocess has a unique     *)
 (* output).  Hence NI_reduceO holds, which is exactly what the rebuild needs.   *)
 Lemma reduceI_det : forall I O (p : Proc I O) i p1, reduceI p i p1 -> forall p2, reduceI p i p2 -> p1 = p2.
-Proof.
-  intros I O p i p1 H. elim: H; intros; match_dd; subst; f_equal; eauto.
-Qed.
+Proof. by move=> I O p i p1 /reduceI_fun -> p2 /reduceI_fun ->. Qed.
 
 Lemma reduceO_det : forall I O (p : Proc I O) o1 p1, reduceO p o1 p1 -> forall o2 p2, reduceO p o2 p2 -> o1 = o2 /\ p1 = p2.
 Proof.
-  intros I O p o1 p1 H. elim: H; intros; match_dd;
-  repeat (match goal with
-          | [ IH : forall o2 p2, reduceO ?q o2 p2 -> _, HH : reduceO ?q _ _ |- _ ] =>
-              apply IH in HH; destruct HH
-          | [ E : (_, _) = (_, _) |- _ ] => inversion E; clear E
-          | [ H1 : reduceI ?q ?i ?a, H2 : reduceI ?q ?i ?b |- _ ] =>
-              assert (a = b) by (eapply reduceI_det; eassumption); clear H2
-          end; subst);
-  split; reflexivity.
+  move=> I O p o1 p1 /reduceO_fun H1 o2 p2 /reduceO_fun H2.
+  by move: H1; rewrite -H2 => -[-> ->].
 Qed.
 
 Lemma NI_reduceI : forall I O (IRel : cEquiv [I]) (ORel : cEquiv [O]) (p p' : Proc I O) i,
@@ -569,20 +559,23 @@ Proof.
     + con.
     + con.
   - inv HT.
-    + destruct i as [b' i_in]. dependent destruction H1.
-      edestruct (IH p'0 (xor b b') H3) as [t' [Htrace Hswi]].
+    + destruct i as [b' i_in].
+      case/inv_swiI: H1 => b'' [q [Eb [Hq Ep]]]. subst b'' p'.
+      edestruct (IH q (xor b b') H3) as [t' [Htrace Hswi]].
       exists (inl i_in :: t'). split.
       * econstructor; eauto.
       * econstructor; eauto.
-    + dependent destruction H1.
-      * edestruct (IH p false H4) as [t' [Htrace Hswi]].
-        exists t'. split.
-        { exact Htrace. }
-        { eapply ST2_false; eauto. }
-      * edestruct (IH p'0 (negb b0) H4) as [t' [Htrace Hswi]].
+    + destruct b.
+      * case/inv_swiO_true: H1 => b0 [b'' [q [o0 [Eb [H1 [Eo Ep]]]]]]. subst b'' o' p'.
+        edestruct (IH q (negb b0) H4) as [t' [Htrace Hswi]].
         exists (inr (b0, o0) :: t'). split.
         { econstructor. exact H1. apply rel_refl. exact Htrace. }
         { eapply ST2_true; eauto. }
+      * case/inv_swiO_false: H1 => Eo Ep. subst o' p'.
+        edestruct (IH p false H4) as [t' [Htrace Hswi]].
+        exists t'. split.
+        { exact Htrace. }
+        { eapply ST2_false; eauto. }
 Qed.
 
 Lemma swi_trace_insert : forall (I O : Ty) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) l b t t' n (i : bool * [I]),
@@ -734,7 +727,6 @@ Proof.
       * eapply IH; exact H4.
 Qed.
 
-Require Import Classical.
 
 Unset Implicit Arguments.
 
@@ -813,60 +805,6 @@ Proof.
   apply H_obl in H_tr'. inv H_tr'. auto.
 Qed.
 
-(* Generalized over the switch state so the trace induction hypothesis stays
-   available across the [swi] step.  The switch's reference output is [None]:
-   a gated-off step emits [None] itself, and a gated-on step emits [Some o1],
-   which is related to [None] by way of the inner process's own reference [o0].
-   Both hypotheses are stated with [rel] alone.  Where the inner relation holds
-   by two values being unobservable, the characterisation of [dis] turns that
-   back into relatedness, so nothing here needs to mention [dis]. *)
-Lemma oblivious_swi_aux : forall (I O : Ty) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) l (b0 : bool) (o0 : [O]),
-  rel (eqmaybe_aware ORel BRel) l None (Some o0) ->
-  forall s q, Trace (eqmaybe_aware ORel BRel) l s q ->
-    forall b (p : Proc I (Times Bool O)), q = swi b p ->
-      oblivious_at (eqpair_R BRel ORel) (b0,o0) p l ->
-      ObliviousTrace (eqmaybe_aware ORel BRel) l None s.
-Proof.
-  intros I O ORel BRel l b0 o0 H_rel_o0 s q Htr.
-  induction Htr as [q0 | q0 i q' t HredI Htr IH | q0 o' o q' t HredO Hrel Htr IH];
-    intros b p Hq H_obl; subst q0.
-  - apply OT_nil.
-  - dependent destruction HredI.
-    apply OT_cons_in.
-    eapply IH; [reflexivity | eapply oblivious_at_reduceI; eauto].
-  - dependent destruction HredO.
-    + (* reduce_swiO: output None, process unchanged *)
-      apply OT_cons_out.
-      * exact Hrel.
-      * eapply IH; [reflexivity | exact H_obl].
-    + (* reduce_swiO2: output Some o1, inner step reduceO p (b1,o1) p'0 *)
-      have H_rel_pair: rel (eqpair_R BRel ORel) l (b0,o0) (b1,o1)
-        by (eapply oblivious_at_reduceO_rel; eauto).
-      have H_rel_inner: rel ORel l o0 o1.
-      { case/rel_eqpair_R2': H_rel_pair.
-        - move=> [] _ H_rel_o. exact H_rel_o.
-        - move=> [] H_dis_o0 H_dis_o1.
-          apply (proj1 (cEquiv_rule3 H_dis_o0 o1)); exact H_dis_o1. }
-      have H_rel_Some: rel (eqmaybe_aware ORel BRel) l (Some o0) (Some o1)
-        by (simpl; exact H_rel_inner).
-      apply OT_cons_out.
-      * move: (equiv (eqmaybe_aware ORel BRel) l) => [] _ _ Htrans.
-        eapply Htrans; [eapply Htrans; [exact H_rel_o0 | exact H_rel_Some] | exact Hrel].
-      * eapply IH; [reflexivity | eapply oblivious_at_reduceO; eauto].
-Qed.
-
-(* The sufficient condition the models use.  It asks only that the switch's
-   [None] be indistinguishable from the class the inner process stays in. *)
-Lemma oblivious_swi : forall (I O : Ty) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) (p : Proc I (Times Bool O)) l b (b0 : bool) (o0 : [O]),
-  rel (eqmaybe_aware ORel BRel) l None (Some o0) ->
-  oblivious_at (eqpair_R BRel ORel) (b0,o0) p l ->
-  oblivious (eqmaybe_aware ORel BRel) (swi b p) l.
-Proof.
-  intros I O ORel BRel p l b b0 o0 H_rel_o0 H_obl.
-  exists None. intros s Htr.
-  eapply oblivious_swi_aux; eauto.
-Qed.
-
 Fixpoint all_outputs_rel (I O : Ty) (ORel : cEquiv [O]) (l : level) (o0 : [O]) (t : seq ([I] + [O])) : Prop :=
   match t with
   | nil => True
@@ -932,7 +870,7 @@ Qed.
    does, so inserting, deleting and swapping inputs it may not see changes
    nothing.  Only [rel] is involved. *)
 Lemma oblivious_NI_l : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (p : Proc I O) l,
-  oblivious ORel p l ->
+  oblivious_class ORel p l ->
   NI_l IRel ORel l p.
 Proof.
   intros I O IRel ORel p l [o0 H_obl].
@@ -960,20 +898,17 @@ Qed.
 
 Set Implicit Arguments.
 
-(* The second disjunct is stated about the switch's own outputs, and only
-   through [rel]: at a level where the observer cannot trust the gate, it is
-   enough that everything the switch emits stays in one indistinguishability
-   class.  [oblivious_swi] above is the sufficient condition the models use. *)
-Theorem swi_NI : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) p b,
-(forall l, aware BRel true l \/  oblivious (eqmaybe_aware ORel BRel) (swi b p) l ) -> NI IRel (eqpair_LR BRel ORel) p ->
+(* A proof device for [swi_NI] below.  The second disjunct asks only that
+   everything the switch emits stays in one indistinguishability class, which
+   is weaker than the original condition. *)
+Theorem swi_NI_class : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) p b,
+(forall l, aware BRel true l \/  oblivious_class (eqmaybe_aware ORel BRel) (swi b p) l ) -> NI IRel (eqpair_LR BRel ORel) p ->
 NI (eqpair_LR BRel IRel) (eqmaybe_aware ORel BRel) (swi b p).
 Proof.
   intros I O IRel ORel BRel p b H_aware_ob H_NI_p.
   intro l.
-  (* We use classic here because aware is not constructively decidable in the logic.
-     If the relation and dis were constructively decidable, a constructive decision
-     procedure could be used instead of classical logic. *)
-  destruct (classic (aware BRel true l)) as [H_aware | H_naware].
+  (* Case on the premise itself; no decision on [aware] is needed. *)
+  destruct (H_aware_ob l) as [H_aware | H_oblivious].
   - split; [| split].
     + intros t [bi val_i] [bi' val_i'] n Hrel Htr.
       apply rel_eqpair_LR in Hrel as [Hrel_b Hrel_i].
@@ -1011,9 +946,37 @@ Proof.
       have Htr_p': Trace (eqpair_LR BRel ORel) l t_p' p.
       { eapply H_NI_p3; [apply Hdis_i | apply Htr_p]. }
       eapply swi_conv; [apply H_aware | apply Htr_p' | apply Hswi_tr'].
-    + destruct (H_aware_ob l) as [H_aware_temp | H_oblivious].
-      * contradiction.
-      * apply oblivious_NI_l; exact H_oblivious.
+    + apply oblivious_NI_l; exact H_oblivious.
+Qed.
+
+(* [swi_NI] as stated by Rafnsson et al.: at every level the observer is aware
+   of the gate or oblivious to the switch. *)
+Theorem swi_NI : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) p b,
+(forall l, aware BRel true l \/ oblivious (eqmaybe_aware ORel BRel) (swi b p) l) -> NI IRel (eqpair_LR BRel ORel) p ->
+NI (eqpair_LR BRel IRel) (eqmaybe_aware ORel BRel) (swi b p).
+Proof.
+  move=> I O IRel ORel BRel p b H Hp. apply swi_NI_class => // l.
+  case: (H l) => [Ha | Hob]; [by left | right].
+  (* Every process emits, so [stepO] gives an output of the switch; it is
+     unobservable, and so related to every other unobservable output. *)
+  set o0 := (stepO (swi b p)).1.
+  have Hd : dis (eqmaybe_aware ORel BRel) l o0.
+  { have Htr : Trace (eqmaybe_aware ORel BRel) l [:: inr o0] (swi b p).
+    { eapply TR2; [apply reduceO_step | apply rel_eq | apply TR0]. }
+    move: (Hob _ Htr). by inversion 1. }
+  exists o0 => s /Hob.
+  elim=> [|i s' _ IH|o s' Hdo _ IH]; [apply OT_nil | by apply OT_cons_in |].
+  apply OT_cons_out => //. exact: (proj1 (cEquiv_rule3 Hd o) Hdo).
+Qed.
+
+(* Every output unobservable at [l] makes any process oblivious there. *)
+Lemma oblivious_all_dis : forall (I O : Ty) (ORel : cEquiv [O]) (p : Proc I O) l,
+  (forall o, dis ORel l o) -> oblivious ORel p l.
+Proof.
+  move=> I O ORel p l Hd s _. elim: s => [|[i|o] s IH].
+  - apply DT_nil.
+  - by apply DT_cons_in.
+  - by apply DT_cons_out.
 Qed.
 
 Fixpoint filter_none {I O : Ty} (t : seq ([Option I] + [O])) : seq ([I] + [O]) :=
@@ -1067,10 +1030,10 @@ Proof.
   - ssa.
   - ssa. inv H0.
     + match_dd.
-      * apply H in H5. ssa.
-      * apply H in H5. ssa. econ; eauto.
+      * match goal with Ht : Trace _ _ _ (maybe _) |- _ => apply H in Ht end. ssa.
+      * match goal with Ht : Trace _ _ _ (maybe _) |- _ => apply H in Ht end. ssa. econ; eauto.
     + match_dd.
-      apply H in H6. ssa. econ; eauto.
+      match goal with Ht : Trace _ _ _ (maybe _) |- _ => apply H in Ht end. ssa. econ; eauto.
 Qed.
 
 Lemma filter_none_trace_back : forall (I O : Ty) (p : Proc I O) (ORel : cEquiv [O]) l t,
@@ -1153,12 +1116,12 @@ Proof.
   - move=> p0 p Heq; subst p0. exists nil; split; first by constructor. by constructor.
   - move=> p0 i p' t0 Hred Htr IH p p0_eq; subst p0.
     inversion Hred; subst.
-    have Heq_p := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H.
+    have Heq_p := @inj_pair2_Ty _ _ _ _ H.
     subst p0.
-    have Heq_i := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H2.
+    have Heq_i := @inj_pair2_Ty _ _ _ _ H2.
     subst i0.
-    have H3' := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H3.
-    have H3'' := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H3'.
+    have H3' := @inj_pair2_Ty _ _ _ _ H3.
+    have H3'' := @inj_pair2_Ty _ _ _ _ H3'.
     have Hsym : p' = loop p'0 by symmetry.
     have [t' [Hlt Htr']]:= IH _ Hsym.
     exists (inl i :: t'); split.
@@ -1166,12 +1129,12 @@ Proof.
     + by apply: (TR1 H4 Htr').
   - move=> p0 o' o p' t0 Hred Hrel Htr IH p p0_eq; subst p0.
     inversion Hred; subst.
-    have Heq_p := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H.
+    have Heq_p := @inj_pair2_Ty _ _ _ _ H.
     subst p0.
-    have Heq_o := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H0.
+    have Heq_o := @inj_pair2_Ty _ _ _ _ H0.
     subst o0.
-    have H3' := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H3.
-    have H3'' := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H3'.
+    have H3' := @inj_pair2_Ty _ _ _ _ H3.
+    have H3'' := @inj_pair2_Ty _ _ _ _ H3'.
     have Hsym : p' = loop p'' by symmetry.
     have [t' [Hlt Htr']]:= IH _ Hsym.
     exists (inr o :: inl o' :: t'); split.
@@ -1294,24 +1257,24 @@ Proof.
   - move=> p0 p1 p2 Heq. by split; constructor.
   - move=> p0 i p' t0 Hred Htr IH p1 p2 Heq; subst p0.
     inversion Hred; subst.
-    have E2 := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H2.
-    have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ E2; subst p0.
-    have E4 := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H4.
-    have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ E4; subst p3.
-    have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H5; subst i0.
-    have E6 := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H6.
-    have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ E6; subst p'.
+    have E2 := @inj_pair2_Ty _ _ _ _ H2.
+    have ? := @inj_pair2_Ty _ _ _ _ E2; subst p0.
+    have E4 := @inj_pair2_Ty _ _ _ _ H4.
+    have ? := @inj_pair2_Ty _ _ _ _ E4; subst p3.
+    have ? := @inj_pair2_Ty _ _ _ _ H5; subst i0.
+    have E6 := @inj_pair2_Ty _ _ _ _ H6.
+    have ? := @inj_pair2_Ty _ _ _ _ E6; subst p'.
     have [IH1 IH2] := IH _ _ erefl.
     by split => /=; [apply: (TR1 H3 IH1) | apply: (TR1 H7 IH2)].
   - move=> p0 o' o p' t0 Hred Hrel Htr IH p1 p2 Heq; subst p0.
     inversion Hred; subst.
-    have E2 := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H2.
-    have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ E2; subst p0.
-    have E4 := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H4.
-    have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ E4; subst p3.
-    have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H3; subst o'.
-    have E6 := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ H6.
-    have ? := @Eqdep.EqdepTheory.inj_pair2 _ _ _ _ _ E6; subst p'.
+    have E2 := @inj_pair2_Ty _ _ _ _ H2.
+    have ? := @inj_pair2_Ty _ _ _ _ E2; subst p0.
+    have E4 := @inj_pair2_Ty _ _ _ _ H4.
+    have ? := @inj_pair2_Ty _ _ _ _ E4; subst p3.
+    have ? := @inj_pair2_Ty _ _ _ _ H3; subst o'.
+    have E6 := @inj_pair2_Ty _ _ _ _ H6.
+    have ? := @inj_pair2_Ty _ _ _ _ E6; subst p'.
     have [IH1 IH2] := IH _ _ erefl.
     case/rel_eqpair: Hrel => Hr1 Hr2.
     by split => /=; [apply: (TR2 H5 Hr1 IH1) | apply: (TR2 H7 Hr2 IH2)].

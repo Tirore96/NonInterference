@@ -1,328 +1,58 @@
 # NonInterference
 
-A Rocq/Coq development proving **non-interference** for a model of an operating
-system that handles interrupts. One interrupt, the disk interrupt, is secret;
-the theorem says an attacker watching the system's output cannot tell whether it
-occurred.
+Rocq mechanisation accompanying the paper *Timing-Sensitive Non-Interference for
+Interrupt Handling, Compositionally and Mechanically* (draft in [`tex/`](tex/)).
+The paper is the reference for everything here; this file only says where things
+are.
 
-The interesting part is that a naive interrupt handler *does* leak it, and not
-through any data it computes: it leaks through **scheduling**. Servicing a secret
-interrupt takes CPU time away from the process that was running, and the resulting
-gap in that process's output is visible. The development formalises both interrupt policies,
-the one that leaks and the one that does not, and proves each claim.
-
-Both policies are expressed in a small process calculus, `Proc I O`.
-Non-interference is a property of a closed term in that calculus. Stating it takes a
-*characterised equivalence* on the input type and one on the output type. At each
-security level, such an equivalence cuts the values into classes an observer there
-cannot tell apart. One of those classes is **distinguished**: it holds the values
-that observer does not see at all, and it is empty when the level hides nothing.
-The calculus and its generic non-interference
-theorems are not ours: they are due to Rafnsson et al., *Timing-Sensitive
-Noninterference through Composition*,
+An operating system with interrupt handling is modelled as one process in the
+calculus of Rafnsson et al., *Timing-Sensitive Noninterference through
+Composition*,
 [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf).
-The contribution here is the OS models and their proofs, together with the
-mechanisation of that paper's theorems.
-
-## The system being modelled
-
-A process pool of six slots, driven by a global state and a feedback loop:
-
-| slot | process | |
-|---|---|---|
-| 0, 1, 2 | timer, disk and NOP handlers | each runs for the same fixed number of output steps, signalling completion with `Notify` |
-| 3 | the scheduler | proposes which user process runs next |
-| 4 | the secret user process | consumes the disk handler's notifications |
-| 5 | the public user process | emits on the public channel |
-
-Slots 3, 4 and 5 are not fixed by the model. The system described throughout uses a
-round-robin scheduler, a `p_priv_concrete` that issues a `Syscall` if the disk
-handler notified it and `NOP` otherwise, and a `p_pub_concrete` that repeatedly
-issues `GetRequest`. Only the interrupt handlers are fixed: they are the mechanism
-under study.
-
-Exactly one slot runs per step, chosen by the current pid. The global state holds a
-`(pending, mask)` bit pair per interrupt, plus a time-slice counter that only the
-non-interfering policy uses. An interrupt is serviced when it is pending and
-unmasked.
-
-## The three models
-
-Everything below refers to these. All three are in
-[`theories/models.v`](theories/models.v).
-
-| Model | Type | Output it exposes | |
-|---|---|---|---|
-| `model_immediate` | `Proc TInterrupt (T_out Opub Opriv)` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive policy; **leaks** |
-| `model_sliced` | `Proc TInterrupt (T_out Opub Opriv)` | the same full pool output | the fixed policy; non-interfering, the headline result |
-| `model_sliced_userview` | `Proc TInterrupt (T_out_userview Opub Opriv)` | only what the two user space processes emit: a public output or a syscall, every other slot erased | `model_sliced` behind a projection; non-interfering as a consequence |
-
-`Opub` and `Opriv` are the two user processes' output alphabets, which is why both
-output types are written over them. The input type takes no parameters, and all
-three models share it: an interrupt *is* an input. `TInterrupt`
-(`T_in` in the source) has two values, `TimerInterrupt` and `DiskInterrupt`.
-Delivering one is the only thing the environment can do to a model; the model
-records it as pending and decides later whether to service it. (The NOP handler
-introduced below has an entry in the interrupt controller but no interrupt of its
-own: the controller is indexed by `option` interrupt, with `None` as the NOP entry,
-and the sliced policy sets that entry pending itself.)
-
-The models then differ along two independent axes, and it helps to keep them apart.
-
-**Axis 1: behaviour (`model_immediate` vs `model_sliced`).** Same input and output
-types, same pool, same state layout. Both are the *same* generic definition,
-`model`, at a different triple of arguments: `init_policy`,
-`service_policy`, and `restore_invariant`, tabulated in
-[`docs/models.md` §8](docs/models.md). That difference is the whole security
-story: one leaks, the other does not.
-
-**Axis 2: observation (`model_sliced` vs `model_sliced_userview`).** Same
-behaviour; they are literally the same process. `model_sliced_userview` is
-`model_sliced` with a projection on its output,
-`map id parse_output model_sliced`, which erases every slot but the two user space
-processes. Below, `·` is `None` and `Nfy` is `Notify`:
-
-```text
-                     pub     sys     sch     nop     dsk     tmr      parse_output
-  public output   (  Get  ,   ·   ,   ·   ,   ·   ,   ·   ,   ·   )  ---------->   Get
-  disk handler    (   ·   ,   ·   ,   ·   ,   ·   ,  Nfy  ,   ·   )  ---------->   ·
-  syscall         (   ·   ,  Sys  ,   ·   ,   ·   ,   ·   ,   ·   )  ---------->   Sys
-  scheduler       (   ·   ,   ·   ,   4   ,   ·   ,   ·   ,   ·   )  ---------->   ·
-                    '-----------'   '---------------------------'
-                    kept            discarded: scheduler and handler activity
-```
-
-Exactly one slot is `Some` per step, so each row above is a single output step.
-
-The six-slot tuple is the natural
-statement for a parallel composition, and it is the stronger non-interference claim: the attacker
-sees every slot, handler and scheduler activity included. The user-visible result
-then follows by weakening the output equivalence.
-
-## Threat model
-
-The attacker is an observer at the level `⊥`. The only other level that matters is
-`⊤`, an observer who sees everything. (The mechanisation allows any security
-lattice; [`docs/noninterference.md` §5](docs/noninterference.md) explains why two
-levels lose nothing.) Each level comes with two notions, and every classification in
-the development is expressed with them.
-
-- Two values are **indistinguishable** at level `l` when the level's equivalence
-  relates them: the observer receives one of them but cannot tell which.
-- A value is **unobservable** at `l` when the observer does not see the event at
-  all, so it can be inserted or removed without the observer noticing.
-
-The two notions are tied together. At each level the equivalence partitions a type
-into classes of indistinguishable values, and the unobservable values are required
-to be exactly one of those classes, the **distinguished class**, empty when the
-level hides nothing. One such partition per level, each with its distinguished
-class, makes a **characterised equivalence**: `cEquiv` in the source
-([`docs/background.md` §2](docs/background.md)). Every classification
-below is an instance of it.
-
-Two instances do most of the work, and they are also the clearest way to read the
-definition. One says what this development means by a **public** value, the other
-what it means by a **private** one:
-
-- **public** (`public_equiv`). The observer sees the value at every level, and
-  tells any two different values apart. Every class is a singleton, and the
-  distinguished class is empty.
-- **private** (`private_equiv`). At `⊥` the observer sees nothing of the value:
-  all private values sit in a single class, and that class is the distinguished
-  one. At `⊤` it behaves like `public_equiv`.
-
-(Both in [`docs/background.md` §3](docs/background.md).)
-
-The model's input is interrupts, classified by `in_equiv`, which marks the disk
-interrupt unobservable at `⊥`. The other interrupts stay observable, and the
-observer tells any two interrupts apart.
-
-The model's output, for `model_sliced`, is the six-slot tuple, where which slot is
-`Some` says which process just ran. Classifying that tuple brings in technical
-detail, so the definition is deferred to
-[`docs/noninterference.md` §1](docs/noninterference.md). Intuitively, `⊥` is allowed
-to see when most of the slots run; the two secret handlers are the exception.
-
-`NI in_equiv out_equiv p` is then the noninterference statement: at every level,
-inserting or removing inputs that are unobservable there, or swapping inputs that
-are indistinguishable there, leaves the traces that observer can see indistinguishable.
-
-**What the attacker can time.** Time is counted in output steps: one step is one
-tick of a clock the attacker shares, and on every tick the system emits a full
-tuple, one entry per slot. A slot that did not run emits `None`, and the attacker
-sees that `None` exactly as it would see a value. Inputs take no time. So the
-attacker learns *when* each public process ran, step by step, and a secret that
-shifts a public output by a single step has leaked. This is what makes the property
-timing-sensitive, and it is the channel the leak below uses.
-
-## The leak
-
-A disk interrupt makes the disk handler run immediately, displacing whichever
-process was scheduled. The handler runs for its full length, then control returns
-to the displaced process. Below, and in the counterexample, that length is two
-output steps, the concrete instance of the parameter `runtime`.
-
-The attacker never sees the handler run: in the full pool output the handler's slot
-is classified secret, and in the user-visible output that slot does not exist at
-all. What the attacker sees is the *public* process's slot, which for those two
-steps carries nothing:
-
-```text
-   model_immediate: the attacker's view of one run, without and with a disk interrupt
-
-     step                    1      2      3      4
-     no disk interrupt      Get    Get    Get    Get
-     with disk interrupt    Get     ·      ·     Get
-                                    '------'      '-- the displaced process resumes here
-                                       |
-       the disk handler runs here: the two public outputs that were
-       due at steps 2 and 3 never arrive
-```
-
-Two public requests are enough to refute non-interference, and that is exactly the
-counterexample `model_immediate_not_NI` constructs. The leak does not depend on which
-process was displaced: interrupting the secret process produces the same gap in the
-schedule.
-
-`model_sliced` closes it by taking away the disk interrupt's power to interrupt a
-user process. Handler execution still depends on the timer, since the **timer**
-handler's completion starts the time slice. That dependence is public and therefore
-harmless. What a secret interrupt can no longer do is pick the moment a handler
-runs. Handlers run only inside the slice and all take the same number of steps, and
-every handler boundary inside the slice queues a run of a "NOP" handler,
-which fills any part of the slice that no real interrupt claims.
-A secret handler run therefore replaces a NOP run
-rather than displacing a user process, and the public schedule is identical either
-way.
+Ordinary interrupt handling leaks whether a secret disk interrupt occurred, through
+the schedule alone. Servicing interrupts only inside publicly timed slices, with
+unused handler runs filled by a dummy handler, removes the leak, for any scheduler
+and user processes that are themselves non-interfering.
 
 ## Results
 
-Three machine-checked theorems, in
-[`theories/noninterference.v`](theories/noninterference.v):
-
-| Theorem | Statement | Meaning |
+| Rocq | Paper | Axioms |
 |---|---|---|
-| `model_immediate_not_NI` | `~ NI in_equiv out_equivC model_immediate_concrete` | The naive policy leaks: a secret disk interrupt is observable. |
-| `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) model_sliced` | The headline result: the fixed policy is non-interfering even on the full pool output, where the attacker sees when every process, handler and scheduler included, runs. |
-| `model_sliced_userview_NI` | `NI in_equiv (out_equiv_userview Opub Opriv) model_sliced_userview` | A consequence: an attacker who sees only user-space output learns nothing either. |
+| `out_NI`, `map_NI`, `sta_NI`, `swi_NI`, `par_NI`, `loop_NI`, `maybe_NI` ([`theorems.v`](theories/theorems.v)) | Theorem 1 (composition) | none |
+| `model_immediate_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 2 (the leak) | none |
+| `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (no leak) | none |
+| `model_sliced_userview_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 1 | none |
+| `restore_invariant_noop` ([`models.v`](theories/models.v)) | Theorem 4 | none |
+| `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VII-A: our definitions equal the original's | none |
+| `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 2 and 3 in the original's terms | none |
 
-The models' arguments are elided in the table. The two positive results assume that
-the scheduler and the two user processes are themselves non-interfering at the
-classification their slot declares. Two numbers
-appear alongside them. The **handler length** `runtime` counts the output steps
-every handler takes before it signals completion with `Notify`. The **slice size**
-`runs` counts the complete handler runs that fit in one time slice. A slice
-therefore lasts `runs * runtime` output steps and always ends on a handler boundary.
+Every result depends only on the two parameters `d` and `L` that fix the security
+lattice: no classical logic and no uniqueness of identity proofs. Reductions are
+inverted through determinism of reduction (`inv_*` lemmas in
+[`definitions.v`](theories/definitions.v)), not by dependent elimination.
 
-The theorems are not about this one system. Neither proof looks at which scheduler
-is running, at what the user processes emit, or at how long the handlers run for
-(only that they all run for the same length), so none of those is fixed: what is
-proved is a property of the interrupt-and-scheduling mechanism, and the concrete
-system is one instance of it. The counterexample needs
-only one system, so it is stated at the concrete instance.
-[`docs/noninterference.md` §5](docs/noninterference.md) makes that precise, once
-the argument it depends on has been given.
+## Files
 
-## Contributions
-
-- **A mechanised timing-sensitive non-interference proof for interrupt handling.**
-  `model_sliced_NI` holds for any scheduler and user processes that are themselves
-  non-interfering, at any handler length and slice size. The proof is compositional:
-  it is assembled from one generic theorem per constructor of the calculus, and the
-  one substantial obligation specific to the model is that the state update
-  preserves the state equivalence.
-- **A mechanised leak.** `model_immediate_not_NI` shows that ordinary interrupt
-  handling leaks a secret interrupt through scheduling alone, with no secret data in
-  any output.
-- **What the proof forces on the policy.** Three lessons fall out of it, each
-  pinned to a proof obligation:
-  - *Pending bits private, masks public.* An unobservable interrupt may not visibly
-    move the state (`f_EP`), so the bit it sets must be private. The state update
-    must map related states to related states (`fv_NI`), so the bits that decide
-    what runs next must be public. Only a per-bit classification satisfies both.
-  - *Hiding that a process ran.* Hiding a slot's value is not enough for the two
-    secret handlers; the fact that they ran must be hidden too. That needs an
-    equivalence under which a run and an idle step look alike (`eqmaybe_nonbot`),
-    and obliviousness of the slot at `⊥`.
-  - *Stage-wise proofs and invariants.* Proving `fv_NI` one stage of the transition
-    at a time loses the reachable-state invariant. Writing it back with a function
-    that is provably the identity on every reachable state (`restore_invariant_noop`)
-    recovers it without changing the model's behaviour.
-- **A mechanisation of the underlying theory.** The calculus and the composition
-  theorems of Rafnsson et al. are mechanised, and the four places where the
-  mechanisation departs from the paper are each proved harmless (below).
-
-## Related work
-
-The sliced policy is not new as a mitigation. Padding, time partitioning and
-partitioned interrupt handling are established defences against timing channels in
-operating systems; the closest is the interrupt partitioning of seL4's time
-protection (Ge et al., *Time Protection: the Missing OS Abstraction*, EuroSys 2019).
-Machine-checked information-flow proofs for real kernels exist too, notably for
-seL4 (Murray et al., *seL4: from General Purpose to a Proof of Information Flow
-Enforcement*, IEEE S&P 2013), whose proof explicitly leaves timing channels out of
-scope. What this development adds is a timing-sensitive, compositional, mechanised
-proof for such a mitigation, stated in a calculus whose non-interference theorems
-compose (Rafnsson et al., POST 2017).
-
-## Departures from the paper
-
-Mechanising Rafnsson et al. changed four definitions: the security equivalences,
-the shape of `NI`, traces as finite lists rather than streams, and obliviousness by
-class rather than by unobservability. Each is proved adequate in
-[`theories/adequacy.v`](theories/adequacy.v), which restates the paper's version
-and shows it holds of exactly the same processes. Nothing in the models or the
-proof depends on that file.
-
-[`docs/departures.md`](docs/departures.md) takes the four one at a time, with what
-the paper does, what is done here, why, and which result closes the gap.
-
-## Logical foundations
-
-The development is constructive except for one import of classical logic,
-`Require Import Classical` at [`theories/theorems.v:737`](theories/theorems.v). The
-law of excluded middle appears only in the switch non-interference lemma `swi_NI`.
-A premise of that lemma uses the predicate `aware`, which is not constructively
-decidable. A decision procedure for `aware` would remove the need for excluded
-middle.
+| File | Contents |
+|---|---|
+| [`theories/definitions.v`](theories/definitions.v) | the calculus, traces, `NI`, the equivalences |
+| [`theories/theorems.v`](theories/theorems.v) | the composition theorems of Rafnsson et al. |
+| [`theories/models.v`](theories/models.v) | the generic model, both interrupt policies, a concrete system and its traces |
+| [`theories/noninterference.v`](theories/noninterference.v) | the model's equivalences and Theorems 2 and 3 |
+| [`theories/adequacy.v`](theories/adequacy.v) | the original definitions, their equivalence with ours, the main results in the original's terms |
 
 ## Building
 
-From the repository root:
+Requires Rocq 9.0.1 with `mathcomp`, `deriving`, Hierarchy Builder and `paco` (see
+[`_CoqProject`](_CoqProject)). From the repository root:
 
 ```bash
 make
 ```
 
-This compiles the main chain in dependency order
-(`definitions → theorems → models → noninterference`), and `adequacy.v`, which
-sits beside it and depends only on `definitions.v`. The build requires Rocq/Coq
-9.0.1 with `mathcomp`, `deriving`, `HB` (Hierarchy Builder) and `paco`; see
-[`_CoqProject`](_CoqProject).
+To check the axioms of a result, compile a file such as
 
-## Repository map
-
-| Path | What it is |
-|---|---|
-| [`theories/definitions.v`](theories/definitions.v) | The process calculus, traces, `NI`, and the security equivalences. |
-| [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); this repository uses them as prior work. |
-| [`theories/models.v`](theories/models.v) | In three parts: the skeleton both interrupt policies share, ending in the generic `model`; the two interrupt policies, as `model` at two triples of arguments; and one concrete system, with the example traces. |
-| [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state equivalences, and the three theorems above. |
-| [`theories/adequacy.v`](theories/adequacy.v) | The paper's presentations, and the results that departing from them costs nothing: L-equivalences, streams, obliviousness over reachable states, and the paper's own coinductive definition of non-interference. Nothing else depends on it. |
-| [`docs/background.md`](docs/background.md) | **What the calculus and `NI` are.** The process calculus, characterised equivalences, `NI` and the composition theorems, companion to `definitions.v` and `theorems.v`. |
-| [`docs/departures.md`](docs/departures.md) | **How this differs from the paper.** The four departures and the results that justify them, companion to `adequacy.v`. |
-| [`docs/models.md`](docs/models.md) | **What the models are.** Long-form companion to `models.v`. |
-| [`docs/noninterference.md`](docs/noninterference.md) | **Why they are (non-)interfering.** The security equivalences and the proof, companion to `noninterference.v`. |
-| [`tex/`](tex/) | A LaTeX draft of the CSF paper (IEEEtran), translated from these documents (`main.tex`, one file per section). |
-
-## Where to read next
-
-- For the **calculus and the definitions**, read
-  [`docs/background.md`](docs/background.md) first; the other documents build on it.
-- For the **models**, read [`docs/models.md`](docs/models.md): every process, the
-  state layout, and the rationale behind the sliced policy.
-- For the **proof**, read [`docs/noninterference.md`](docs/noninterference.md): the
-  security equivalences, how the generic theorems compose, and the one hard
-  obligation (`fv_NI`, closure of the state equivalence under the transition).
-- To **scrutinise the definitions** against the paper they come from, read
-  [`docs/departures.md`](docs/departures.md).
+```coq
+From NonInterference.theories Require Import noninterference.
+Print Assumptions model_sliced_NI.
+```

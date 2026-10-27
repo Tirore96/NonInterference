@@ -8,8 +8,8 @@ From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
 From HB Require Import structures.
 From deriving Require Import deriving.
-Require Import Coq.Program.Equality.
 Require Import Stdlib.Classes.DecidableClass.
+From Stdlib Require Eqdep_dec.
 
 Import Order.TTheory.
 Open Scope order_scope.
@@ -72,7 +72,7 @@ Definition order (b1 b2 : level) := b1 <= b2.
    and the last field characterises [dis l] as one of those classes, the
    distinguished class, which is empty when the level hides nothing.  Both
    fields weaken downwards: a lower observer sees less.
-   Prose: docs/background.md section 2. *)
+   Paper: Section II-B. *)
 Record cEquiv (A : Set) :=
         CEquiv {
            dis : level -> A -> Prop;
@@ -123,6 +123,15 @@ Definition Ty_indDef := [indDef for Ty_rect].
 Canonical Ty_indType := IndType Ty Ty_indDef.
 Definition Ty_hasDecEq := [derive hasDecEq for Ty].
 HB.instance Definition _ := Ty_hasDecEq.
+
+(* Dependent pairs over [Ty] are injective without any axiom, since [Ty] has
+   decidable equality (Hedberg). *)
+Lemma Ty_eq_dec (x y : Ty) : {x = y} + {x <> y}.
+Proof. case: (x =P y); by [left | right]. Qed.
+
+Lemma inj_pair2_Ty (P : Ty -> Type) (x : Ty) (p q : P x) :
+  existT P x p = existT P x q -> p = q.
+Proof. apply: Eqdep_dec.inj_pair2_eq_dec. exact: Ty_eq_dec. Qed.
 
 Fixpoint interp (t : Ty) : Set :=
   match t with
@@ -188,13 +197,278 @@ Inductive reduceO : forall (I O : Ty), Proc I O -> [O] -> Proc I O -> Prop :=
 | reduce_loopO (O :Ty) (p p' p'' : Proc O O) (o : [O]) : reduceO p o p' -> reduceI p' o p'' -> reduceO (loop p) o (loop p'').
 Hint Constructors reduceO : core.
 
+(* Reduction as functions.  Every process can take an input step and an output
+   step, and [stepI] / [stepO] compute them. *)
+Fixpoint stepI (I O : Ty) (p : Proc I O) : [I] -> Proc I O :=
+  match p in Proc I O return [I] -> Proc I O with
+  | @out _ _ o => fun _ => out o
+  | @map _ _ _ _ f g q => fun i => map f g (stepI q (f i))
+  | @sta _ _ _ f g v q => fun i => sta f g (f i v) (stepI q (f i v, i))
+  | @swi _ _ b q => fun i => swi (xor b i.1) (stepI q i.2)
+  | @par _ _ _ q1 q2 => fun i => par (stepI q1 i) (stepI q2 i)
+  | @loop _ q => fun i => loop (stepI q i)
+  | @maybe _ _ q => fun i => match i with
+                        | None => maybe q
+                        | Some i' => maybe (stepI q i')
+                        end
+  end.
+
+Fixpoint stepO (I O : Ty) (p : Proc I O) : [O] * Proc I O :=
+  match p in Proc I O return [O] * Proc I O with
+  | @out _ _ o => (o, out o)
+  | @map _ _ _ _ f g q => let: (o,q') := stepO q in (g o, map f g q')
+  | @sta _ _ _ f g v q => let: (o,q') := stepO q in ((g o v, o), sta f g (g o v) q')
+  | @swi _ _ b q => match b with
+               | true => let: (bo,q') := stepO q in (Some bo.2, swi (xor true bo.1) q')
+               | false => (None, swi false q)
+               end
+  | @par _ _ _ q1 q2 => let: (o1,q1') := stepO q1 in let: (o2,q2') := stepO q2 in
+                 ((o1,o2), par q1' q2')
+  | @loop _ q => let: (o,q') := stepO q in (o, loop (stepI q' o))
+  | @maybe _ _ q => let: (o,q') := stepO q in (o, maybe q')
+  end.
+
+Lemma reduceI_step : forall (I O : Ty) (p : Proc I O) i, reduceI p i (stepI p i).
+Proof.
+  intros I O p. induction p; intros; simpl; eauto.
+  - destruct i as [b' i]. econstructor; eauto.
+  - destruct i as [i'|]; eauto.
+Qed.
+
+Lemma reduceO_step : forall (I O : Ty) (p : Proc I O), reduceO p (stepO p).1 (stepO p).2.
+Proof.
+  intros I O p. induction p; simpl; eauto.
+  - destruct (stepO p); simpl in *; eauto.
+  - destruct (stepO p); simpl in *; eauto.
+  - destruct b.
+    + destruct (stepO p) as [[b' o] q]; simpl in *. econstructor; eauto.
+    + econstructor.
+  - destruct (stepO p1); destruct (stepO p2); simpl in *; eauto.
+  - destruct (stepO p) as [o q]; simpl in *. econstructor; eauto.
+    apply reduceI_step.
+  - destruct (stepO p); simpl in *; eauto.
+Qed.
+
+(* Reduction is deterministic: it agrees with [stepI] and [stepO]. *)
+Lemma reduceI_fun : forall (I O : Ty) (p : Proc I O) i p',
+    reduceI p i p' -> p' = stepI p i.
+Proof.
+  intros I O p i p' H. induction H; simpl; subst.
+  all: try rewrite IHreduceI.
+  all: try rewrite IHreduceI1.
+  all: try rewrite IHreduceI2.
+  all: reflexivity.
+Qed.
+
+Lemma reduceO_fun : forall (I O : Ty) (p : Proc I O) o p',
+    reduceO p o p' -> (o,p') = stepO p.
+Proof.
+  intros I O p o p' H. induction H; simpl; subst.
+  all: try (apply reduceI_fun in H0; subst).
+  all: try rewrite -IHreduceO.
+  all: try rewrite -IHreduceO1.
+  all: try rewrite -IHreduceO2.
+  all: reflexivity.
+Qed.
+
+(* Inversion of a reduction, one lemma per rule.  The relations are indexed by
+   the input and output types, so [inversion] and [dependent destruction] on
+   them need injectivity of dependent pairs, and with it the axiom
+   [eq_rect_eq].  These lemmas go through determinism instead and use no axiom.
+   Each states the premises of its rule, as [dependent destruction] would. *)
+Section Inversion.
+Implicit Types (I O V : Ty).
+
+Lemma inv_outI I O (o : [O]) i p' : reduceI (@out I O o) i p' -> p' = out o.
+Proof. by move/reduceI_fun. Qed.
+
+Lemma inv_mapI (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) p i p' :
+  reduceI (map f g p) i p' -> exists i' q, f i = i' /\ reduceI p i' q /\ p' = map f g q.
+Proof. move/reduceI_fun => ->. exists (f i), (stepI p (f i)). split => //. split => //. exact: reduceI_step. Qed.
+
+Lemma inv_staI I O V (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) v p i p' :
+  reduceI (sta f g v p) i p' -> exists v' q, f i v = v' /\ reduceI p (v', i) q /\ p' = sta f g v' q.
+Proof. move/reduceI_fun => ->. exists (f i v), (stepI p (f i v, i)). split => //. split => //. exact: reduceI_step. Qed.
+
+Lemma inv_swiI I O b (p : Proc I (Times Bool O)) b' (i : [I]) p' :
+  reduceI (swi b p) (b', i) p' -> exists b'' q, b'' = xor b b' /\ reduceI p i q /\ p' = swi b'' q.
+Proof. move/reduceI_fun => ->. exists (xor b b'), (stepI p i). split => //. split => //. exact: reduceI_step. Qed.
+
+Lemma inv_maybeI_None I O (p : Proc I O) p' : reduceI (maybe p) None p' -> p' = maybe p.
+Proof. by move/reduceI_fun. Qed.
+
+Lemma inv_maybeI_Some I O (p : Proc I O) (i : [I]) p' :
+  reduceI (maybe p) (Some i) p' -> exists q, reduceI p i q /\ p' = maybe q.
+Proof. move/reduceI_fun => ->. exists (stepI p i). split => //. exact: reduceI_step. Qed.
+
+Lemma inv_parI I O1 O2 (p1 : Proc I O1) (p2 : Proc I O2) i p' :
+  reduceI (par p1 p2) i p' -> exists q1 q2, reduceI p1 i q1 /\ reduceI p2 i q2 /\ p' = par q1 q2.
+Proof. move/reduceI_fun => ->. exists (stepI p1 i), (stepI p2 i). split; [exact: reduceI_step | split; [exact: reduceI_step | done]]. Qed.
+
+Lemma inv_loopI I (p : Proc I I) i p' :
+  reduceI (loop p) i p' -> exists q, reduceI p i q /\ p' = loop q.
+Proof. move/reduceI_fun => ->. exists (stepI p i). split => //. exact: reduceI_step. Qed.
+
+Lemma inv_outO I O (o : [O]) o' p' : reduceO (@out I O o) o' p' -> o' = o /\ p' = out o.
+Proof. by move/reduceO_fun => /= [-> ->]. Qed.
+
+Lemma inv_mapO (I I' O O' : Ty) (f : [I] -> [I']) (g : [O] -> [O']) p o' p' :
+  reduceO (map f g p) o' p' -> exists q o, g o = o' /\ reduceO p o q /\ p' = map f g q.
+Proof.
+  move/reduceO_fun => /=. move: (reduceO_step p). case: (stepO p) => o q /= Hs [-> ->].
+  by exists q, o.
+Qed.
+
+Lemma inv_staO I O V (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]) v p o' p' :
+  reduceO (sta f g v p) o' p' ->
+  exists v' q o, g o v = v' /\ reduceO p o q /\ o' = (v', o) /\ p' = sta f g v' q.
+Proof.
+  move/reduceO_fun => /=. move: (reduceO_step p). case: (stepO p) => o q /= Hs [-> ->].
+  by exists (g o v), q, o.
+Qed.
+
+Lemma inv_swiO_false I O (p : Proc I (Times Bool O)) o' p' :
+  reduceO (swi false p) o' p' -> o' = None /\ p' = swi false p.
+Proof. by move/reduceO_fun => /= [-> ->]. Qed.
+
+Lemma inv_swiO_true I O (p : Proc I (Times Bool O)) o' p' :
+  reduceO (swi true p) o' p' ->
+  exists b b' q o, b' = xor true b /\ reduceO p (b, o) q /\ o' = Some o /\ p' = swi b' q.
+Proof.
+  move/reduceO_fun => /=. move: (reduceO_step p). case: (stepO p) => [[b o] q] /= Hs [-> ->].
+  by exists b, (xor true b), q, o.
+Qed.
+
+Lemma inv_maybeO I O (p : Proc I O) o' p' :
+  reduceO (maybe p) o' p' -> exists q, reduceO p o' q /\ p' = maybe q.
+Proof.
+  move/reduceO_fun => /=. move: (reduceO_step p). case: (stepO p) => o q /= Hs [-> ->].
+  by exists q.
+Qed.
+
+Lemma inv_parO I O1 O2 (p1 : Proc I O1) (p2 : Proc I O2) o' p' :
+  reduceO (par p1 p2) o' p' ->
+  exists q1 q2 o1 o2, reduceO p1 o1 q1 /\ reduceO p2 o2 q2 /\ o' = (o1, o2) /\ p' = par q1 q2.
+Proof.
+  move/reduceO_fun => /=. move: (reduceO_step p1) (reduceO_step p2).
+  case: (stepO p1) => o1 q1 /= H1. case: (stepO p2) => o2 q2 /= H2 [-> ->].
+  by exists q1, q2, o1, o2.
+Qed.
+
+Lemma inv_loopO I (p : Proc I I) o' p' :
+  reduceO (loop p) o' p' -> exists q q', reduceO p o' q /\ reduceI q o' q' /\ p' = loop q'.
+Proof.
+  move/reduceO_fun => /=. move: (reduceO_step p). case: (stepO p) => o q /= Hs [-> ->].
+  exists q, (stepI q o). split => //. split => //. exact: reduceI_step.
+Qed.
+End Inversion.
+
+(* Case analysis with the cases in the order of the reduction rules. *)
+Lemma option_rule_order (A : Type) (P : option A -> Prop) :
+  P None -> (forall a, P (Some a)) -> forall o, P o.
+Proof. by move=> ? ? []. Qed.
+
+Lemma bool_rule_order (P : bool -> Prop) : P false -> P true -> forall b, P b.
+Proof. by move=> ? ? []. Qed.
+
+(* Use an equation produced by an inversion lemma: substitute a variable side,
+   split an equation between pairs or options, or close the goal when the two
+   sides start with different constructors. *)
+Ltac use_eq E :=
+  match type of E with
+  | ?a = ?b =>
+    first [ is_var a; subst a
+          | is_var b; subst b
+          | discriminate E
+          | (injection E; clear E;
+             repeat (let E' := fresh "E" in intro E'; use_eq E'))
+          | idtac ]
+  end.
+
+(* Invert one reduction hypothesis whose process is a constructor term. *)
+Ltac inv_red H :=
+  match type of H with
+  | reduceI (out _) _ _ => apply inv_outI in H; use_eq H
+  | reduceI (map _ _ _) _ _ =>
+      apply inv_mapI in H; let E1 := fresh "E" in let E2 := fresh "E" in
+      destruct H as (? & ? & E1 & H & E2); use_eq E2; use_eq E1
+  | reduceI (sta _ _ _ _) _ _ =>
+      apply inv_staI in H; let E1 := fresh "E" in let E2 := fresh "E" in
+      destruct H as (? & ? & E1 & H & E2); use_eq E2; use_eq E1
+  | reduceI (swi _ _) (_, _) _ =>
+      apply inv_swiI in H; let E1 := fresh "E" in let E2 := fresh "E" in
+      destruct H as (? & ? & E1 & H & E2); use_eq E2; use_eq E1
+  | reduceI (swi _ _) ?x _ => split_scrutinee H x
+  | reduceI (maybe _) None _ => apply inv_maybeI_None in H; use_eq H
+  | reduceI (maybe _) (Some _) _ =>
+      apply inv_maybeI_Some in H; let E := fresh "E" in
+      destruct H as (? & H & E); use_eq E
+  | reduceI (maybe _) ?x _ => split_scrutinee H x
+  | reduceI (par _ _) _ _ =>
+      apply inv_parI in H; let H2 := fresh "H" in let E := fresh "E" in
+      destruct H as (? & ? & H & H2 & E); use_eq E
+  | reduceI (loop _) _ _ =>
+      apply inv_loopI in H; let E := fresh "E" in destruct H as (? & H & E); use_eq E
+  | reduceO (out _) _ _ =>
+      apply inv_outO in H; let E := fresh "E" in destruct H as [H E]; use_eq E; use_eq H
+  | reduceO (map _ _ _) _ _ =>
+      apply inv_mapO in H; let E1 := fresh "E" in let E2 := fresh "E" in
+      destruct H as (? & ? & E1 & H & E2); use_eq E2; use_eq E1
+  | reduceO (sta _ _ _ _) _ _ =>
+      apply inv_staO in H; let E1 := fresh "E" in let E2 := fresh "E" in let E3 := fresh "E" in
+      destruct H as (? & ? & ? & E1 & H & E2 & E3); use_eq E3; use_eq E2; use_eq E1
+  | reduceO (swi true _) _ _ =>
+      apply inv_swiO_true in H; let E1 := fresh "E" in let E2 := fresh "E" in
+      let E3 := fresh "E" in
+      destruct H as (? & ? & ? & ? & E1 & H & E2 & E3); use_eq E3; use_eq E2; use_eq E1
+  | reduceO (swi false _) _ _ =>
+      apply inv_swiO_false in H; let E := fresh "E" in
+      destruct H as [H E]; use_eq E; use_eq H
+  | reduceO (swi ?b _) _ _ => split_scrutinee H b
+  | reduceO (maybe _) _ _ =>
+      apply inv_maybeO in H; let E := fresh "E" in destruct H as (? & H & E); use_eq E
+  | reduceO (par _ _) _ _ =>
+      apply inv_parO in H; let H2 := fresh "H" in let E1 := fresh "E" in let E2 := fresh "E" in
+      destruct H as (? & ? & ? & ? & H & H2 & E1 & E2); use_eq E2; use_eq E1
+  | reduceO (loop _) _ _ =>
+      apply inv_loopO in H; let H2 := fresh "H" in let E := fresh "E" in
+      destruct H as (? & ? & H & H2 & E); use_eq E
+  (* A defined process: unfold it to its head constructor first. *)
+  | reduceI ?p _ _ =>
+      let q := eval hnf in p in
+      (tryif constr_eq p q then fail else change p with q in H; inv_red H)
+  | reduceO ?p _ _ =>
+      let q := eval hnf in p in
+      (tryif constr_eq p q then fail else change p with q in H; inv_red H)
+  end
+(* A scrutinee that is not yet a constructor (a pair, an option, a boolean):
+   evaluate it if it computes to one, and otherwise split on it, keeping an
+   equation, as [dependent destruction] would.  The cases come in the order of
+   the rules. *)
+with split_scrutinee H x :=
+  first
+    [ is_var x; split_var H x
+    | let x' := eval vm_compute in x in
+      tryif constr_eq x x' then fail else (change x with x' in H; inv_red H)
+    | let Ex := fresh "Ex" in destruct x eqn:Ex; inv_red H ]
+(* Split a variable, with the cases in the order of the rules ([None] before
+   [Some], [false] before [true]). *)
+with split_var H x :=
+  let T := type of x in let T := eval hnf in T in
+  lazymatch T with
+  | option _ => destruct x using option_rule_order; inv_red H
+  | bool => destruct x using bool_rule_order; inv_red H
+  | _ => destruct x; inv_red H
+  end.
+
+
 Ltac check_if_var x :=
   first [ is_var x;fail 1 "Term" x "is not a bare variable" | idtac ].
 
 Ltac match_dd_once := 
     match goal with
-    | H : reduceI ?p _ _ |- _ => check_if_var p; dependent destruction  H
-    | H : reduceO ?p _ _ |- _ => check_if_var p; dependent destruction  H
+    | H : reduceI ?p _ _ |- _ => check_if_var p; inv_red H
+    | H : reduceO ?p _ _ |- _ => check_if_var p; inv_red H
     end.
 
 
@@ -203,6 +477,13 @@ Ltac match_dd :=
 
 Ltac match_dd_o := 
    repeat (match_dd_once;eauto).
+
+(* Invert every output step before any input step.  In a feedback loop the
+   next input is computed from the last output, so inverting outputs first
+   lets the input steps' arguments evaluate to constructors. *)
+Ltac match_dd_out_first :=
+  repeat (match goal with H : reduceO ?p _ _ |- _ => check_if_var p; inv_red H end);
+  match_dd.
 
 
 Inductive Trace (I O : Ty) (ORel : cEquiv [O]) (l : level) : list ([I] + [O]) -> Proc I O -> Prop :=
@@ -528,8 +809,7 @@ Hint Resolve rel_eq.
 (* [ObliviousTrace ORel l o0 s]: every output in [s] is indistinguishable from
    the reference output [o0] at level [l], so an observer there sees the same
    class throughout.  The reference is a plain output value, not a member of the
-   distinguished class: obliviousness is a statement about indistinguishability
-   only.  Prose: docs/noninterference.md section 3a. *)
+   distinguished class.  Used only by [oblivious_class] below. *)
 Inductive ObliviousTrace {I O : Ty} (ORel : cEquiv [O]) (l : level) (o0 : [O]) : seq ([I] + [O]) -> Prop :=
  | OT_nil : ObliviousTrace ORel l o0 nil
  | OT_cons_in i s :  ObliviousTrace ORel l o0 s -> ObliviousTrace ORel l o0 ((inl i)::s)
@@ -538,9 +818,21 @@ Inductive ObliviousTrace {I O : Ty} (ORel : cEquiv [O]) (l : level) (o0 : [O]) :
 Definition oblivious_at {I O : Ty} (ORel : cEquiv [O]) (o0 : [O]) (p : Proc I O) (l : level) :=
   forall s, Trace ORel l s p -> ObliviousTrace ORel l o0 s.
 
-(* [p] never leaves one indistinguishability class at [l]. *)
-Definition oblivious  {I O : Ty} (ORel : cEquiv [O]) (p : Proc I O)  (l : level) :=
+(* [p] never leaves one indistinguishability class at [l].  This is weaker than
+   [oblivious] below and is used only inside the proof of [swi_NI]. *)
+Definition oblivious_class {I O : Ty} (ORel : cEquiv [O]) (p : Proc I O) (l : level) :=
   exists o0, oblivious_at ORel o0 p l.
+
+(* [DisTrace ORel l s]: every output in [s] is unobservable at [l]. *)
+Inductive DisTrace {I O : Ty} (ORel : cEquiv [O]) (l : level) : seq ([I] + [O]) -> Prop :=
+ | DT_nil : DisTrace ORel l nil
+ | DT_cons_in i s : DisTrace ORel l s -> DisTrace ORel l ((inl i)::s)
+ | DT_cons_out o s : dis ORel l o -> DisTrace ORel l s -> DisTrace ORel l ((inr o)::s).
+
+(* Obliviousness as in Rafnsson et al.: every output [p] can emit is
+   unobservable at [l]. *)
+Definition oblivious {I O : Ty} (ORel : cEquiv [O]) (p : Proc I O) (l : level) :=
+  forall s, Trace ORel l s p -> DisTrace ORel l s.
 
 Definition aware_or_oblivious  {I O : Ty} (ORel : cEquiv [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware ORel o l \/ oblivious ORel p l.
 

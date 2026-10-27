@@ -6,7 +6,7 @@ interrupts the ordinary way: a handler starts as soon as its interrupt can be
 serviced. It leaks (\cref{sec:leak}). The second, \m{model_sliced}, runs handlers
 only inside time slices opened by the public timer, each slice holding a fixed number
 of handler runs, with unused runs filled by the NOP handler. It does not leak
-(\cref{sec:sliced}). \Cref{tab:designs} summarises both.
+(\cref{sec:sliced}). \Cref{fig:schedules} runs both on the same inputs.
 
 Both are exercised on the same concrete system. Its public user process
 emits the request \code{GetRequest} (\code{Get}) whenever it runs, and its private
@@ -17,20 +17,35 @@ $\mathit{runs} = 2$ handler runs.
 
 \subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
 
-\m{model_immediate} starts with every mask clear and no slice counter. Its service
-policy reacts to a handler announcing completion by unmasking everything, and if the
-handler was the timer's, by requesting a reschedule. An interrupt is therefore
-serviced at the first output step after it arrives at which no handler is running,
-and nothing constrains \emph{when} that is. \Cref{sec:state} traced the consequence:
-the disk handler starts at once and takes the public user's steps, producing the gap
-of \cref{fig:leak}.
+\m{model_immediate} is \m{model} at
+\begin{lstlisting}
+immediate_init :=
+  ((initial_pid, None),
+   (false, (None, false_ic)))
+
+immediate_service o v :=
+  if is_ir_out_done o is Some ir then
+    let v := unset_masks v in
+    if ir is timer_irq then update_re_sched v true
+    else v
+  else v
+\end{lstlisting}
+and the identity for \m{restore_invariant}. In \m{immediate_init} (fields as in
+\cref{sec:global-state}) the slice counter is \code{None}, disabled, and
+\m{false_ic} clears every pending and mask bit.
+\m{is_ir_out_done} names the handler, if any, that emits \code{Notify} in the output
+\code{o}; the service policy then unmasks everything, and after the timer handler
+also requests a reschedule. An interrupt is therefore serviced at the first output
+step after it arrives at which no handler is running, and nothing constrains
+\emph{when} that is. \Cref{sec:state} traced the consequence: the disk handler
+starts at once and takes the public user's steps, producing the gap of
+\cref{fig:leak}.
 
 \begin{theorem}[\m{model_immediate_not_NI}]\label{thm:leak}
-For the concrete system, with $\mathsf{out\_equivC}$ the output equivalence
-\m{out_equiv} at the concrete output types,
+For the concrete system,
 \[
 \mathsf{model\_immediate\_concrete} \notin
-  \NI(\mathsf{in\_equiv},\, \mathsf{out\_equivC}).
+  \NI(\mathsf{in\_equiv},\, \mathsf{out\_equiv}).
 \]
 \end{theorem}
 
@@ -52,31 +67,65 @@ which is public. Each slice holds exactly $\mathit{runs}$ handler runs (for hand
 steps; \cref{sec:restore} discusses one-step handlers), and a run that no disk
 interrupt claims is taken by the NOP handler.
 
-The slice counter \m{ir_count} counts output steps. The service policy
-\m{sliced_service} runs three stages on each output, in this order:
+\m{model_sliced} is \m{model} at \m{sliced_init}, \m{sliced_service} and
+\m{restore_invariant}:
+\begin{lstlisting}
+sliced_init :=
+  ((initial_pid, None),
+   (false, (Some 0, mask_most)))
+
+sliced_service runtime runs o :=
+  check_ir_count
+  (@$\circ$@) check_handler_completed runtime
+  (@$\circ$@) initiate_ir runtime runs o
+
+initiate_ir runtime runs o v :=
+  if tI_out o is Some Notify then
+    update_re_sched
+      (update_ir_count v
+         (Some (time_slice runtime runs)))
+      true
+  else v
+
+check_handler_completed runtime v :=
+  if handler_completed runtime
+       (get_ir_count v) then
+    update_ir_pending (set_tI (unset_masks v))
+      nop_irq true
+  else v
+
+check_ir_count v :=
+  match get_ir_count v with
+  | Some n.+1 => update_ir_count v (Some n)
+  | Some 0 => update_ir_count
+                (set_otherIs (unset_tI v)) None
+  | None => v
+  end
+\end{lstlisting}
+The system starts outside a slice: \m{mask_most} masks the disk and NOP handlers
+and leaves the timer unmasked. The slice counter \m{ir_count} counts output steps,
+and \m{sliced_service} runs three stages on each output, right to left:
 \begin{itemize}
 \item \emph{Opening a slice.} When the timer handler emits \code{Notify},
-  \m{initiate_ir} loads the counter with $\mathit{runs}\cdot\mathit{runtime}$, the
-  number of steps that $\mathit{runs}$ handler runs take, and requests a reschedule
-  for when the slice ends.
-\item \emph{Boundaries.} Since the slice length is a multiple of $\mathit{runtime}$,
-  the counter is a nonzero multiple of $\mathit{runtime}$ exactly at the start of the
-  slice and after each completed run inside it. There
-  \m{check_handler_completed} reopens the disk and NOP masks, keeps the timer
-  masked, and makes the NOP handler pending. That last step is the \emph{filler}: a
-  handler is always ready at a boundary, so a run takes place whether or not a disk
-  interrupt is waiting, and the disk handler, if pending, takes priority.
-\item \emph{Closing.} \m{check_ir_count} ticks the counter, and when it reaches zero
-  masks the disk and NOP handlers, unmasks the timer and disables the counter.
+  \m{initiate_ir} loads the counter with
+  $\mathsf{time\_slice}\;\mathit{runtime}\;\mathit{runs} =
+  \mathit{runs}\cdot\mathit{runtime}$, the number of steps that $\mathit{runs}$
+  handler runs take, and requests a reschedule for when the slice ends.
+\item \emph{Boundaries.} \m{handler_completed} holds when the counter is a nonzero
+  multiple of $\mathit{runtime}$: at the start of the slice and after each
+  completed run inside it. There \m{check_handler_completed} reopens the masks,
+  masks the timer again, and makes the NOP handler pending. That last step is the
+  \emph{filler}: a handler is always ready at a boundary, so a run takes place
+  whether or not a disk interrupt is waiting, and the disk handler, if pending,
+  takes priority.
+\item \emph{Closing.} \m{check_ir_count} ticks the counter, and when it reaches
+  zero masks the disk and NOP handlers, unmasks the timer and disables the counter.
 \end{itemize}
 On the step where the timer handler completes, opening a slice and its first
 boundary coincide, so the first run of the slice starts at the very next step.
-
-The system starts outside a slice. Outside a slice the disk and NOP handlers are
-masked, so a disk interrupt that arrives there is only recorded as pending. Inside a
-slice the timer is masked, so a timer interrupt cannot start a handler in the middle
-of one. When a slice ends, the reschedule requested at its opening hands control to
-the scheduler, so the step after every slice belongs to the scheduler.
+Outside a slice a disk interrupt is only recorded as pending; inside one, the
+timer is masked, so it cannot start a handler mid-slice. When a slice ends, the
+reschedule requested at its opening hands control to the scheduler.
 
 A secret handler run therefore takes the place of a NOP run: a slice containing a disk run has the same length and position as one
 containing only filler, and the public schedule around it is unchanged.
@@ -87,28 +136,42 @@ the private user's value. By \cref{fig:slots}, the attacker sees neither, so the
 runs look the same to it. \Cref{thm:main} in \cref{sec:proof} proves that the same holds
 for any two runs that differ only in inputs the attacker cannot see.
 
-\begin{table*}[t]
+\begin{figure}[t]
 \centering
-\caption{The two interrupt policies, as arguments of \texttt{model}.}
-\label{tab:designs}
-\footnotesize
-\begin{tabularx}{\textwidth}{@{}lLL@{}}
-\toprule
- & \m{model_immediate} & \m{model_sliced} \\
-\midrule
-\code{init_policy} & all masks clear; no slice counter & outside a slice: disk and
-  NOP masked, timer unmasked \\
-\code{service_policy} & on a handler's completion, unmask everything; on the timer's,
-  also request a reschedule & open, fill and close slices
-  (\cref{sec:sliced}) \\
-\m{restore_invariant} (proof only) & \code{id} & re-imposes the slice invariant;
-  the identity on every reachable state \\
-a handler runs & at the first step its interrupt can be serviced & only inside a
-  slice opened by the public timer \\
-non-interfering? & no (\cref{thm:leak}) & yes (\cref{thm:main}) \\
-\bottomrule
-\end{tabularx}
-\end{table*}
+\begin{tikzpicture}[font=\scriptsize,
+  cell/.style={draw, minimum width=0.5cm, minimum height=0.42cm, inner sep=0pt},
+  cG/.style={cell, fill=black!28}, cT/.style={cell, fill=black!28},
+  cS/.style={cell, fill=black!28}, cP/.style={cell, fill=black!10},
+  cD/.style={cell, fill=white}, cN/.style={cell, fill=white},
+  irq/.style={line width=1.6pt},
+  dsk/.style={double, double distance=1.1pt, line width=0.55pt}]
+% step numbers
+\foreach \i in {1,...,12} \node at (0.5*\i, 0.42) {\i};
+% the four runs (models.v, aligned traces); y positions leave a gap between policies
+\foreach \y/\lab/\run in
+  {0/{ordinary}/{G,G,G,G,T,T,S,P,P,P,P,P},
+   -0.5/{ordinary, disk}/{G,G,D,D,T,T,S,P,P,P,P,P},
+   -1.35/{sliced}/{G,G,G,G,T,T,N,N,N,N,S,P},
+   -1.85/{sliced, disk}/{G,G,G,G,T,T,D,D,N,N,S,P}}
+  {\node[anchor=east] at (0.15, \y) {\lab};
+   \foreach \c [count=\i] in \run \node[c\c] at (0.5*\i, \y) {\c};}
+% interrupts: a bar on the boundary between two steps
+\foreach \y in {0,-0.5,-1.35,-1.85} \draw[irq] (1.75, \y+0.25) -- (1.75, \y-0.25);
+\foreach \y in {-0.5,-1.85} \draw[dsk] (0.75, \y+0.25) -- (0.75, \y-0.25);
+% the slice
+\draw (3.25,-2.18) -- (3.25,-2.28) -- (5.25,-2.28) -- (5.25,-2.18);
+\node[anchor=north] at (4.25,-2.28) {slice};
+\end{tikzpicture}
+\caption{Who runs at each step, under both policies, with and without a disk
+  interrupt, on the concrete system of this section. G: public user, P: private
+  user, S: scheduler, T, D, N: timer, disk and NOP handler; shaded as in
+  \cref{fig:slots}. A solid bar marks the timer interrupt, a hollow bar the disk
+  interrupt. Under the ordinary policy the disk handler takes steps 3 and 4 from
+  the public user; under the sliced policy it takes the place of the first NOP run,
+  and the shading of the two runs agrees. All four runs are proved traces of the
+  mechanised models (\protect\mechfile{theories/models.v}{models.v}, Section 11).}
+\label{fig:schedules}
+\end{figure}
 
 \begin{table*}[t]
 \centering

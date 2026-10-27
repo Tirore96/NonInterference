@@ -17,11 +17,6 @@ model runtime init_policy service_policy
 first step, and \m{pool_input} passes each slot the current pid and the disk
 handler's output.
 
-\paragraph{The state} Besides the current pid and the interrupt controller, the
-state holds the pid of the user process a handler interrupted, a reschedule flag
-\m{re_sched}, and a time-slice counter \m{ir_count}. The last two are used only by
-the sliced policy.
-
 \paragraph{Handlers} \code{ir_handler runtime} counts its output steps modulo
 \code{runtime}. Its output type \code{THandlerOutput} has two values: it emits
 \code{Notify} on the step that completes a run and \code{Nothing} (a handler value,
@@ -31,16 +26,7 @@ not the option \code{None}) otherwise.
 pid. Each slot's output is tagged with the constant \code{true}, which closes its
 switch after one output step, so a selected process takes exactly one step.
 
-\paragraph{The scheduling decision} The state update is
-\begin{lstlisting}
-state_step service_policy restore_invariant =
-  step_sum set_pending
-    (initiate_next restore_invariant
-     (@$\circ$@) service_policy (@$\circ$@) check_scheduler)
-\end{lstlisting}
-where \code{step_sum} applies its first argument to interrupts and its second to
-pool outputs, and the composition runs right to left. The priority rule of
-\cref{sec:state} is
+\paragraph{The scheduling decision} The priority rule of \cref{sec:state} is
 \begin{lstlisting}
 initiate_next restore_invariant v =
   if masks_set v then v   (* handler running *)

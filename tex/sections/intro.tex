@@ -104,9 +104,10 @@ implement it in an operating system is carried out in separate work
   while the masks that decide what runs next may depend only on public
   information. The implementation in \todo{cite X} follows these requirements.
 \item A mechanisation of the calculus and its composition theorems. Our
-  definitions depart from the original in four places, and for each we prove that
-  the departure changes nothing or only weakens a side condition
-  (\cref{sec:mechanisation}).
+  definitions depart from the original in one essential place: non-interference
+  is stated over finite traces, which makes every proof an induction. We prove the
+  definition equivalent to the original coinductive one, so our main results also
+  hold in the original's terms (\cref{sec:mechanisation}).
 \end{itemize}
 
 \Cref{sec:background} recalls the calculus and the definition of non-interference.

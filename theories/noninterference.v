@@ -8,7 +8,6 @@ From mathcomp Require Import all_ssreflect.
 From mathcomp Require Import order.
 From HB Require Import structures.
 From deriving Require Import deriving.
-Require Import Coq.Program.Equality.
 Require Import Coq.Classes.DecidableClass.
 Import Order.TTheory.
 Open Scope order_scope.
@@ -18,20 +17,16 @@ Require Export NonInterference.theories.models.
 (* ===================================================================
    NonInterference: the concrete security equivalences and the results.
 
-   Prose companion: docs/noninterference.md (kept in sync with the
-   section banners below).  Structure:
+   Paper: Sections IV and V.  Structure:
      4. The model's equivalences : in_equiv, out_equiv (out_equiv_userview is in models.v)
      5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
      7. The state equivalence (state_type_equiv) and the fv_NI obligation
-   Note: this file imports classical logic via theorems.v (Require Import
-   Classical), used only in swi_NI because `aware` is not constructively
-   decidable.
    =================================================================== *)
 
 (* --- Section 4: the input equivalence.  in_equiv is CUSTOM: ir_dis makes
    ONLY the disk interrupt secret, and only at bot; the timer interrupt stays
-   public.  (docs/noninterference.md §1.) --- *)
+   public.  (Paper, Section V-A.) --- *)
 Definition ir_dis (l : level) (ir : [TInterrupt]) := ir = DiskInterrupt /\ l = \bot.
 Definition in_equiv : cEquiv [T_in].
   refine (@CEquiv _
@@ -64,7 +59,7 @@ Definition out_equiv (Opub Opriv : Ty) : cEquiv [T_out Opub Opriv] := eqpair (eq
                                                       (eqmaybe_all (public_equiv _)))))).
 
 (* The alphabets the concrete models are instantiated at. *)
-Notation out_equivC := (out_equiv TPublicOutput TTypeSyscall).
+Notation out_equiv_concrete := (out_equiv TPublicOutput TTypeSyscall).
 Notation out_equiv_userviewC := (out_equiv_userview TPublicOutput TTypeSyscall).
 
 Lemma Trace_imp : forall (A B : Ty) (p : Proc A B) (s : seq ([A] + [B])) l (BRel BRel' : cEquiv [B]), (forall x y, rel BRel l x y -> rel BRel' l x y) -> Trace BRel l s p -> Trace BRel' l s p.
@@ -89,7 +84,7 @@ Proof.
    econ. reduce_tac. econ. econ. reduce_tac. econ.
 Qed.   
 
-Lemma helper_trace : Trace out_equivC \bot [::out_get';out_get'] model_immediate_concrete.
+Lemma helper_trace : Trace out_equiv_concrete \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace'.
   intros. simpl in H. subst. auto.
@@ -103,9 +98,8 @@ Opaque state_step pool_input immediate_init no_output f_proj.
    bot-trace of two public requests; insert a disk interrupt at the front
    (secret at bot); its pending flag reschedules the disk handler, which then
    runs its full two steps, so the expected second public output becomes None.
-   Two public outputs suffice to refute NI.  Short by necessity:
-   inversion on reductions is expensive.  (docs/noninterference.md §2.) === *)
-Lemma model_immediate_not_NI : ~ NI in_equiv out_equivC model_immediate_concrete.
+   Two public outputs suffice to refute NI.  (Paper, Section IV-A.) === *)
+Lemma model_immediate_not_NI : ~ NI in_equiv out_equiv_concrete model_immediate_concrete.
 Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
@@ -114,11 +108,11 @@ Proof.
   have: ir_dis \bot DiskInterrupt. ssa.
   move=>aa. move/(_ aa).
   move=>Htr. clear a aa.
-  inv Htr;clear Htr;match_dd. 
-  rewrite /= in x. clear x.
-  inv H3;clear H3;match_dd. ssa.
-  inv H5;clear H5;match_dd.
-  move: H9. clear. simpl. ssa.
+  inv Htr; clear Htr; match_dd_out_first.
+  do 2 (match goal with Ht : Trace _ _ (_ :: _) _ |- _ => inv Ht; clear Ht end;
+        match_dd_out_first).
+  (* the second public request is missing: the public slot emitted None *)
+  match goal with Hr : rel _ _ _ _ |- _ => solve [move: Hr; clear; simpl; ssa] end.
 Qed.
 
 Transparent pool_input immediate_init no_output f_proj.
@@ -245,7 +239,7 @@ Qed.
    pending bits secret via private_pending_equiv; cur_pid's inl/inr tag PUBLIC but the
    bool inside inl (which handler) secret;
    re_sched, ir_count (the slice), scheduler/user pid all public.
-   (docs/noninterference.md §4a.) === *)
+   (Paper, Section V-D.) === *)
 Definition pids_equiv : cEquiv [pids] := eqpair (eqsum (private_equiv _) (public_equiv _)) (public_equiv _).
 Definition private_pending_equiv : cEquiv [ir_bits] := eqpair (private_equiv _) (public_equiv _).
 Definition public_bits_equiv : cEquiv [ir_bits] := eqpair (public_equiv _) (public_equiv _).
@@ -419,7 +413,7 @@ Qed.
    The pool's userspace and scheduler slots are discharged by these three
    facts and nothing else.  Stating them separately makes explicit what the
    assembled proof needs of each slot: an NI process at the classification
-   its slot declares.  (docs/noninterference.md) *)
+   its slot declares.  (Paper, Section VI.) *)
 
 (* Slot 5, the public user process.  Its output slot is public, so it may
    emit anything as long as it emits it unconditionally. *)
@@ -487,7 +481,7 @@ Qed.
 (* === Section 6: model_sliced is non-interfering.  Assembled from the generic
    composition theorems (par_NI, sta_NI, swi_NI, map/output-weakening) applied
    to the pool; the only non-mechanical obligation is fv_NI of the state
-   transition (section 7).  (docs/noninterference.md §3.)
+   transition (section 7).  (Paper, Section V-B.)
 
    The result holds for *any* scheduler and any two user processes that are
    themselves non-interfering at the classification their slot declares.  That
@@ -1581,16 +1575,12 @@ Proof.
   apply swi_NI.
   intros.
   destruct (eqVneq l \bot). subst. right.
-  (* At bot the gate cannot be trusted, so we show instead that the whole
-     switch stays inside one indistinguishability class: everything it emits
-     is related to None. *)
-  eapply oblivious_swi with (b0:=false) (o0:=Nothing). ssa.
+  (* At bot the gate cannot be trusted, but everything the switch emits is
+     unobservable there: the gate is hidden, so None is, and so is every
+     payload. *)
+  apply oblivious_all_dis. case=> [o|] /=; first done.
   move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by (simpl; right).
   by move: (Ha _ Hr)=>[].
-  intro. intros.
-  elim: H. intros. con.
-  intros. econ. done.
-  intros. econ. 2:done. de o.
   left. intro. intros.
   move/private_not_bot' : H=>->//. ssa.
   intro. subst. rewrite eqxx in i. done.
@@ -1640,16 +1630,12 @@ Proof.
   apply swi_NI.
   intros.
   destruct (eqVneq l \bot). subst. right.
-  (* At bot the gate cannot be trusted, so we show instead that the whole
-     switch stays inside one indistinguishability class: everything it emits
-     is related to None. *)
-  eapply oblivious_swi with (b0:=false) (o0:=Nothing). ssa.
+  (* At bot the gate cannot be trusted, but everything the switch emits is
+     unobservable there: the gate is hidden, so None is, and so is every
+     payload. *)
+  apply oblivious_all_dis. case=> [o|] /=; first done.
   move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by (simpl; right).
   by move: (Ha _ Hr)=>[].
-  intro. intros.
-  elim: H. intros. con.
-  intros. econ. done.
-  intros. econ. 2:done. de o.
   left. intro. intros.
   move/private_not_bot' : H=>->//. ssa.
   intro. subst. rewrite eqxx in i. done.
@@ -1717,7 +1703,7 @@ Qed.
 (* === Section 6 (payoff): the top result.  model_sliced_userview = map id
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
    weakening through parse_output (out_equiv-related outputs map to
-   out_equiv_userview-related ones).  (docs/noninterference.md §3.) === *)
+   out_equiv_userview-related ones).  (Paper, Section V.) === *)
 Lemma model_sliced_userview_NI : NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
   eapply map_NI. eauto. eauto.
@@ -1743,7 +1729,7 @@ End Parameters.
 
 
 (* === The concrete system, recovered by instantiation. === *)
-Corollary model_sliced_concrete_NI : NI in_equiv out_equivC model_sliced_concrete.
+Corollary model_sliced_concrete_NI : NI in_equiv out_equiv_concrete model_sliced_concrete.
 Proof.
   apply model_sliced_NI.
   apply p_pub_concrete_NI. apply p_priv_concrete_NI. apply scheduler_NI.

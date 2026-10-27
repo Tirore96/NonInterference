@@ -1,9 +1,9 @@
 \section{Background: Composable Timing-Sensitive Non-Interference}\label{sec:background}
 
 This section recalls the calculus and definitions of Rafnsson et
-al.~\cite{rafnsson2017}, in the form we mechanise. Our definitions are stated
-differently from the original, but they are equivalent to it, except for one side
-condition that we weaken; \cref{sec:departures} gives the details.
+al.~\cite{rafnsson2017}, in the form we mechanise. The one essential difference is
+that non-interference is stated over finite traces; \cref{sec:departures} proves
+it equivalent to the original.
 
 \subsection{Processes, traces and time}
 
@@ -88,8 +88,9 @@ lattices). Each input and output type carries a \emph{characterised equivalence}
 \item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;
 \item $x \doteq_\ell \unobs$: an observer at $\ell$ does not see $x$ at all.
 \end{itemize}
-We keep the notation of Rafnsson et al.; in our formulation
-$x \doteq_\ell \unobs$ is a predicate on $x$ (\cref{sec:departures}). $\doteq_\ell$ is an equivalence, and the unobservable values form one
+We keep the notation of Rafnsson et al.; in the mechanisation
+$x \doteq_\ell \unobs$ is a predicate on $x$, which changes nothing
+(\cref{sec:departures}). $\doteq_\ell$ is an equivalence, and the unobservable values form one
 of its classes:
 \[
 x \doteq_\ell \unobs \;\Rightarrow\; \forall y.\;
@@ -191,15 +192,15 @@ f \in \NI(\eqv{I},\eqv{V},\eqv{V}) &\iff \forall \ell, i, i', v, v'.\;
 f \in \mathsf{PE}(\eqv{I},\eqv{V}) &\iff \forall \ell, i, v.\;
   i \eqv{I}_\ell \unobs \Rightarrow f\,i\,v \eqv{V}_\ell v \\
 \ell \in \Aw(v,\doteq) &\iff \forall \hat v.\; v \doteq_\ell \hat v \Rightarrow v = \hat v \\
-\ell \in \Ob(p,\doteq) &\iff \exists o_0.\; \text{every output of $p$ at $\ell$ is}
-  \doteq_\ell o_0
+\ell \in \Ob(p,\doteq) &\iff \text{every output of $p$ at $\ell$ is}
+  \doteq_\ell \unobs
 \end{align*}
 A function is non-interfering if it maps related values to related values
 (\m{f_NI}, \m{fv_NI}), unobservable-preserving if it maps unobservable values to
 unobservable ones (\m{f_PU}), and equivalence-preserving if an unobservable input
 does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $v$
 (\m{aware}) if it can tell $v$ from every other value, and \emph{oblivious} to $p$
-(\m{oblivious}) if all outputs of $p$ fall in one class.
+(\m{oblivious}) if it sees none of $p$'s outputs.
 
 \begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
 For all processes, functions and equivalences of matching types:
