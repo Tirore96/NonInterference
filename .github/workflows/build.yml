@@ -1,0 +1,80 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The two jobs are independent and run in parallel: the PDF is published as soon
+# as the paper builds, without waiting for the proofs.
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: coq-community/docker-coq-action@v1
+        with:
+          # Rocq 9.0 with MathComp 2.5.0 and Hierarchy Builder preinstalled.
+          custom_image: mathcomp/mathcomp:2.5.0-rocq-prover-9.0
+          before_install: |
+            startGroup "Fix permissions"
+              sudo chown -R 1000:1000 .
+            endGroup
+          install: |
+            startGroup "Install deriving and paco"
+              opam repo add rocq-released https://rocq-prover.org/opam/released || true
+              opam update -y
+              opam install -y coq-deriving.0.2.2 coq-paco.4.2.3
+              opam list
+            endGroup
+          script: |
+            startGroup "Build"
+              rocq makefile -f _CoqProject -o Makefile
+              make -j2
+            endGroup
+            startGroup "Check axioms"
+              sh ci/check_axioms.sh
+            endGroup
+          after_script: |
+            startGroup "Restore permissions"
+              sudo chown -R 1001:116 .
+            endGroup
+
+  paper:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the paper
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: main.tex
+          working_directory: tex
+          # .latexmkrc runs mechlinks.py, which needs Python.
+          extra_system_packages: python3
+      - name: Upload the PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper
+          path: tex/main.pdf
+      # On main, replace the single commit on the pdf branch with the new PDF,
+      # so https://github.com/<owner>/<repo>/blob/pdf/paper.pdf is always current.
+      - name: Publish the PDF to the pdf branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir out
+          cp tex/main.pdf out/paper.pdf
+          cd out
+          git init -q -b pdf
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add paper.pdf
+          git commit -q -m "Paper built from ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" pdf

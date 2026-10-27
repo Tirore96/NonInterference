@@ -13,3 +13,4 @@ Makefile
 *.Makefile.d
 Makefile.conf
 *.cache
+ci/axioms.out
