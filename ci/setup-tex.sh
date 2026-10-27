@@ -16,7 +16,7 @@ for p in $pkgs; do
     missing="$missing $p"
 done
 # shellcheck disable=SC2086
-[ -z "$missing" ] || "$TEXBIN/tlmgr" install $missing >/dev/null
+[ -z "$missing" ] || "$TEXBIN/tlmgr" install $missing
 
 command -v python3 >/dev/null 2>&1 || echo "warning: python3 is needed for tex/mechlinks.py"
 

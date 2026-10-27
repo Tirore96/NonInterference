@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash ci/setup-cloud.sh rocq
-      - run: bash ci/build.sh proofs
+      - run: bash ci/run-annotated.sh "setup rocq" bash ci/setup-cloud.sh rocq
+      - run: bash ci/run-annotated.sh "build proofs" bash ci/build.sh proofs
       - name: Re-run setup (should be quick)
         run: time bash ci/setup-cloud.sh rocq
 
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash ci/setup-cloud.sh tex
-      - run: bash ci/build.sh paper
+      - run: bash ci/run-annotated.sh "setup tex" bash ci/setup-cloud.sh tex
+      - run: bash ci/run-annotated.sh "build paper" bash ci/build.sh paper
       - name: Re-run setup (should be quick)
         run: time bash ci/setup-cloud.sh tex
