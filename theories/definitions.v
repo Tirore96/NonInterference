@@ -85,9 +85,9 @@ Record cEquiv (A : Set) :=
             _: forall l a0, dis l a0 -> forall a1, dis l a1 <-> rel l a0 a1
           }.
 
-Inductive Interrupt := DiskInterrupt | TimerInterrupt | DefaultInterrupt.
+Inductive Interrupt := DiskInterrupt | TimerInterrupt.
 Inductive HandlerOutput := Nothing | Notify.
-Inductive TypeSyscall := Syscall | NOP.
+Inductive TypeSyscall := Syscall | Idle.
 Inductive PublicOutput := GetRequest | Public_NOP.
 
 Definition Interrupt_indDef := [indDef for Interrupt_rect].
@@ -445,7 +445,7 @@ Defined.
 
 
 Definition eqmaybe_dis {V : Ty} (P: levelPred) (VRel : cEquiv [V]) l (v : [Option V]) := if v is Some v' then dis VRel l v' else ~ P l.
-Definition eqmaybe_aux {V : Ty} (P: levelPred) (VRel : cEquiv [V]) : presP P -> cEquiv ([Option V]).
+Definition eqmaybe {V : Ty} (P: levelPred) (VRel : cEquiv [V]) : presP P -> cEquiv ([Option V]).
 intros.  
     refine (@CEquiv _
             (fun l v => eqmaybe_dis P VRel l v)
@@ -480,42 +480,42 @@ intros.
     de a0. de a1. eauto. de a1.
 Defined.    
 
-Definition Option_presP : presP (fun _ => True).
+Definition Option_presP_all : presP (fun _ => True).
   rewrite /presP. eauto.
 Qed.
 
 Definition aware (V : Ty) (VRel : cEquiv [V]) (v : [V]) : levelPred
   := fun l => (forall v', rel VRel l v v' -> v = v' /\ ~ dis VRel l v').
 
-Definition Option_presP_swi (BRel : cEquiv [Bool]) : presP (fun l => aware BRel true l).
+Definition Option_presP_aware (BRel : cEquiv [Bool]) : presP (fun l => aware BRel true l).
   rewrite /presP. intros. destruct BRel. move: H0. rewrite /aware. ssa.
   have: rel0 x0 true v'. eauto. move/H0. ssa.
   have: rel0 x0 true v'. eauto. move/H0. ssa. eauto.
 Qed.
 
 
-Definition Option_presP_hidden : presP (fun _ => False).
+Definition Option_presP_nobody : presP (fun _ => False).
   rewrite /presP. eauto.
 Qed.
 
-Definition Option_presP_private : presP (fun l => l <> \bot).
+Definition Option_presP_nonbot : presP (fun l => l <> \bot).
   rewrite /presP. intros. subst. rewrite /order in H. intro. subst. apply/H0.  rewrite lex0 in H. by apply/eqP.
 Qed.
 
-Definition eqmaybe {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
-  apply:eqmaybe_aux. apply VRel. apply: Option_presP.
+Definition eqmaybe_all {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
+  apply:eqmaybe. apply VRel. apply: Option_presP_all.
 Defined.
 
-Definition eqmaybe_private {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
-  apply:eqmaybe_aux. apply VRel. apply: Option_presP_private.
+Definition eqmaybe_nonbot {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
+  apply:eqmaybe. apply VRel. apply: Option_presP_nonbot.
 Defined.
 
-Definition eqmaybe_swi {V : Ty} (VRel : cEquiv [V]) (BRel : cEquiv [Bool]) : cEquiv ([Option V]).
-  apply:eqmaybe_aux. apply VRel. apply: Option_presP_swi. apply BRel.
+Definition eqmaybe_aware {V : Ty} (VRel : cEquiv [V]) (BRel : cEquiv [Bool]) : cEquiv ([Option V]).
+  apply:eqmaybe. apply VRel. apply: Option_presP_aware. apply BRel.
 Defined. 
 
-Definition eqmaybe_hidden {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
-  apply:eqmaybe_aux. apply VRel. apply:Option_presP_hidden.
+Definition eqmaybe_nobody {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
+  apply:eqmaybe. apply VRel. apply:Option_presP_nobody.
 Defined. 
 
 Lemma rel_eq : forall (I : Set) (IRel : cEquiv I) (x : I) l, rel IRel l x x.
@@ -787,7 +787,7 @@ Qed.
 
 Definition pair_rewr := (simp_pair1,simp_pair2).
 
-Lemma rel_eqmaybe : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel ARel l x y -> rel (eqmaybe ARel) l (Some x) (Some y).
+Lemma rel_eqmaybe_all : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel ARel l x y -> rel (eqmaybe_all ARel) l (Some x) (Some y).
 Proof. ssa.
 Qed.
 
@@ -809,7 +809,7 @@ Ltac temp_tac := (match reverse goal with
                   end                      
                   ;subst;ssa).
 
-Lemma rel_eqmaybe_private_aux : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel (eqmaybe_private ARel) l x y -> match x,y with
+Lemma rel_eqmaybe_nonbot_aux : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel (eqmaybe_nonbot ARel) l x y -> match x,y with
                                                                                                       | Some x', Some y' => rel ARel l x' y'
                                                                                                       | Some x', None => l = \bot /\ dis ARel l x'
                                                                                                       | None, Some y' => l = \bot /\ dis ARel l y'
@@ -822,7 +822,7 @@ Proof.
   temp_tac.
 Qed.
 
-Lemma rel_eqmaybe_private : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel (eqmaybe_private ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+Lemma rel_eqmaybe_nonbot : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel (eqmaybe_nonbot ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
                                                                                                     (exists x', x = Some x' /\ y = None /\ l = \bot /\ dis ARel l x') \/
                                                                                                     (exists y', x = None /\ y = Some y' /\ l = \bot /\ dis ARel l y') \/ x = None /\ y = None.
 Proof.
@@ -831,16 +831,16 @@ Proof.
   de y. right. right. econ. econ. eauto.
 Qed.
 
-Lemma rel_eqmaybe_private2 : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel ARel l x y -> rel (eqmaybe_private ARel) l (Some x) (Some y).
+Lemma rel_eqmaybe_nonbot2 : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel ARel l x y -> rel (eqmaybe_nonbot ARel) l (Some x) (Some y).
 Proof. ssa.
 Qed.
 
-Lemma rel_eqmaybe_hidden2 : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel ARel l x y -> rel (eqmaybe_hidden ARel) l (Some x) (Some y).
+Lemma rel_eqmaybe_nobody2 : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel ARel l x y -> rel (eqmaybe_nobody ARel) l (Some x) (Some y).
 Proof. ssa.
 Qed.
 
 
-Lemma rel_eqmaybe_aux : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel (eqmaybe ARel) l x y -> match x,y with
+Lemma rel_eqmaybe_all_aux : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel (eqmaybe_all ARel) l x y -> match x,y with
                                                                                               | Some x', Some y' => rel ARel l x' y'
                                                                                               | Some x', None => dis ARel l x'
                                                                                               | None, Some y' => dis ARel l y'
@@ -853,7 +853,7 @@ Proof.
   temp_tac.
 Qed.
 
-Lemma rel_eqmaybe2 : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel (eqmaybe ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+Lemma rel_eqmaybe_all2 : forall (A : Ty) (ARel : cEquiv [A]) l x y, rel (eqmaybe_all ARel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
                                                                                              x = None /\ y = None.
 Proof.
   intros.
@@ -862,7 +862,7 @@ Proof.
   de y.
 Qed.
 
-Lemma rel_eqmaybe_swi2 : forall (A : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [Bool]) l x y, rel (eqmaybe_swi ARel BRel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
+Lemma rel_eqmaybe_aware2 : forall (A : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [Bool]) l x y, rel (eqmaybe_aware ARel BRel) l x y -> (exists x' y', x = Some x' /\ y = Some y' /\ rel ARel l x' y') \/
                                                                                                                                 (x = None /\ y = None) \/ (eqmaybe_dis (aware BRel true) ARel l x /\ eqmaybe_dis (aware BRel true) ARel l y).
 Proof.
   intros.
@@ -871,17 +871,17 @@ Proof.
   de y.
 Qed.
 
-Lemma dis_eqmaybe : forall (A : Ty) (ARel : cEquiv [A]) l v, dis (eqmaybe ARel) l v -> exists v', v = Some v' /\ dis ARel l v'.
+Lemma dis_eqmaybe_all : forall (A : Ty) (ARel : cEquiv [A]) l v, dis (eqmaybe_all ARel) l v -> exists v', v = Some v' /\ dis ARel l v'.
 Proof.
   intros. ssa. de v. econ. eauto.
 Qed.
 
-Lemma dis_eqmaybe2 : forall (A : Ty) (ARel : cEquiv [A]) l x, dis ARel l x -> dis (eqmaybe ARel) l (Some x). 
+Lemma dis_eqmaybe_all2 : forall (A : Ty) (ARel : cEquiv [A]) l x, dis ARel l x -> dis (eqmaybe_all ARel) l (Some x). 
 Proof.
   intros. ssa. 
 Qed.
 
-Lemma dis_eqmaybe_hidden2 : forall (A : Ty) (ARel : cEquiv [A]) l x, dis ARel l x -> dis (eqmaybe_hidden ARel) l (Some x). 
+Lemma dis_eqmaybe_nobody2 : forall (A : Ty) (ARel : cEquiv [A]) l x, dis ARel l x -> dis (eqmaybe_nobody ARel) l (Some x). 
 Proof.
   intros. ssa. 
 Qed.    

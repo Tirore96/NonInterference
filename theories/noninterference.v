@@ -53,15 +53,15 @@ Definition in_equiv : cEquiv [T_in].
   ssa. de H0. move: H. rewrite /ir_dis. ssa.
 Defined.
 
-(* out_equiv: the 6-slot pool output.  Handler slots are default/NOP, disk,
-   timer: the first two are secret (eqmaybe_private private_equiv), the timer slot
+(* out_equiv: the 6-slot pool output.  Handler slots are NOP, disk,
+   timer: the first two are secret (eqmaybe_nonbot private_equiv), the timer slot
    is public (it reacts only to public timer interrupts). *)
-Definition out_equiv (Opub Opriv : Ty) : cEquiv [T_out Opub Opriv] := eqpair (eqmaybe (public_equiv _))
-                                          (eqpair (eqmaybe (private_equiv _))
-                                             (eqpair (eqmaybe (public_equiv _))
-                                                (eqpair (eqmaybe_private ((private_equiv _)))
-                                                   (eqpair (eqmaybe_private (private_equiv _))
-                                                      (eqmaybe (public_equiv _)))))).
+Definition out_equiv (Opub Opriv : Ty) : cEquiv [T_out Opub Opriv] := eqpair (eqmaybe_all (public_equiv _))
+                                          (eqpair (eqmaybe_all (private_equiv _))
+                                             (eqpair (eqmaybe_all (public_equiv _))
+                                                (eqpair (eqmaybe_nonbot ((private_equiv _)))
+                                                   (eqpair (eqmaybe_nonbot (private_equiv _))
+                                                      (eqmaybe_all (public_equiv _)))))).
 
 (* The alphabets the concrete models are instantiated at. *)
 Notation out_equivC := (out_equiv TPublicOutput TTypeSyscall).
@@ -97,7 +97,7 @@ Qed.
 
 
 (*Opaque otherwise the inversion tactic take forever*)
-Opaque state_step pool_input initial_state_immediate def f_proj.
+Opaque state_step pool_input initial_state_immediate no_output f_proj.
 
 (* === Section 5: model_immediate_concrete is not non-interfering.  Witness: a short
    bot-trace of two public requests; insert a disk interrupt at the front
@@ -121,7 +121,7 @@ Proof.
   move: H9. clear. simpl. ssa.
 Qed.
 
-Transparent pool_input initial_state_immediate def f_proj.
+Transparent pool_input initial_state_immediate no_output f_proj.
 
 
 (*The rest of the file shows nonintereference of model2 and model3*)
@@ -181,22 +181,22 @@ Proof.
 ssa. de H0.
 Qed.
 
-Lemma eqmaybe_private_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (private_equiv _)) l x y -> x = y.
+Lemma eqmaybe_nonbot_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_all (private_equiv _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. de H0. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_public_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe (public_equiv _)) l x y -> x = y.
+Lemma eqmaybe_all_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_all (public_equiv _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_private_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_private (private_equiv _)) l x y -> x = y.
+Lemma eqmaybe_nonbot_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_nonbot (private_equiv _)) l x y -> x = y.
 Proof.
 ssa. de x. de y. de H0. subst. done. de y.
 Qed.
 
-Lemma eqmaybe_private_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_private (private_equiv _)) \bot x y.
+Lemma eqmaybe_nonbot_at_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_nonbot (private_equiv _)) \bot x y.
 Proof.
   ssa. de x. de y. de y.
 Qed.
@@ -218,19 +218,19 @@ Proof.
   move: i=>[a [b [c [d [e f]]]]].
   move: i'=>[a' [b' [c' [d' [e' f']]]]].  
   rewrite !pair_rewr.
-  move=>/eqmaybe_public_not_bot=>->//.
-  move=>/eqmaybe_private_not_bot'=>->//.
-  move=>/eqmaybe_public_not_bot=>->//.
-  move/rel_eqmaybe_private.
+  move=>/eqmaybe_all_not_bot=>->//.
+  move=>/eqmaybe_nonbot_not_bot'=>->//.
+  move=>/eqmaybe_all_not_bot=>->//.
+  move/rel_eqmaybe_nonbot.
   case.
   move=>[x0][y0][]->[]-> /private_not_bot' ->//.
-  move=>/eqmaybe_private_not_bot=>->//.
-  move=>/eqmaybe_public_not_bot=>->//.
+  move=>/eqmaybe_nonbot_not_bot=>->//.
+  move=>/eqmaybe_all_not_bot=>->//.
   case. ssa.
   case. ssa.
   move=>[]->->.
-  move=>/eqmaybe_private_not_bot=>->//.
-  move=>/eqmaybe_public_not_bot=>->//.  
+  move=>/eqmaybe_nonbot_not_bot=>->//.
+  move=>/eqmaybe_all_not_bot=>->//.  
 Qed.
 
 
@@ -241,7 +241,7 @@ intros. rewrite /aware. intros. ssa. subst. simpl. intro. ssa.
 Qed.
 
 (* === Section 7a: the state equivalence.  Classification across two bot-related
-   states: masks PUBLIC everywhere; the secret handlers' (disk, default)
+   states: masks PUBLIC everywhere; the secret handlers' (disk, NOP)
    pending bits secret via private_pending_equiv; cur_pid's inl/inr tag PUBLIC but the
    bool inside inl (which handler) secret;
    re_sched, ir_count (the slice), scheduler/user pid all public.
@@ -270,7 +270,7 @@ Proof.
 Qed.
 
 
-Transparent state_step pool_input initial_state_immediate def f_proj.
+Transparent state_step pool_input initial_state_immediate no_output f_proj.
 
 Lemma in_equiv_eq i i0 l : rel in_equiv l i i0 -> i = i0.
 Proof.
@@ -295,7 +295,7 @@ Qed.
 
 
 (* === The composition-breakdown technique.  state_step is
-   step_sum set_pending (initiate_next(restore_invariant) o handler_preroutine o
+   step_sum set_pending (initiate_next(restore_invariant) o service_policy o
    check_scheduler).  fv_NI_step_sum splits a goal into the two summands, and
    fv_NI_comp discharges fv_NI of the output pipeline from fv_NI of its stages.
    The event equivalence is eqsum_L: an input may be unobservable, an output never
@@ -342,20 +342,20 @@ Proof.
   ssa.
 Qed.
 
-Definition ready_aux (v : [state_type]) := ir_ready v TimerInterrupt /\ first_ready v = Some TimerInterrupt \/ ~ ir_ready v TimerInterrupt /\ ir_ready v DiskInterrupt /\ first_ready v = Some DiskInterrupt \/  ~ ir_ready v TimerInterrupt /\ ~ ir_ready v DiskInterrupt /\ ir_ready v DefaultInterrupt /\ first_ready v = Some DefaultInterrupt \/ ~ ir_ready v TimerInterrupt /\ ~ ir_ready v DiskInterrupt /\ ~ ir_ready v DefaultInterrupt /\ first_ready v = None.
+Definition ready_aux (v : [state_type]) := ir_ready v timer_irq /\ first_ready v = Some timer_irq \/ ~ ir_ready v timer_irq /\ ir_ready v disk_irq /\ first_ready v = Some disk_irq \/  ~ ir_ready v timer_irq /\ ~ ir_ready v disk_irq /\ ir_ready v nop_irq /\ first_ready v = Some nop_irq \/ ~ ir_ready v timer_irq /\ ~ ir_ready v disk_irq /\ ~ ir_ready v nop_irq /\ first_ready v = None.
 
 Lemma ready_auxP v : ready_aux v.
 Proof.
   rewrite /ready_aux.
-  destruct (ir_ready v TimerInterrupt) eqn:Heqn. left. ssa.
+  destruct (ir_ready v timer_irq) eqn:Heqn. left. ssa.
   rewrite /first_ready. rewrite /all_interrupts /ohead. rewrite /filter.
   rewrite Heqn. done.
   right.
-  destruct (ir_ready v DiskInterrupt) eqn:Heqn'.
+  destruct (ir_ready v disk_irq) eqn:Heqn'.
   left. con. done. con. done.
   rewrite /first_ready /ohead /filter /all_interrupts Heqn Heqn' //.
   right.
-  destruct (ir_ready v DefaultInterrupt) eqn:Heqn''.
+  destruct (ir_ready v nop_irq) eqn:Heqn''.
   left. con. done. con. done. con. done.
   rewrite /first_ready /ohead /filter /all_interrupts Heqn Heqn' Heqn''//.
   rewrite /first_ready /ohead /filter /all_interrupts Heqn Heqn' Heqn''//. ssa.
@@ -364,12 +364,12 @@ Qed.
 
 Definition ready_cases (v v' : [state_type]) := ready_aux v /\ ready_aux v'.
 
-Definition ready_aux2 (v : [state_type]) := ir_ready v DiskInterrupt /\ first_ready v = Some DiskInterrupt \/
-                                             ~ ir_ready v DiskInterrupt /\ ir_ready v DefaultInterrupt /\ first_ready v = Some DefaultInterrupt \/
-                                             ~ ir_ready v DiskInterrupt /\ ~ ir_ready v DefaultInterrupt /\ first_ready v = None.
+Definition ready_aux2 (v : [state_type]) := ir_ready v disk_irq /\ first_ready v = Some disk_irq \/
+                                             ~ ir_ready v disk_irq /\ ir_ready v nop_irq /\ first_ready v = Some nop_irq \/
+                                             ~ ir_ready v disk_irq /\ ~ ir_ready v nop_irq /\ first_ready v = None.
 
-Definition ready_cases2 (v v' : [state_type]) := ir_ready v TimerInterrupt /\ ir_ready v' TimerInterrupt /\ first_ready v = Some TimerInterrupt /\ first_ready v' = Some TimerInterrupt \/
-                                                  ~ ir_ready v TimerInterrupt /\ ~ ir_ready v' TimerInterrupt /\
+Definition ready_cases2 (v v' : [state_type]) := ir_ready v timer_irq /\ ir_ready v' timer_irq /\ first_ready v = Some timer_irq /\ first_ready v' = Some timer_irq \/
+                                                  ~ ir_ready v timer_irq /\ ~ ir_ready v' timer_irq /\
                                                     ready_aux2 v /\ ready_aux2 v'.
 
 Lemma ready_casesP v v' : ready_cases v v'.
@@ -377,7 +377,7 @@ Proof.
   rewrite /ready_cases. con. apply ready_auxP. apply ready_auxP.
 Qed.
 
-Lemma ready_cases2P v v' : ir_ready v TimerInterrupt = ir_ready v' TimerInterrupt -> ready_cases2 v v'.
+Lemma ready_cases2P v v' : ir_ready v timer_irq = ir_ready v' timer_irq -> ready_cases2 v v'.
 Proof.
   rewrite /ready_cases2.
   move: (ready_casesP v v'). rewrite /ready_cases. case.
@@ -533,7 +533,7 @@ Proof.
   apply/rel_eqpair2.
   rewrite !pair_rewr.
   con. done.
-  destruct ir; rewrite /get_ir_bits /get_ir_bits' /get_ic /get_bool_state !pair_rewr;
+  case: ir => [[]|]; rewrite /get_ir_bits /get_ir_bits' /get_ic /get_bool_state !pair_rewr;
   repeat (apply/rel_eqpair2; con); rewrite ?pair_rewr; try done; try apply rel_eq; eauto.
 Qed.
 
@@ -571,7 +571,7 @@ Proof.
   case/rel_eqpair: H;eauto.
   instantiate (1:= state_type_equiv).
 
-  (*state update: This part is long. Involves set_pending, check_scheduler and the two preroutine stages*)
+  (*state update: This part is long. Involves set_pending, check_scheduler and the two service-policy stages*)
   apply sta_NI.
   mrw;eauto.
 
@@ -607,7 +607,7 @@ Proof.
   destruct i';rewrite !pair_rewr //.
   destruct i';rewrite !pair_rewr //.    
 
-  (*the output summand, initiate_next o handler_preroutine o check_scheduler*)
+  (*the output summand, initiate_next o service_policy o check_scheduler*)
   apply fv_NI_comp.
 
   (*check_scheduler*)
@@ -631,15 +631,15 @@ Proof.
   move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
   rewrite !pair_rewr /is_sched_out. subst.
  
-  case/rel_eqmaybe2.
+  case/rel_eqmaybe_all2.
   move=>[]x []y []-> []->// /public_equiv_eq ->//.
   move=>[]->[]->//.
 
-  case/rel_eqmaybe2.
+  case/rel_eqmaybe_all2.
   move=>[]x' []y' []-> []->// Hpr.
   move=>[]->[]->//.
 
-  case/rel_eqmaybe2.
+  case/rel_eqmaybe_all2.
   move=>[]x0 []y0 []-> []->// /public_equiv_eq ->//.
 
   move=>_. (*drop*)
@@ -649,7 +649,7 @@ Proof.
   move=>[]->[]->//.
 
 
-  (*handler_preroutine, itself a composition of three stages*)
+  (*service_policy, itself a composition of three stages*)
   apply fv_NI_comp.
 
   apply fv_NI_comp.
@@ -670,7 +670,7 @@ Proof.
   move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
   rewrite !pair_rewr /is_sched_out.  
 
-  case/rel_eqmaybe2.
+  case/rel_eqmaybe_all2.
   move=>[]x'[]y'[]->[]->/public_equiv_eq->//.
   move=>[]->->//.
 
@@ -776,8 +776,8 @@ Proof.
   
   destruct (masks_set v'). done. 
 
-  have: ir_ready  (restore_invariant v) TimerInterrupt =
-          ir_ready (restore_invariant v') TimerInterrupt. 
+  have: ir_ready  (restore_invariant v) timer_irq =
+          ir_ready (restore_invariant v') timer_irq. 
 
 
   move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
@@ -1419,7 +1419,7 @@ Proof.
 
   (*map*)
   eapply map_NI.
-  instantiate (1:= eqmaybe_hidden (eqpair (eqsum (private_equiv Bool) (public_equiv _)) (eqmaybe_hidden (private_equiv _)))).
+  instantiate (1:= eqmaybe_nobody (eqpair (eqsum (private_equiv Bool) (public_equiv _)) (eqmaybe_nobody (private_equiv _)))).
   mrw. intros.
   destruct i. destruct i'.
   rewrite !pair_rewr.
@@ -1429,7 +1429,7 @@ Proof.
   move/eqsum_L_split : H0. case.
   move=>[]x0[]x1[]->[]->. auto.
   move=>[]x0[]x1[]->[]->Hout.
-  apply rel_eqmaybe_hidden2.
+  apply rel_eqmaybe_nobody2.
   apply rel_eqpair2. con. rewrite !pair_rewr.
 
   move:H.
@@ -1442,7 +1442,7 @@ Proof.
   case: x0=>a[]b[]c[]d[] e f.
   case: x1=>a'[]b'[] c'[] d'[] e' f'.
   rewrite !pair_rewr.
-  move/rel_eqmaybe_private. case.
+  move/rel_eqmaybe_nonbot. case.
   move=>[]x'[]y'[] ->[]->.
   rewrite /dI_out. intro. move: b0. simpl. case.
   case. intros. subst. auto. intros. auto.
@@ -1476,10 +1476,10 @@ Proof.
   case_if. done. done.
   move=>[]x[]y[]->[]->/public_equiv_eq->/=. done.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (public_equiv _) false_equiv).
-  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  instantiate (1:= eqmaybe_aware (public_equiv _) false_equiv).
+  mrw. intros. apply rel_eqmaybe_aware2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe. eauto.
+  subst. apply rel_eqmaybe_all. eauto.
   destruct H. destruct H. subst. auto.
   destruct H. destruct i. ssa. destruct i'. ssa. auto.
 
@@ -1507,10 +1507,10 @@ Proof.
   case_if. done. done.
   move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (private_equiv _) false_equiv).
-  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  instantiate (1:= eqmaybe_aware (private_equiv _) false_equiv).
+  mrw. intros. apply rel_eqmaybe_aware2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe. eauto.
+  subst. apply rel_eqmaybe_all. eauto.
   destruct H. destruct H. subst. auto.
   destruct H. destruct i. ssa. destruct i'. ssa. ssa. intro. apply H0. intro. ssa. subst.
   intro. ssa. de i'. intro. apply H. intro. ssa. intro. apply H. intro. intros. subst.
@@ -1540,10 +1540,10 @@ Proof.
   case_if. done. done.
   move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (public_equiv _) false_equiv).
-  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  instantiate (1:= eqmaybe_aware (public_equiv _) false_equiv).
+  mrw. intros. apply rel_eqmaybe_aware2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe. eauto.
+  subst. apply rel_eqmaybe_all. eauto.
   destruct H. destruct H. subst. auto.
   destruct H. destruct i. ssa. destruct i'. ssa. ssa.
   
@@ -1569,12 +1569,12 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto. eauto.
   move=>[]x[]y[]->[]->/public_equiv_eq->/=.
   destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_hidden (private_equiv _)). auto.
+  instantiate (1:= eqmaybe_nobody (private_equiv _)). auto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (private_equiv _) (private_equiv _)).
-  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  instantiate (1:= eqmaybe_aware (private_equiv _) (private_equiv _)).
+  mrw. intros. apply rel_eqmaybe_aware2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe. eauto.
+  subst. apply rel_eqmaybe_all. eauto.
   destruct H. destruct H. subst. auto.
   destruct H. destruct i. ssa. destruct i'. ssa. ssa. de i'.
   
@@ -1628,12 +1628,12 @@ Proof.
   simpl in b. destruct b. destruct H. subst. eauto. eauto.
   move=>[]x[]y[]->[]->/public_equiv_eq->/=.
   destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_hidden (private_equiv _)). auto.
+  instantiate (1:= eqmaybe_nobody (private_equiv _)). auto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (private_equiv _) (private_equiv _)).
-  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  instantiate (1:= eqmaybe_aware (private_equiv _) (private_equiv _)).
+  mrw. intros. apply rel_eqmaybe_aware2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe. eauto.
+  subst. apply rel_eqmaybe_all. eauto.
   destruct H. destruct H. subst. auto.
   destruct H. destruct i. ssa. destruct i'. ssa. ssa. de i'.
   
@@ -1685,10 +1685,10 @@ Proof.
   case_if. done. done.
   move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
   mrw. intros. ssa.
-  instantiate (1:= eqmaybe_swi (public_equiv _) false_equiv).
-  mrw. intros. apply rel_eqmaybe_swi2 in H.
+  instantiate (1:= eqmaybe_aware (public_equiv _) false_equiv).
+  mrw. intros. apply rel_eqmaybe_aware2 in H.
   destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe. eauto.
+  subst. apply rel_eqmaybe_all. eauto.
   destruct H. destruct H. subst. auto.
   destruct H. destruct i. ssa. destruct i'. ssa. ssa.
   
@@ -1728,12 +1728,12 @@ Proof.
   move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
   rewrite !pair_rewr.
   rewrite /parse_output.
-  move/rel_eqmaybe2. case.
+  move/rel_eqmaybe_all2. case.
   move=>[]x'[]y'[]->[]->/public_equiv_eq->//.
   move=>[]->->.
-  move/rel_eqmaybe2. case.
+  move/rel_eqmaybe_all2. case.
   move=>[]x'[]y'[]->[]-> H _ _ _ _.
-  apply rel_eqmaybe. ssa.
+  apply rel_eqmaybe_all. ssa.
   move=>[]->[]->. auto.
 Qed.
 

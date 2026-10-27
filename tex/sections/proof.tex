@@ -5,8 +5,8 @@ If the scheduler and the public user process are non-interfering at
 \m{public_equiv} on input and output, and the private user process is
 non-interfering at \m{private_equiv} on input and output, then
 \begin{multline*}
-\NI\;\texttt{in\_equiv}\;(\texttt{out\_equiv}\;O_{pub}\;O_{priv})\\
-  (\texttt{model\_sliced}\;\mathit{runtime}\;\mathit{runs}\;p_{pub}\;p_{priv}\;p_{sched}).
+\mathsf{model\_sliced}\;\mathit{runtime}\;\mathit{runs}\;p_{pub}\;p_{priv}\;p_{sched}\\
+  \in \NI(\mathsf{in\_equiv},\, \mathsf{out\_equiv}).
 \end{multline*}
 \end{theorem}
 
@@ -22,37 +22,34 @@ section is about \cref{thm:main}.
 \subsection{The equivalences}\label{sec:equivs}
 
 \paragraph{Input} \m{in_equiv} makes the disk interrupt, and only the disk interrupt,
-unobservable at $\bot$. Taking \m{private_equiv} on interrupts instead would hide the
-timer as well, and non-interference would then forbid the schedule from depending
-on the timer, which is the whole basis of the sliced design.
+unobservable at $\Lo$. The timer stays public, because the sliced design schedules by it.
 
 \paragraph{Output} A pool output is a six-tuple of options, one per slot, and
 \m{out_equiv} is the corresponding nest of \m{eqpair}s (\cref{tab:out-equiv}). Its two
 columns come apart only for the two secret handlers, and that is where scheduling
 secrecy lives. The payload equivalence hides a slot's \emph{value}. Whether the slot
-\emph{ran} is decided by the \m{eqmaybe} variant around it, which fixes who can see
-\code{None}. Under plain \m{eqmaybe} the attacker sees a \code{Some} where another run has a
-\code{None}; so the private user process's system call is hidden from its \code{NOP}, but not
-the fact that it ran. Under \m{eqmaybe_private} a handler run and a step in which
-nothing happened are the same observation.
+\emph{ran} is decided by the \code{eqmaybe} instance around it, which fixes who can see
+\code{None}. Under \m{eqmaybe_all} the attacker tells \code{Some} from \code{None}, and so
+sees that the private user process ran; under \m{eqmaybe_nonbot} a handler run and
+a step in which nothing happened are the same observation.
 
 \begin{table}[t]
 \centering
 \caption{\texttt{out\_equiv}, one component per slot: a wrapper from the
   \texttt{eqmaybe} family around a public or private payload equivalence. The last
-  two columns say what the attacker at $\bot$ sees.}
+  two columns say what the attacker at $\Lo$ sees.}
 \label{tab:out-equiv}
 \footnotesize
 \begin{tabular}{@{}lllll@{}}
 \toprule
 slot & wrapper & payload & value & ran? \\
 \midrule
-public user & \m{eqmaybe} & public & visible & visible \\
-private user & \m{eqmaybe} & private & hidden & visible \\
-scheduler & \m{eqmaybe} & public & visible & visible \\
-NOP & \m{eqmaybe_private} & private & hidden & hidden \\
-disk & \m{eqmaybe_private} & private & hidden & hidden \\
-timer & \m{eqmaybe} & public & visible & visible \\
+public user & \m{eqmaybe_all} & public & visible & visible \\
+private user & \m{eqmaybe_all} & private & hidden & visible \\
+scheduler & \m{eqmaybe_all} & public & visible & visible \\
+NOP & \m{eqmaybe_nonbot} & private & hidden & hidden \\
+disk & \m{eqmaybe_nonbot} & private & hidden & hidden \\
+timer & \m{eqmaybe_all} & public & visible & visible \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -63,13 +60,13 @@ the other, so the two must look alike.
 \subsection{Compositional structure}
 
 The proof follows the term of \m{model_sliced} from the outside in, applying one
-composition theorem per constructor (\cref{tab:composition}): \m{map_NI} for the outer
+composition theorem per constructor (\cref{thm:composition}): \m{map_NI} for the outer
 rewiring, \m{loop_NI} for the feedback, \m{sta_NI} for the global state, \m{maybe_NI} for
 the idling pool, \m{par_NI} to split the pool into slots, \m{swi_NI} for each slot's
 gate, and at the leaves \m{out_NI} for the handler processes and the hypotheses of
 \cref{thm:main} for the scheduler and user processes. Since each theorem derives the
 composite's equivalences from those of its parts, the shape of \m{out_equiv} is forced:
-\m{par_NI} imposes its nest of \m{eqpair}s and \m{swi_NI} its \m{eqmaybe}s.
+\m{par_NI} imposes its nest of \m{eqpair}s and \m{swi_NI} its \code{eqmaybe} instances.
 
 Two of these steps carry substantial side conditions: the gate obligations of
 \m{swi_NI} (\cref{sec:gating}) and the state obligations of \m{sta_NI}
@@ -78,33 +75,33 @@ Two of these steps carry substantial side conditions: the gate obligations of
 \subsection{Gating a slot}\label{sec:gating}
 
 Each slot is a \code{swi} whose gate bit is computed from the pid by a \code{map}. Two
-obligations remain per slot, both parameterised by an equivalence \code{BRel} on the gate
-bit that the proof may choose. \m{map_NI} requires the gate map to send unobservable
-pids to unobservable bits (\m{f_PU}), and \m{swi_NI} requires, at every level, that the
+obligations remain per slot, both parameterised by an equivalence $\eqv{B}$ on the gate
+bit that the proof may choose. \m{map_NI} requires the gate map to be unobservable-preserving,
+sending unobservable pids to unobservable bits (\m{f_PU}), and \m{swi_NI} requires, at every level, that the
 observer be aware of the gate or oblivious to the slot:
-\begin{multline*}
-\mathit{aware}\;\mathit{BRel}\;\mathsf{true}\;l \;\vee{}\\
-\mathit{oblivious}\;(\mathsf{eqmaybe\_swi}\;\mathit{ORel}\;\mathit{BRel})\;
-  (\mathsf{swi}\;b\;p)\;l.
-\end{multline*}
+\[
+\ell \in \Aw(\mathsf{true}, \eqv{B}) \;\cup\;
+  \Ob(\mathsf{swi}\;b\;p,\; \mathsf{eqmaybe\_aware}(\eqv{O},\eqv{B})).
+\]
 Awareness means a bit related to \code{true} is \code{true} and observable, so the observer can
 trust the gate. Obliviousness means there is a reference output $o_0$ such that every
 output of the slot is related to it: whatever the input does, the observer sees the
-same class.
+same class. This is weaker than the original condition (\cref{sec:departures}), and the
+argument below needs the weaker form.
 
-At $\bot$ the two pids of the secret handlers are unobservable. For a slot neither of
-them selects, both map to \code{false}, so a \code{BRel} in which \code{false} alone is unobservable
+At $\Lo$ the two pids of the secret handlers are unobservable. For a slot neither of
+them selects, both map to \code{false}, so a $\eqv{B}$ in which \code{false} alone is unobservable
 satisfies \m{f_PU}; we call it \m{false_equiv}. Under \m{false_equiv} the observer is aware
 at every level, and the obligation is discharged without a case split. This covers
 the public and private user slots, the scheduler and the timer handler.
 
 For the disk and NOP slots, one secret pid maps to \code{true} and the other to \code{false},
 so \m{f_PU} demands that both bits be unobservable, which leaves only \m{private_equiv}.
-But then \code{true} is unobservable at $\bot$ and awareness fails there. At $\top$
-awareness still holds; at $\bot$ the proof uses obliviousness, with \code{None} as the
+But then \code{true} is unobservable at $\Lo$ and awareness fails there. At $\Hi$
+awareness still holds; at $\Lo$ the proof uses obliviousness, with \code{None} as the
 reference output. A step where the slot is gated off emits \code{None}, and a step where
 it runs emits \code{Some o}, so the obligation is that \code{None} and \code{Some o} are related at
-$\bot$. Under \m{eqmaybe_swi} that holds exactly when the gate is hidden and the
+$\Lo$. Under \m{eqmaybe_aware} that holds exactly when the gate is hidden and the
 payload unobservable, which the \m{private_equiv} payload of \cref{tab:out-equiv}
 provides. The line therefore falls between the two secret handlers and everything
 else; the private user process sits on the public side, its secrecy carried by its
@@ -116,7 +113,7 @@ payload and never by its gate.
 directions.
 \begin{itemize}
 \item \m{f_EP} requires that an unobservable input not visibly move the state. A disk
-  interrupt is unobservable at $\bot$ and sets the disk pending bit, so that bit
+  interrupt is unobservable at $\Lo$ and sets the disk pending bit, so that bit
   must be private. (The event equivalence \code{eqsum_L in_equiv out_equiv} makes only
   interrupts unobservable, so \m{f_EP} constrains \m{set_pending} alone.)
 \item \m{fv_NI} requires that related states be mapped to related states.
@@ -137,7 +134,7 @@ output step, where the input is no longer the thing being varied.
 \footnotesize
 \begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}p{0.25\columnwidth}L>{\raggedright\arraybackslash}p{0.24\columnwidth}@{}}
 \toprule
-field & equivalence & at $\bot$ \\
+field & equivalence & at $\Lo$ \\
 \midrule
 current pid & \code{eqsum private_equiv public_equiv} & which secret handler is hidden \\
 previous pid, \m{re_sched}, \m{ir_count} & \m{public_equiv} & visible \\
@@ -147,10 +144,15 @@ timer bits & \m{public_bits_equiv} & visible \\
 \end{tabularx}
 \end{table}
 
+The pid type is $\mathsf{Sum}\;\mathsf{Bool}\;\mathsf{Nat}$. Its \code{inl} side
+holds exactly the two secret handlers, the disk handler and the NOP handler, and its
+\code{inr} side everything else, the timer handler included. Drawing the line there
+lets the proof classify a whole pid in one place.
+
 The current pid is where the design does its work. Since \m{eqsum} never relates an
 \code{inl} to an \code{inr}, the fact \emph{that} a handler is running stays visible, as does
-every public pid. What \m{private_equiv} hides is the bit inside \code{inl}: at $\bot$ the
-disk handler and the NOP handler look alike. Across two $\bot$-related states, that
+every public pid. What \m{private_equiv} hides is the bit inside \code{inl}: at $\Lo$ the
+disk handler and the NOP handler look alike. Across two $\Lo$-related states, that
 bit and the two private pending bits are the only things allowed to differ.
 
 \subsection{Closure under the transition}\label{sec:fvni}
@@ -163,7 +165,7 @@ pipeline into one goal per stage:
 \begin{itemize}
 \item \m{set_pending}: related interrupts set related pending bits;
 \item \m{check_scheduler}: the scheduler's pid is public, so the update agrees;
-\item \code{handler_preroutine}: the slice logic reads only the public counter and
+\item \code{service_policy}: the slice logic reads only the public counter and
   masks, and writes the same values into both states;
 \item \m{initiate_next}: related states must make the same choice of what runs
   next.
@@ -186,8 +188,7 @@ The function \m{restore_invariant} writes these facts into the state, just befor
 two related states, and afterwards the deciding mask bits agree and related states
 take the same branch. This is what discharges the \m{initiate_next} goal.
 
-A function that changes the state could change the model, so we prove that it does
-not.
+We prove that it never changes a state the model reaches.
 
 \begin{theorem}[\m{restore_invariant_noop}]\label{thm:noop}
 Let $\mathit{runtime} \neq 1$. For every sequence of events $es$ from the initial
@@ -196,8 +197,7 @@ state of \m{model_sliced}, and every output $o$, let $w$ be the state that
 $\mathsf{restore\_invariant}\;w = w$.
 \end{theorem}
 
-The sequence $es$ is arbitrary, not restricted to what a process pool can emit, so
-the theorem is about the state machine alone. The proof states the invariant
+The events $es$ are arbitrary, so the theorem holds whatever the pool emits. The proof states the invariant
 between steps, shows that every event preserves it, and shows that at the choice
 point a slightly weaker invariant holds, on which \m{restore_invariant} is the
 identity. One small lemma per stage of the pipeline does the bookkeeping.
@@ -213,6 +213,6 @@ every slice loses its last handler run.
 An earlier version of the model relied on \m{restore_invariant} for behaviour: it was
 the only thing that queued the NOP filler and the only thing that returned control
 to the scheduler after a slice. Proving \cref{thm:noop} required moving both into
-\code{handler_preroutine}, where they now appear as part of the design
+\code{service_policy}, where they now appear as part of the design
 (\cref{sec:sliced}). The proof of \cref{thm:main} needed only two small lemmas to
 follow the change.

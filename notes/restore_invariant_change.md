@@ -15,11 +15,11 @@ things into the state that nothing else in `model_sliced` set:
 
 | effect | consequence |
 |---|---|
-| `re_sched := true` | `sliced_preroutine` never set `re_sched`, and `initiate_scheduler` resets it to `false`. So `restore_invariant` was the only reason control ever returned to the scheduler after a slice. |
+| `re_sched := true` | `sliced_policy` never set `re_sched`, and `initiate_scheduler` resets it to `false`. So `restore_invariant` was the only reason control ever returned to the scheduler after a slice. |
 | slice live ⇒ NOP pending | `initiate_handler` clears a handler's pending bit when it starts it, and only an input event (`set_pending`) sets one. So `restore_invariant` was the only reason the NOP filler ever ran. |
 
 The mechanised trace `sliced_no_dI'` shows both. It contains four NOP runs and no
-`DefaultInterrupt` input, and it reaches the scheduler after each slice. The filler,
+input that sets the NOP entry, and it reaches the scheduler after each slice. The filler,
 which is the heart of the security story, was being produced by the component
 described as harmless bookkeeping.
 
@@ -37,12 +37,12 @@ that only `model_sliced` uses.
    ```coq
    check_handler_completed runtime v =
      if handler_completed runtime (ir_count v)
-     then update_ir_pending (set_tI (unset_masks v)) DefaultInterrupt true
+     then update_ir_pending (set_tI (unset_masks v)) nop_irq true
      else v
    ```
 
 2. **`initiate_ir`** now requests a reschedule when the timer's `Notify` opens a
-   slice, as `immediate_preroutine` does in `model_immediate`:
+   slice, as `immediate_policy` does in `model_immediate`:
 
    ```coq
    initiate_ir runtime runs o v =

@@ -45,45 +45,45 @@ the whole basis of `model_sliced`.
 componentwise. A pool output is a six-tuple, one `Option` per slot:
 
 ```text
-( pub , sys , sch , dfl , dsk , tmr )
+( pub , sys , sch , nop , dsk , tmr )
 ```
 
 and `out_equiv` is the corresponding nest of `eqpair`s, with these components:
 
 | slot | component equivalence | value at `⊥` | did the slot run? |
 |---|---|---|---|
-| `pub` public user process | `eqmaybe public_equiv` | visible | visible |
-| `sys` private user process | `eqmaybe private_equiv` | hidden | visible |
-| `sch` scheduler | `eqmaybe public_equiv` | visible | visible |
-| `dfl` default/NOP handler | `eqmaybe_private private_equiv` | hidden | hidden |
-| `dsk` disk handler | `eqmaybe_private private_equiv` | hidden | hidden |
-| `tmr` timer handler | `eqmaybe public_equiv` | visible | visible |
+| `pub` public user process | `eqmaybe_all public_equiv` | visible | visible |
+| `sys` private user process | `eqmaybe_all private_equiv` | hidden | visible |
+| `sch` scheduler | `eqmaybe_all public_equiv` | visible | visible |
+| `nop` NOP handler | `eqmaybe_nonbot private_equiv` | hidden | hidden |
+| `dsk` disk handler | `eqmaybe_nonbot private_equiv` | hidden | hidden |
+| `tmr` timer handler | `eqmaybe_all public_equiv` | visible | visible |
 
 The timer slot is public, since it reacts only to public scheduled events. The disk
-slot is private because the disk interrupt is, and the default/NOP slot has to be
+slot is private because the disk interrupt is, and the NOP slot has to be
 private as well: a slice step is filled by one or the other, so the two must look
 alike.
 
 **The last two columns come apart only for the handlers, and that is where
 scheduling secrecy lives.** The `private_equiv` payload hides the *value* in a slot.
 Whether the slot ran is decided by the `eqmaybe` variant wrapped around it, since
-that is what fixes who can see `None`. Under plain `eqmaybe`, `None` is public, so a
+that is what fixes who can see `None`. Under `eqmaybe_all`, `None` is public, so a
 `⊥`-observer sees a `Some` where the other run has a `None`. That is why `sys` hides
-`Syscall` from `NOP` but not the fact that `p_priv_concrete` produced something.
-Under `eqmaybe_private`, `None` is unobservable at `⊥` and may be related to
+`Syscall` from `Idle` but not the fact that `p_priv_concrete` produced something.
+Under `eqmaybe_nonbot`, `None` is unobservable at `⊥` and may be related to
 `Some o`, so a disk handler run and a step where nothing happened are the same
 observation.
 
 For `p_priv_concrete` hiding the value is enough, since when it runs is public
 anyway. For the two secret handlers the fact of running must go too, which is the
 formal content of "the leak is in the scheduling". Section 3a discharges the
-obligation `eqmaybe_private` creates.
+obligation `eqmaybe_nonbot` creates.
 
 **`out_equiv_userview Opub Opriv : cEquiv [T_out_userview Opub Opriv]`**
 (user-visible output, for `model_sliced_userview`)
 
 ```text
-eqmaybe_hidden (eqsum public_equiv private_equiv)
+eqmaybe_nobody (eqsum public_equiv private_equiv)
 ```
 
 Only the user-visible channel survives `parse_output`: a public user output on the
@@ -146,12 +146,12 @@ from the outside in:
 
 | layer of `model_sliced` | theorem | what it gives |
 |---|---|---|
-| the outer `map inl (inr_or_def def)` and every rewiring of an input or output | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
+| the outer `map inl (inr_or_def no_output)` and every rewiring of an input or output | `map_NI` | `NI IRel' ORel p → NI IRel ORel' (map f g p)`, given `f_NI`/`f_PU` for `f` and `f_NI` for `g` |
 | `loop` (the feedback tying output back to input) | `loop_NI` | `NI IRel IRel p → NI IRel IRel (loop p)`; note input and output equivalences must coincide |
 | `sta` (the global state cell) | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p → NI IRel (eqpair VRel ORel) (sta f g v p)`, given `fv_NI` for both state updates; **this is where section 4 is discharged** |
-| `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_hidden IRel) ORel (maybe p)` |
+| `maybe` (a slot or the pool idling) | `maybe_NI` | `NI IRel ORel p → NI (eqmaybe_nobody IRel) ORel (maybe p)` |
 | `par` (laying the pool slots side by side) | `par_NI` | `NI IRel ORel1 p1 → NI IRel ORel2 p2 → NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
-| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`false_equiv`](#3a-gating-a-slot-why-false_equiv-and-where-obliviousness-is-needed) for every public slot |
+| `swi` (gating each slot on/off) | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p → NI (eqpair_LR BRel IRel) (eqmaybe_aware ORel BRel) (swi b p)`, given awareness-or-obliviousness at every level; the gate `BRel` is [`false_equiv`](#3a-gating-a-slot-why-false_equiv-and-where-obliviousness-is-needed) for every public slot |
 | the leaves | `out_NI`, or a hypothesis | the handler and padding leaves are constant processes, so `out_NI`; the scheduler and user slots are where the three parametricity hypotheses are consumed |
 | `parse_output` on top of `model_sliced` | `map_NI` again | output weakening, giving `model_sliced_userview_NI` |
 
@@ -186,7 +186,7 @@ f_PU (eqsum private_equiv public_equiv) BRel (fun pid => slot_pid pid == k)
 and `swi_NI` asks, at every level,
 
 ```coq
-aware BRel true l  \/  oblivious (eqmaybe_swi ORel BRel) (swi b (f_proc k)) l
+aware BRel true l  \/  oblivious (eqmaybe_aware ORel BRel) (swi b (f_proc k)) l
 ```
 
 Under `aware BRel true l` a value related to `true` must *be* `true` and must not
@@ -228,7 +228,7 @@ It is a well-formed `cEquiv` because `false` is its only unobservable value, so 
 ([noninterference.v:238](../theories/noninterference.v)) discharges `swi_NI` by the
 left disjunct at every level, no case split needed.
 
-**The disk handler at slot 1, and the same for the default handler at slot 2.**
+**The disk handler at slot 1, and the same for the NOP handler at slot 2.**
 Here `inl true` maps to `true` and `inl false` maps to `false`, and both pids are
 unobservable at `⊥`. `f_PU` now demands that *both* booleans be unobservable there,
 which rules `false_equiv` out and leaves `private_equiv Bool`. But if `true` is
@@ -239,13 +239,13 @@ disjunct is gone and the proof must split on the level:
   as before;
 - at `⊥`, the right disjunct is used, with `None` as the reference output. A step
   where the slot is gated off emits `None` itself, and a step where it runs emits
-  `Some o`, so the obligation is `rel (eqmaybe_swi ORel BRel) ⊥ None (Some o)`.
+  `Some o`, so the obligation is `rel (eqmaybe_aware ORel BRel) ⊥ None (Some o)`.
 
 `oblivious_swi` ([theorems.v](../theories/theorems.v)) discharges that from two
 facts, both of them relations:
 
 ```coq
-rel (eqmaybe_swi ORel BRel) l None (Some o0)      (* None sits in the class *)
+rel (eqmaybe_aware ORel BRel) l None (Some o0)      (* None sits in the class *)
 oblivious_at (eqpair_R BRel ORel) (b0,o0) p l     (* and the slot stays in it *)
 ```
 
@@ -255,14 +255,14 @@ the characterisation ([`background.md` §2](background.md)) turns that straight 
 into relatedness, so no step of the argument mentions `dis`.
 
 What the model has to prove is the first line, at `⊥`, with `o0` any handler
-output. `eqmaybe_swi` relates `None` to a `Some` exactly when the observer cannot
+output. `eqmaybe_aware` relates `None` to a `Some` exactly when the observer cannot
 see the gate and the payload is unobservable, so this is where the classification of
 section 1 comes back in: the slot's `private_equiv` payload is what makes a disk
 handler run and a step where nothing happened the same observation. Under a public
 `None` the two would come apart and obliviousness would fail. Losing awareness at
 `⊥` costs nothing, since the slot's output is private there anyway.
 
-So the distinguished class enters only through how `eqmaybe_swi` *defines*
+So the distinguished class enters only through how `eqmaybe_aware` *defines*
 relatedness, and never through obliviousness or through `swi_NI`, neither of which
 mentions it. The paper asks for more, that every output be unobservable; the
 weakening and its adequacy are in [`departures.md` §4](departures.md).
@@ -273,12 +273,12 @@ weakening and its adequacy are in [`departures.md` §4](departures.md).
 | 4 | `p_priv_concrete`, private | `false_equiv` | `aware`, every level |
 | 3 | scheduler | `false_equiv` | `aware`, every level |
 | 0 | timer handler | `false_equiv` | `aware`, every level |
-| 2 | default/NOP handler | `private_equiv` | `oblivious` at `⊥`, `aware` at `⊤` |
+| 2 | NOP handler | `private_equiv` | `oblivious` at `⊥`, `aware` at `⊤` |
 | 1 | disk handler | `private_equiv` | `oblivious` at `⊥`, `aware` at `⊤` |
 
 The line falls between the two secret handlers and everything else.
 `p_priv_concrete` sits on the public side of it: its secrecy travels in the
-`private_equiv` payload inside `eqmaybe_swi`, never in its gate.
+`private_equiv` payload inside `eqmaybe_aware`, never in its gate.
 
 ## 4. The state equivalence and `fv_NI`: the hard part
 
@@ -329,7 +329,7 @@ condition on `set_pending` alone.
 - **`f_EP` forces fields written by a secret input to be private.** A disk
   interrupt is unobservable at `⊥`, and `set_pending` responds by setting the disk
   pending bit. For `f_EP` to hold the result must still be `⊥`-related to the
-  original, so that bit cannot be public. Likewise the default handler's.
+  original, so that bit cannot be public. Likewise the NOP handler's.
 - **`fv_NI` forces fields that decide control flow to be public.** `initiate_next`
   branches on the mask bits, and two `⊥`-related states disagreeing there would
   take different branches and produce unrelated states.
@@ -351,8 +351,8 @@ matching nest of `eqpair`s:
 
 ```text
 state = ( ( cur_pid , prev_pid ) , ( re_sched , ( ir_count , ic ) ) )
-ic    = ( dfl , ( dsk , tmr ) )        the interrupt controller
-dfl   = ( pending , mask )             and likewise dsk and tmr
+ic    = ( nop , ( dsk , tmr ) )        the interrupt controller
+nop   = ( pending , mask )             and likewise dsk and tmr
 ```
 
 Field by field:
@@ -363,7 +363,7 @@ Field by field:
 | `prev_pid` | Nat | `public_equiv` | visible |
 | `re_sched` | Bool | `public_equiv` | visible |
 | `ir_count`, the slice counter | Option Nat | `public_equiv` | visible |
-| `dfl` | (pending, mask) | `private_pending_equiv` | pending hidden, mask visible |
+| `nop` | (pending, mask) | `private_pending_equiv` | pending hidden, mask visible |
 | `dsk` | (pending, mask) | `private_pending_equiv` | pending hidden, mask visible |
 | `tmr` | (pending, mask) | `public_bits_equiv` | both visible |
 
@@ -375,9 +375,9 @@ selecting which; `inr n` is a user or scheduler pid. Since `eqsum` never relates
 `inl` to an `inr` ([`background.md` §4](background.md)), *that* a handler is
 running stays visible, and so does the pid in `inr n`. What `private_equiv` hides is the `Bool` inside `inl`: at
 `⊥`, `inl true` and `inl false` are related, so the disk handler and the
-default/NOP one look alike.
+NOP one look alike.
 
-Across two `⊥`-related states, that bit and the `dfl` and `dsk` pending bits are
+Across two `⊥`-related states, that bit and the `nop` and `dsk` pending bits are
 the only things allowed to differ.
 
 ### 4c. `fv_NI` and the composition-breakdown technique
@@ -387,7 +387,7 @@ whole transition:
 
 ```text
 fv_NI  (eqsum_L in_equiv out_equiv)  state_type_equiv  state_type_equiv
-       (state_step sliced_preroutine restore_invariant)
+       (state_step sliced_policy restore_invariant)
 ```
 
 `eqsum_L` relates two inputs by `in_equiv` and two outputs by `out_equiv`, and never
@@ -400,7 +400,7 @@ its three stages, leaving one goal apiece:
 |---|---|---|
 | `set_pending` | input | an arriving interrupt sets a pending bit, and related inputs give related states |
 | `check_scheduler` | output | the scheduler pid is public, so the `cur_pid` update agrees |
-| `handler_preroutine` | output | the slice bookkeeping reads only the public `ir_count` and masks, and writes the same values into both states (the masks, the private NOP pending bit, the public `re_sched`), so it agrees |
+| `service_policy` | output | the slice bookkeeping reads only the public `ir_count` and masks, and writes the same values into both states (the masks, the private NOP pending bit, the public `re_sched`), so it agrees |
 | `initiate_next` | output | related states must pick the same branch of "what runs next"; the hard one, see 7d |
 
 `f_EP` needs no such breakdown. Since `eqsum_L` makes only an `inl` unobservable,
@@ -415,7 +415,7 @@ Section 4d recovers what that loses.
 ### 4d. `restore_invariant`: putting the forgotten invariant back
 
 Two facts hold of every state `model_sliced` can reach. First, while the time slice
-is live and no handler is running, the NOP (default) handler is pending, the disk and
+is live and no handler is running, the NOP handler is pending, the disk and
 NOP masks are clear and the timer mask is set; once the slice is over, the disk and
 NOP masks are set. Second, the disk and NOP masks are always toggled together. The
 design maintains both: each handler boundary reopens the masks and queues a NOP run,
@@ -429,7 +429,7 @@ before `initiate_next` runs:
 - it sets the controller's flags from `timeslice_live`, ORing them in. Since
   `timeslice_live` reads only the public `ir_count`, the same flags are set in two
   related states;
-- it forces the default (NOP) mask to equal the disk mask, so the `initiate_next`
+- it forces the NOP mask to equal the disk mask, so the `initiate_next`
   argument can assume the two are in sync.
 
 The hard `initiate_next` stage can then assume related states take the same branch,
@@ -511,7 +511,7 @@ lattice at once.
 **What stays fixed.** The three interrupt handlers, which are the mechanism under
 study, and the shape of the pool around them: six slots, the last of them padding.
 The scheduler and user slot *processes* are open, but their number and position are
-not. The output projections `is_sched_out`, `tI_out`, `dI_out` and `default_ir_out`
+not. The output projections `is_sched_out`, `tI_out`, `dI_out` and `nop_ir_out`
 are tuple patterns, and they hardwire two user slots ahead of the scheduler slot.
 Varying the count changes the state transition and lands inside `fv_NI`.
 
@@ -529,13 +529,12 @@ Two simplifications keep the proof tractable. Both are limitations of the model
 rather than of the technique, and either could be lifted at the cost of a harder
 `fv_NI` (section 4).
 
-**(a) Only one secret interrupt.** The NOP (default) handler exists purely for
-privacy, as the disk handler's indistinguishable partner, and the design schedules
-it itself, at every handler boundary. `DefaultInterrupt` is nonetheless an input,
-because the same type names the handler's bits in the interrupt controller; the
-environment delivering it is a public event that sets a private pending bit, and the
-proof covers it. Several secret interrupts would need a correspondingly richer
-indistinguishability argument.
+**(a) Only one secret interrupt.** The NOP handler exists purely for privacy, as
+the disk handler's indistinguishable partner, and the design schedules it itself,
+at every handler boundary. It has an entry in the interrupt controller (`nop_irq`)
+but no external interrupt: the input type has only the timer and disk interrupts.
+Several secret interrupts would need a correspondingly richer indistinguishability
+argument.
 
 **(b) Same-length handler execution.** Every handler runs for the same fixed number
 of output steps, which is what lets all masks be public (4b). Handlers finish on

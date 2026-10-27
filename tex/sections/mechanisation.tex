@@ -36,45 +36,38 @@ for it would remove the axiom. \Cref{thm:noop} uses no axioms.
 
 \subsection{Departures from the original definitions}\label{sec:departures}
 
-Mechanising the calculus changed four definitions (\cref{tab:departures}). For each,
-the original is written out in \code{adequacy.v} and related to ours; that file depends
-only on the definitions, nothing depends on it, and it uses no axioms beyond the
-lattice parameters.
+Mechanising the calculus changed four definitions (\cref{sec:background}). For
+each, the original is written out in \mechfile{theories/adequacy.v}{adequacy.v} and
+related to ours. That file depends only on the definitions, nothing depends on it,
+and it uses no axioms beyond the lattice parameters.
 
-\begin{table*}[t]
-\centering
-\caption{The four departures from the original paper, and the results relating
-  them. Departures 2 and 3 compose: \m{NI_paper} states that the original
-  definition and ours hold of the same processes.}
-\label{tab:departures}
-\footnotesize
-\begin{tabularx}{\textwidth}{@{}lLLl@{}}
-\toprule
- & original & here & result \\
-\midrule
-1 & L-equivalences: an equivalence on values extended with a distinguished element
-  & \m{cEquiv}: separate $\rel$ and $\dis$ fields tied by the characterisation law
-  & \m{NI_lEquiv} \\
-2 & a coinductive simulation, four clauses applied at the head of a stream
-  & three closure clauses, at an arbitrary position
-  & \m{PNI_of_SNI}, \m{SNI_of_PNI} \\
-3 & infinite streams of labels & finite traces & \m{NI_SNI} \\
-4 & obliviousness: every reachable output unobservable
-  & every output in one class & \m{oblivious_of_ObliviousDis} \\
-\bottomrule
-\end{tabularx}
-\end{table*}
+\paragraph{Characterised equivalences} The original equips each type with an
+$\mathcal{L}$-equivalence over $V \cup \{\unobs\}$: the distinguished value $\unobs$
+is adjoined to the values, and $x \doteq_\ell \unobs$ says that $x$ is unobservable.
+We use \m{cEquiv}, which keeps the values as they are and adds unobservability as a
+separate predicate, the field $\dis$, tied to the equivalence $\rel$ by the
+characterisation law. \Cref{sec:background} writes $x \doteq_\ell \unobs$ for
+$\dis$. \m{NI_lEquiv} shows that the two give the same notion of non-interference.
 
-Departures 1 to 3 change nothing: the two versions hold of exactly the same
-processes. Departure 1 needs no choice principle, because the original's
-distinguished element is adjoined to the value set rather than chosen from it.
-Departure 3 rests on two properties: finite and infinite behaviour determine each
-other, which needs reduction to be deterministic (to assemble finite runs into one
-infinite run) and total (to continue a finite run); and insertion commutes with
-taking prefixes. Departure 4 is a strict weakening of a side condition of \m{swi_NI}:
-the original condition implies ours, and a constant process under \m{public_equiv}
-satisfies ours but not the original. It is the weakening that lets \m{swi_NI} and the
-obliviousness argument of \cref{sec:gating} avoid unobservability altogether.
+\paragraph{Closure at a position} The original defines non-interference as a
+coinductive simulation whose four clauses apply at the head of a stream. We state
+three closure clauses that apply at an arbitrary position. \m{PNI_of_SNI} and
+\m{SNI_of_PNI} prove the two equivalent.
 
-These results concern definitions. The composition theorems were proved afresh for
-our definitions; the original paper's proofs were not replayed.
+\paragraph{Finite traces} The original quantifies over infinite streams of labels;
+we quantify over finite traces. \m{NI_SNI} proves the two equivalent. It rests on
+two properties: finite and infinite behaviour determine each other, which needs
+reduction to be deterministic (to assemble finite runs into one infinite run) and
+never to block (to continue a finite run); and insertion commutes with taking prefixes.
+Composed with the previous result, \m{NI_paper} states that the original definition
+and ours hold of the same processes.
+
+\paragraph{Obliviousness by class} The side condition of \m{swi_NI} asks that the
+observer be oblivious to a process. The original reads this as every reachable
+output being unobservable; we ask only that every output lie in one class.
+\m{oblivious_of_ObliviousDis} shows that the original condition implies ours, and
+a constant process under \m{public_equiv} satisfies ours but not the original, so
+the weakening is strict. It is what lets \m{swi_NI} and the obliviousness argument
+of \cref{sec:gating} avoid unobservability altogether.
+
+The composition theorems themselves are proved directly for our definitions.

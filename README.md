@@ -30,7 +30,7 @@ A process pool of six slots, driven by a global state and a feedback loop:
 
 | slot | process | |
 |---|---|---|
-| 0, 1, 2 | timer, disk and default interrupt handlers | each runs for the same fixed number of output steps, signalling completion with `Notify` |
+| 0, 1, 2 | timer, disk and NOP handlers | each runs for the same fixed number of output steps, signalling completion with `Notify` |
 | 3 | the scheduler | proposes which user process runs next |
 | 4 | the secret user process | consumes the disk handler's notifications |
 | 5 | the public user process | emits on the public channel |
@@ -60,19 +60,19 @@ Everything below refers to these. All three are in
 `Opub` and `Opriv` are the two user processes' output alphabets, which is why both
 output types are written over them. The input type takes no parameters, and all
 three models share it: an interrupt *is* an input. `TInterrupt`
-(`T_in` in the source) has three values, `TimerInterrupt`, `DiskInterrupt` and
-`DefaultInterrupt`. Delivering one is the only thing the environment can do to a
-model; the model records it as pending and decides later whether to service it.
-(`DefaultInterrupt` names the NOP handler introduced below. The design schedules
-that handler itself, so the value exists mainly because the same type indexes the
-interrupt controller; the environment delivering it is a harmless public event.)
+(`T_in` in the source) has two values, `TimerInterrupt` and `DiskInterrupt`.
+Delivering one is the only thing the environment can do to a model; the model
+records it as pending and decides later whether to service it. (The NOP handler
+introduced below has an entry in the interrupt controller but no interrupt of its
+own: the controller is indexed by `option` interrupt, with `None` as the NOP entry,
+and the design sets that entry pending itself.)
 
 The models then differ along two independent axes, and it helps to keep them apart.
 
 **Axis 1: behaviour (`model_immediate` vs `model_sliced`).** Same input and output
 types, same pool, same state layout. Both are the *same* generic definition,
-`model`, at a different triple of arguments: `init`,
-`handler_preroutine`, and `restore_invariant`, tabulated in
+`model`, at a different triple of arguments: `init_state`,
+`service_policy`, and `restore_invariant`, tabulated in
 [`docs/models.md` §8](docs/models.md). That difference is the whole security
 story: one leaks, the other does not.
 
@@ -83,7 +83,7 @@ behaviour; they are literally the same process. `model_sliced_userview` is
 processes. Below, `·` is `None` and `Nfy` is `Notify`:
 
 ```text
-                     pub     sys     sch     dfl     dsk     tmr      parse_output
+                     pub     sys     sch     nop     dsk     tmr      parse_output
   public output   (  Get  ,   ·   ,   ·   ,   ·   ,   ·   ,   ·   )  ---------->   Get
   disk handler    (   ·   ,   ·   ,   ·   ,   ·   ,  Nfy  ,   ·   )  ---------->   ·
   syscall         (   ·   ,  Sys  ,   ·   ,   ·   ,   ·   ,   ·   )  ---------->   Sys
@@ -189,7 +189,7 @@ user process. Handler execution still depends on the timer, since the **timer**
 handler's completion starts the time slice. That dependence is public and therefore
 harmless. What a secret interrupt can no longer do is pick the moment a handler
 runs. Handlers run only inside the slice and all take the same number of steps, and
-every handler boundary inside the slice queues a run of a default "NOP" handler,
+every handler boundary inside the slice queues a run of a "NOP" handler,
 which fills any part of the slice that no real interrupt claims.
 A secret handler run therefore replaces a NOP run
 rather than displacing a user process, and the public schedule is identical either
@@ -242,7 +242,7 @@ the argument it depends on has been given.
     what runs next must be public. Only a per-bit classification satisfies both.
   - *Hiding that a process ran.* Hiding a slot's value is not enough for the two
     secret handlers; the fact that they ran must be hidden too. That needs an
-    equivalence under which a run and an idle step look alike (`eqmaybe_private`),
+    equivalence under which a run and an idle step look alike (`eqmaybe_nonbot`),
     and obliviousness of the slot at `⊥`.
   - *Stage-wise proofs and invariants.* Proving `fv_NI` one stage of the transition
     at a time loses the reachable-state invariant. Writing it back with a function

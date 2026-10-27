@@ -1,6 +1,6 @@
 \section{How General the Result Is}\label{sec:generality}
 
-\Cref{thm:main} is not about one system. Discharging the section variables of the
+\Cref{thm:main} covers a family of systems. Discharging the section variables of the
 mechanisation, it reads in full:
 \begin{lstlisting}
 forall (Opub Opriv : Ty) (runtime runs : nat)
@@ -17,7 +17,9 @@ forall (Opub Opriv : Ty) (runtime runs : nat)
      (model_sliced runtime runs
                    p_pub p_priv p_sched)
 \end{lstlisting}
-Everything the pool is built around stays fixed; everything it carries is left
+Sections~\ref{sec:model}--\ref{sec:proof} fixed the output types of the two user
+processes to those of the example. The theorem is parametric in them (\code{Opub}
+and \code{Opriv} above). Everything the pool is built around stays fixed; everything it carries is left
 open (\cref{tab:open}). The side conditions are the expected ones: the mechanism
 cannot make a leaking process secure, so each slot is assumed non-interfering at its
 own classification, and the theorem says that composing them through this mechanism
@@ -58,8 +60,7 @@ change the state transition and with it the proof of \m{fv_NI}.
 \paragraph{Levels} We have read levels as two. The mechanisation works over an
 arbitrary bounded lattice, where a characterised equivalence must also be monotone
 downwards (what a level relates stays related below it, and likewise for
-unobservability), and $\NI$ quantifies over every level. Nothing in the proof depends
-on the lattice having two points, because every equivalence in the models
-distinguishes $\bot$ from all other levels and nothing more. The level case splits
-in the proof are $l = \bot$ against $l \neq \bot$, and the second case covers every
+unobservability), and $\NI$ quantifies over every level. Every equivalence in the models
+treats the bottom level, read as $\Lo$, apart from all others, so the proof's level
+case splits are $\ell = \Lo$ against $\ell \neq \Lo$, and the second case covers every
 other level of any lattice at once.

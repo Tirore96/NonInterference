@@ -48,8 +48,8 @@ them); no proof code is reproduced.
 ## 1. The generic model
 
 ```coq
-model runtime init handler_preroutine restore_invariant p_pub p_priv p_sched =
-  reactive_system init (state_step handler_preroutine restore_invariant) def
+model runtime init service_policy restore_invariant p_pub p_priv p_sched =
+  reactive_system init_state (state_step service_policy restore_invariant) no_output
     (pool runtime p_pub p_priv p_sched) pool_input
       : Proc T_in (T_out Opub Opriv)
 ```
@@ -61,7 +61,7 @@ state and deciding on every step whose turn it is (sections 5 and 6).
 
 It receives interrupts, and on each output step emits one tuple holding every slot's
 value. Nothing in it is committed to a security design. That is entirely the job of
-the three parameters `init`, `handler_preroutine` and `restore_invariant`. Section 7
+the three parameters `init_state`, `service_policy` and `restore_invariant`. Section 7
 sets them out, and Part II fixes them in two different ways: once so that a secret
 interrupt leaks, once so that it does not.
 
@@ -103,7 +103,7 @@ the handler simply never finishes.)
 |---|---|---|---|
 | 0 | timer-interrupt handler | `Empty` | `THandlerOutput` |
 | 1 | disk-interrupt handler | `Empty` | `THandlerOutput` |
-| 2 | default handler | `Empty` | `THandlerOutput` |
+| 2 | NOP handler | `Empty` | `THandlerOutput` |
 | 3 | scheduler (parameter `p_sched`) | `Empty` | `Nat` |
 | 4 | private user process (`p_priv`) | `THandlerOutput` | `Opriv` |
 | 5 | public user process (`p_pub`) | `Empty` | `Opub` |
@@ -187,7 +187,7 @@ f_proc    = slot_procs runtime p_pub p_priv p_sched
 
 f_pid     = fun pid => match pid with
                        | inl true  => 1     (* disk handler    *)
-                       | inl false => 2     (* default handler *)
+                       | inl false => 2     (* NOP handler *)
                        | inr 0     => 0     (* timer handler   *)
                        | inr 1     => 3     (* scheduler       *)
                        | inr 2     => 4     (* private user    *)
@@ -199,7 +199,7 @@ f_initial = fun n => n == 5        (* slot 5 alone starts open *)
 ```
 
 The `cur_pid` split is the one choice here worth a second look: the `inl` side holds
-**exactly the two private pids**, the disk and default handlers, and the `inr` side
+**exactly the two private pids**, the disk and NOP handlers, and the `inr` side
 everything public, including the timer handler, which is `inr 0`. It is a handler,
 but not a private one, so the split is not "handler versus not". Drawing it on this
 line is what lets the state equivalence classify a whole pid in one place, as
@@ -247,8 +247,8 @@ it has no state and no way to drive itself. `reactive_system` closes it into a s
 self-driving `Proc T_in T_out` by adding the global state and a feedback loop.
 
 ```coq
-reactive_system state state_update def p pool_input =
-  map inl (inr_or_def def)
+reactive_system state state_update no_output p pool_input =
+  map inl (inr_or_def no_output)
     (loop (map id snd
       (sta state_update (fun _ v => v) state
         (map pool_input inr (maybe p)))))
@@ -260,7 +260,7 @@ on an output step `inr` tags the pool's output for the feedback channel.
 `sta state_update ... state` holds the global state and advances it on every event,
 external input or fed-back output. `loop` ties output back to input. The outer `map`
 presents external inputs on the left, and on the way out applies
-`inr_or_def def x = if x is inr x' then x' else def`. That substitutes `def`, the
+`inr_or_def no_output x = if x is inr x' then x' else no_output`. That substitutes `no_output`, the
 all-`None` tuple, when there is no genuine external output yet.
 
 `state_update` is `state_step ...` (section 6). `pool_input` decides, from the state
@@ -300,12 +300,12 @@ state_type = ((cur_pid, prev_pid), (re_sched, (ir_count, ic)))
 | `prev_pid` | `Option Nat` | the user pid to return to once handlers finish |
 | `re_sched` | `Bool` | reschedule flag: control should go to the scheduler rather than back to the interrupted process |
 | `ir_count` | `Option Nat` | the handler time-slice counter: `None` when disabled, `Some n` when `n` handler output-steps remain, `Some 0` when the slice is over |
-| `ic` | `Times ir_bits (Times ir_bits ir_bits)` | the interrupt controller: one `ir_bits` per interrupt, in order default, disk, timer |
+| `ic` | `Times ir_bits (Times ir_bits ir_bits)` | the interrupt controller: one `ir_bits` per entry, in order NOP, disk, timer. Entries are indexed by `irq := Option TInterrupt`: `timer_irq` and `disk_irq` (`Some` of the two external interrupts) and `nop_irq` (`None`), which no external interrupt raises |
 | `ir_bits` | `Times pending mask` | `pending`: an interrupt of this kind has arrived and awaits service; `mask`: service is currently blocked |
 
 A handler is *selectable* for an interrupt kind iff it is pending and not masked
 (`ir_ready`). `first_ready` picks the highest-priority ready one, in the fixed order
-timer > disk > default.
+timer > disk > NOP.
 
 
 ## 6. State transitions
@@ -318,9 +318,9 @@ runs `f` on the first and `g` on the second, and the transition is one of these:
 step_sum f g (inl i) = f i
 step_sum f g (inr o) = g o
 
-state_step handler_preroutine restore_invariant =
+state_step service_policy restore_invariant =
   step_sum set_pending
-           (initiate_next(restore_invariant) ∘ handler_preroutine ∘ check_scheduler)
+           (initiate_next(restore_invariant) ∘ service_policy ∘ check_scheduler)
 ```
 
 - **`set_pending`**: on an arriving interrupt, set that interrupt's `pending` bit.
@@ -331,7 +331,7 @@ state_step handler_preroutine restore_invariant =
   so the two user slots are checked for `None`-ness and nothing more. No stage
   reads a user-slot *value*, which is why the state transition is independent of what
   userspace does.
-- **`handler_preroutine`** is a parameter; see section 7.
+- **`service_policy`** is a parameter; see section 7.
 - **`initiate_next(restore_invariant)`** decides who runs next:
 
   ```coq
@@ -358,8 +358,8 @@ costs, is in [`noninterference.md` §4c](noninterference.md).
 That completes it:
 
 ```coq
-model runtime init handler_preroutine restore_invariant p_pub p_priv p_sched =
-  reactive_system init (state_step handler_preroutine restore_invariant) def
+model runtime init service_policy restore_invariant p_pub p_priv p_sched =
+  reactive_system init_state (state_step service_policy restore_invariant) no_output
     (pool runtime p_pub p_priv p_sched) pool_input
 ```
 
@@ -373,7 +373,7 @@ is allowed to run*:
   interrupts can be serviced before anything at all has happened. It also decides
   whether the time-slice counter is enabled (`Some _`) or switched off (`None`).
 
-- **`handler_preroutine : [T_out] -> [state_type] -> [state_type]`** runs on each
+- **`service_policy : [T_out] -> [state_type] -> [state_type]`** runs on each
   pool *output*, immediately before `initiate_next`. It is the only place a design
   sees a handler announce completion, and so the only place it can reopen masks. It
   therefore decides **when the next handler becomes eligible**: the difference
@@ -388,7 +388,7 @@ is allowed to run*:
   about each stage of the transition separately and so loses the invariant along
   the way ([`noninterference.md` §4d](noninterference.md)).
 
-Between them: `init` says what is runnable at rest and `handler_preroutine` says
+Between them: `init_state` says what is runnable at rest and `service_policy` says
 when that changes. `restore_invariant` adds no behaviour; it states what must hold
 when the choice is made.
 
@@ -402,8 +402,8 @@ story.
 
 | | `model_immediate` | `model_sliced` |
 |---|---|---|
-| **`init`** | all masks clear; counter `None` (disabled) | all masks set except the timer's; counter `Some 0` |
-| **`handler_preroutine`** | `immediate_preroutine`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_preroutine`: on a timer `Notify`, open a slice and ask to reschedule; at each boundary inside it, reopen the masks and queue a NOP run; tick the slice and close it |
+| **`init_state`** | all masks clear; counter `None` (disabled) | all masks set except the timer's; counter `Some 0` |
+| **`service_policy`** | `immediate_policy`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_policy`: on a timer `Notify`, open a slice and ask to reschedule; at each boundary inside it, reopen the masks and queue a NOP run; tick the slice and close it |
 | **`restore_invariant`** | `id` (no bookkeeping) | re-impose the time-slice invariant; the identity on every reachable state |
 | **When a handler stops** | when it emits its **secret** `Notify` (*secret-driven*) | at a fixed **public** time-slice boundary (*slice-driven*) |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
@@ -419,11 +419,11 @@ reach a fixed length by padding.
 ### 8a. `model_immediate`
 
 The baseline, interrupts handled the ordinary way. It is `model` at the triple
-`(initial_state_immediate, immediate_preroutine, id)`:
+`(initial_state_immediate, immediate_policy, id)`:
 
 ```coq
 model_immediate runtime p_pub p_priv p_sched =
-  model runtime initial_state_immediate immediate_preroutine id p_pub p_priv p_sched
+  model runtime initial_state_immediate immediate_policy id p_pub p_priv p_sched
 ```
 
 **The initial state** disables the slice counter and leaves every controller bit
@@ -433,16 +433,16 @@ clear, so from rest every interrupt is serviceable:
 initial_state_immediate = ((initial_pid, None), (false, (None, false_ic)))
 ```
 
-**The handler preroutine** reacts to a handler finishing, which a handler announces
+**The service policy** reacts to a handler finishing, which a handler announces
 by emitting `Notify`; `is_ir_out_done` scans the three handler slots for one. The
 response is to unmask everything, and if it was the timer handler, also to ask for a
 reschedule:
 
 ```coq
-immediate_preroutine o v =
+immediate_policy o v =
   if is_ir_out_done o is Some ir
   then let v := unset_masks v in
-       if ir is TimerInterrupt then update_re_sched v true else v
+       if ir is timer_irq then update_re_sched v true else v
   else v
 ```
 
@@ -460,11 +460,11 @@ own traces.
 ### 8b. `model_sliced`
 
 The fixed design, `model` at the triple `(initial_state_sliced,
-sliced_preroutine runtime runs, restore_invariant)`:
+sliced_policy runtime runs, restore_invariant)`:
 
 ```coq
 model_sliced runtime runs p_pub p_priv p_sched =
-  model runtime initial_state_sliced (sliced_preroutine runtime runs) restore_invariant
+  model runtime initial_state_sliced (sliced_policy runtime runs) restore_invariant
     p_pub p_priv p_sched
 ```
 
@@ -473,16 +473,16 @@ every interrupt but the timer:
 
 ```coq
 mask_most = ((false,true), ((false,true), (false,false)))
-            (* pending false everywhere; masks set for default and disk,
+            (* pending false everywhere; masks set for NOP and disk,
                clear for the timer *)
 initial_state_sliced = ((initial_pid, None), (false, (Some 0, mask_most)))
 ```
 
-**The handler preroutine** is a composition of three
+**The service policy** is a composition of three
 stages:
 
 ```coq
-sliced_preroutine o = check_ir_count ∘ check_handler_completed ∘ initiate_ir o
+sliced_policy o = check_ir_count ∘ check_handler_completed ∘ initiate_ir o
 ```
 
 Read right to left: `initiate_ir` opens a slice, `check_handler_completed` starts
@@ -520,7 +520,7 @@ handler_completed runtime c =
 
 check_handler_completed runtime v =
   if handler_completed runtime (ir_count v)
-  then update_ir_pending (set_tI (unset_masks v)) DefaultInterrupt true
+  then update_ir_pending (set_tI (unset_masks v)) nop_irq true
   else v
 ```
 
@@ -570,7 +570,7 @@ restore_invariant v =
   let b := timeslice_live (ir_count v) in
   let ic := (false, (None, ((b,~~b), ((false,~~b), (false,b))))) in
   let v := update_bool_state v (or_bool_state (bool_state v) ic) in
-  update_ir_mask v DefaultInterrupt (get_ir_mask v DiskInterrupt)
+  update_ir_mask v nop_irq (get_ir_mask v disk_irq)
 ```
 
 The tuple `ic` is ORed into the state: the leading `false` leaves `re_sched` alone,
@@ -604,7 +604,7 @@ just before the choice, gives the hardest stage the invariant for free
 
 **Why it does not leak.** A handler can now run only inside a slice, every handler
 runs for the same `runtime` steps, and every boundary queues a NOP run, so the
-default/NOP handler fills any part of a slice no real interrupt claims. A secret
+The NOP handler fills any part of a slice no real interrupt claims. A secret
 handler run therefore takes the place of a NOP run rather than displacing a user
 process: a slice containing a disk run has the same shape as one containing only
 filler, and the public schedule around it is unchanged. `model_sliced_NI` proves this
@@ -643,7 +643,7 @@ slice size. This section supplies one of each, so both designs can be run.
 
 ```coq
 p_pub_concrete     = out GetRequest                                    (* public user process *)
-p_priv_concrete    = alternate Syscall NOP tt (fun i => i == Notify)   (* private user process *)
+p_priv_concrete    = alternate Syscall Idle tt (fun i => i == Notify)   (* private user process *)
 scheduler = map id (fun o => o.1 + 2)
               (sta (fun _ v => v) (fun _ v => v.+1 %% 2) 1 (out tt))
 
@@ -693,10 +693,10 @@ behaviour, so both are shown aligned, with `≠` marking every row on which they
 differ.
 
 Every output is a six-slot tuple with exactly one slot `Some` at a time, and for each
-run we show only that value. A user process's value appears bare (`Get`, `NOP`,
+run we show only that value. A user process's value appears bare (`Get`, `Idle`,
 `Sys`); everything else is labelled by the slot it came from: `sch hi` / `sch lo` for
-the scheduler naming the private or the public process, and `tmr` / `dsk` / `dfl` for
-the timer, disk and default handlers. A handler emits `Nth` (`Nothing`) on each step
+the scheduler naming the private or the public process, and `tmr` / `dsk` / `nop` for
+the timer, disk and NOP handlers. A handler emits `Nth` (`Nothing`) on each step
 and `Nfy` (`Notify`) on the one that completes it, so an `Nth`/`Nfy` pair is exactly
 one handler run. In the user-view columns `·` is `None`.
 
@@ -719,9 +719,9 @@ one handler run. In the user-view columns `·` is `None`.
   tmr  Nth                 tmr  Nth
   tmr  Nfy                 tmr  Nfy
   sch  hi                  sch  hi
-  NOP                   ≠  Sys                    ← the secret process reacts
+  Idle                  ≠  Sys                    ← the secret process reacts
   tI                       tI
-  NOP                      NOP
+  Idle                     Idle
   tmr  Nth                 tmr  Nth
   tmr  Nfy                 tmr  Nfy
   sch  lo                  sch  lo
@@ -751,20 +751,20 @@ the theorem is that they are *indistinguishable* at `⊥`.
   Get        Get         Get        Get
   tmr  Nth   ·           tmr  Nth   ·
   tmr  Nfy   ·           tmr  Nfy   ·
-  dfl  Nth   ·        ≠  dsk  Nth   ·          ┐ the slice: two handler runs, and the
-  dfl  Nfy   ·        ≠  dsk  Nfy   ·          │ whole difference between the two runs
-  dfl  Nth   ·           dfl  Nth   ·          │ is that the disk handler takes the
-  dfl  Nfy   ·           dfl  Nfy   ·          ┘ place of the first NOP run
+  nop  Nth   ·        ≠  dsk  Nth   ·          ┐ the slice: two handler runs, and the
+  nop  Nfy   ·        ≠  dsk  Nfy   ·          │ whole difference between the two runs
+  nop  Nth   ·           nop  Nth   ·          │ is that the disk handler takes the
+  nop  Nfy   ·           nop  Nfy   ·          ┘ place of the first NOP run
   sch  hi    ·           sch  hi    ·
-  NOP        NOP      ≠  Sys        Sys        ← the only surviving difference; both secret,
+  Idle       Idle     ≠  Sys        Sys        ← the only surviving difference; both secret,
   tI         tI          tI         tI           so indistinguishable at ⊥
-  NOP        NOP         NOP        NOP
+  Idle       Idle        Idle       Idle
   tmr  Nth   ·           tmr  Nth   ·
   tmr  Nfy   ·           tmr  Nfy   ·
-  dfl  Nth   ·           dfl  Nth   ·          ┐
-  dfl  Nfy   ·           dfl  Nfy   ·          │ second slice, identical in both runs
-  dfl  Nth   ·           dfl  Nth   ·          │
-  dfl  Nfy   ·           dfl  Nfy   ·          ┘
+  nop  Nth   ·           nop  Nth   ·          ┐
+  nop  Nfy   ·           nop  Nfy   ·          │ second slice, identical in both runs
+  nop  Nth   ·           nop  Nth   ·          │
+  nop  Nfy   ·           nop  Nfy   ·          ┘
   sch  lo    ·           sch  lo    ·
   Get        Get         Get        Get
 ```
@@ -781,10 +781,10 @@ completes does a slice open, and only inside that slice may a handler run.
 structural difference between the two runs, the `≠` at the first of the two handler
 runs.
 
-**The projection erases the substitution entirely.** Both `dsk` and `dfl` sit in
+**The projection erases the substitution entirely.** Both `dsk` and `nop` sit in
 slots `parse_output` discards, so each run's user view is `·` on every handler step
 and every scheduled pid. Comparing the two view columns against each other, the only
-place they differ at all is the secret process reacting to its notification, `NOP`
+place they differ at all is the secret process reacting to its notification, `Idle`
 against `Sys`, and both of those are classified secret, so an observer at `⊥` cannot
 tell them apart.
 

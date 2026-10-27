@@ -555,11 +555,11 @@ Qed.
 Inductive SwiTrace (I O : Ty) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) (l : level) : bool -> seq ([Times Bool I] + [Option O]) -> seq ([I] + [Times Bool O]) -> Prop :=
 | ST0 b : SwiTrace ORel BRel l b nil nil
 | ST1 b b' i t_swi t_p : SwiTrace ORel BRel l (xor b b') t_swi t_p -> SwiTrace ORel BRel l b (inl (b', i) :: t_swi) (inl i :: t_p)
-| ST2_false o t_swi t_p : rel (eqmaybe_swi ORel BRel) l None o -> SwiTrace ORel BRel l false t_swi t_p -> SwiTrace ORel BRel l false (inr o :: t_swi) t_p
-| ST2_true b_out o o_obs t_swi t_p : rel (eqmaybe_swi ORel BRel) l (Some o) o_obs -> SwiTrace ORel BRel l (negb b_out) t_swi t_p -> SwiTrace ORel BRel l true (inr o_obs :: t_swi) (inr (b_out, o) :: t_p).
+| ST2_false o t_swi t_p : rel (eqmaybe_aware ORel BRel) l None o -> SwiTrace ORel BRel l false t_swi t_p -> SwiTrace ORel BRel l false (inr o :: t_swi) t_p
+| ST2_true b_out o o_obs t_swi t_p : rel (eqmaybe_aware ORel BRel) l (Some o) o_obs -> SwiTrace ORel BRel l (negb b_out) t_swi t_p -> SwiTrace ORel BRel l true (inr o_obs :: t_swi) (inr (b_out, o) :: t_p).
 
 Lemma swi_trace : forall (I O : Ty) (p : Proc I (Times Bool O)) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) l b t,
-    Trace (eqmaybe_swi ORel BRel) l t (swi b p) ->
+    Trace (eqmaybe_aware ORel BRel) l t (swi b p) ->
     exists t', Trace (eqpair_LR BRel ORel) l t' p /\ SwiTrace ORel BRel l b t t'.
 Proof.
   intros I O p ORel BRel l b t HT.
@@ -707,7 +707,7 @@ Qed.
 
 Lemma swi_conv : forall (I O : Ty) (p : Proc I (Times Bool O)) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) l b t t_p,
     aware BRel true l ->
-    Trace (eqpair_LR BRel ORel) l t_p p -> SwiTrace ORel BRel l b t t_p -> Trace (eqmaybe_swi ORel BRel) l t (swi b p).
+    Trace (eqpair_LR BRel ORel) l t_p p -> SwiTrace ORel BRel l b t t_p -> Trace (eqmaybe_aware ORel BRel) l t (swi b p).
 Proof.
   intros I O p ORel BRel l b t t_p Haware HT Hswi.
   move: p HT.
@@ -723,7 +723,7 @@ Proof.
     destruct o' as [b_out' o''].
     apply rel_eqpair_LR in H2. destruct H2 as [Hb Ho].
     simpl in Hb, Ho.
-    have Ho' : rel (eqmaybe_swi ORel BRel) l (Some o'') (Some o) by exact Ho.
+    have Ho' : rel (eqmaybe_aware ORel BRel) l (Some o'') (Some o) by exact Ho.
     econstructor.
     + eapply reduce_swiO2; [reflexivity | exact H1].
     + eapply rel_trans; [exact Ho' | exact Hrel].
@@ -821,11 +821,11 @@ Qed.
    by two values being unobservable, the characterisation of [dis] turns that
    back into relatedness, so nothing here needs to mention [dis]. *)
 Lemma oblivious_swi_aux : forall (I O : Ty) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) l (b0 : bool) (o0 : [O]),
-  rel (eqmaybe_swi ORel BRel) l None (Some o0) ->
-  forall s q, Trace (eqmaybe_swi ORel BRel) l s q ->
+  rel (eqmaybe_aware ORel BRel) l None (Some o0) ->
+  forall s q, Trace (eqmaybe_aware ORel BRel) l s q ->
     forall b (p : Proc I (Times Bool O)), q = swi b p ->
       oblivious_at (eqpair_R BRel ORel) (b0,o0) p l ->
-      ObliviousTrace (eqmaybe_swi ORel BRel) l None s.
+      ObliviousTrace (eqmaybe_aware ORel BRel) l None s.
 Proof.
   intros I O ORel BRel l b0 o0 H_rel_o0 s q Htr.
   induction Htr as [q0 | q0 i q' t HredI Htr IH | q0 o' o q' t HredO Hrel Htr IH];
@@ -847,10 +847,10 @@ Proof.
         - move=> [] _ H_rel_o. exact H_rel_o.
         - move=> [] H_dis_o0 H_dis_o1.
           apply (proj1 (cEquiv_rule3 H_dis_o0 o1)); exact H_dis_o1. }
-      have H_rel_Some: rel (eqmaybe_swi ORel BRel) l (Some o0) (Some o1)
+      have H_rel_Some: rel (eqmaybe_aware ORel BRel) l (Some o0) (Some o1)
         by (simpl; exact H_rel_inner).
       apply OT_cons_out.
-      * move: (equiv (eqmaybe_swi ORel BRel) l) => [] _ _ Htrans.
+      * move: (equiv (eqmaybe_aware ORel BRel) l) => [] _ _ Htrans.
         eapply Htrans; [eapply Htrans; [exact H_rel_o0 | exact H_rel_Some] | exact Hrel].
       * eapply IH; [reflexivity | eapply oblivious_at_reduceO; eauto].
 Qed.
@@ -858,9 +858,9 @@ Qed.
 (* The sufficient condition the models use.  It asks only that the switch's
    [None] be indistinguishable from the class the inner process stays in. *)
 Lemma oblivious_swi : forall (I O : Ty) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) (p : Proc I (Times Bool O)) l b (b0 : bool) (o0 : [O]),
-  rel (eqmaybe_swi ORel BRel) l None (Some o0) ->
+  rel (eqmaybe_aware ORel BRel) l None (Some o0) ->
   oblivious_at (eqpair_R BRel ORel) (b0,o0) p l ->
-  oblivious (eqmaybe_swi ORel BRel) (swi b p) l.
+  oblivious (eqmaybe_aware ORel BRel) (swi b p) l.
 Proof.
   intros I O ORel BRel p l b b0 o0 H_rel_o0 H_obl.
   exists None. intros s Htr.
@@ -965,8 +965,8 @@ Set Implicit Arguments.
    enough that everything the switch emits stays in one indistinguishability
    class.  [oblivious_swi] above is the sufficient condition the models use. *)
 Theorem swi_NI : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) p b,
-(forall l, aware BRel true l \/  oblivious (eqmaybe_swi ORel BRel) (swi b p) l ) -> NI IRel (eqpair_LR BRel ORel) p ->
-NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p).
+(forall l, aware BRel true l \/  oblivious (eqmaybe_aware ORel BRel) (swi b p) l ) -> NI IRel (eqpair_LR BRel ORel) p ->
+NI (eqpair_LR BRel IRel) (eqmaybe_aware ORel BRel) (swi b p).
 Proof.
   intros I O IRel ORel BRel p b H_aware_ob H_NI_p.
   intro l.
@@ -1093,7 +1093,7 @@ Proof.
       * apply: IH. apply: H4.
 Qed.
 
-Theorem maybe_NI : forall (I O :Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) p, NI IRel ORel p -> NI (eqmaybe_hidden IRel) ORel (maybe p).
+Theorem maybe_NI : forall (I O :Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) p, NI IRel ORel p -> NI (eqmaybe_nobody IRel) ORel (maybe p).
 Proof.
   intros. rewrite /NI /NI_l. ssa.
   - move: (H l). ssa. clear H.

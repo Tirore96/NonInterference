@@ -221,23 +221,21 @@ eqsum_L    an inl is secret exactly when its payload is
 ([`noninterference.md` §4a](noninterference.md)), where it makes `f_EP` a condition
 on the input summand alone.
 
-**`eqmaybe VRel` and variants (`eqmaybe_private` / `eqmaybe_hidden` / `eqmaybe_swi`,
-via `eqmaybe_aux`)** relate `Option` values. On `Some`/`Some` they defer to
-`VRel`; they differ only in who can see `None`, and `None` is secret exactly for
-those who cannot:
+**`eqmaybe P VRel`** relates `Option` values. On `Some`/`Some` it defers to
+`VRel`; the level predicate `P` says who can see `None`, and `None` is secret
+exactly for those who cannot. Four instances are used, named after who sees
+`None`:
 
 ```text
-                 can the attacker (⊥) see None?   can ⊤ see None?
-eqmaybe          yes                              yes
-eqmaybe_private  no                               yes
-eqmaybe_hidden   no                               no
-eqmaybe_swi      yes iff the gate equivalence     yes iff aware there
-                 BRel makes ⊥ "aware"
+                 who sees None             can the attacker (⊥)?   can ⊤?
+eqmaybe_all   every level               yes                     yes
+eqmaybe_nonbot  every level above ⊥       no                      yes
+eqmaybe_nobody   no level                  no                      no
+eqmaybe_aware      levels aware of the gate  iff aware under BRel    iff aware there
 ```
 
-To the attacker, `eqmaybe_private` and `eqmaybe_hidden` are the same; they differ
-only at `⊤`. In the source the variants are one construction indexed by a
-level-predicate `P l`, "the observer at `l` can see `None`".
+To the attacker, `eqmaybe_nonbot` and `eqmaybe_nobody` are the same; they differ
+only at `⊤`.
 
 The mixed case follows from the characterisation (section 2): `Some v ~ None` at
 `l` iff both are secret there, i.e. iff `None` is hidden at `l` and `dis VRel l v`.
@@ -257,10 +255,10 @@ what gives the model's equivalences their shape.
 | `out o` | `out_NI` | nothing | `NI IRel ORel (out o)` |
 | `map f g p` | `map_NI` | `NI IRel' ORel p`, side conditions on `f` and `g` | `NI IRel ORel' (map f g p)` |
 | `sta f g v p` | `sta_NI` | `NI (eqpair_R VRel IRel) ORel p`, `fv_NI` and `f_EP` for the updates | `NI IRel (eqpair VRel ORel) (sta f g v p)` |
-| `swi b p` | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p`, awareness or obliviousness at every level | `NI (eqpair_LR BRel IRel) (eqmaybe_swi ORel BRel) (swi b p)` |
+| `swi b p` | `swi_NI` | `NI IRel (eqpair_LR BRel ORel) p`, awareness or obliviousness at every level | `NI (eqpair_LR BRel IRel) (eqmaybe_aware ORel BRel) (swi b p)` |
 | `par p1 p2` | `par_NI` | `NI IRel ORel1 p1`, `NI IRel ORel2 p2` | `NI IRel (eqpair ORel1 ORel2) (par p1 p2)` |
 | `loop p` | `loop_NI` | `NI IRel IRel p` | `NI IRel IRel (loop p)` |
-| `maybe p` | `maybe_NI` | `NI IRel ORel p` | `NI (eqmaybe_hidden IRel) ORel (maybe p)` |
+| `maybe p` | `maybe_NI` | `NI IRel ORel p` | `NI (eqmaybe_nobody IRel) ORel (maybe p)` |
 
 Two of these carry substantial side conditions, and they are where the work of
 [`noninterference.md`](noninterference.md) lies: `sta_NI` asks that the state update

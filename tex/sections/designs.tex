@@ -1,117 +1,136 @@
 \section{Two Designs}\label{sec:designs}
 
-\Cref{tab:designs} sets the two designs side by side. Both are \m{model} at a
-different triple, and that difference is the whole security story.
+We now instantiate the model twice. The first design, \m{model_immediate}, handles
+interrupts the ordinary way: a handler starts as soon as its interrupt can be
+serviced. It leaks (\cref{sec:leak}). The second, \m{model_sliced}, runs handlers
+only inside time slices opened by the public timer, each slice holding a fixed number
+of handler runs, with unused runs filled by the NOP handler. It does not leak
+(\cref{sec:sliced}). \Cref{tab:designs} summarises both.
+
+Both designs are exercised on the same concrete system. Its public user process
+emits the request \code{GetRequest} (\code{Get}) whenever it runs, and its private
+user process emits \code{Syscall} (\code{Sys}) when the disk handler has notified it
+and \code{Idle} otherwise. The scheduler alternates between the two user processes.
+Handlers take $\mathit{runtime} = 2$ steps, and the sliced design uses slices of
+$\mathit{runs} = 2$ handler runs.
+
+\subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
+
+\m{model_immediate} starts with every mask clear and no slice counter. Its service
+policy reacts to a handler announcing completion by unmasking everything, and if the
+handler was the timer's, by requesting a reschedule. An interrupt is therefore
+serviced at the first output step after it arrives at which no handler is running,
+and nothing constrains \emph{when} that is. \Cref{sec:state} traced the consequence:
+the disk handler starts at once and takes the public user's steps, producing the gap
+of \cref{fig:leak}.
+
+\begin{theorem}[\m{model_immediate_not_NI}]\label{thm:leak}
+For the concrete system, with $\mathsf{out\_equivC}$ the output equivalence
+\m{out_equiv} at the concrete output types,
+\[
+\mathsf{model\_immediate\_concrete} \notin
+  \NI(\mathsf{in\_equiv},\, \mathsf{out\_equivC}).
+\]
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+Start from the trace of two public requests, which the model admits. Insert a disk
+interrupt at the front; it is unobservable at $\Lo$, so non-interference demands
+that the result still be a trace. It is not. The interrupt sets the disk pending bit.
+The pid of the first step was fixed before any input, so the first request still
+goes through; but the next step belongs to the disk handler, so the public slot carries \code{None} where the second request was.
+\end{proof}
+A single counterexample refutes non-interference, so ordinary interrupt handling is
+not non-interfering in general.
+
+\subsection{Sliced interrupt handling}\label{sec:sliced}
+
+The idea is to take away a secret interrupt's power to choose when its handler runs.
+Time is cut into slices, and a slice is opened only by the timer handler finishing,
+which is public. Each slice holds exactly $\mathit{runs}$ handler runs (for handlers of at least two
+steps; \cref{sec:restore} discusses one-step handlers), and a run that no disk
+interrupt claims is taken by the NOP handler.
+
+The slice counter \m{ir_count} counts output steps. The service policy
+\m{sliced_policy} runs three stages on each output, in this order:
+\begin{itemize}
+\item \emph{Opening a slice.} When the timer handler emits \code{Notify},
+  \m{initiate_ir} loads the counter with $\mathit{runs}\cdot\mathit{runtime}$, the
+  number of steps that $\mathit{runs}$ handler runs take, and requests a reschedule
+  for when the slice ends.
+\item \emph{Boundaries.} Since the slice length is a multiple of $\mathit{runtime}$,
+  the counter is a nonzero multiple of $\mathit{runtime}$ exactly at the start of the
+  slice and after each completed run inside it. There
+  \m{check_handler_completed} reopens the disk and NOP masks, keeps the timer
+  masked, and makes the NOP handler pending. That last step is the \emph{filler}: a
+  handler is always ready at a boundary, so a run takes place whether or not a disk
+  interrupt is waiting, and the disk handler, if pending, takes priority.
+\item \emph{Closing.} \m{check_ir_count} ticks the counter, and when it reaches zero
+  masks the disk and NOP handlers, unmasks the timer and disables the counter.
+\end{itemize}
+On the step where the timer handler completes, opening a slice and its first
+boundary coincide, so the first run of the slice starts at the very next step.
+
+The system starts outside a slice. Outside a slice the disk and NOP handlers are
+masked, so a disk interrupt that arrives there is only recorded as pending. Inside a
+slice the timer is masked, so a timer interrupt cannot start a handler in the middle
+of one. When a slice ends, the reschedule requested at its opening hands control to
+the scheduler, so the step after every slice belongs to the scheduler.
+
+A secret handler run therefore takes the place of a NOP run: a slice containing a disk run has the same length and position as one
+containing only filler, and the public schedule around it is unchanged.
+\Cref{tab:traces} shows this on the concrete system. The two runs differ only in a
+disk interrupt; it is recorded as pending, waits for the next slice, and then
+replaces the first NOP run. Only two rows differ: one in which handler ran, and one in
+the private user's value. By \cref{tab:slots}, the attacker sees neither, so the two
+runs look the same to it. \Cref{thm:main} in \cref{sec:proof} proves that the same holds
+for any two runs that differ only in inputs the attacker cannot see.
 
 \begin{table*}[t]
 \centering
-\caption{The two designs.}
+\caption{The two designs, as choices of the arguments of \texttt{model}.}
 \label{tab:designs}
 \footnotesize
 \begin{tabularx}{\textwidth}{@{}lLL@{}}
 \toprule
  & \m{model_immediate} & \m{model_sliced} \\
 \midrule
-\code{init} & all masks clear; no slice counter & every mask set except the timer's;
-  counter at \code{Some 0} \\
-\code{handler_preroutine} & on a handler's \code{Notify}, unmask everything; on the timer's,
-  also request a reschedule & on the timer's \code{Notify}, open a slice and request a
-  reschedule; at each boundary inside it, reopen the masks and queue a NOP run; tick
-  the slice and close it \\
-\m{restore_invariant} & \code{id} & re-imposes the slice invariant; the identity on every
-  reachable state \\
-a handler runs & as soon as its interrupt is serviced & only inside a slice opened
-  by the public timer \\
+\code{init_state} & all masks clear; no slice counter & outside a slice: disk and
+  NOP masked, timer unmasked \\
+\code{service_policy} & on a handler's completion, unmask everything; on the timer's,
+  also request a reschedule & open, fill and close slices
+  (\cref{sec:sliced}) \\
+\m{restore_invariant} (proof only) & \code{id} & re-imposes the slice invariant;
+  the identity on every reachable state \\
+a handler runs & at the first step its interrupt can be serviced & only inside a
+  slice opened by the public timer \\
 non-interfering? & no (\cref{thm:leak}) & yes (\cref{thm:main}) \\
 \bottomrule
 \end{tabularx}
 \end{table*}
 
-\subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
-
-\m{model_immediate} starts with every mask clear, so an interrupt is serviced the
-moment it arrives. Its preroutine reacts to a handler announcing completion by
-unmasking everything, and if the handler was the timer's, by requesting a
-reschedule. Nothing constrains \emph{when} a handler runs.
-
-The counterexample is stated for a concrete system: a public process that
-repeatedly emits the request \code{GetRequest}, a private process that issues a system
-call when the disk handler has notified it and \code{NOP} otherwise, a round-robin
-scheduler, and handlers of length two.
-
-\begin{theorem}[\m{model_immediate_not_NI}]\label{thm:leak}
-\begin{multline*}
-\neg\,\NI\;\texttt{in\_equiv}\;\texttt{out\_equivC}\\
-\texttt{model\_immediate\_concrete}.
-\end{multline*}
-\end{theorem}
-
-\begin{proof}[Proof sketch]
-Start from the trace of two public requests, which the model admits. Insert a disk
-interrupt at the front; it is unobservable at $\bot$, so non-interference demands
-that the result still be a trace. It is not. The interrupt sets the disk pending bit,
-the first request still goes through, and the following step belongs to the disk
-handler, so the public slot carries \code{None} where the second request was. Refuting
-this requires showing that a trace is \emph{not} admitted, which needs reductions to
-be invertible (\cref{sec:mechanisation}).
-\end{proof}
-
-\subsection{Sliced interrupt handling}\label{sec:sliced}
-
-\m{model_sliced} keeps the disk and NOP handlers masked outside a slice. Its
-preroutine is a composition of three stages, read right to left:
-\begin{lstlisting}
-sliced_preroutine o =
-  check_ir_count (@$\circ$@) check_handler_completed
-  (@$\circ$@) initiate_ir o
-\end{lstlisting}
-\begin{itemize}
-\item \emph{Opening a slice.} When the timer handler emits \code{Notify}, \m{initiate_ir} loads
-  the counter with $\mathit{runs}\cdot\mathit{runtime}$, so that exactly \code{runs}
-  handler runs fit in the slice, and requests a reschedule for when the slice ends.
-\item \emph{Boundaries.} Because the slice length is a multiple of \code{runtime}, the counter
-  is a nonzero multiple of \code{runtime} exactly when a handler run has just finished.
-  There \m{check_handler_completed} reopens the disk and NOP masks, keeps the timer
-  masked, and makes the NOP handler pending. That last step is the \emph{filler}: a
-  handler is always ready at a boundary, so a run takes place whether or not a disk
-  interrupt is waiting, and the disk handler, if pending, takes priority.
-\item \emph{Closing.} \m{check_ir_count} ticks the counter, and when it reaches zero masks the
-  disk and NOP handlers, unmasks the timer and disables the counter.
-\end{itemize}
-
-A secret handler run therefore takes the place of a NOP run instead of displacing a
-user process: a slice containing a disk run has the same length and position as one
-containing only filler, and the public schedule around it is unchanged.
-\Cref{fig:traces} shows two runs of the concrete system. In the run with a disk
-interrupt, the interrupt is merely recorded until the next slice opens, and the only
-structural difference between the runs is which handler occupies the first run of
-the slice.
-
-\begin{figure*}[t]
+\begin{table*}[t]
 \centering
+\caption{Two runs of the concrete sliced system that differ only in a disk
+  interrupt. Each row is one or more consecutive output steps of one process; the
+  rows in italics are inputs. A handler step is shown as the handler and its output (\texttt{Nothing} or
+  \texttt{Notify}).}
+\label{tab:traces}
 \footnotesize
-\begin{tabular}{@{}lll@{}}
+\begin{tabularx}{\textwidth}{@{}llL@{}}
 \toprule
-no disk interrupt & with disk interrupt & \\
+without disk interrupt & with disk interrupt & \\
 \midrule
 \code{Get} & \code{Get} & \\
- & \textit{disk interrupt} & recorded as pending; nothing else happens \\
- & \code{Get}, \code{Get} & \\
+ & \textit{disk interrupt} & recorded as pending; the disk handler is masked \\
+\code{Get}, \code{Get} & \code{Get}, \code{Get} & \\
 \textit{timer interrupt} & \textit{timer interrupt} & \\
 \code{Get} & \code{Get} & \\
-\code{tmr Nth}, \code{tmr Nfy} & \code{tmr Nth}, \code{tmr Nfy} & timer handler completes: slice opens \\
-\code{dfl Nth}, \code{dfl Nfy} & \code{dsk Nth}, \code{dsk Nfy} & the disk handler replaces a NOP run \\
-\code{dfl Nth}, \code{dfl Nfy} & \code{dfl Nth}, \code{dfl Nfy} & \\
-\code{sch hi} & \code{sch hi} & slice over: the scheduler runs \\
-\code{NOP} & \code{Sys} & the private process reacts; both are secret \\
+timer: \code{Nothing}, \code{Notify} & timer: \code{Nothing}, \code{Notify} & the timer handler completes: a slice opens \\
+NOP: \code{Nothing}, \code{Notify} & disk: \code{Nothing}, \code{Notify} & the disk handler replaces the first NOP run \\
+NOP: \code{Nothing}, \code{Notify} & NOP: \code{Nothing}, \code{Notify} & second run of the slice \\
+scheduler: private user & scheduler: private user & the slice is over: the scheduler runs \\
+\code{Idle} & \code{Sys} & the private user reacts; its value is secret \\
 \bottomrule
-\end{tabular}
-\caption{Two runs of the concrete sliced system (abridged). Handler slots are
-  secret including whether they ran, so to the attacker both columns look alike.}
-\label{fig:traces}
-\end{figure*}
-
-\m{model_sliced} still exposes every slot of the pool. The model
-\m{model_sliced_userview} applies a projection \m{parse_output} that keeps only the two
-user processes' outputs; it is \m{model_sliced} behind a \code{map}, and its
-non-interference follows by weakening the output equivalence.
+\end{tabularx}
+\end{table*}

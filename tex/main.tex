@@ -7,12 +7,15 @@
 
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{amsmath,amssymb}
+\usepackage{amsmath,amssymb,mathtools}
 \usepackage{amsthm}
+\usepackage{mathpartir}
 \usepackage{booktabs}
 \usepackage{tabularx}
 \newcolumntype{L}{>{\raggedright\arraybackslash}X}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{fit,calc}
 \usepackage{listings}
 \usepackage{hyperref}
 \hypersetup{colorlinks,linkcolor=black,citecolor=black,urlcolor=blue!50!black}
@@ -46,10 +49,24 @@
 \emergencystretch=1.5em
 
 % ---------------------------------------------------------------- macros
-\newcommand{\Proc}[2]{\mathsf{Proc}\;#1\;#2}
-\newcommand{\NI}{\mathsf{NI}}
+% Notation follows Rafnsson et al. (POST 2017).
+\newcommand{\Proc}[2]{\mathit{Proc}\;#1\;#2}
+\newcommand{\NI}{\text{\normalfont\scshape ni}}
 \newcommand{\rel}{\mathsf{rel}}
 \newcommand{\dis}{\mathsf{dis}}
+% p ~i~> p' (input) and p -o-> p' (output)
+\newcommand{\stepI}[3]{#1 \overset{#2}{\rightsquigarrow} #3}
+\newcommand{\stepO}[3]{#1 \xrightarrow{#2} #3}
+% p performs trace t at level l
+\newcommand{\perf}[3]{#1 \overset{#2}{\dashrightarrow}_{#3}}
+% equivalences: \eqv{I} is (=.) with I on top; \unobs the distinguished value
+\newcommand{\eqv}[1]{\overset{#1}{\doteq}}
+\newcommand{\unobs}{\bullet}
+\newcommand{\Lo}{\mathsf{L}}
+\newcommand{\Hi}{\mathsf{H}}
+\newcommand{\Aw}{\mathsf{A}}
+\newcommand{\Ob}{\mathsf{O}}
+\newcommand{\cn}[1]{\mathsf{#1}}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 
 % ---------------------------------------------------------------- mechanisation
@@ -141,6 +158,8 @@ verification, Rocq
 \input{sections/mechanisation}
 \input{sections/related}
 \input{sections/conclusion}
+
+\input{sections/appendix}
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}

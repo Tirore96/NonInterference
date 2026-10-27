@@ -10,17 +10,22 @@ A key part of this mediation is interrupt handling. Interrupts are how an operat
 system learns that something happened: a disk transfer completed, a packet arrived,
 a timer expired. Some of these events are secret. Whether a particular process just
 received data from the disk may reveal what it is doing, so an operating system
-that keeps such an event secret has to hide not only the data it carries but also
-the fact that it happened at all.
+that keeps such an event secret has to hide that it happened at all.
 
-Ordinary interrupt handling does not hide it. When the interrupt arrives, its
-handler runs at once, displacing whatever process was scheduled; the handler takes
-a few steps, and then the displaced process resumes. Suppose a public process keeps
+Ordinary interrupt handling does not hide it. As soon as the interrupt can be
+serviced, its handler runs, displacing whatever process was scheduled; the handler
+takes a few steps, and then the displaced process resumes. Suppose a public process keeps
 issuing requests whose results an attacker can see. While the handler runs, those
 requests stop, and the attacker sees a gap in the stream exactly as long as the
 handler (\cref{fig:leak}). The interrupt has leaked through the \emph{schedule}.
 Timing leaks through interrupt handling of this kind arise in several operating
 systems \todo{examples, with citations}.
+
+This is the example we follow throughout the paper. The secret is \emph{whether a
+disk interrupt occurred}. A public process issues requests whose results the
+attacker sees, and a private process, the legitimate consumer of the disk event,
+reacts to it. The attacker may learn nothing about the disk interrupt. \Cref{sec:model,sec:designs,sec:proof}
+model this system, exhibit the leak, and remove it.
 
 \begin{figure}[t]
 \centering
@@ -29,12 +34,14 @@ systems \todo{examples, with citations}.
 step & 1 & 2 & 3 & 4 \\
 \midrule
 no disk interrupt   & \code{Get} & \code{Get} & \code{Get} & \code{Get} \\
-with disk interrupt & \code{Get} & ---   & ---   & \code{Get} \\
+disk interrupt before step 1 & \code{Get} & ---   & ---   & \code{Get} \\
 \bottomrule
 \end{tabular}
 \caption{What the attacker sees of the public process under ordinary interrupt
-  handling. The disk handler runs at steps 2 and 3, and the two public requests due
-  then never arrive. The attacker never sees the handler; it sees the gap.}
+  handling, with handlers of two steps. The two runs differ only in whether a disk
+  interrupt arrives, which the attacker may not learn. The interrupt sets a pending
+  bit; step 1 was already scheduled, so the disk handler runs at steps 2 and 3, and
+  the public process does not run then. The mechanised counterexample (\cref{thm:leak}) uses steps 1 and 2.}
 \label{fig:leak}
 \end{figure}
 
@@ -63,13 +70,13 @@ We then model the corresponding non-interfering variant, obtained by altering ho
 interrupts are processed. The idea is to take away a secret interrupt's power to
 choose \emph{when} its handler runs. Interrupts are serviced only inside time slices
 opened by the public timer, every handler run takes the same number of steps, and
-any part of a slice that no real interrupt claims is filled with a dummy ``NOP''
-handler. A secret handler run then replaces a NOP run instead of displacing a user
+any part of a slice that no real interrupt claims is filled with a dummy handler,
+the NOP handler. A secret handler run then replaces a NOP run instead of displacing a user
 process, and the public schedule is the same whether or not the interrupt occurred.
 We prove this variant non-interfering (\m{model_sliced_NI}), even to an attacker who
 sees, at every step, which process in the pool ran, the scheduler and the handlers
 included. The two designs are instances of a single generic model and differ only
-in three arguments. The result is general in two ways. It holds for every scheduler
+in their initial state and service policy. The result is general in two ways. It holds for every scheduler
 and every pair of user processes that are themselves non-interfering. And it holds
 for every choice of the two numbers that fix the timing of the design: the number
 of steps one handler run takes, and the number of handler runs that fit in one
@@ -86,10 +93,9 @@ implement it in an operating system is carried out in separate work
   design (\cref{sec:leak}). The proof is compositional: it applies one generic
   theorem per constructor of the model, and leaves one substantial obligation
   specific to interrupt handling (\cref{sec:fvni}).
-\item Requirements on any implementation of interrupt handling that is to be
-  non-interfering, forced by the proof rather than chosen by us
-  (\cref{sec:proof}). The arrival of a secret interrupt may only record that it is
-  pending; every decision it influences, such as starting its handler, must be
+\item Requirements, forced by the proof, on any implementation of interrupt
+  handling that is to be non-interfering (\cref{sec:proof}). The arrival of a
+  secret interrupt may only record that it is pending; every decision it influences, such as starting its handler, must be
   deferred to a point fixed by public time. Whether a secret handler ran must be
   indistinguishable from whether a dummy handler ran, so the time reserved for
   handlers must be fixed in advance and always used up. And the interrupt

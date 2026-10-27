@@ -1,0 +1,60 @@
+\appendix
+
+\section{The Model in Detail}\label{app:model}
+
+The generic model puts the pool inside a stateful wrapper, \m{reactive_system}:
+\begin{lstlisting}
+model runtime init_state service_policy
+      restore_invariant p_pub p_priv p_sched =
+  reactive_system init_state
+    (state_step service_policy restore_invariant)
+    no_output
+    (pool runtime p_pub p_priv p_sched)
+    pool_input
+  : Proc T_in T_out
+\end{lstlisting}
+\m{no_output}, the all-\code{None} tuple, stands in for the pool's output before its
+first step, and \m{pool_input} passes each slot the current pid and the disk
+handler's output.
+
+\paragraph{The state} Besides the current pid and the interrupt controller, the
+state holds the pid of the user process a handler interrupted, a reschedule flag
+\m{re_sched}, and a time-slice counter \m{ir_count}. The last two are used only by
+the sliced design.
+
+\paragraph{Handlers} \code{ir_handler runtime} counts its output steps modulo
+\code{runtime}. Its output type \code{THandlerOutput} has two values: it emits
+\code{Notify} on the step that completes a run and \code{Nothing} (a handler value,
+not the option \code{None}) otherwise.
+
+\paragraph{The pool} Each slot is a \code{swi} whose gate bit is computed from the
+pid. Each slot's output is tagged with the constant \code{true}, which closes its
+switch after one output step, so a selected process takes exactly one step.
+
+\paragraph{The scheduling decision} The state update is
+\begin{lstlisting}
+state_step service_policy restore_invariant =
+  step_sum set_pending
+    (initiate_next restore_invariant
+     (@$\circ$@) service_policy (@$\circ$@) check_scheduler)
+\end{lstlisting}
+where \code{step_sum} applies its first argument to interrupts and its second to
+pool outputs, and the composition runs right to left. The priority rule of
+\cref{sec:state} is
+\begin{lstlisting}
+initiate_next restore_invariant v =
+  if masks_set v then v   (* handler running *)
+  else let v := restore_invariant v in
+    if first_ready v is Some ir
+    then initiate_handler ir v
+    else if is_handler_pid v (* handler done *)
+    then if get_re_sched v
+         then initiate_scheduler v
+         else initiate_prev_pid v
+    else v                (* stay in user space *)
+\end{lstlisting}
+\m{first_ready} picks the highest-priority serviceable interrupt.
+\m{initiate_handler} saves the current user pid, points the current pid at the
+handler, sets all masks and clears the handler's pending bit.
+\m{initiate_scheduler} hands control to the scheduler and clears \m{re_sched};
+\m{initiate_prev_pid} returns to the interrupted user process.
