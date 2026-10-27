@@ -15,8 +15,12 @@ for p in $pkgs; do
   "$TEXBIN/tlmgr" info --only-installed "$p" 2>/dev/null | grep -q "^installed: *Yes" ||
     missing="$missing $p"
 done
-# shellcheck disable=SC2086
-[ -z "$missing" ] || "$TEXBIN/tlmgr" install $missing
+if [ -n "$missing" ]; then
+  # tlmgr refuses to install anything while it is older than the repository.
+  "$TEXBIN/tlmgr" update --self
+  # shellcheck disable=SC2086
+  "$TEXBIN/tlmgr" install $missing
+fi
 
 command -v python3 >/dev/null 2>&1 || echo "warning: python3 is needed for tex/mechlinks.py"
 
