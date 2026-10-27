@@ -46,7 +46,7 @@ parameter & ranges over & side condition \\
 \end{tabularx}
 \end{table}
 
-Two features of the design make this possible. The state update never reads the
+Two features of the model make this possible. The state update never reads the
 \emph{value} a user slot emits, only whether it emitted (the scheduler-output test
 inspects the user slots for \code{None} and nothing more), so no user behaviour reaches
 the schedule. And the state obligation \m{fv_NI} never mentions the slot processes, so

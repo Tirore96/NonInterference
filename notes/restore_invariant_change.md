@@ -15,7 +15,7 @@ things into the state that nothing else in `model_sliced` set:
 
 | effect | consequence |
 |---|---|
-| `re_sched := true` | `sliced_policy` never set `re_sched`, and `initiate_scheduler` resets it to `false`. So `restore_invariant` was the only reason control ever returned to the scheduler after a slice. |
+| `re_sched := true` | `sliced_service` never set `re_sched`, and `initiate_scheduler` resets it to `false`. So `restore_invariant` was the only reason control ever returned to the scheduler after a slice. |
 | slice live ⇒ NOP pending | `initiate_handler` clears a handler's pending bit when it starts it, and only an input event (`set_pending`) sets one. So `restore_invariant` was the only reason the NOP filler ever ran. |
 
 The mechanised trace `sliced_no_dI'` shows both. It contains four NOP runs and no
@@ -42,7 +42,7 @@ that only `model_sliced` uses.
    ```
 
 2. **`initiate_ir`** now requests a reschedule when the timer's `Notify` opens a
-   slice, as `immediate_policy` does in `model_immediate`:
+   slice, as `immediate_service` does in `model_immediate`:
 
    ```coq
    initiate_ir runtime runs o v =
@@ -119,7 +119,7 @@ restore_invariant_noop :
 ```
 
 Here `sliced_run es` is the state after the events `es`, starting from
-`initial_state_sliced`. `choice_state o v` is the state `initiate_next` receives on
+`sliced_init`. `choice_state o v` is the state `initiate_next` receives on
 output `o`, and the `~~ masks_set` premise is exactly the condition under which
 `initiate_next` applies `restore_invariant`. The proof uses no axioms.
 

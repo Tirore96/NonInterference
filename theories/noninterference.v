@@ -97,7 +97,7 @@ Qed.
 
 
 (*Opaque otherwise the inversion tactic take forever*)
-Opaque state_step pool_input initial_state_immediate no_output f_proj.
+Opaque state_step pool_input immediate_init no_output f_proj.
 
 (* === Section 5: model_immediate_concrete is not non-interfering.  Witness: a short
    bot-trace of two public requests; insert a disk interrupt at the front
@@ -121,7 +121,7 @@ Proof.
   move: H9. clear. simpl. ssa.
 Qed.
 
-Transparent pool_input initial_state_immediate no_output f_proj.
+Transparent pool_input immediate_init no_output f_proj.
 
 
 (*The rest of the file shows nonintereference of model2 and model3*)
@@ -270,7 +270,7 @@ Proof.
 Qed.
 
 
-Transparent state_step pool_input initial_state_immediate no_output f_proj.
+Transparent state_step pool_input immediate_init no_output f_proj.
 
 Lemma in_equiv_eq i i0 l : rel in_equiv l i i0 -> i = i0.
 Proof.

@@ -8,8 +8,8 @@ interrupt occurred. We first introduce the processes the system runs
 (\cref{sec:pool}) and how they run together (\cref{sec:running}). That explains what
 the system receives (\cref{sec:interface}) and what it emits
 (\cref{sec:outputs}). We then give the rule that decides which process runs
-(\cref{sec:state}). What is left open is what a security design chooses
-(\cref{sec:parameters}); \cref{sec:designs} makes the choice twice.
+(\cref{sec:state}). What is left open is the \emph{interrupt policy}
+(\cref{sec:parameters}); \cref{sec:designs} gives two.
 
 \subsection{The processes}\label{sec:pool}
 
@@ -74,7 +74,7 @@ global state, which a state cell and a feedback loop thread around the pool.
 The system receives interrupts. Its input type \code{T_in} has two values, the timer
 interrupt and the disk interrupt. An interrupt goes to the global state, where it
 marks itself pending in the interrupt controller. The controller has one more
-entry, for the NOP handler, which no external interrupt raises; the sliced design of
+entry, for the NOP handler, which no external interrupt raises; the sliced policy of
 \cref{sec:sliced} sets it pending itself, to use the NOP handler as filler.
 
 The disk interrupt is the secret. The input equivalence \m{in_equiv} makes it, and
@@ -92,29 +92,47 @@ By the rule for \code{par} (\cref{fig:semantics}), the pool emits the
 outputs of all its slots together. So the system emits a six-tuple of options, the output
 type \code{T_out}, with exactly one \code{Some} on each step. The output therefore
 records not only what was computed but also \emph{who ran}: the schedule is part of
-what the system emits. \Cref{tab:slots} says what we intend to hide from the
+what the system emits. \Cref{fig:slots} shows what we intend to hide from the
 attacker in each position. The exact output equivalence, and why the proof forces
 its shape, come in \cref{sec:equivs}.
 
-\begin{table}[t]
+\begin{figure}[t]
 \centering
-\caption{The six processes, and what the attacker may learn of each.}
-\label{tab:slots}
-\footnotesize
-\begin{tabularx}{\columnwidth}{@{}Lllll@{}}
-\toprule
-process & input & emits & value & ran? \\
-\midrule
-timer handler & --- & \code{Notify}, \code{Nothing} & visible & visible \\
-disk handler & --- & \code{Notify}, \code{Nothing} & hidden & hidden \\
-NOP handler & --- & \code{Notify}, \code{Nothing} & hidden & hidden \\
-scheduler & --- & a pid & visible & visible \\
-private user & disk handler & \code{Sys}, \code{Idle} & hidden & visible \\
-public user & --- & \code{Get} & visible & visible \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
+\begin{tikzpicture}[font=\scriptsize,
+  proc/.style={draw, rounded corners=1.5pt, minimum width=4.1cm,
+    minimum height=0.46cm, inner sep=1pt},
+  % indented on both sides like the nested boxes of the key
+  hid/.style={proc, fill=white},
+  ran/.style={proc, fill=black!10, minimum width=3.7cm},
+  val/.style={proc, fill=black!28, minimum width=3.3cm}]
+% the processes, in the order of Fig.~3, shaded by what the attacker learns
+\foreach \s/\k/\n/\t in
+  {val/0/timer handler/{\Proc{\emptyset}{\mathit{Hout}}},
+   hid/1/disk handler/{\Proc{\emptyset}{\mathit{Hout}}},
+   hid/2/NOP handler/{\Proc{\emptyset}{\mathit{Hout}}},
+   val/3/scheduler/{\Proc{\emptyset}{\mathbb{N}}},
+   ran/4/private user/{\Proc{\mathit{Hout}}{S}},
+   val/5/public user/{\Proc{\emptyset}{G}}}
+  {\node[\s] (p\k) at (0, -0.52*\k) {};
+   \node[anchor=west] at (p\k.west) {\n};
+   \node[anchor=east] at (p\k.east) {$\t$};}
+% key: the shades as nested sets
+\begin{scope}[shift={(2.55,-0.52)}]
+\draw[rounded corners=3pt, fill=white] (0,0) rectangle (2.75,-1.6);
+\draw[rounded corners=3pt, fill=black!10] (0.2,-0.42) rectangle (2.55,-1.48);
+\draw[rounded corners=3pt, fill=black!28] (0.4,-0.86) rectangle (2.35,-1.36);
+\node[anchor=north west] at (0,0) {attacker sees nothing};
+\node[anchor=north west] at (0.2,-0.42) {sees that it ran};
+\node[anchor=north west] at (0.4,-0.86) {\dots\ and its value};
+\end{scope}
+\end{tikzpicture}
+\caption{The six processes, with their types, shaded by what the attacker learns
+  of each (key on the right). $\mathit{Hout} = \{\mathtt{Notify},
+  \mathtt{Nothing}\}$ is the handler output, which the private user reads from the
+  disk handler; $S = \{\mathtt{Sys}, \mathtt{Idle}\}$, $G = \{\mathtt{Get}\}$, and
+  the scheduler emits a pid.}
+\label{fig:slots}
+\end{figure}
 \subsection{When does a handler run?}\label{sec:state}
 
 Besides the current pid, the global state holds an interrupt controller with a
@@ -124,8 +142,8 @@ the timer goes first, then the disk, then NOP. Handlers cannot be interrupted: s
 
 The state changes once per event. On an interrupt, \m{set_pending} sets that
 interrupt's pending bit. On a pool output, \m{check_scheduler} adopts the pid the scheduler
-proposed, if the scheduler ran; then \code{service_policy}, which a design chooses
-(\cref{sec:parameters}), reacts to the output; and finally \m{initiate_next} decides
+proposed, if the scheduler ran; then \code{service_policy}, part of the interrupt
+policy (\cref{sec:parameters}), reacts to the output; and finally \m{initiate_next} decides
 who runs next by a priority rule:
 \begin{enumerate}
 \item if a handler is running, it continues;
@@ -135,7 +153,7 @@ who runs next by a priority rule:
 \item otherwise, the current process continues.
 \end{enumerate}
 Just before the choice, \m{initiate_next} applies \m{restore_invariant}, which
-\cref{sec:parameters} explains; for the first design it is the identity.
+\cref{sec:parameters} explains.
 Appendix~\ref{app:model} gives the code.
 
 This is enough to see the leak of \cref{fig:leak}. With the disk unmasked, a disk
@@ -143,28 +161,31 @@ interrupt sets its pending bit. At the next output, rule 2 applies and the disk
 handler starts at once, and for the \code{runtime} steps of the handler the public
 user's slot emits \code{None}.
 
-\subsection{What a design chooses}\label{sec:parameters}
+\subsection{The interrupt policy}\label{sec:parameters}
 
 Together, these parts form the generic model
 \begin{lstlisting}
-model runtime init_state service_policy
+model runtime init_policy service_policy
       restore_invariant p_pub p_priv p_sched
   : Proc T_in T_out
 \end{lstlisting}
-(\m{model}, written out in Appendix~\ref{app:model}). The scheduler and the two user
-processes are parameters, and so is the handler length. The pool, the layout of the
-state, \m{set_pending}, \m{check_scheduler} and \m{initiate_next} are shared by every
-design. A design chooses two further things, each a distinct point of control over
-\emph{when a handler may run} (\cref{tab:designs} gives both choices for both
-designs):
+(\m{model}, written out in Appendix~\ref{app:model}). Its first argument,
+\code{runtime}, is the handler length, and its last three are the scheduler and the
+two user processes. The pool, the layout of the state, \m{set_pending},
+\m{check_scheduler} and \m{initiate_next} are fixed. The remaining three arguments
+are where models differ:
 \begin{itemize}
-\item \code{init_state}, the initial state. Its masks decide which interrupts can be
+\item \code{init_policy}, the initial state. Its masks decide which interrupts can be
   serviced before anything has happened.
 \item \code{service_policy}, which runs on each pool output, before
-  \m{initiate_next}. It is the only place a design sees a handler announce
-  completion, and so the only place it can reopen masks: it decides when the next
+  \m{initiate_next}. It is the only place that sees a handler announce
+  completion, and so the only place masks can be reopened: it decides when the next
   handler becomes eligible.
+\item \m{restore_invariant}, which \m{initiate_next} applies just before choosing.
+  It writes into the state an invariant that the other two already maintain, for
+  the benefit of the proof (\cref{sec:restore}).
 \end{itemize}
-The third argument, \m{restore_invariant}, serves the proof: it writes into the
-state an invariant the design already maintains (\cref{sec:restore}), and is the
-identity for a design that needs no such help.
+The first two decide \emph{when a handler may run}, and together we call them the
+\emph{interrupt policy}. The third is not part of it: it never changes a state the
+model reaches (\cref{thm:noop}), and it is the identity where the proof needs no
+help. \Cref{tab:designs} gives all three for both policies.

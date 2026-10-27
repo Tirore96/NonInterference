@@ -1,17 +1,18 @@
-\section{Two Designs}\label{sec:designs}
+\section{Two Interrupt Policies}\label{sec:designs}
 
-We now instantiate the model twice. The first design, \m{model_immediate}, handles
+We now instantiate the model with two interrupt policies. The first,
+\m{model_immediate}, handles
 interrupts the ordinary way: a handler starts as soon as its interrupt can be
 serviced. It leaks (\cref{sec:leak}). The second, \m{model_sliced}, runs handlers
 only inside time slices opened by the public timer, each slice holding a fixed number
 of handler runs, with unused runs filled by the NOP handler. It does not leak
 (\cref{sec:sliced}). \Cref{tab:designs} summarises both.
 
-Both designs are exercised on the same concrete system. Its public user process
+Both are exercised on the same concrete system. Its public user process
 emits the request \code{GetRequest} (\code{Get}) whenever it runs, and its private
 user process emits \code{Syscall} (\code{Sys}) when the disk handler has notified it
 and \code{Idle} otherwise. The scheduler alternates between the two user processes.
-Handlers take $\mathit{runtime} = 2$ steps, and the sliced design uses slices of
+Handlers take $\mathit{runtime} = 2$ steps, and the sliced policy uses slices of
 $\mathit{runs} = 2$ handler runs.
 
 \subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
@@ -52,7 +53,7 @@ steps; \cref{sec:restore} discusses one-step handlers), and a run that no disk
 interrupt claims is taken by the NOP handler.
 
 The slice counter \m{ir_count} counts output steps. The service policy
-\m{sliced_policy} runs three stages on each output, in this order:
+\m{sliced_service} runs three stages on each output, in this order:
 \begin{itemize}
 \item \emph{Opening a slice.} When the timer handler emits \code{Notify},
   \m{initiate_ir} loads the counter with $\mathit{runs}\cdot\mathit{runtime}$, the
@@ -82,20 +83,20 @@ containing only filler, and the public schedule around it is unchanged.
 \Cref{tab:traces} shows this on the concrete system. The two runs differ only in a
 disk interrupt; it is recorded as pending, waits for the next slice, and then
 replaces the first NOP run. Only two rows differ: one in which handler ran, and one in
-the private user's value. By \cref{tab:slots}, the attacker sees neither, so the two
+the private user's value. By \cref{fig:slots}, the attacker sees neither, so the two
 runs look the same to it. \Cref{thm:main} in \cref{sec:proof} proves that the same holds
 for any two runs that differ only in inputs the attacker cannot see.
 
 \begin{table*}[t]
 \centering
-\caption{The two designs, as choices of the arguments of \texttt{model}.}
+\caption{The two interrupt policies, as arguments of \texttt{model}.}
 \label{tab:designs}
 \footnotesize
 \begin{tabularx}{\textwidth}{@{}lLL@{}}
 \toprule
  & \m{model_immediate} & \m{model_sliced} \\
 \midrule
-\code{init_state} & all masks clear; no slice counter & outside a slice: disk and
+\code{init_policy} & all masks clear; no slice counter & outside a slice: disk and
   NOP masked, timer unmasked \\
 \code{service_policy} & on a handler's completion, unmask everything; on the timer's,
   also request a reschedule & open, fill and close slices

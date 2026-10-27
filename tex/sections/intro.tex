@@ -75,10 +75,11 @@ the NOP handler. A secret handler run then replaces a NOP run instead of displac
 process, and the public schedule is the same whether or not the interrupt occurred.
 We prove this variant non-interfering (\m{model_sliced_NI}), even to an attacker who
 sees, at every step, which process in the pool ran, the scheduler and the handlers
-included. The two designs are instances of a single generic model and differ only
-in their initial state and service policy. The result is general in two ways. It holds for every scheduler
+included. Both variants are instances of a single generic model and differ only
+in their \emph{interrupt policy}: the initial state and how handler completion is
+serviced. The result is general in two ways. It holds for every scheduler
 and every pair of user processes that are themselves non-interfering. And it holds
-for every choice of the two numbers that fix the timing of the design: the number
+for every choice of the two numbers that fix the timing of the policy: the number
 of steps one handler run takes, and the number of handler runs that fit in one
 time slice.
 
@@ -89,8 +90,8 @@ implement it in an operating system is carried out in separate work
 \paragraph{Contributions}
 \begin{itemize}
 \item A mechanised, timing-sensitive non-interference proof for interrupt handling
-  (\cref{sec:designs,sec:proof}), and a mechanised counterexample for the ordinary
-  design (\cref{sec:leak}). The proof is compositional: it applies one generic
+  (\cref{sec:designs,sec:proof}), and a mechanised counterexample for ordinary
+  interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one generic
   theorem per constructor of the model, and leaves one substantial obligation
   specific to interrupt handling (\cref{sec:fvni}).
 \item Requirements, forced by the proof, on any implementation of interrupt
@@ -109,7 +110,7 @@ implement it in an operating system is carried out in separate work
 \end{itemize}
 
 \Cref{sec:background} recalls the calculus and the definition of non-interference.
-\Cref{sec:model} presents the generic model and \cref{sec:designs} the two designs.
+\Cref{sec:model} presents the generic model and \cref{sec:designs} the two interrupt policies.
 \Cref{sec:proof} gives the proof, \cref{sec:generality} states precisely how general
 it is, and \cref{sec:mechanisation} describes the mechanisation.
 \Cref{sec:related,sec:conclusion} discuss related work and limitations.

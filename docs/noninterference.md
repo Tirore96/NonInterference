@@ -370,7 +370,7 @@ Field by field:
 Every mask bit is public, which is the formal content of "all masks are public".
 
 `cur_pid` is the one field whose parts are classified differently, and it is where
-the design is doing its work. `inl b` means a handler is running, with `b`
+the policy is doing its work. `inl b` means a handler is running, with `b`
 selecting which; `inr n` is a user or scheduler pid. Since `eqsum` never relates an
 `inl` to an `inr` ([`background.md` §4](background.md)), *that* a handler is
 running stays visible, and so does the pid in `inr n`. What `private_equiv` hides is the `Bool` inside `inl`: at
@@ -387,7 +387,7 @@ whole transition:
 
 ```text
 fv_NI  (eqsum_L in_equiv out_equiv)  state_type_equiv  state_type_equiv
-       (state_step sliced_policy restore_invariant)
+       (state_step sliced_service restore_invariant)
 ```
 
 `eqsum_L` relates two inputs by `in_equiv` and two outputs by `out_equiv`, and never
@@ -418,7 +418,7 @@ Two facts hold of every state `model_sliced` can reach. First, while the time sl
 is live and no handler is running, the NOP handler is pending, the disk and
 NOP masks are clear and the timer mask is set; once the slice is over, the disk and
 NOP masks are set. Second, the disk and NOP masks are always toggled together. The
-design maintains both: each handler boundary reopens the masks and queues a NOP run,
+policy maintains both: each handler boundary reopens the masks and queues a NOP run,
 and every mask update touches the disk and NOP masks alike
 ([`models.md` §8b](models.md)).
 
@@ -442,7 +442,7 @@ the state unchanged. The proof is about the state machine alone: it states the
 invariant, shows every event preserves it, and shows `restore_invariant` is the
 identity on the states where it holds. It assumes `runtime ≠ 1`, for the reason
 given in [`models.md` §8b](models.md). So `restore_invariant` is a device for the
-proof that provably does nothing at run time, rather than a part of the design.
+proof that provably does nothing at run time, rather than a part of the policy.
 
 
 ## 5. How general the result is
@@ -489,7 +489,7 @@ leaks nothing further. The last three carry no side condition at all.
 boundary by construction, so no arithmetic relation between the two numbers has to
 be assumed.
 
-**Why they can be left open.** Two features of the design buy it:
+**Why they can be left open.** Two features of the model buy it:
 
 - **The pool's own transition never reads a user slot's output value.**
   `is_sched_out` matches `(None,(None,(Some n,_)))`, inspecting the user slots only
@@ -530,7 +530,7 @@ rather than of the technique, and either could be lifted at the cost of a harder
 `fv_NI` (section 4).
 
 **(a) Only one secret interrupt.** The NOP handler exists purely for privacy, as
-the disk handler's indistinguishable partner, and the design schedules it itself,
+the disk handler's indistinguishable partner, and the sliced policy schedules it itself,
 at every handler boundary. It has an entry in the interrupt controller (`nop_irq`)
 but no external interrupt: the input type has only the timer and disk interrupts.
 Several secret interrupts would need a correspondingly richer indistinguishability

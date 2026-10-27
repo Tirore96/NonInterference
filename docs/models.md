@@ -2,7 +2,7 @@
 
 *Prose companion to [`theories/models.v`](../theories/models.v).*
 
-There is one generic model. Instantiating it one way gives a design that leaks a
+There is one generic model. Instantiating it one way gives an interrupt policy that leaks a
 secret interrupt through scheduling; instantiating it another way gives one that
 does not. This document defines the generic model, then the two instantiations,
 then one concrete system to run them on. The process calculus they are written in
@@ -34,8 +34,8 @@ them); no proof code is reproduced.
 [6. State transitions](#6-state-transitions) ·
 [7. The generic model, and its three parameters](#7-the-generic-model-and-its-three-parameters)
 
-**Part II: the two designs.**
-[8. Side by side](#8-the-two-designs-side-by-side) ·
+**Part II: the two interrupt policies.**
+[8. Side by side](#8-the-two-interrupt-policies-side-by-side) ·
 [9. `model_sliced_userview`](#9-model_sliced_userview)
 
 **Part III: one concrete system.**
@@ -49,7 +49,7 @@ them); no proof code is reproduced.
 
 ```coq
 model runtime init service_policy restore_invariant p_pub p_priv p_sched =
-  reactive_system init_state (state_step service_policy restore_invariant) no_output
+  reactive_system init_policy (state_step service_policy restore_invariant) no_output
     (pool runtime p_pub p_priv p_sched) pool_input
       : Proc T_in (T_out Opub Opriv)
 ```
@@ -60,9 +60,11 @@ wrapper** (section 4) closes the pool into a self-driving whole, threading the g
 state and deciding on every step whose turn it is (sections 5 and 6).
 
 It receives interrupts, and on each output step emits one tuple holding every slot's
-value. Nothing in it is committed to a security design. That is entirely the job of
-the three parameters `init_state`, `service_policy` and `restore_invariant`. Section 7
-sets them out, and Part II fixes them in two different ways: once so that a secret
+value. Nothing in it is committed to an interrupt policy. That is entirely the job of
+the three parameters `init_policy`, `service_policy` and `restore_invariant`. The
+first two, marked by the `_policy` suffix, are the *interrupt policy*: they decide
+when a handler may run. `restore_invariant` only helps the proof. Section 7 sets
+them out, and Part II fixes them in two different ways: once so that a secret
 interrupt leaks, once so that it does not.
 
 Sections 2 to 6 define each piece, bottom-up.
@@ -359,7 +361,7 @@ That completes it:
 
 ```coq
 model runtime init service_policy restore_invariant p_pub p_priv p_sched =
-  reactive_system init_state (state_step service_policy restore_invariant) no_output
+  reactive_system init_policy (state_step service_policy restore_invariant) no_output
     (pool runtime p_pub p_priv p_sched) pool_input
 ```
 
@@ -374,7 +376,7 @@ is allowed to run*:
   whether the time-slice counter is enabled (`Some _`) or switched off (`None`).
 
 - **`service_policy : [T_out] -> [state_type] -> [state_type]`** runs on each
-  pool *output*, immediately before `initiate_next`. It is the only place a design
+  pool *output*, immediately before `initiate_next`. It is the only place a policy
   sees a handler announce completion, and so the only place it can reopen masks. It
   therefore decides **when the next handler becomes eligible**: the difference
   between reopening as soon as a handler says it is done, and reopening only at a
@@ -383,27 +385,27 @@ is allowed to run*:
 - **`restore_invariant : [state_type] -> [state_type]`** is consulted by
   `initiate_next`, after the "is a handler already running" test and before
   `first_ready` picks the next one. It writes into the state an invariant that the
-  design itself maintains. On a real run it therefore changes nothing; this is a
+  policy itself maintains. On a real run it therefore changes nothing; this is a
   theorem for `model_sliced` (section 8b). It is there for the proof, which reasons
   about each stage of the transition separately and so loses the invariant along
   the way ([`noninterference.md` §4d](noninterference.md)).
 
-Between them: `init_state` says what is runnable at rest and `service_policy` says
+Between them: `init_policy` says what is runnable at rest and `service_policy` says
 when that changes. `restore_invariant` adds no behaviour; it states what must hold
 when the choice is made.
 
 
-# Part II: the two designs
+# Part II: the two interrupt policies
 
-## 8. The two designs, side by side
+## 8. The two interrupt policies, side by side
 
 Both are `model` at a different triple, and that difference is the whole security
 story.
 
 | | `model_immediate` | `model_sliced` |
 |---|---|---|
-| **`init_state`** | all masks clear; counter `None` (disabled) | all masks set except the timer's; counter `Some 0` |
-| **`service_policy`** | `immediate_policy`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_policy`: on a timer `Notify`, open a slice and ask to reschedule; at each boundary inside it, reopen the masks and queue a NOP run; tick the slice and close it |
+| **`init_policy`** | all masks clear; counter `None` (disabled) | all masks set except the timer's; counter `Some 0` |
+| **`service_policy`** | `immediate_service`: on a handler's `Notify`, unmask everything; if it was the timer, ask to reschedule | `sliced_service`: on a timer `Notify`, open a slice and ask to reschedule; at each boundary inside it, reopen the masks and queue a NOP run; tick the slice and close it |
 | **`restore_invariant`** | `id` (no bookkeeping) | re-impose the time-slice invariant; the identity on every reachable state |
 | **When a handler stops** | when it emits its **secret** `Notify` (*secret-driven*) | at a fixed **public** time-slice boundary (*slice-driven*) |
 | **What mask changes track** | secret handler behaviour | public slice boundaries |
@@ -419,18 +421,18 @@ reach a fixed length by padding.
 ### 8a. `model_immediate`
 
 The baseline, interrupts handled the ordinary way. It is `model` at the triple
-`(initial_state_immediate, immediate_policy, id)`:
+`(immediate_init, immediate_service, id)`:
 
 ```coq
 model_immediate runtime p_pub p_priv p_sched =
-  model runtime initial_state_immediate immediate_policy id p_pub p_priv p_sched
+  model runtime immediate_init immediate_service id p_pub p_priv p_sched
 ```
 
 **The initial state** disables the slice counter and leaves every controller bit
 clear, so from rest every interrupt is serviceable:
 
 ```coq
-initial_state_immediate = ((initial_pid, None), (false, (None, false_ic)))
+immediate_init = ((initial_pid, None), (false, (None, false_ic)))
 ```
 
 **The service policy** reacts to a handler finishing, which a handler announces
@@ -439,7 +441,7 @@ response is to unmask everything, and if it was the timer handler, also to ask f
 reschedule:
 
 ```coq
-immediate_policy o v =
+immediate_service o v =
   if is_ir_out_done o is Some ir
   then let v := unset_masks v in
        if ir is timer_irq then update_re_sched v true else v
@@ -459,12 +461,12 @@ own traces.
 
 ### 8b. `model_sliced`
 
-The fixed design, `model` at the triple `(initial_state_sliced,
-sliced_policy runtime runs, restore_invariant)`:
+The fixed policy, `model` at the triple `(sliced_init,
+sliced_service runtime runs, restore_invariant)`:
 
 ```coq
 model_sliced runtime runs p_pub p_priv p_sched =
-  model runtime initial_state_sliced (sliced_policy runtime runs) restore_invariant
+  model runtime sliced_init (sliced_service runtime runs) restore_invariant
     p_pub p_priv p_sched
 ```
 
@@ -475,14 +477,14 @@ every interrupt but the timer:
 mask_most = ((false,true), ((false,true), (false,false)))
             (* pending false everywhere; masks set for NOP and disk,
                clear for the timer *)
-initial_state_sliced = ((initial_pid, None), (false, (Some 0, mask_most)))
+sliced_init = ((initial_pid, None), (false, (Some 0, mask_most)))
 ```
 
 **The service policy** is a composition of three
 stages:
 
 ```coq
-sliced_policy o = check_ir_count ∘ check_handler_completed ∘ initiate_ir o
+sliced_service o = check_ir_count ∘ check_handler_completed ∘ initiate_ir o
 ```
 
 Read right to left: `initiate_ir` opens a slice, `check_handler_completed` starts
@@ -639,7 +641,7 @@ secret one `inr`. Every other slot, and any all-`None` tuple, projects to `None`
 ## 10. A concrete system
 
 Nothing in Parts I and II names a user process, a scheduler, a handler length or a
-slice size. This section supplies one of each, so both designs can be run.
+slice size. This section supplies one of each, so both policies can be run.
 
 ```coq
 p_pub_concrete     = out GetRequest                                    (* public user process *)
@@ -686,9 +688,9 @@ model_sliced_userview_concrete = model_sliced_userview handler_runtime slice_run
 
 ## 11. Example traces
 
-Each design is exercised on two runs of the concrete system, one with no disk
+Each policy is exercised on two runs of the concrete system, one with no disk
 interrupt and one with a disk interrupt, and each run is proved to be an accepted
-trace. Reading a design's two runs against each other is what exhibits its
+trace. Reading a policy's two runs against each other is what exhibits its
 behaviour, so both are shown aligned, with `≠` marking every row on which they
 differ.
 

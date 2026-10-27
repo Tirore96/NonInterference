@@ -18,15 +18,15 @@ Require Export NonInterference.theories.theorems.
 (* =================================================================
    This file defines the process-scheduling models studied in the paper.
 
-   It is organised so that everything the two designs share is defined
-   once, before either design is named:
+   It is organised so that everything the two interrupt policies share is
+   defined once, before either policy is named:
 
      Part I   (sections 0-7)   the shared skeleton, culminating in the
                                generic [model].  Nothing here is specific
-                               to a design or to a concrete system.
-     Part II  (sections 8-9)   the two designs, obtained by instantiating
-                               [model] at the three parameters that differ
-                               between them, plus the projected
+                               to a policy or to a concrete system.
+     Part II  (sections 8-9)   the two interrupt policies, obtained by
+                               instantiating [model] at the three parameters
+                               that differ between them, plus the projected
                                [model_sliced_userview].
      Part III (sections 10-11) one concrete system -- userspace processes,
                                scheduler, handler length, slice size -- and
@@ -115,7 +115,7 @@ Definition handler_type := Proc Empty THandlerOutput.
    A handler counts modulo [runtime], emitting [Nothing] while the count is
    nonzero and [Notify] on the step that brings it back to 0 -- so it signals
    completion exactly every [runtime] output steps.  [runtime] is a parameter;
-   what the design needs is only that every handler has the *same* one, so that
+   what the sliced policy needs is only that every handler has the *same* one, so that
    a secret handler's run is the same length as the NOP run it replaces.
    ([runtime = 0] degenerates: [n %% 0 = n], so the count never returns to 0 and
    the handler never signals completion.) *)
@@ -294,7 +294,7 @@ Definition ic_count := Times ir_count ic.
 Definition bool_state := Times re_sched ic_count.
 (* The interrupt controller has one entry per external interrupt and one more,
    [nop_irq], for the NOP handler.  No external interrupt raises the NOP entry;
-   the sliced design sets it pending itself, to use the NOP handler as filler. *)
+   the sliced policy sets it pending itself, to use the NOP handler as filler. *)
 Definition irq := Option TInterrupt.
 Notation timer_irq := (Some TimerInterrupt).
 Notation disk_irq := (Some DiskInterrupt).
@@ -376,7 +376,7 @@ Definition masks_set (v : [state_type]) :=
 
    Slot accessors and the two projections that leave the pool: [no_output], the output
    emitted when no slot produced one, and [pool_input], the value fed back in.
-   Both designs use all of these unchanged. *)
+   Both policies use all of these unchanged. *)
 
 Definition tI_out (Opub Opriv : Ty) (o : [T_out Opub Opriv]) :=
   match o with
@@ -517,38 +517,41 @@ Definition state_step (Opub Opriv : Ty) (service_policy : [T_out Opub Opriv] -> 
    Everything above is shared.  A model is the process pool run inside the
    stateful wrapper, and the only freedom left is the triple
 
-     (init_state, service_policy, restore_invariant)
+     (init_policy, service_policy, restore_invariant)
 
-   that section 8 fixes in two different ways.  Note [runs] is not a parameter
+   that section 8 fixes in two different ways.  The first two decide when a
+   handler may run and together form the *interrupt policy*; the [_policy]
+   suffix marks them.  [restore_invariant] is not part of it: it only helps the
+   proof, and never changes a reachable state (restore_invariant_noop).  Note [runs] is not a parameter
    here: the slice size reaches the model only through [service_policy],
    already applied. *)
 Definition model (runtime : nat) (Opub Opriv : Ty)
-  (init_state : [state_type])
+  (init_policy : [state_type])
   (service_policy : [T_out Opub Opriv] -> [state_type] -> [state_type])
   (restore_invariant : [state_type] -> [state_type])
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
-  @reactive_system cur_pid state_type init_state T_in (T_out Opub Opriv) T_intermediate
+  @reactive_system cur_pid state_type init_policy T_in (T_out Opub Opriv) T_intermediate
     (state_step service_policy restore_invariant) (no_output Opub Opriv)
     (pool runtime p_pub p_priv p_sched) (@pool_input Opub Opriv).
 
 
 (* #################################################################
-   PART II -- the two designs
+   PART II -- the two interrupt policies
    ################################################################# *)
 
 (* === 8. model_immediate and model_sliced, side by side ===
 
-   The two designs are the same [model] at two different triples, and that
+   The two policies are the same [model] at two different triples, and that
    difference is the whole security story:
 
      parameter            model_immediate            model_sliced
      -----------------------------------------------------------------------
-     initial state        initial_state_immediate    initial_state_sliced
+     init_policy          immediate_init             sliced_init
                           no slice, no masks set     slice at [Some 0], every
                                                      mask but the timer's set
-     service policy   immediate_policy       sliced_policy runtime runs
+     service_policy       immediate_service          sliced_service runtime runs
                           a finished handler         a finished timer handler opens
                           unmasks everything, so     a slice and requests a
                           a pending interrupt is     reschedule; each handler
@@ -556,7 +559,7 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
                                                      masks and queues a NOP run; the
                                                      slice is counted down and
                                                      closed on a handler boundary
-     restore_invariant          id                         restore_invariant
+     restore_invariant    id                         restore_invariant
                           nothing                    re-imposes the slice invariant
                                                      for the proof; the identity on
                                                      every reachable state
@@ -571,25 +574,25 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
 
 Definition false_ir_bits : [ir_bits] := (false,false).
 Definition false_ic : [ic] := ((false,false),(false_ir_bits,false_ir_bits)).
-Definition initial_state_immediate : [state_type] := ((initial_pid,None),(false,(None,false_ic))).
+Definition immediate_init : [state_type] := ((initial_pid,None),(false,(None,false_ic))).
 
-Definition immediate_policy (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type])  :=
+Definition immediate_service (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type])  :=
   if is_ir_out_done o is Some ir then let v := unset_masks v in if ir is timer_irq then update_re_sched v true else v else v.
 
 (* model_immediate p_pub p_priv p_sched =
-     model initial_state_immediate immediate_policy id p_pub p_priv p_sched *)
+     model immediate_init immediate_service id p_pub p_priv p_sched *)
 Definition model_immediate (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
-  model runtime initial_state_immediate (@immediate_policy Opub Opriv) id
+  model runtime immediate_init (@immediate_service Opub Opriv) id
     p_pub p_priv p_sched.
 
 (* -- model_sliced -- *)
 
 Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*mask set for everything but timer interrupt*)
 
-Definition initial_state_sliced : [state_type] := ((initial_pid,None),(false,(Some 0,mask_most))).
+Definition sliced_init : [state_type] := ((initial_pid,None),(false,(Some 0,mask_most))).
 
 (* The time slice, as a whole number [runs] of handler runs.  Expressing it this
    way rather than as an independent constant is what makes "the slice ends on a
@@ -628,7 +631,7 @@ Definition timeslice_live (c : [ir_count]) := match c with | Some n => 0 < n | _
 (* restore_invariant writes the time-slice invariant into the state just before
    [initiate_next] chooses: inside a slice the NOP handler is pending and the
    timer masked, outside it the disk and NOP handlers are masked, and the NOP
-   mask equals the disk mask.  The design already maintains all of this, so on
+   mask equals the disk mask.  The sliced policy already maintains all of this, so on
    every reachable state it changes nothing (restore_invariant_noop, below).  It
    exists for the proof: stated unconditionally, it lets the [fv_NI] argument
    for [initiate_next] use the invariant without carrying reachability, and so
@@ -641,16 +644,16 @@ Definition restore_invariant v := let b := timeslice_live (get_ir_count v) in
                             let m := get_ir_mask v disk_irq in
                             update_ir_mask v nop_irq m.
 
-Definition sliced_policy (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [state_type] -> [state_type] := check_ir_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*)
+Definition sliced_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [state_type] -> [state_type] := check_ir_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*)
 
 (* model_sliced p_pub p_priv p_sched =
-     model initial_state_sliced (sliced_policy runtime runs) restore_invariant
+     model sliced_init (sliced_service runtime runs) restore_invariant
        p_pub p_priv p_sched *)
 Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
-  model runtime initial_state_sliced (@sliced_policy runtime runs Opub Opriv) restore_invariant
+  model runtime sliced_init (@sliced_service runtime runs Opub Opriv) restore_invariant
     p_pub p_priv p_sched.
 
 
@@ -658,7 +661,7 @@ Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
 
    [restore_invariant] is stated unconditionally so that the compositional proof
    of [fv_NI] can rely on the time-slice invariant without carrying reachability.
-   The design itself establishes that invariant: [check_handler_completed] queues
+   The sliced policy itself establishes that invariant: [check_handler_completed] queues
    the NOP handler at each boundary, and [initiate_ir] requests a reschedule when
    a slice opens.  So on every state [initiate_next] actually reaches,
    [restore_invariant] changes nothing (restore_invariant_noop).
@@ -682,7 +685,7 @@ Definition sliced_inv (v : [state_type]) : bool :=
 
 (* The state [initiate_next] makes its choice from. *)
 Definition choice_state (o : [T_out Opub Opriv]) v :=
-  sliced_policy runtime runs o (check_scheduler o v).
+  sliced_service runtime runs o (check_scheduler o v).
 
 (* At that point: as [sliced_inv], except that at a handler boundary inside a
    slice the masks are open and the NOP handler is pending. *)
@@ -812,12 +815,12 @@ Qed.
 
 Lemma sliced_inv_step (e : [Sum T_in (T_out Opub Opriv)]) v :
   sliced_inv v ->
-  sliced_inv (state_step (@sliced_policy runtime runs Opub Opriv) restore_invariant e v).
+  sliced_inv (state_step (@sliced_service runtime runs Opub Opriv) restore_invariant e v).
 Proof.
 case: e => [i|o] Hv.
 - move: v Hv => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] Hv.
   by case: i.
-- have -> : state_step (@sliced_policy runtime runs Opub Opriv) restore_invariant (inr o) v =
+- have -> : state_step (@sliced_service runtime runs Opub Opriv) restore_invariant (inr o) v =
             initiate_next restore_invariant (choice_state o v) by [].
   have := choice_inv_step o Hv; move: (choice_state o v) => w Hw.
   rewrite /initiate_next.
@@ -838,10 +841,10 @@ case: e => [i|o] Hv.
       by case: (is_handler_pid _); first case: (get_re_sched _).
 Qed.
 
-(* The state after any sequence of events, starting from [initial_state_sliced]. *)
+(* The state after any sequence of events, starting from [sliced_init]. *)
 Definition sliced_run (es : seq [Sum T_in (T_out Opub Opriv)]) :=
-  foldl (fun v e => state_step (@sliced_policy runtime runs Opub Opriv) restore_invariant e v)
-        initial_state_sliced es.
+  foldl (fun v e => state_step (@sliced_service runtime runs Opub Opriv) restore_invariant e v)
+        sliced_init es.
 
 Lemma sliced_run_inv es : sliced_inv (sliced_run es).
 Proof.

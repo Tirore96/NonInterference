@@ -6,7 +6,7 @@
 Meseguer~\cite{goguen1982}; Sabelfeld and Myers survey language-based
 approaches~\cite{sabelfeld2003}. Timing channels in programs have been closed by
 padding transformations that equalise the running time of secret-dependent
-branches~\cite{agat2000}; the sliced design applies the same idea to handler
+branches~\cite{agat2000}; the sliced policy applies the same idea to handler
 runs, with the NOP handler as padding.
 
 \paragraph{Composable timing-sensitive non-interference} Our proofs rest on the
@@ -20,7 +20,7 @@ exist for real kernels, notably seL4~\cite{murray2013}, whose proof explicitly
 leaves timing channels out of scope. Time protection~\cite{ge2019} argues that an
 operating system must partition time as well as space, and includes the
 partitioning of interrupts among its mechanisms\todo{check this characterisation
-against~\cite{ge2019}}; our sliced design is an instance of
+against~\cite{ge2019}}; our sliced policy is an instance of
 that idea in a small model. What we add is a timing-sensitive, compositional,
 mechanised proof that the mechanism is secure, for any non-interfering scheduler and
 user processes.

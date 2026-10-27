@@ -22,7 +22,7 @@ section is about \cref{thm:main}.
 \subsection{The equivalences}\label{sec:equivs}
 
 \paragraph{Input} \m{in_equiv} makes the disk interrupt, and only the disk interrupt,
-unobservable at $\Lo$. The timer stays public, because the sliced design schedules by it.
+unobservable at $\Lo$. The timer stays public, because the sliced policy schedules by it.
 
 \paragraph{Output} A pool output is a six-tuple of options, one per slot, and
 \m{out_equiv} is the corresponding nest of \m{eqpair}s (\cref{tab:out-equiv}). Its two
@@ -149,7 +149,7 @@ holds exactly the two secret handlers, the disk handler and the NOP handler, and
 \code{inr} side everything else, the timer handler included. Drawing the line there
 lets the proof classify a whole pid in one place.
 
-The current pid is where the design does its work. Since \m{eqsum} never relates an
+The current pid is where the policy does its work. Since \m{eqsum} never relates an
 \code{inl} to an \code{inr}, the fact \emph{that} a handler is running stays visible, as does
 every public pid. What \m{private_equiv} hides is the bit inside \code{inl}: at $\Lo$ the
 disk handler and the NOP handler look alike. Across two $\Lo$-related states, that
@@ -180,7 +180,7 @@ and the last stage cannot be proved without it.
 Two facts hold of every state \m{model_sliced} reaches. While a slice is live and no
 handler is running, the NOP handler is pending, the disk and NOP masks are clear and
 the timer is masked; once the slice is over, the disk and NOP handlers are masked.
-And the disk and NOP masks always agree. The design maintains both
+And the disk and NOP masks always agree. The sliced policy maintains both
 (\cref{sec:sliced}).
 
 The function \m{restore_invariant} writes these facts into the state, just before
@@ -213,6 +213,6 @@ every slice loses its last handler run.
 An earlier version of the model relied on \m{restore_invariant} for behaviour: it was
 the only thing that queued the NOP filler and the only thing that returned control
 to the scheduler after a slice. Proving \cref{thm:noop} required moving both into
-\code{service_policy}, where they now appear as part of the design
+\code{service_policy}, where they now appear as part of the policy
 (\cref{sec:sliced}). The proof of \cref{thm:main} needed only two small lemmas to
 follow the change.

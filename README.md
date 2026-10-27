@@ -8,10 +8,10 @@ occurred.
 The interesting part is that a naive interrupt handler *does* leak it, and not
 through any data it computes: it leaks through **scheduling**. Servicing a secret
 interrupt takes CPU time away from the process that was running, and the resulting
-gap in that process's output is visible. The development formalises both designs,
+gap in that process's output is visible. The development formalises both interrupt policies,
 the one that leaks and the one that does not, and proves each claim.
 
-Both designs are expressed in a small process calculus, `Proc I O`.
+Both policies are expressed in a small process calculus, `Proc I O`.
 Non-interference is a property of a closed term in that calculus. Stating it takes a
 *characterised equivalence* on the input type and one on the output type. At each
 security level, such an equivalence cuts the values into classes an observer there
@@ -43,7 +43,7 @@ under study.
 
 Exactly one slot runs per step, chosen by the current pid. The global state holds a
 `(pending, mask)` bit pair per interrupt, plus a time-slice counter that only the
-non-interfering design uses. An interrupt is serviced when it is pending and
+non-interfering policy uses. An interrupt is serviced when it is pending and
 unmasked.
 
 ## The three models
@@ -53,8 +53,8 @@ Everything below refers to these. All three are in
 
 | Model | Type | Output it exposes | |
 |---|---|---|---|
-| `model_immediate` | `Proc TInterrupt (T_out Opub Opriv)` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive design; **leaks** |
-| `model_sliced` | `Proc TInterrupt (T_out Opub Opriv)` | the same full pool output | the fixed design; non-interfering, the headline result |
+| `model_immediate` | `Proc TInterrupt (T_out Opub Opriv)` | the full pool output: one slot per process, so handler and scheduler activity is visible | the naive policy; **leaks** |
+| `model_sliced` | `Proc TInterrupt (T_out Opub Opriv)` | the same full pool output | the fixed policy; non-interfering, the headline result |
 | `model_sliced_userview` | `Proc TInterrupt (T_out_userview Opub Opriv)` | only what the two user space processes emit: a public output or a syscall, every other slot erased | `model_sliced` behind a projection; non-interfering as a consequence |
 
 `Opub` and `Opriv` are the two user processes' output alphabets, which is why both
@@ -65,13 +65,13 @@ Delivering one is the only thing the environment can do to a model; the model
 records it as pending and decides later whether to service it. (The NOP handler
 introduced below has an entry in the interrupt controller but no interrupt of its
 own: the controller is indexed by `option` interrupt, with `None` as the NOP entry,
-and the design sets that entry pending itself.)
+and the sliced policy sets that entry pending itself.)
 
 The models then differ along two independent axes, and it helps to keep them apart.
 
 **Axis 1: behaviour (`model_immediate` vs `model_sliced`).** Same input and output
 types, same pool, same state layout. Both are the *same* generic definition,
-`model`, at a different triple of arguments: `init_state`,
+`model`, at a different triple of arguments: `init_policy`,
 `service_policy`, and `restore_invariant`, tabulated in
 [`docs/models.md` §8](docs/models.md). That difference is the whole security
 story: one leaks, the other does not.
@@ -202,8 +202,8 @@ Three machine-checked theorems, in
 
 | Theorem | Statement | Meaning |
 |---|---|---|
-| `model_immediate_not_NI` | `~ NI in_equiv out_equivC model_immediate_concrete` | The naive design leaks: a secret disk interrupt is observable. |
-| `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) model_sliced` | The headline result: the fixed design is non-interfering even on the full pool output, where the attacker sees when every process, handler and scheduler included, runs. |
+| `model_immediate_not_NI` | `~ NI in_equiv out_equivC model_immediate_concrete` | The naive policy leaks: a secret disk interrupt is observable. |
+| `model_sliced_NI` | `NI in_equiv (out_equiv Opub Opriv) model_sliced` | The headline result: the fixed policy is non-interfering even on the full pool output, where the attacker sees when every process, handler and scheduler included, runs. |
 | `model_sliced_userview_NI` | `NI in_equiv (out_equiv_userview Opub Opriv) model_sliced_userview` | A consequence: an attacker who sees only user-space output learns nothing either. |
 
 The models' arguments are elided in the table. The two positive results assume that
@@ -234,7 +234,7 @@ the argument it depends on has been given.
 - **A mechanised leak.** `model_immediate_not_NI` shows that ordinary interrupt
   handling leaks a secret interrupt through scheduling alone, with no secret data in
   any output.
-- **What the proof forces on the design.** Three lessons fall out of it, each
+- **What the proof forces on the policy.** Three lessons fall out of it, each
   pinned to a proof obligation:
   - *Pending bits private, masks public.* An unobservable interrupt may not visibly
     move the state (`f_EP`), so the bit it sets must be private. The state update
@@ -254,7 +254,7 @@ the argument it depends on has been given.
 
 ## Related work
 
-The sliced design is not new as a mitigation. Padding, time partitioning and
+The sliced policy is not new as a mitigation. Padding, time partitioning and
 partitioned interrupt handling are established defences against timing channels in
 operating systems; the closest is the interrupt partitioning of seL4's time
 protection (Ge et al., *Time Protection: the Missing OS Abstraction*, EuroSys 2019).
@@ -306,7 +306,7 @@ sits beside it and depends only on `definitions.v`. The build requires Rocq/Coq
 |---|---|
 | [`theories/definitions.v`](theories/definitions.v) | The process calculus, traces, `NI`, and the security equivalences. |
 | [`theories/theorems.v`](theories/theorems.v) | Generic non-interference theorems for the calculus, one per constructor. These mechanise results from Rafnsson et al., *Timing-Sensitive Noninterference through Composition*, [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf); this repository uses them as prior work. |
-| [`theories/models.v`](theories/models.v) | In three parts: the skeleton both designs share, ending in the generic `model`; the two designs, as `model` at two triples of arguments; and one concrete system, with the example traces. |
+| [`theories/models.v`](theories/models.v) | In three parts: the skeleton both interrupt policies share, ending in the generic `model`; the two interrupt policies, as `model` at two triples of arguments; and one concrete system, with the example traces. |
 | [`theories/noninterference.v`](theories/noninterference.v) | The concrete input, output and state equivalences, and the three theorems above. |
 | [`theories/adequacy.v`](theories/adequacy.v) | The paper's presentations, and the results that departing from them costs nothing: L-equivalences, streams, obliviousness over reachable states, and the paper's own coinductive definition of non-interference. Nothing else depends on it. |
 | [`docs/background.md`](docs/background.md) | **What the calculus and `NI` are.** The process calculus, characterised equivalences, `NI` and the composition theorems, companion to `definitions.v` and `theorems.v`. |
@@ -320,7 +320,7 @@ sits beside it and depends only on `definitions.v`. The build requires Rocq/Coq
 - For the **calculus and the definitions**, read
   [`docs/background.md`](docs/background.md) first; the other documents build on it.
 - For the **models**, read [`docs/models.md`](docs/models.md): every process, the
-  state layout, and the design rationale behind the sliced design.
+  state layout, and the rationale behind the sliced policy.
 - For the **proof**, read [`docs/noninterference.md`](docs/noninterference.md): the
   security equivalences, how the generic theorems compose, and the one hard
   obligation (`fv_NI`, closure of the state equivalence under the transition).

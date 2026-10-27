@@ -4,9 +4,9 @@
 
 The generic model puts the pool inside a stateful wrapper, \m{reactive_system}:
 \begin{lstlisting}
-model runtime init_state service_policy
+model runtime init_policy service_policy
       restore_invariant p_pub p_priv p_sched =
-  reactive_system init_state
+  reactive_system init_policy
     (state_step service_policy restore_invariant)
     no_output
     (pool runtime p_pub p_priv p_sched)
@@ -20,7 +20,7 @@ handler's output.
 \paragraph{The state} Besides the current pid and the interrupt controller, the
 state holds the pid of the user process a handler interrupted, a reschedule flag
 \m{re_sched}, and a time-slice counter \m{ir_count}. The last two are used only by
-the sliced design.
+the sliced policy.
 
 \paragraph{Handlers} \code{ir_handler runtime} counts its output steps modulo
 \code{runtime}. Its output type \code{THandlerOutput} has two values: it emits

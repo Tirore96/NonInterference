@@ -16,7 +16,7 @@
   and handler alike. Caches, memory contention and other microarchitectural channels
   are outside the model.
 \item \emph{One-step handlers.} At $\mathit{runtime} = 1$ a slice loses its last
-  handler run (\cref{sec:restore}); the result still holds, but the design behaves
+  handler run (\cref{sec:restore}); the result still holds, but the policy behaves
   less usefully there.
 \end{itemize}
 
@@ -24,10 +24,10 @@
 servicing interrupts only in publicly timed, padded slices closes the channel. We
 proved both facts in Rocq, the second for any non-interfering scheduler and user
 processes, by composing generic non-interference theorems over the structure of the
-model. The proof did more than check the design: it fixed the classification of the
+model. The proof did more than check the policy: it fixed the classification of the
 interrupt controller bit by bit, separated hiding what a handler computed from hiding
 that it ran, and exposed a proof device that was quietly carrying behaviour, which we
-moved into the design and then proved inert.
+moved into the policy and then proved inert.
 
 % TODO: future work, e.g. several secret interrupts, variable-length handlers with
 % padding, or connecting the model to a real interrupt controller.
