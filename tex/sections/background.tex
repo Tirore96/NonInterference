@@ -131,7 +131,7 @@ the observer at $\ell$ may not see.
 
 \subsection{Equivalences}
 
-A composite process gets its equivalences from those of its parts: each process
+\todo{this is the story, so show it: a small table of process constructor vs.\ the equivalences it induces, with input and output columns (\code{swi} and \code{sta} change both sides), and `none' for \code{out}, \code{map}, \code{loop}. Theorem names can move into the table.}\todo{overclaim (my text): \code{out}, \code{map} and \code{loop} have no matching equivalence constructor; only the constructors that combine or gate processes do (\code{par}, \code{swi}, \code{maybe}, \code{sta}).}A composite process gets its equivalences from those of its parts: each process
 constructor has a matching constructor on equivalences (\cref{thm:composition}), so
 the equivalences of the model in \cref{sec:model} are terms built from a few
 constructors over two equivalences at the leaves.
@@ -194,14 +194,14 @@ f \in \mathsf{PE}(\eqv{I},\eqv{V}) &\iff \forall \ell, i, v.\;
 \ell \in \Ob(p,\doteq) &\iff \text{every output of $p$ at $\ell$ is}
   \doteq_\ell \unobs
 \end{align*}
-A function is non-interfering if it maps related values to related values
+\todo{Aw and Ob are given as formulas only. Every abstract definition gets an example: use a slot's gate bit (aware) and the disk slot (oblivious), forward-referencing V-A.}A function is non-interfering if it maps related values to related values
 (\m{f_NI}, \m{fv_NI}), unobservable-preserving if it maps unobservable values to
 unobservable ones (\m{f_PU}), and equivalence-preserving if an unobservable input
 does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $v$
 (\m{aware}) if it can tell $v$ from every other value, and \emph{oblivious} to $p$
 (\m{oblivious}) if it sees none of $p$'s outputs.
 
-\begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
+\todo{keep Theorem~1 complete, it is what everything rests on; let the constructor table above carry the intuition, and consider dropping the theorem names from the items once they are in the table.}\begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
 For all processes, functions and equivalences of matching types:
 \begin{enumerate}
 \item (\m{out_NI}) $\mathsf{out}\;o \in \NI(\eqv{I},\eqv{O})$.

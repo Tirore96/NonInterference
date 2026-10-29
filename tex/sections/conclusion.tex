@@ -6,7 +6,7 @@
   indistinguishable partner. Several secret interrupts would need a richer
   indistinguishability argument.
 \item \emph{Equal handler lengths.} Every handler runs for the same number of steps,
-  which is what lets every mask bit be public. Variable-length handlers would force
+  which is what lets every mask bit be public.\todo{we now know why: boundaries from the public counter coincide with completions only because runs have fixed length (IV-B). Link there.} Variable-length handlers would force
   the masks private, and the proof of \m{fv_NI} would have to reason across diverging
   branches. A real system would reach a fixed length by padding.
 \item \emph{Cooperative processes, no nesting.} A selected process takes exactly one
@@ -15,12 +15,12 @@
 \item \emph{Abstract time.} One output step is one unit of time, for every process
   and handler alike. Caches, memory contention and other microarchitectural channels
   are outside the model.
-\item \emph{One-step handlers.} At $\mathit{runtime} = 1$ a slice loses its last
+\todo{the one-step quirk is now explained three times (IV-B footnote, V-C, here). Keep V-C; make this and the footnote one-clause pointers.}\item \emph{One-step handlers.} At $\mathit{runtime} = 1$ a slice loses its last
   handler run (\cref{sec:restore}); the result still holds, but the policy behaves
   less usefully there.
 \end{itemize}
 
-\paragraph{Conclusion} A secret interrupt can leak through the schedule alone, and
+\todo{still the pre-rework story. Restate the result as the requirement (when secret handlers run, and for how long, is public) and the slice as one way to meet it. `a proof device that was quietly carrying behaviour' duplicates VII.}\note{there is no future-work paragraph in the PDF; it exists only as a LaTeX comment at the end of this file.}\paragraph{Conclusion} A secret interrupt can leak through the schedule alone, and
 servicing interrupts only in publicly timed, padded slices closes the channel. We
 proved both facts in Rocq, the second for any non-interfering scheduler and user
 processes, by composing generic non-interference theorems over the structure of the

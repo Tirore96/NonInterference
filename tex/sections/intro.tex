@@ -1,6 +1,6 @@
 \section{Introduction}\label{sec:intro}
 
-The security of a computer system rests on its operating system. The operating
+\todo{overall: the paper now has one organising idea (U/T/S, \emph{whether} public, \emph{which} private). IV and V use it; the intro, III, the conclusion and the abstract still speak the older language. Every section should tell the same story.}\note{the first sentences of the abstract and the intro are near-identical. Let the intro open differently.}The security of a computer system rests on its operating system. The operating
 system ties software to hardware: it owns the devices, decides which process runs and when, and stands
 between processes that must not learn about each other. Whatever an operating
 system lets one process observe about another is a potential leak, and that
@@ -27,7 +27,7 @@ attacker sees, and a private process, the legitimate consumer of the disk event,
 reacts to it. The attacker may learn nothing about the disk interrupt. \Cref{sec:model,sec:designs,sec:proof}
 model this system, exhibit the leak, and remove it.
 
-\begin{figure}[t]
+\todo{Fig.~1 and the mechanised counterexample agree (interrupt before step 1, handler at 2--3), but Fig.~6 uses another run (interrupt after step 1, handler at 3--4). Make Fig.~1 the two ordinary rows of Fig.~6, drawn in the strip style, so page 1 teaches the visual language; keep the counterexample as the minimal trace and say so in IV-A.}\begin{figure}[t]
 \centering
 \begin{tabular}{lcccc}
 \toprule
@@ -51,7 +51,7 @@ non-interference~\cite{goguen1982}: varying what the attacker may not see must n
 change what it does see. For timing leaks, ``what it sees'' must include when each
 output appears~\cite{agat2000}.
 
-In this paper we use the process calculus of Rafnsson, Jia and
+\todo{dense paragraph with no picture yet: pool, global state, interrupt controller. Point to the model figure, or cut to two sentences and leave the rest to III.}In this paper we use the process calculus of Rafnsson, Jia and
 Bauer~\cite{rafnsson2017} to state and prove such properties of interrupt handling.
 Its notion of non-interference is timing-sensitive, and its non-interference
 theorems compose: if the parts of a process are non-interfering at suitable
@@ -62,11 +62,11 @@ concurrent processes in a pool, and a global state, holding the interrupt
 controller, decides at each step which of them runs. Interrupts arrive as inputs to
 the whole system, and at each step the pool emits the output of the process that
 ran. We prove in
-Rocq\footnote{The mechanisation is available at \url{\repobase}.} that ordinary
-interrupt handling is interfering (\m{model_immediate_not_NI}): the leak of
+Rocq\footnote{The mechanisation is available at \url{\repobase}.}\note{the repository link also opens VII; one place is enough.} that ordinary
+\note{every \textbackslash m name is a blue link. In running prose they distract (you flagged this in II). Consider linking only theorem names and first occurrences, or printing links black and relying on the artifact table.}interrupt handling is interfering (\m{model_immediate_not_NI}): the leak of
 \cref{fig:leak} is a counterexample.
 
-We then model the corresponding non-interfering variant, obtained by altering how
+\todo{this paragraph predates U/T/S. State the requirement in one sentence (when secret handlers run, and for how long, must be public), then the slice as one way to meet it. The `intuitive but hard' part should then say what is hard in those terms.}We then model the corresponding non-interfering variant, obtained by altering how
 interrupts are processed. The idea is to take away a secret interrupt's power to
 choose \emph{when} its handler runs. Interrupts are serviced only inside time slices,
 each opened when the handler of the public timer completes; every handler run takes the same number of steps, and
@@ -77,11 +77,11 @@ That this is safe is intuitive; proving it is not. The secret still changes the
 state: it sets a pending bit, decides which handler fills a run, and changes what
 the private user process does next. The proof must show that none of this ever
 reaches what the attacker sees (\cref{sec:proof}).
-We prove this variant non-interfering (\m{model_sliced_NI}), even to an attacker who
+\todo{overclaim: the attacker does not see \emph{which} secret handler ran, that is the point. Say `which process ran, except which of the two secret handlers'.}We prove this variant non-interfering (\m{model_sliced_NI}), even to an attacker who
 sees, at every step, which process in the pool ran, the scheduler and the handlers
 included. Both variants are instances of a single generic model and differ only
 in their \emph{interrupt policy}: the initial state and how handler completion is
-serviced. The result is general in two ways. It holds for every scheduler
+\todo{`how handler completion is serviced' is no longer accurate: the sliced policy reopens masks on the counter, not on completion (IV-B). Say `when handlers may run'.}serviced. The result is general in two ways. It holds for every scheduler
 and every pair of user processes that are themselves non-interfering. And it holds
 for every choice of the two numbers that fix the timing of the policy: the number
 of steps one handler run takes, and the number of handler runs that fit in one
@@ -96,9 +96,9 @@ implement it in an operating system is carried out in separate work
 \item A mechanised, timing-sensitive non-interference proof for interrupt handling
   (\cref{sec:designs,sec:proof}), and a mechanised counterexample for ordinary
   interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one generic
-  theorem per constructor of the model, and leaves one substantial obligation
+\todo{II-D and V say two side conditions; here and in VI (`the one hard obligation') we mean the hard one. Use one phrasing everywhere: two side conditions, one of them hard (\code{fv\_NI}).}  theorem per constructor of the model, and leaves one substantial obligation
   specific to interrupt handling (\cref{sec:state-equiv}).
-\item Requirements, forced by the proof, on any implementation of interrupt
+\todo{we claim these are `forced by the proof', but the body never collects them or traces each to the obligation that forces it. Either do that (end of V, or conclusion) or soften. And phrase them in U/T/S terms.}\item Requirements, forced by the proof, on any implementation of interrupt
   handling that is to be non-interfering (\cref{sec:proof}). The arrival of a
   secret interrupt may only record that it is pending; every decision it influences, such as starting its handler, must be
   deferred to a point fixed by public time. Whether a secret handler ran must be

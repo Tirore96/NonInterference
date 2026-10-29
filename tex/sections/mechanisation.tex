@@ -1,13 +1,13 @@
 \section{Mechanisation}\label{sec:mechanisation}
 
-The development is about 6{,}000 lines of Rocq 9.0.1, available at
+\note{name all versions (MathComp 2.5.0, Hierarchy Builder 1.10.1, deriving 0.2.2, paco 4.2.3), and mention the CI that rebuilds the proofs and checks for axioms: cheap reproducibility evidence.}The development is about 6{,}000 lines of Rocq 9.0.1, available at
 \url{\repobase}, using Mathematical
 Components~\cite{mathcomp} and, for the coinductive definitions of the original
 paper, paco~\cite{paco} (\cref{tab:files}).
 
 \begin{table}[t]
 \centering
-\caption{The development.}
+\caption{The development.}\note{the line counts are stale (now 1188, 1321, 1166, 1743, 835). Generate them in mechlinks.py like the line links, so they cannot drift.}
 \label{tab:files}
 \footnotesize
 \begin{tabularx}{\columnwidth}{@{}lrL@{}}
@@ -23,7 +23,7 @@ file & lines & contents \\
 \end{tabularx}
 \end{table}
 
-\paragraph{Types} Input and output types range over an inductive universe \m{Ty} of
+\todo{add a paragraph on how the figures are backed: the runs are proved traces and the state rows come from computed lemmas. It is a selling point of a mechanisation paper and is now only in captions.}\paragraph{Types} Input and output types range over an inductive universe \m{Ty} of
 codes, interpreted into \code{Set}, rather than over \code{Set} directly. This makes
 reductions invertible, which the negative result needs: refuting non-interference
 means showing that a trace is \emph{not} admitted.
@@ -34,7 +34,7 @@ proofs. The latter is what dependent elimination on the type-indexed reduction
 relations would need; we invert reductions through determinism of reduction
 instead, one lemma per rule (\m{inv_mapO} and its siblings).
 
-\paragraph{Proof devices} A hook that only the proof needs, such as
+\todo{part of the development was done with AI assistance. Check whether CSF requires disclosure, and decide on a sentence.}\paragraph{Proof devices} A hook that only the proof needs, such as
 \m{restore_invariant}, can hide behaviour. An earlier version of our model relied on
 it to queue the NOP filler and to return control to the scheduler after a slice;
 proving \cref{thm:noop} forced both into the interrupt policy, where they now are.
@@ -58,7 +58,7 @@ the original (\m{ObliviousDis_iff}). As a consequence, \cref{thm:leak,thm:main}
 also hold with non-interference read as in the original, hypotheses included
 (\m{model_immediate_not_NI_paper}, \m{model_sliced_NI_paper}).
 
-One further difference is only notational. The original adjoins the distinguished
+\todo{keep both (II-B has the one-line pointer you asked for), but use the same word in both places: `alternative definition' there, `only notational' here.}One further difference is only notational. The original adjoins the distinguished
 value $\unobs$ to every type; we keep the values as they are and make
 unobservability a predicate, tied to the equivalence by the characterisation law.
 \m{NI_lEquiv} shows that the two give the same notion of non-interference, and

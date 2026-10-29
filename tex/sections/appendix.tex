@@ -26,7 +26,7 @@ not the option \code{None}) otherwise.
 pid. Each slot's output is tagged with the constant \code{true}, which closes its
 switch after one output step, so a selected process takes exactly one step.
 
-\paragraph{The scheduling decision} The priority rule of \cref{sec:state} is
+\todo{annotate the branches of the listing with the priority rules 1--4 of III-D (or the U/T/S arrows), so the reader can match them.}\paragraph{The scheduling decision} The priority rule of \cref{sec:state} is
 \begin{lstlisting}
 initiate_next restore_invariant v =
   if masks_set v then v   (* handler running *)

@@ -67,6 +67,7 @@
 \newcommand{\Ob}{\mathsf{O}}
 \newcommand{\cn}[1]{\mathsf{#1}}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\note}[1]{\textcolor{orange!85!black}{[NOTE: #1]}}
 
 % ---------------------------------------------------------------- mechanisation
 % Every link to the mechanisation goes through \mech, so the target is set here
@@ -122,9 +123,10 @@ wilr@itu.dk}
 dati@itu.dk}}
 
 \maketitle
-
+\note{is CSF double-blind this year? If so, the author block and the GitHub links must switch with \textbackslash anonymoustrue (only \textbackslash repobase does now), and the \code{pdf} branch must stay out of the anonymous mirror.
+}
 \begin{abstract}
-The security of a computer system rests on its operating system, which ties
+\todo{the abstract still tells the pre-rework story (slices, dummy handler). We now have a sharper one: the attacker learns when the secret handlers run and for how long, and the fix makes both public. One sentence each for leak, requirement, fix, proof.}The security of a computer system rests on its operating system, which ties
 software to hardware and decides which process runs, when, and on whose behalf. A key part of
 this is interrupt handling. Servicing an interrupt takes time away from whichever
 process was scheduled. If a public process keeps issuing requests whose results an
@@ -160,7 +162,8 @@ verification, Rocq
 
 \input{sections/appendix}
 
-\bibliographystyle{IEEEtran}
+\note{only eight references, all written from memory (see references.bib). Verify every field, and expect the related-work rework to add many.
+}\bibliographystyle{IEEEtran}
 \bibliography{references}
 
 \end{document}

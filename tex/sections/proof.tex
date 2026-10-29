@@ -6,7 +6,7 @@ secret handler runs at steps 7 to 10 in both; the runs differ only in which hand
 runs at steps 7 and 8. This section proves that the same holds for every pair of
 runs the attacker should not tell apart, and that nothing else reveals the secret.
 
-The proof follows the term of \m{model_sliced} from the outside in, applying one
+\todo{ten blue theorem names in one sentence. Draw the term as a tree, but accurately: map / loop / map / sta / map / maybe / pool, and each slot is swi(maybe(map \dots)), so \code{maybe\_NI} and \code{map\_NI} apply more than once (`maybe for the idling pool' is incomplete). Mark the two side conditions at swi and sta.}The proof follows the term of \m{model_sliced} from the outside in, applying one
 composition theorem per constructor (\cref{thm:composition}): \m{map_NI} for the outer
 rewiring, \m{loop_NI} for the feedback, \m{sta_NI} for the global state, \m{maybe_NI} for
 the idling pool, \m{par_NI} to split the pool into slots, \m{swi_NI} for each slot's
@@ -62,7 +62,7 @@ because a slice run is filled by one or the other.
 
 \subsection{The state}\label{sec:state-equiv}
 
-\m{sta_NI} imposes two conditions on the state update $f$, and they pull in opposite
+\todo{$\doteq^E$ (events) appears without being introduced.}\m{sta_NI} imposes two conditions on the state update $f$, and they pull in opposite
 directions. \m{f_EP} requires that an unobservable input leave the state related to
 itself, and \m{fv_NI} that related events map related states to related states:
 \[
@@ -81,7 +81,7 @@ moving the slice counter, would disturb a public field, so everything an interru
 causes is deferred to a later output step, where the input is no longer the thing
 being varied.
 
-\begin{table}[t]
+\todo{same problem as the old eqmaybe table: mechanisation names (\code{private\_pending\_equiv}, \code{public\_bits\_equiv}). Write the equivalences out, or fold this into a shaded state listing in III-C.}\begin{table}[t]
 \centering
 \caption{\texttt{state\_type\_equiv}, field by field.}
 \label{tab:state-equiv}
@@ -122,7 +122,7 @@ and the output, and write the same values into both states. For the service poli
 this is what the restriction of \cref{sec:sliced} buys: \m{immediate_service} reads
 the disk handler's output.
 
-The fourth, \m{initiate_next}, chooses what runs next, and is where whether a secret
+\todo{this is the formal version of the bold arrows of Fig.~5. Say so: `a secret handler in one state and none in the other' is a bold arrow taken in one run only.}The fourth, \m{initiate_next}, chooses what runs next, and is where whether a secret
 handler runs is decided. The timer is public, so both states agree on it. Otherwise,
 in each state the secret handler ready to start is the disk handler, the NOP handler,
 or none. Disk in one state and NOP in the other is harmless: both start an \code{inl}
@@ -137,7 +137,7 @@ model reaches, and so cannot use it.
 
 \subsection{Restoring the invariant}\label{sec:restore}
 
-The function \m{restore_invariant} makes the phase fix readiness in every state.
+\todo{`phase of Fig.~7': Fig.~7 now draws U/T/S with counter values, not phases. Align the words throughout V (`open slice' = in S).}The function \m{restore_invariant} makes the phase fix readiness in every state.
 Just before \m{initiate_next} chooses, it writes the masks of the current phase of
 \cref{fig:phases} into the state: in an open slice it sets the NOP pending bit and
 the timer mask, otherwise the disk and NOP masks, and in both cases it copies the
@@ -147,7 +147,7 @@ has. This discharges \m{initiate_next}. In the states the model reaches, the pol
 has already done all of this (\cref{sec:sliced}), and we prove that
 \m{restore_invariant} never changes them.
 
-\begin{theorem}[\m{restore_invariant_noop}]\label{thm:noop}
+\todo{hard to parse. Keep the formal condition (`not all masks are set' is exactly \code{initiate\_next}'s guard) and add the gloss `that is, no handler is running', and `reachable' for the events clause.}\begin{theorem}[\m{restore_invariant_noop}]\label{thm:noop}
 Let $\mathit{runtime} \neq 1$. For every sequence of events $es$ from the initial
 state of \m{model_sliced}, and every output $o$, let $w$ be the state that
 \m{initiate_next} receives on $o$ after $es$. If not all masks are set in $w$, then
@@ -156,7 +156,7 @@ $\mathsf{restore\_invariant}\;w = w$.
 
 The events $es$ are arbitrary, so the theorem holds whatever the pool emits. The proof states the invariant
 between steps, shows that every event preserves it, and shows that at the choice
-point a slightly weaker invariant holds, on which \m{restore_invariant} is the
+point a slightly weaker invariant holds,\todo{which weaker invariant? One line, or drop the remark.} on which \m{restore_invariant} is the
 identity. One small lemma per stage of the pipeline does the bookkeeping.
 
 The hypothesis $\mathit{runtime} \neq 1$ marks where \m{restore_invariant} and the

@@ -1,0 +1,188 @@
+ASSESSMENT OF THE REVIEW COMMENTS (second pass, 2026-10-29)
+==========================================================
+
+Scope: the 33 \todo comments added in the simulated review pass (uncommitted),
+re-checked against the paper text and the Rocq sources. Nothing in tex/ was
+changed. Verdicts: KEEP (sound as written), REVISE (sound idea, comment wrong or
+incomplete), WITHDRAW (would make the paper worse), plus NEW findings the pass
+missed.
+
+
+1. NEW FINDINGS (not commented yet, and more important than most comments)
+--------------------------------------------------------------------------
+
+N1. Intro overclaims the attacker.  [high]
+    intro.tex, "We prove this variant non-interfering ... even to an attacker who
+    sees, at every step, which process in the pool ran, the scheduler and the
+    handlers included."
+    False as stated: the attacker does NOT see which secret handler ran. That is
+    the whole point (whether public, which private). out_equiv wraps the disk and
+    NOP slots in eqmaybe({H}, private), so None is unobservable to L there.
+    Fix: "which process ran, except which of the two secret handlers".
+
+N2. II-C overclaims the constructor correspondence.  [high, my own text]
+    background.tex, "each process constructor has a matching constructor on
+    equivalences (Theorem 1)". Not true for out, map and loop: they introduce no
+    equivalence constructor. The correspondence holds for par (eqpair), swi
+    (eqpair_LR on input, eqmaybe(Aw(true,B), O) on output), maybe (eqmaybe(empty, I)
+    on input) and sta (eqpair_R(V, I) inside, eqpair(V, O) outside).
+    Fix: "the constructors that combine or gate processes each have a matching
+    constructor on equivalences". This also shapes comment B1 below.
+
+N3. "Phase" vocabulary is stale in III-C too, not only in V.  [low]
+    model.tex, slice-counter bullet: "tracks the phase of a time slice ...
+    (Fig. 7)". Same issue as comment P6; fix both together.
+
+N4. One-step handlers are explained three times.  [low]
+    IV-B footnote, V-C last paragraph, conclusion "Limitations". Keep V-C, make
+    the other two one-clause pointers.
+
+N5. Page budget.  [check]
+    The paper is 12 pages without the red comments. Check CSF's limit and
+    whether the appendix and references count; several comments below add
+    figures (constructor table, proof tree, Fig. 1 redraw).
+
+
+2. COMMENTS TO REVISE
+---------------------
+
+I1  Fig. 1 vs Fig. 6 (intro).  REVISE: overstated.
+    The comment says there are three different runs. There are two: Fig. 1 and
+    the mechanised counterexample agree (interrupt before step 1, inserted at
+    position 0 in model_immediate_not_NI; handler at 2-3). Only Fig. 6 differs
+    (interrupt after step 1, handler at 3-4, as in immediate_with_dI').
+    Recommendation: make Fig. 1 the two ordinary rows of Fig. 6 drawn in the
+    strip style (same run, same visual language), and keep the counterexample
+    as is: it is a minimal trace, and IV-A can say so in one clause.
+
+B1  Constructor table (II-C).  REVISE.
+    Sound idea, but the table needs input and output columns (swi and sta
+    change both sides), and out/map/loop rows say "no new constructor" (see N2).
+
+B3  Theorem 1 "shrink each item".  REVISE: risky.
+    Theorem 1 is the formal statement the rest relies on; shrinking items
+    loses precision. Keep it complete; only move the theorem names into the
+    constructor table, and let the table carry the intuition.
+
+M4  Shade the state listing, drop Table II.  REVISE.
+    Shading a code listing field by field is awkward: the current pid is half
+    public (inl vs inr) and half private (which secret handler). Better: keep
+    Table II but write its equivalences out (as P3 says), and in III-C only
+    add "the inl side is exactly S". Drop the "Table II redundant" part.
+
+P1  Proof tree figure (V).  REVISE: correct the details first.
+    The term is map / loop / map / sta / map / maybe / pool, and each slot is
+    swi (maybe (map ... proc)) (models.v, reactive_system and slot_procs). So
+    maybe_NI applies twice (idling pool and each slot), and map_NI several
+    times. The V text names maybe_NI only "for the idling pool". The figure is
+    still a good idea, but it must show this structure accurately or it will
+    mislead.
+
+P5  Theorem 4 wording.  REVISE.
+    "not all masks are set" is exactly the guard of initiate_next (masks_set),
+    so the formal condition must stay. Keep it and add the gloss "i.e. no
+    handler is running" rather than replacing it.
+
+G1  Drop the Rocq listing in VI.  REVISE: a choice, not a defect.
+    The listing shows the discharged statement verbatim, which supports the
+    "mechanisation is ground truth" goal. Listing and Table III do overlap:
+    keep one. I lean to the table, but this is the author's call.
+
+I6  "one substantial obligation" vs two.  REVISE: the wording, not the count.
+    II-D and V say two side conditions; the intro and VI ("the one hard
+    obligation") mean the hard one (fv_NI). Unify as "two side conditions, one
+    of them hard (fv_NI)".
+
+V2  "only notational" (VII) vs "alternative definition" (II-B).  REVISE.
+    The author asked for the line in II-B, so keep both, but use the same word
+    in both places.
+
+
+3. COMMENTS TO WITHDRAW
+-----------------------
+
+M5  "Rules 1-4 can be read off the U/T/S diagrams; drop the enumerate."
+    WITHDRAW. The priority rule is generic (initiate_next), the diagrams are
+    per policy, and the diagrams do not show "return to the interrupted
+    process vs. the scheduler" or "current process continues". The enumerate
+    carries information the figures do not.
+
+D2  "Does immediate_init need a listing?"
+    WITHDRAW. The author asked for both initial states to be shown in full,
+    and IV-A/IV-B are meant to be parallel (concept, code, run, theorem).
+    Removing one listing breaks the parallel.
+
+D3  "Proof sketch repeats the walk-through."  DOWNGRADE to optional.
+    The walk-through follows the Fig. 6 run (interrupt after step 1); the
+    sketch follows the counterexample trace (interrupt before step 1) and
+    adds insertion and determinism. The overlap is one sentence about
+    initiate_next. The author explicitly asked for the more formal sketch.
+
+
+4. COMMENTS THAT HOLD (verified)
+--------------------------------
+
+Abstract    stale story. KEEP.
+Intro       overall "one organising idea" comment; dense pool paragraph;
+            idea paragraph predates U/T/S; "how handler completion is
+            serviced" inaccurate; requirements claimed "forced by the proof"
+            but never traced in the body. KEEP all.
+B2          Aw / Ob need examples. KEEP.
+M1          U/T/S visible in the model figure: shaded slots are U and T,
+            white slots are S. Verified against the shading. KEEP.
+M2          out_equiv fits in III in one line, and the three shades are
+            exactly eqmaybe({L,H}, public) dark, eqmaybe({L,H}, private)
+            light, eqmaybe({H}, private) white. Verified against out_equiv in
+            noninterference.v. KEEP; probably the highest-value comment.
+M3          in_equiv by example. KEEP (low).
+M6          service_policy "only stage that sees a handler announce
+            completion". KEEP: the sliced policy reopens masks on the
+            counter. Note restore_invariant also writes masks, but it is not
+            part of the policy.
+D1          "sees the U and T steps" imprecise for the private user. KEEP (low).
+D5          why the userview corollary. KEEP (low).
+P2          E (events) never introduced. KEEP (trivial).
+P3          Table II mechanised names. KEEP.
+P4          initiate_next case = the bold arrows of Fig. 5. KEEP: in the
+            ordinary policy the fatal case is exactly a U->S or T->S arrow
+            taken in one run only.
+P6          "phase of Fig. 7" stale. KEEP (fix together with N3).
+P7          "slightly weaker invariant" unexplained. KEEP.
+VII         figures backed by lemmas; AI-assistance disclosure. KEEP.
+Related     stub. KEEP; citations still to be found and checked.
+Conclusion  stale story; equal-lengths limitation should link IV-B. KEEP.
+Appendix    annotate initiate_next with rules 1-4. KEEP (low).
+
+
+5. SUGGESTED ORDER OF WORK
+--------------------------
+
+1. Correctness first: N1 (intro overclaim), N2 (II-C overclaim), I6.
+2. The one idea everywhere: M1 + M2 together (U/T/S and out_equiv in III),
+   then the intro idea paragraph, abstract, conclusion.
+3. Figures: I1 (Fig. 1 as strip), B1 (constructor table), P1 (proof tree,
+   with the corrected structure). Check the page budget (N5) before adding.
+4. Section V wording: P3, P4, P5, P6 + N3, P7, P2.
+5. Low priority: M3, D1, D5, V2, N4, appendix, G1.
+
+
+6. APPLIED TO THE TEX (2026-10-29)
+----------------------------------
+
+Red \todo comments were updated to match sections 1-3 above: I1, I6, B1, B3,
+M4, D3, P1, P5, G1, V2 revised; M5 and D2 removed; N1-N4 added. (N5, the page
+budget, is in the orange note on the bibliography/anonymity instead.)
+
+Orange \note comments (new macro \note in main.tex) flag issues unrelated to
+the presentation review:
+- main.tex, after the title: CSF double-blind? \anonymoustrue switches only
+  \repobase, not the author block; keep the pdf branch out of the mirror.
+- main.tex, before the bibliography: eight references, all from memory.
+- intro: abstract and intro open with near-identical sentences.
+- intro: repository URL given twice (intro footnote and VII).
+- intro: \m names print as blue links everywhere in prose.
+- VII, file table: line counts stale (now 1188, 1321, 1166, 1743, 835);
+  generate them in mechlinks.py.
+- VII: name all library versions and mention the CI axiom check.
+- IV-B, Fig. 7: overfull by 1.7pt.
+- conclusion: future work exists only as a LaTeX comment.

@@ -10,7 +10,7 @@ Handlers take $\mathit{runtime} = 2$ steps.
 
 Each step is taken by one of three kinds of process: the users or the scheduler
 (U), the timer handler (T), or a secret handler, disk or NOP (S). The attacker sees
-the U and T steps (\cref{fig:system}). Of an S step it sees only that it happened:
+\todo{imprecise: of the private user it sees only that it ran. What matters is that it sees \emph{when} U and T run.}the U and T steps (\cref{fig:system}). Of an S step it sees only that it happened:
 the public slots stay silent, and nothing shows which secret handler ran. It thus
 learns when the system enters S and how long it stays there, so for the attacker to
 learn nothing, both must be fixed by public events; what runs inside S may depend on
@@ -102,7 +102,7 @@ immediate_init :=
   pending, takes a run the NOP handler would otherwise fill; that choice is all the
   secret decides. Each arrow is labelled with the stage of the service policy that
   takes it. Steps are those of both runs in \cref{fig:run-sliced}.}
-\label{fig:phases}
+\note{this figure is 1.7\,pt wider than the column (overfull box); nudge the node positions.}\label{fig:phases}
 \end{figure}
 starts in the public user with the slice counter disabled (fields as in
 \cref{sec:global-state}). The interrupt controller holds one (pending, mask) pair
@@ -140,7 +140,7 @@ For the concrete system,
 \]
 \end{theorem}
 
-\begin{proof}[Proof sketch]
+\todo{optional: one sentence about \code{initiate\_next} repeats the walk-through; the rest (insertion, determinism, the failing relation) is new. Trim only that sentence.}\begin{proof}[Proof sketch]
 Let $p$ be the model and $o_G$ the output in which only the public slot is set, to
 \code{Get}. The model performs $\perf{p}{!o_G.!o_G}{\Lo}$. The disk interrupt is
 unobservable at $\Lo$, so insertion demands $\perf{p}{?\mathsf{disk}.!o_G.!o_G}{\Lo}$.
@@ -302,7 +302,7 @@ non-interfering at \m{private_equiv} on input and output, then
 \end{multline*}
 \end{theorem}
 
-An attacker who sees only the two user processes, and not the scheduler or the
+\todo{why do we bother with the weaker attacker? One line: the main theorem's attacker already sees the schedule; this one is the realistic user-level view.}An attacker who sees only the two user processes, and not the scheduler or the
 handlers, observes \m{model_sliced_userview}, which applies \m{parse_output} to
 every output to erase all but the user slots.
 
