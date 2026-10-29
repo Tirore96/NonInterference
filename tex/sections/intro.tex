@@ -68,11 +68,15 @@ interrupt handling is interfering (\m{model_immediate_not_NI}): the leak of
 
 We then model the corresponding non-interfering variant, obtained by altering how
 interrupts are processed. The idea is to take away a secret interrupt's power to
-choose \emph{when} its handler runs. Interrupts are serviced only inside time slices
-opened by the public timer, every handler run takes the same number of steps, and
+choose \emph{when} its handler runs. Interrupts are serviced only inside time slices,
+each opened when the handler of the public timer completes; every handler run takes the same number of steps, and
 any part of a slice that no real interrupt claims is filled with a dummy handler,
 the NOP handler. A secret handler run then replaces a NOP run instead of displacing a user
 process, and the public schedule is the same whether or not the interrupt occurred.
+That this is safe is intuitive; proving it is not. The secret still changes the
+state: it sets a pending bit, decides which handler fills a run, and changes what
+the private user process does next. The proof must show that none of this ever
+reaches what the attacker sees (\cref{sec:proof}).
 We prove this variant non-interfering (\m{model_sliced_NI}), even to an attacker who
 sees, at every step, which process in the pool ran, the scheduler and the handlers
 included. Both variants are instances of a single generic model and differ only
@@ -93,7 +97,7 @@ implement it in an operating system is carried out in separate work
   (\cref{sec:designs,sec:proof}), and a mechanised counterexample for ordinary
   interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one generic
   theorem per constructor of the model, and leaves one substantial obligation
-  specific to interrupt handling (\cref{sec:fvni}).
+  specific to interrupt handling (\cref{sec:state-equiv}).
 \item Requirements, forced by the proof, on any implementation of interrupt
   handling that is to be non-interfering (\cref{sec:proof}). The arrival of a
   secret interrupt may only record that it is pending; every decision it influences, such as starting its handler, must be

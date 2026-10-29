@@ -238,7 +238,7 @@ Qed.
    states: masks PUBLIC everywhere; the secret handlers' (disk, NOP)
    pending bits secret via private_pending_equiv; cur_pid's inl/inr tag PUBLIC but the
    bool inside inl (which handler) secret;
-   re_sched, ir_count (the slice), scheduler/user pid all public.
+   re_sched, slice_count (the slice), scheduler/user pid all public.
    (Paper, Section V-D.) === *)
 Definition pids_equiv : cEquiv [pids] := eqpair (eqsum (private_equiv _) (public_equiv _)) (public_equiv _).
 Definition private_pending_equiv : cEquiv [ir_bits] := eqpair (private_equiv _) (public_equiv _).
@@ -517,8 +517,8 @@ Proof.
   intros l v v' ir b.
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 /rel_eqpair[]/rel_eqpair[]H3 H4/rel_eqpair[]/rel_eqpair[]H5 H6/rel_eqpair[]H7 H8.
   move: H0 H1 H2 H3 H4 H5 H6 H7 H8.
-  move: v=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+  move: v=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
   rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_pending /update_ir_bits /update_ir_bits' !pair_rewr.
   move=> H0 H1 H2 H3 H4 H5 H6 H7 H8.
   rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_pending /update_ir_bits /update_ir_bits' !pair_rewr.
@@ -538,8 +538,8 @@ Proof.
   intros l v v' b.
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 H3.
   move: H0 H1 H2 H3.
-  move: v=> [[cur prev]] [re_sched] [ir_count] ic.
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] ic'.
+  move: v=> [[cur prev]] [re_sched] [slice_count] ic.
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] ic'.
   rewrite /update_re_sched /get_bool_state /update_bool_state !pair_rewr.
   move=> H0 H1 H2 H3.
   apply/rel_eqpair2; con; rewrite !pair_rewr; first done.
@@ -579,8 +579,8 @@ Proof.
   move: H0.
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 /rel_eqpair[]/rel_eqpair[]H3 H4/rel_eqpair[]/rel_eqpair[]H5 H6/rel_eqpair[]H7 H8.
   move: H0 H1 H2 H3 H4 H5 H6 H7 H8.
-  move: v=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+  move: v=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
   rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_pending /update_ir_bits /update_ir_bits' !pair_rewr.
   move=> H0 H1 H2 H3 H4 H5 H6 H7 H8.
   rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_pending /update_ir_bits /update_ir_bits' !pair_rewr.    
@@ -614,8 +614,8 @@ Proof.
         apply state_type_equiv_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
   subst.  
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] /public_equiv_eq H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6. 
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -653,8 +653,8 @@ Proof.
 
   have: tI_out i = tI_out i'.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -679,17 +679,17 @@ Proof.
   mrw. intros.
   rewrite /check_handler_completed.
 
-  have: get_ir_count v = get_ir_count v'.
+  have: get_slice_count v = get_slice_count v'.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
 
   move: H2=>/public_equiv_eq->//.
   move=>->.
-  destruct (handler_completed runtime (get_ir_count v')).
+  destruct (handler_completed runtime (get_slice_count v')).
 
   apply update_pending_rel.
   apply/rel_eqpair2. con. ssa.
@@ -702,12 +702,12 @@ Proof.
   apply/rel_eqpair2. con. ssa. ssa. done.
 
   mrw. intros.
-  rewrite /check_ir_count.
+  rewrite /check_slice_count.
 
-  have: get_ir_count v = get_ir_count v'.
+  have: get_slice_count v = get_slice_count v'.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -715,7 +715,7 @@ Proof.
   move: H2=>/public_equiv_eq->//.
   move=>->.
 
-  destruct (get_ir_count v').
+  destruct (get_slice_count v').
   destruct n.
 
   apply/rel_eqpair2. con. ssa.
@@ -733,8 +733,8 @@ Proof.
   apply/rel_eqpair2. con. 
   apply/rel_eqpair2. con. ssa.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    rewrite !pair_rewr.
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    rewrite !pair_rewr.
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6. eauto.
@@ -756,8 +756,8 @@ Proof.
 
   have: masks_set v = masks_set v'.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask']. 
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask']. 
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -774,8 +774,8 @@ Proof.
           ir_ready (restore_invariant v') timer_irq. 
 
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -790,8 +790,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst'.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -832,8 +832,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD'.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -885,8 +885,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef'.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -938,13 +938,13 @@ Proof.
   rewrite Hfirst Hfirst'. exfalso.
   clear Hready Hready' Hfirst Hfirst'.
   
-  move: v H0 HreadyD HreadyD' HreadyDef'=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0 HreadyD HreadyD' HreadyDef'=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
 
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state !pair_rewr.
   move=>+ /negP + /negP.
   rewrite !negb_and !negbK.
   move/andP. case.
@@ -967,8 +967,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -1021,8 +1021,8 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef HreadyDef'.
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -1074,14 +1074,14 @@ Proof.
 
   clear Hready HreadyD Hready' Hfirst Hfirst'.
   
-  move: v H0 HreadyD' HreadyDef HreadyDef'=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0 HreadyD' HreadyDef HreadyDef'=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
 
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state.  
   move/negP. rewrite !negb_and !negbK.
   move/orP. case. move/orP. case.
   intro.
@@ -1118,14 +1118,14 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst'.
   
-  move: v H0 HreadyD' HreadyD HreadyDef => [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0 HreadyD' HreadyD HreadyDef => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
 
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.  
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state.  
   move/andP. case. intro.
   rewrite negb_or negbK. move/andP. case.
   intro. intro.
@@ -1145,14 +1145,14 @@ Proof.
 
   clear Hready Hready' Hfirst Hfirst'.
   
-  move: v H0 HreadyD' HreadyD HreadyDef HreadyDef' => [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0 HreadyD' HreadyD HreadyDef HreadyDef' => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
   rewrite !pair_rewr in HH H4 H5 H6.  
   move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
 
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_ir_count /get_ic_count /get_bool_state.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state !pair_rewr.
+  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state.
 
   move/negP. rewrite !negb_and !negb_or.
   move/orP. case. intro.
@@ -1301,8 +1301,8 @@ Proof.
   clear Hready Hready' HreadyD HreadyDef Hfirst HreadyD' HreadyDef' Hfirst'.
 
   have: is_handler_pid (restore_invariant v) = is_handler_pid (restore_invariant v').
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -1318,8 +1318,8 @@ Proof.
   move=>->.
   destruct (is_handler_pid _).
   have: get_re_sched (restore_invariant v) = get_re_sched (restore_invariant v').
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -1336,8 +1336,8 @@ Proof.
   move=>->.
   destruct (get_re_sched (restore_invariant v')).
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
 
@@ -1365,8 +1365,8 @@ Proof.
   move/public_equiv_eq : H2=>->//.
 
 
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.    
 
@@ -1379,18 +1379,18 @@ Proof.
   destruct prev'. done.
   destruct scheduler_pid. auto. done.
   subst. cbv. case_if. done.
-  destruct ir_count'. done. done.
+  destruct slice_count'. done. done.
   subst. ssa. subst. done. subst. done.
 
   
-  move: v H0=> [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [ir_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.    
 
   ssa. subst. done.
   subst. cbv. case_if. done.
-  destruct ir_count'. done. done. subst. done. subst. done.
+  destruct slice_count'. done. done. subst. done. subst. done.
   subst. done.
 
 
@@ -1402,7 +1402,7 @@ Proof.
   mrw. intros.
   simpl in H. rewrite /ir_dis in H. destruct H. subst.
 
-  move: v => [[cur prev]] [re_sched] [ir_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. de cur.
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.

@@ -34,6 +34,11 @@ proofs. The latter is what dependent elimination on the type-indexed reduction
 relations would need; we invert reductions through determinism of reduction
 instead, one lemma per rule (\m{inv_mapO} and its siblings).
 
+\paragraph{Proof devices} A hook that only the proof needs, such as
+\m{restore_invariant}, can hide behaviour. An earlier version of our model relied on
+it to queue the NOP filler and to return control to the scheduler after a slice;
+proving \cref{thm:noop} forced both into the interrupt policy, where they now are.
+
 \subsection{Non-interference over finite traces}\label{sec:departures}
 
 Our definitions follow Rafnsson et al., with one essential departure. The original

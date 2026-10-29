@@ -33,14 +33,17 @@ global state, which a state cell and a feedback loop thread around the pool.
 \centering
 \begin{tikzpicture}[>=stealth, font=\scriptsize,
   slot/.style={draw, minimum width=2.3cm, minimum height=0.42cm, inner sep=0pt},
-  outv/.style={minimum width=1.0cm, minimum height=0.42cm, inner sep=0pt,
-    font=\ttfamily\scriptsize}]
+  outv/.style={draw, minimum width=1.0cm, minimum height=0.42cm, inner sep=0pt,
+    font=\ttfamily\scriptsize},
+  hid/.style={outv, fill=white}, ran/.style={outv, fill=black!10},
+  val/.style={outv, fill=black!28}]
 % six slots and their outputs, on a common grid
-\foreach \n/\l/\o [count=\k from 0] in
-  {t/timer handler/None, d/disk handler/None, z/NOP handler/None,
-   s/scheduler/None, v/private user/None, u/public user/Some o}
+% the outputs are shaded by what the attacker learns of each slot
+\foreach \n/\l/\o/\s [count=\k from 0] in
+  {t/timer handler/None/val, d/disk handler/None/hid, z/NOP handler/None/hid,
+   s/scheduler/None/val, v/private user/None/ran, u/public user/Some o/val}
   {\node[slot] (\n) at (3.0, 1.05-0.42*\k) {\l};
-   \node[outv] (o\n) at (5.15, 1.05-0.42*\k) {\o};
+   \node[\s] (o\n) at (5.15, 1.05-0.42*\k) {\o};
    \draw[->] (\n.east) -- (o\n.west);}
 \node[draw, dashed, rounded corners=2pt, fit=(t)(u), inner sep=3pt] (pool) {};
 \node[draw, rounded corners=2pt, fit=(ot)(ou), inner sep=2pt] (tuple) {};
@@ -54,11 +57,22 @@ global state, which a state cell and a feedback loop thread around the pool.
 \draw[->] (tuple.east) -- ++(0.5,0) node[right] {out};
 \draw[->] ($(tuple.east)+(0.25,0)$) |- ($(pool.south)+(0,-0.35)$) -|
   node[pos=0.25, below] {fed back (\texttt{loop})} (sta.south);
+% key: the shades as nested sets
+\begin{scope}[shift={(-1.2,-2.25)}]
+\draw[rounded corners=3pt, fill=white] (0,0) rectangle (7.5,-0.62);
+\draw[rounded corners=3pt, fill=black!10] (2.65,-0.08) rectangle (7.4,-0.54);
+\draw[rounded corners=3pt, fill=black!28] (4.95,-0.15) rectangle (7.3,-0.47);
+\node[anchor=west] at (0.05,-0.31) {attacker sees nothing};
+\node[anchor=west] at (2.7,-0.31) {sees that it ran};
+\node[anchor=west] at (5.0,-0.31) {\dots\ and its value};
+\end{scope}
 \end{tikzpicture}
 \caption{The model. An interrupt only updates the global state. The state's pid
   selects one slot, which takes a step and emits \texttt{Some o}; every other slot
   emits \texttt{None}. Because the slots are composed with \texttt{par}, their
-  outputs form a six-tuple, which is emitted and fed back to update the state.}
+  outputs form a six-tuple, which is emitted and fed back to update the state. Each
+  position of the tuple is shaded by what the attacker learns of that slot (key
+  below).}
 \label{fig:system}
 \end{figure}
 
@@ -82,58 +96,20 @@ By the rule for \code{par} (\cref{fig:semantics}), the pool emits the
 outputs of all its slots together. So the system emits a six-tuple of options, the output
 type \code{T_out}, with exactly one \code{Some} on each step. The output therefore
 records not only what was computed but also \emph{who ran}: the schedule is part of
-what the system emits. \Cref{fig:slots} shows what we intend to hide from the
-attacker in each position. The exact output equivalence, and why the proof forces
-its shape, come in \cref{sec:equivs}. Each output, like each input, then updates the
+what the system emits. The shading of the six-tuple in \cref{fig:system} shows what
+we intend to hide from the attacker in each position. The exact output equivalence, and why the proof forces
+its shape, come in \cref{sec:gating}. Each output, like each input, then updates the
 state.
-
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}[font=\scriptsize,
-  proc/.style={draw, rounded corners=1.5pt, minimum width=4.1cm,
-    minimum height=0.46cm, inner sep=1pt},
-  % indented on both sides like the nested boxes of the key
-  hid/.style={proc, fill=white},
-  ran/.style={proc, fill=black!10, minimum width=3.7cm},
-  val/.style={proc, fill=black!28, minimum width=3.3cm}]
-% the processes, in the order of Fig.~3, shaded by what the attacker learns
-\foreach \s/\k/\n/\t in
-  {val/0/timer handler/{\Proc{\emptyset}{\mathit{Hout}}},
-   hid/1/disk handler/{\Proc{\emptyset}{\mathit{Hout}}},
-   hid/2/NOP handler/{\Proc{\emptyset}{\mathit{Hout}}},
-   val/3/scheduler/{\Proc{\emptyset}{\mathbb{N}}},
-   ran/4/private user/{\Proc{\mathit{Hout}}{S}},
-   val/5/public user/{\Proc{\emptyset}{G}}}
-  {\node[\s] (p\k) at (0, -0.52*\k) {};
-   \node[anchor=west] at (p\k.west) {\n};
-   \node[anchor=east] at (p\k.east) {$\t$};}
-% key: the shades as nested sets
-\begin{scope}[shift={(2.55,-0.52)}]
-\draw[rounded corners=3pt, fill=white] (0,0) rectangle (2.75,-1.6);
-\draw[rounded corners=3pt, fill=black!10] (0.2,-0.42) rectangle (2.55,-1.48);
-\draw[rounded corners=3pt, fill=black!28] (0.4,-0.86) rectangle (2.35,-1.36);
-\node[anchor=north west] at (0,0) {attacker sees nothing};
-\node[anchor=north west] at (0.2,-0.42) {sees that it ran};
-\node[anchor=north west] at (0.4,-0.86) {\dots\ and its value};
-\end{scope}
-\end{tikzpicture}
-\caption{The six processes, with their types, shaded by what the attacker learns
-  of each (key on the right). $\mathit{Hout} = \{\mathtt{Notify},
-  \mathtt{Nothing}\}$ is the handler output, which the private user reads from the
-  disk handler; $S = \{\mathtt{Sys}, \mathtt{Idle}\}$, $G = \{\mathtt{Get}\}$, and
-  the scheduler emits a pid.}
-\label{fig:slots}
-\end{figure}
 \subsection{The state}\label{sec:global-state}
 
 The global state (\m{state_type}) is a nest of pairs:
 \begin{lstlisting}
 state_type = (cur_pid (@$\times$@) prev_pid)
-           (@$\times$@) (re_sched (@$\times$@) (ir_count (@$\times$@) ic))
+           (@$\times$@) (re_sched (@$\times$@) (slice_count (@$\times$@) ic))
 cur_pid  = Sum Bool Nat
 prev_pid = Option Nat
 re_sched = Bool
-ir_count = Option Nat
+slice_count = Option Nat
 ic       = ir_bits (@$\times$@) (ir_bits (@$\times$@) ir_bits)
 ir_bits  = Bool (@$\times$@) Bool    (* pending, mask *)
 \end{lstlisting}
@@ -147,8 +123,9 @@ ir_bits  = Bool (@$\times$@) Bool    (* pending, mask *)
   control returns when the handler finishes.
 \item The \emph{reschedule flag} \m{re_sched} sends control to the scheduler
   instead, when a handler finishes.
-\item The \emph{slice counter} \m{ir_count} is used only by the sliced policy of
-  \cref{sec:sliced}; \code{None} disables it.
+\item The \emph{slice counter} \m{slice_count} tracks the phase of a time slice for
+  the sliced policy (\cref{sec:sliced}, \cref{fig:phases}); the ordinary policy
+  leaves it \code{None}.
 \item The \emph{interrupt controller} \m{ic} holds a pending bit and a mask bit
   for each handler. Its entries are indexed by \m{irq}, an optional interrupt:
   \code{timer_irq} and \code{disk_irq} for the two interrupts, and
@@ -175,6 +152,35 @@ scheduler proposed, if the scheduler ran. The next stage, \code{service_policy},
 left open here: it is half of the interrupt policy (\cref{sec:parameters}). Last,
 \m{initiate_next} computes the next pid.
 
+\suppressfloats[t]
+\begin{figure}[t]
+\centering
+% the ordinary policy over three kinds of step; steps from models.v lemmas
+% immediate_states_no_dI / _with_dI
+\begin{tikzpicture}[font=\scriptsize, >=stealth,
+  ph/.style={draw, rounded corners, align=center, minimum width=1.6cm,
+    minimum height=1.1cm, inner sep=3.5pt},
+  note/.style={align=center, font=\scriptsize},
+  secret/.style={->, line width=1.2pt}]
+\node[ph] (u) at (0,0)   {\textbf{U}: users\\all unmasked\\steps 1--2, 7--12};
+\node[ph] (t) at (3.3,0) {\textbf{T}: timer\\all masked\\steps 5--6};
+\node[ph] (s) at (6.6,0) {\textbf{S}: disk\\all masked\\steps 3--4};
+\draw[->] ([yshift=6pt]u.east) -- node[above, note]{timer\\pending} ([yshift=6pt]t.west);
+\draw[->] ([yshift=-6pt]t.west) -- node[below, note]{completes,\\none pending} ([yshift=-6pt]u.east);
+\draw[secret] ([yshift=6pt]t.east) -- node[above, note]{disk\\pending} ([yshift=6pt]s.west);
+\draw[->] ([yshift=-6pt]s.west) -- node[below, note]{completes,\\timer pending} ([yshift=-6pt]t.east);
+\draw[secret] (u.north) to[bend left=22] node[above, note]{disk pending} (s.north);
+\draw[->] (s.south) to[bend left=22] node[below, note]{completes, none pending} (u.south);
+\end{tikzpicture}
+\caption{The ordinary policy over three kinds of step: U, the users and the scheduler;
+  T, the timer handler; S, a secret handler. Each state gives the masks and the steps
+  of the run with the disk interrupt in \cref{fig:run-ordinary}; without it, S is
+  never entered. Bold arrows are triggered by the disk interrupt: it decides when S
+  is entered. Every completion arrow is taken by \texttt{immediate\_service}, which
+  reads the completing handler's output, the disk's included.}
+\label{fig:policy-ordinary}
+\end{figure}
+
 A handler can be started when its controller entry is pending and not masked; if
 several can, the timer goes first, then the disk, then NOP. Handlers cannot be
 interrupted: starting one sets all masks. \m{initiate_next} chooses by a priority
@@ -190,10 +196,7 @@ Just before the choice, \m{initiate_next} applies \m{restore_invariant}, a hook
 used only by the proof (\cref{sec:parameters}). Appendix~\ref{app:model} gives the
 code of \m{initiate_next}.
 
-This is enough to see the leak of \cref{fig:leak}. With the disk unmasked, a disk
-interrupt sets its pending bit. At the next output, rule 2 applies and the disk
-handler starts at once, and for the \code{runtime} steps of the handler the public
-user's slot emits \code{None}.
+Rule 2 is the source of the leak of \cref{fig:leak}, as \cref{sec:leak} shows step by step.
 
 \subsection{The generic model}\label{sec:parameters}
 

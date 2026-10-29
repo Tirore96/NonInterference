@@ -280,16 +280,16 @@ Definition reactive_system
 Definition mask := Bool.
 Definition pending := Bool.
 Definition ir_bits := Times pending mask.
-Definition ir_count := Option Nat.
+Definition slice_count := Option Nat.
 Definition ic := Times ir_bits (Times ir_bits ir_bits).
 Definition count := Nat.
 Definition re_sched := Bool.
 Definition prev_pid := Option Nat.
 Definition pids := Times cur_pid prev_pid.
 (* ic_count bundles the interrupt-handler time slice with the interrupt controller.
-   ir_count = None  -> feature disabled
-   ir_count = Some n -> n steps of handler execution left; Some 0 -> return to user space *)
-Definition ic_count := Times ir_count ic.
+   slice_count = None  -> feature disabled
+   slice_count = Some n -> n steps of handler execution left; Some 0 -> return to user space *)
+Definition ic_count := Times slice_count ic.
 Definition bool_state := Times re_sched ic_count.
 (* The interrupt controller has one entry per external interrupt and one more,
    [nop_irq], for the NOP handler.  No external interrupt raises the NOP entry;
@@ -310,7 +310,7 @@ Definition get_cur_pid (v : [state_type]) := (get_pids v).1.
 Definition get_prev_pid (v : [state_type]) := (get_pids v).2.
 Definition get_re_sched (v : [state_type]) := (get_bool_state v).1.
 Definition get_ic_count (v : [state_type]) := (get_bool_state v).2.
-Definition get_ir_count (v : [state_type]) := (get_ic_count v).1.
+Definition get_slice_count (v : [state_type]) := (get_ic_count v).1.
 Definition get_ic (v : [state_type]) := (get_ic_count v).2.
 
 Definition get_ir_bits' (ic : [ic]) (ir : [irq]) : [ir_bits] :=
@@ -341,7 +341,7 @@ Definition update_ir_bits' (myic : [ic]) (ir : [irq]) (bits : [ir_bits]) : [ic] 
   end.
 
 Definition update_ic_count (v : [state_type]) icc : [state_type] := update_bool_state v ((get_bool_state v).1,icc).
-Definition update_ir_count (v : [state_type]) c : [state_type] := update_ic_count v (c,(get_ic_count v).2).
+Definition update_slice_count (v : [state_type]) c : [state_type] := update_ic_count v (c,(get_ic_count v).2).
 Definition update_ic (v : [state_type]) ic : [state_type] := update_ic_count v ((get_ic_count v).1,ic).
 Definition update_ir_bits (v : [state_type]) (ir : [irq]) (bits : [ir_bits]) := update_ic v (update_ir_bits' (get_ic v) ir bits).
 
@@ -593,39 +593,38 @@ Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*ma
 
 Definition sliced_init : [state_type] := ((initial_pid,None),(false,(Some 0,mask_most))).
 
-(* The time slice, as a whole number [runs] of handler runs.  Expressing it this
-   way rather than as an independent constant is what makes "the slice ends on a
-   handler boundary" structural instead of a side condition: [handler_completed]
-   can then *compute* the boundaries as the nonzero multiples of [runtime]. *)
-Definition time_slice (runtime runs : nat) := runs * runtime.
-
-Definition handler_completed (runtime : nat) (c : [ir_count]) :=
+Definition handler_completed (runtime : nat) (c : [slice_count]) :=
   match c with
   | Some n => (n != 0) && (n %% runtime == 0)
   | None => false
   end.
 
 (* The timer handler's completion opens a slice and, as in [model_immediate],
-   requests a reschedule for when control next leaves the handlers. *)
+   requests a reschedule for when control next leaves the handlers.  The slice
+   is a whole number [runs] of handler runs, [runs * runtime] steps.  Expressing
+   it this way rather than as an independent constant is what makes "the slice
+   ends on a handler boundary" structural instead of a side condition:
+   [handler_completed] can then *compute* the boundaries as the nonzero
+   multiples of [runtime]. *)
 Definition initiate_ir (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type]) : [state_type] :=
   if tI_out o is Some Notify
-  then update_re_sched (update_ir_count v (Some (time_slice runtime runs))) true else v.
+  then update_re_sched (update_slice_count v (Some (runs * runtime))) true else v.
 
 (* At each handler boundary inside a slice: reopen the disk and NOP masks, keep
    the timer masked, and make the NOP handler pending, so that the next handler
    run happens whether or not a disk interrupt is waiting.  This is the filler. *)
 Definition check_handler_completed (runtime : nat) (v : [state_type]) : [state_type] :=
-  if handler_completed runtime (get_ir_count v)
+  if handler_completed runtime (get_slice_count v)
   then update_ir_pending (set_tI (unset_masks v)) nop_irq true else v.
 
-Definition check_ir_count (v : [state_type]) : [state_type] :=
-    match (get_ir_count v) with
-    | Some n.+1 => update_ir_count v (Some n)
-    | Some 0 => update_ir_count (set_otherIs (unset_tI v)) None
+Definition check_slice_count (v : [state_type]) : [state_type] :=
+    match (get_slice_count v) with
+    | Some n.+1 => update_slice_count v (Some n)
+    | Some 0 => update_slice_count (set_otherIs (unset_tI v)) None
     | None => v
     end.
 
-Definition timeslice_live (c : [ir_count]) := match c with | Some n => 0 < n | _ => false end.
+Definition timeslice_live (c : [slice_count]) := match c with | Some n => 0 < n | _ => false end.
 
 (* restore_invariant writes the time-slice invariant into the state just before
    [initiate_next] chooses: inside a slice the NOP handler is pending and the
@@ -637,13 +636,13 @@ Definition timeslice_live (c : [ir_count]) := match c with | Some n => 0 < n | _
    conclude that if one of two related states has the disk or NOP handler ready,
    so does the other. *)
 
-Definition restore_invariant v := let b := timeslice_live (get_ir_count v) in
+Definition restore_invariant v := let b := timeslice_live (get_slice_count v) in
                             let ic := (false,(None,((b,~~b),((false,~~b),(false,b))))) in
                             let v := update_bool_state v (or_bool_state (get_bool_state v) ic) in
                             let m := get_ir_mask v disk_irq in
                             update_ir_mask v nop_irq m.
 
-Definition sliced_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [state_type] -> [state_type] := check_ir_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*)
+Definition sliced_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [state_type] -> [state_type] := check_slice_count \o check_handler_completed runtime \o (initiate_ir runtime runs o). (*\o (unset_handler_masks o)*)
 
 (* model_sliced p_pub p_priv p_sched =
      model sliced_init (sliced_service runtime runs) restore_invariant
@@ -679,7 +678,7 @@ Hypothesis runtime_ne1 : runtime != 1.
    inside a slice a handler is running. *)
 Definition sliced_inv (v : [state_type]) : bool :=
   (get_ir_mask v nop_irq == get_ir_mask v disk_irq) &&
-  (if timeslice_live (get_ir_count v) then masks_set v
+  (if timeslice_live (get_slice_count v) then masks_set v
    else get_ir_mask v disk_irq).
 
 (* The state [initiate_next] makes its choice from. *)
@@ -690,7 +689,7 @@ Definition choice_state (o : [T_out Opub Opriv]) v :=
    slice the masks are open and the NOP handler is pending. *)
 Definition choice_inv (w : [state_type]) : bool :=
   (get_ir_mask w nop_irq == get_ir_mask w disk_irq) &&
-  (if timeslice_live (get_ir_count w)
+  (if timeslice_live (get_slice_count w)
    then masks_set w || [&& get_ir_pending w nop_irq,
                           get_ir_mask w timer_irq,
                           ~~ get_ir_mask w disk_irq &
@@ -703,7 +702,7 @@ Proof. by rewrite /masks_set /= andbT. Qed.
 
 (* One lemma per stage of [choice_state], stated on the fields the invariant reads. *)
 Lemma check_scheduler_bits (o : [T_out Opub Opriv]) v :
-  [/\ get_ir_count (check_scheduler o v) = get_ir_count v,
+  [/\ get_slice_count (check_scheduler o v) = get_slice_count v,
       forall ir, get_ir_mask (check_scheduler o v) ir = get_ir_mask v ir &
       forall ir, get_ir_pending (check_scheduler o v) ir = get_ir_pending v ir].
 Proof. rewrite /check_scheduler. by case: (is_sched_out o). Qed.
@@ -712,44 +711,44 @@ Lemma initiate_ir_mask (o : [T_out Opub Opriv]) v ir :
   get_ir_mask (initiate_ir runtime runs o v) ir = get_ir_mask v ir.
 Proof. by rewrite /initiate_ir; case: (tI_out o) => [[|]|]. Qed.
 
-Lemma initiate_ir_count (o : [T_out Opub Opriv]) v :
-  get_ir_count (initiate_ir runtime runs o v) =
-  if tI_out o is Some Notify then Some (time_slice runtime runs) else get_ir_count v.
+Lemma initiate_slice_count (o : [T_out Opub Opriv]) v :
+  get_slice_count (initiate_ir runtime runs o v) =
+  if tI_out o is Some Notify then Some (runs * runtime) else get_slice_count v.
 Proof. by rewrite /initiate_ir; case: (tI_out o) => [[|]|]. Qed.
 
-Lemma chc_count v : get_ir_count (check_handler_completed runtime v) = get_ir_count v.
+Lemma chc_count v : get_slice_count (check_handler_completed runtime v) = get_slice_count v.
 Proof. rewrite /check_handler_completed. by case: (handler_completed _ _). Qed.
 
-Lemma chc_id v : handler_completed runtime (get_ir_count v) = false ->
+Lemma chc_id v : handler_completed runtime (get_slice_count v) = false ->
   check_handler_completed runtime v = v.
 Proof. by rewrite /check_handler_completed => ->. Qed.
 
-Lemma chc_bits v : handler_completed runtime (get_ir_count v) ->
+Lemma chc_bits v : handler_completed runtime (get_slice_count v) ->
   [/\ get_ir_mask (check_handler_completed runtime v) nop_irq = false,
       get_ir_mask (check_handler_completed runtime v) disk_irq = false,
       get_ir_mask (check_handler_completed runtime v) timer_irq = true &
       get_ir_pending (check_handler_completed runtime v) nop_irq = true].
 Proof. rewrite /check_handler_completed => ->. by move: v => [[? ?] [? [? [[? ?] [[? ?] [? ?]]]]]]. Qed.
 
-Lemma cic_tick v n : get_ir_count v = Some n.+1 ->
-  [/\ get_ir_count (check_ir_count v) = Some n,
-      forall ir, get_ir_mask (check_ir_count v) ir = get_ir_mask v ir &
-      forall ir, get_ir_pending (check_ir_count v) ir = get_ir_pending v ir].
-Proof. rewrite /check_ir_count => ->. by split => // -[]. Qed.
+Lemma cic_tick v n : get_slice_count v = Some n.+1 ->
+  [/\ get_slice_count (check_slice_count v) = Some n,
+      forall ir, get_ir_mask (check_slice_count v) ir = get_ir_mask v ir &
+      forall ir, get_ir_pending (check_slice_count v) ir = get_ir_pending v ir].
+Proof. rewrite /check_slice_count => ->. by split => // -[]. Qed.
 
-Lemma cic_close v : get_ir_count v = Some 0 ->
-  [/\ get_ir_count (check_ir_count v) = None,
-      get_ir_mask (check_ir_count v) nop_irq = true &
-      get_ir_mask (check_ir_count v) disk_irq = true].
-Proof. rewrite /check_ir_count => ->. by move: v => [[? ?] [? [? [[? ?] [[? ?] [? ?]]]]]]. Qed.
+Lemma cic_close v : get_slice_count v = Some 0 ->
+  [/\ get_slice_count (check_slice_count v) = None,
+      get_ir_mask (check_slice_count v) nop_irq = true &
+      get_ir_mask (check_slice_count v) disk_irq = true].
+Proof. rewrite /check_slice_count => ->. by move: v => [[? ?] [? [? [[? ?] [[? ?] [? ?]]]]]]. Qed.
 
-Lemma cic_none v : get_ir_count v = None -> check_ir_count v = v.
-Proof. by rewrite /check_ir_count => ->. Qed.
+Lemma cic_none v : get_slice_count v = None -> check_slice_count v = v.
+Proof. by rewrite /check_slice_count => ->. Qed.
 
 (* Opening a slice lands on a boundary, and every boundary is at least 2. *)
-Lemma hc_slice : time_slice runtime runs != 0 ->
-  handler_completed runtime (Some (time_slice runtime runs)).
-Proof. by move=> H; rewrite /handler_completed H /time_slice modnMl. Qed.
+Lemma hc_slice : runs * runtime != 0 ->
+  handler_completed runtime (Some (runs * runtime)).
+Proof. by move=> H; rewrite /handler_completed H modnMl. Qed.
 
 Lemma hc_ge2 m : handler_completed runtime (Some m) -> (2 <= m)%N.
 Proof.
@@ -764,31 +763,31 @@ Lemma choice_inv_step (o : [T_out Opub Opriv]) v : sliced_inv v -> choice_inv (c
 Proof.
 move=> Hv.
 have -> : choice_state o v =
-          check_ir_count (check_handler_completed runtime (initiate_ir runtime runs o (check_scheduler o v))) by [].
+          check_slice_count (check_handler_completed runtime (initiate_ir runtime runs o (check_scheduler o v))) by [].
 case: (check_scheduler_bits o v) => Cc Cm Cp.
 set v1 := initiate_ir runtime runs o (check_scheduler o v).
 have M1 : forall ir, get_ir_mask v1 ir = get_ir_mask v ir by move=> ir; rewrite initiate_ir_mask Cm.
-have C1 : get_ir_count v1 = if tI_out o is Some Notify then Some (time_slice runtime runs) else get_ir_count v
-  by rewrite initiate_ir_count Cc.
+have C1 : get_slice_count v1 = if tI_out o is Some Notify then Some (runs * runtime) else get_slice_count v
+  by rewrite initiate_slice_count Cc.
 move: Hv; rewrite /sliced_inv /choice_inv masks_setE => /andP [/eqP Hdk Hl].
-case HC: (handler_completed runtime (get_ir_count v1)).
+case HC: (handler_completed runtime (get_slice_count v1)).
 - (* a boundary: masks open, NOP pending, and the slice is still live *)
   case: (chc_bits HC) => Bd Bk Bt Bp.
-  move: HC; case E1: (get_ir_count v1) => [m|] // HC.
+  move: HC; case E1: (get_slice_count v1) => [m|] // HC.
   have Hm := hc_ge2 HC.
   case: m Hm E1 HC => [|[|k]] // _ E1 _.
-  have E2 : get_ir_count (check_handler_completed runtime v1) = Some k.+2 by rewrite chc_count.
+  have E2 : get_slice_count (check_handler_completed runtime v1) = Some k.+2 by rewrite chc_count.
   case: (cic_tick E2) => -> Tm Tp.
   by rewrite /timeslice_live masks_setE !Tm !Tp Bd Bk Bt Bp.
 - rewrite (chc_id HC).
-  case E1: (get_ir_count v1) => [[|[|k]]|].
+  case E1: (get_slice_count v1) => [[|[|k]]|].
   + by case: (cic_close E1) => -> -> ->.
   + case: (cic_tick E1) => -> Tm Tp.
     rewrite /timeslice_live !Tm !M1 Hdk eqxx.
     move: C1 Hl; rewrite E1.
     case: (tI_out o) => [[|]|].
     * by move<-; rewrite /timeslice_live masks_setE => /and3P [].
-    * case=> /esym /eqP; rewrite /time_slice muln_eq1 => /andP [_ /eqP r1].
+    * case=> /esym /eqP; rewrite muln_eq1 => /andP [_ /eqP r1].
       by move: runtime_ne1; rewrite r1.
     * by move<-; rewrite /timeslice_live masks_setE => /and3P [].
   + case: (cic_tick E1) => -> Tm Tp.
@@ -830,7 +829,7 @@ case: e => [i|o] Hv.
     case FR: (first_ready w) => [ir|].
     * move: w {Hw Ms FR} => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]].
       by case: ir => [[]|]; case: cur => [b|m]; case: c => [[|n]|].
-    * have NL : ~~ timeslice_live (get_ir_count w).
+    * have NL : ~~ timeslice_live (get_slice_count w).
         apply/negP => L; move: Hw FR; rewrite /choice_inv L Ms /= => /andP [_ /and4P [Hp _ _ Hdm]].
         have Rd : ir_ready w nop_irq by rewrite /ir_ready Hp Hdm.
         rewrite /first_ready /=.
@@ -931,10 +930,10 @@ Definition model_sliced_userview_concrete :=
 
 (* Sanity, at this instance: the computed test agrees with the enumeration
    [Some 2 | Some 4] it replaced, on every value the counter can reach (the
-   counter starts at [time_slice] and is decremented to [Some 0] before being
+   counter starts at [slice_runs * handler_runtime] and is decremented to [Some 0] before being
    cleared). *)
 Lemma handler_completed_reachable n :
-  n <= time_slice handler_runtime slice_runs ->
+  n <= slice_runs * handler_runtime ->
   handler_completed handler_runtime (Some n) = ((n == 2) || (n == 4)).
 Proof. by case: n => [|[|[|[|[|n]]]]]. Qed.
 
@@ -1037,6 +1036,95 @@ Proof. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 12 trace_step. trace_last. Qed.
 
 Lemma trace_sliced_with_dI' l : Trace (public_equiv _) l sliced_with_dI' model_sliced_concrete.
 Proof. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 13 trace_step. trace_last. Qed.
+
+
+(* -- The state along the four runs (Paper, Figs. 5 and 6, lower rows) --
+
+   [run_states] gives the state after each event of a run, from the policy's
+   initial state, computed with the model's own transition; [state_row] keeps
+   the slice counter, the timer and disk masks, and the disk and NOP pending
+   bits.  Under [model_immediate] the masks differ between the two runs: the
+   disk handler holds them set at steps 3-4, and the masks are public.  Under
+   [model_sliced] the counter and the masks agree; the runs differ only in the
+   private pending bits, and from the second run of the slice on not at all. *)
+Definition run_states (init : [state_type])
+  (service : [T_outC] -> [state_type] -> [state_type])
+  (restore : [state_type] -> [state_type]) (es : seqtype') :=
+  scanl (fun v e => state_step service restore e v) init es.
+Definition immediate_states :=
+  run_states immediate_init (@immediate_service TPublicOutput TTypeSyscall) id.
+Definition sliced_states :=
+  run_states sliced_init (@sliced_service handler_runtime slice_runs TPublicOutput TTypeSyscall)
+             restore_invariant.
+Definition state_row (v : [state_type]) :=
+  (get_slice_count v, get_ir_mask v timer_irq, get_ir_mask v disk_irq,
+   get_ir_pending v disk_irq, get_ir_pending v nop_irq).
+
+Lemma immediate_states_no_dI : seq.map state_row (immediate_states immediate_no_dI') =
+  [:: (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, true, true, false, false);
+      (None, true, true, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false)].
+Proof. by vm_compute. Qed.
+
+Lemma immediate_states_with_dI : seq.map state_row (immediate_states immediate_with_dI') =
+  [:: (None, false, false, false, false);
+      (None, false, false, true, false);
+      (None, true, true, false, false);
+      (None, true, true, false, false);
+      (None, true, true, false, false);
+      (None, true, true, false, false);
+      (None, true, true, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false);
+      (None, false, false, false, false)].
+Proof. by vm_compute. Qed.
+
+Lemma sliced_states_no_dI : seq.map state_row (sliced_states sliced_no_dI') =
+  [:: (None, false, true, false, false);
+      (None, false, true, false, false);
+      (None, false, true, false, false);
+      (None, false, true, false, false);
+      (None, true, true, false, false);
+      (None, true, true, false, false);
+      (Some 3, true, true, false, false);
+      (Some 2, true, true, false, false);
+      (Some 1, true, true, false, false);
+      (Some 0, true, true, false, false);
+      (None, false, true, false, false);
+      (None, false, true, false, false);
+      (None, false, true, false, false)].
+Proof. by vm_compute. Qed.
+
+Lemma sliced_states_with_dI : seq.map state_row (sliced_states sliced_with_dI') =
+  [:: (None, false, true, false, false);
+      (None, false, true, true, false);
+      (None, false, true, true, false);
+      (None, false, true, true, false);
+      (None, false, true, true, false);
+      (None, true, true, true, false);
+      (None, true, true, true, false);
+      (Some 3, true, true, false, true);
+      (Some 2, true, true, false, true);
+      (Some 1, true, true, false, false);
+      (Some 0, true, true, false, false);
+      (None, false, true, false, false);
+      (None, false, true, false, false);
+      (None, false, true, false, false)].
+Proof. by vm_compute. Qed.
 
 
 (* -- model_sliced_userview traces -- *)
