@@ -26,18 +26,19 @@ not the option \code{None}) otherwise.
 pid. Each slot's output is tagged with the constant \code{true}, which closes its
 switch after one output step, so a selected process takes exactly one step.
 
-\todo{annotate the branches of the listing with the priority rules 1--4 of III-D (or the U/T/S arrows), so the reader can match them.}\paragraph{The scheduling decision} The priority rule of \cref{sec:state} is
+\paragraph{The scheduling decision} The priority rule of \cref{sec:state}, with its
+four rules marked, is
 \begin{lstlisting}
 initiate_next restore_invariant v =
-  if masks_set v then v   (* handler running *)
+  if masks_set v then v            (* rule 1 *)
   else let v := restore_invariant v in
     if first_ready v is Some ir
-    then initiate_handler ir v
-    else if is_handler_pid v (* handler done *)
-    then if get_re_sched v
+    then initiate_handler ir v     (* rule 2 *)
+    else if is_handler_pid v
+    then if get_re_sched v         (* rule 3 *)
          then initiate_scheduler v
          else initiate_prev_pid v
-    else v                (* stay in user space *)
+    else v                         (* rule 4 *)
 \end{lstlisting}
 \m{first_ready} picks the highest-priority serviceable interrupt.
 \m{initiate_handler} saves the current user pid, points the current pid at the

@@ -1,13 +1,30 @@
 \section{Related Work}\label{sec:related}
 
-% TODO: this section is a starting point; extend before submission.
-
-\todo{still a stub. Missing: timing channels through interrupts and scheduling specifically, non-interference for schedulers, time-partitioned/quantised scheduling. Position the U/T/S requirement against them.}\paragraph{Non-interference} Non-interference goes back to Goguen and
+\paragraph{Non-interference} Non-interference goes back to Goguen and
 Meseguer~\cite{goguen1982}; Sabelfeld and Myers survey language-based
 approaches~\cite{sabelfeld2003}. Timing channels in programs have been closed by
 padding transformations that equalise the running time of secret-dependent
 branches~\cite{agat2000}; the sliced policy applies the same idea to handler
 runs, with the NOP handler as padding.
+
+\paragraph{Concurrency and scheduling} How the scheduler affects the security of
+multi-threaded programs has been studied since Smith and Volpano~\cite{smith1998}.
+Sabelfeld and Sands give a probabilistic, timing-sensitive non-interference for
+multi-threaded programs~\cite{sabelfeld2000}, Mantel and Sudbrock a notion of
+security that holds for a whole class of schedulers~\cite{mantel2010}, and Stefan et
+al.\ address termination and timing channels in a concurrent information-flow
+system~\cite{stefan2012}. These works treat the scheduler as given and ask which
+programs are secure under it. We treat the interrupt mechanism, which decides when
+handlers preempt the scheduled process, as the object to be made secure, for any
+non-interfering scheduler and user processes.
+
+\paragraph{Timing-channel mitigation} Predictive mitigation delays outputs to a
+schedule predicted from public information, bounding what their timing
+leaks~\cite{askarov2010}, also in a language-based setting~\cite{zhang2012}. Our
+requirement has the same shape, applied to the interrupt mechanism: when secret
+handlers run, and for how long, must be fixed by public events. The sliced policy
+meets it exactly, so nothing leaks, at the cost of reserving handler time whether or
+not it is used.
 
 \paragraph{Composable timing-sensitive non-interference} Our proofs rest on the
 calculus of Rafnsson et al.~\cite{rafnsson2017}, whose definitions are
@@ -15,12 +32,13 @@ timing-sensitive by construction and whose theorems compose. We mechanise the
 calculus and its composition theorems, and apply them to a model of interrupt
 handling.
 
-\paragraph{Verified operating systems} Machine-checked information-flow proofs
-exist for real kernels, notably seL4~\cite{murray2013}, whose proof explicitly
-leaves timing channels out of scope. Time protection~\cite{ge2019} argues that an
-operating system must partition time as well as space, and includes the
-partitioning of interrupts among its mechanisms\todo{check this characterisation
-against~\cite{ge2019}}; our sliced policy is an instance of
-that idea in a small model. What we add is a timing-sensitive, compositional,
-mechanised proof that the mechanism is secure, for any non-interfering scheduler and
-user processes.
+\paragraph{Verified operating systems} Murray et al.\ formulate non-interference for
+operating system kernels~\cite{murray2012} and prove it for seL4~\cite{murray2013},
+whose proof leaves timing channels out of scope; Cock et al.\ measure the timing
+channels that remain in seL4 and their mitigation~\cite{cock2014}. Time
+protection~\cite{ge2019} argues that an operating system must partition time as well
+as space, and includes the partitioning of interrupts among its
+mechanisms\todo{check this characterisation against~\cite{ge2019}}; our sliced policy
+is an instance of that idea in a small model. What we add is a timing-sensitive,
+compositional, mechanised proof that the mechanism is secure, for any
+non-interfering scheduler and user processes.

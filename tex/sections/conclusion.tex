@@ -6,7 +6,9 @@
   indistinguishable partner. Several secret interrupts would need a richer
   indistinguishability argument.
 \item \emph{Equal handler lengths.} Every handler runs for the same number of steps,
-  which is what lets every mask bit be public.\todo{we now know why: boundaries from the public counter coincide with completions only because runs have fixed length (IV-B). Link there.} Variable-length handlers would force
+  which is what lets every mask bit be public: the boundaries the sliced policy
+  computes from the public counter fall exactly where handlers complete
+  (\cref{sec:sliced}). Variable-length handlers would force
   the masks private, and the proof of \m{fv_NI} would have to reason across diverging
   branches. A real system would reach a fixed length by padding.
 \item \emph{Cooperative processes, no nesting.} A selected process takes exactly one
@@ -15,19 +17,22 @@
 \item \emph{Abstract time.} One output step is one unit of time, for every process
   and handler alike. Caches, memory contention and other microarchitectural channels
   are outside the model.
-\todo{the one-step quirk is now explained three times (IV-B footnote, V-C, here). Keep V-C; make this and the footnote one-clause pointers.}\item \emph{One-step handlers.} At $\mathit{runtime} = 1$ a slice loses its last
-  handler run (\cref{sec:restore}); the result still holds, but the policy behaves
-  less usefully there.
+\item \emph{One-step handlers.} At $\mathit{runtime} = 1$ a slice loses its last
+  handler run (\cref{sec:restore}).
 \end{itemize}
 
-\todo{still the pre-rework story. Restate the result as the requirement (when secret handlers run, and for how long, is public) and the slice as one way to meet it. `a proof device that was quietly carrying behaviour' duplicates VII.}\note{there is no future-work paragraph in the PDF; it exists only as a LaTeX comment at the end of this file.}\paragraph{Conclusion} A secret interrupt can leak through the schedule alone, and
-servicing interrupts only in publicly timed, padded slices closes the channel. We
-proved both facts in Rocq, the second for any non-interfering scheduler and user
+\paragraph{Conclusion} A secret interrupt leaks through the schedule alone: the
+attacker learns when its handler runs and for how long. To close the channel, both
+must be fixed by public events, and only which secret handler runs may depend on the
+secret. Servicing secret handlers only in time slices of fixed length, opened by the
+public timer handler and padded by a dummy handler, achieves this. We proved the leak
+and its absence in Rocq, the latter for any non-interfering scheduler and user
 processes, by composing generic non-interference theorems over the structure of the
 model. The proof did more than check the policy: it fixed the classification of the
-interrupt controller bit by bit, separated hiding what a handler computed from hiding
-that it ran, and exposed a proof device that was quietly carrying behaviour, which we
-moved into the policy and then proved inert.
+interrupt controller bit by bit, and it separated hiding what a handler computed from
+hiding that it ran.
 
-% TODO: future work, e.g. several secret interrupts, variable-length handlers with
-% padding, or connecting the model to a real interrupt controller.
+\paragraph{Future work} Several secret interrupts would need a richer argument than
+one dummy partner; variable-length handlers would need padding and private masks.
+Connecting the model to a real interrupt controller, and to the implementation of
+the policy, would carry the result to a running system.

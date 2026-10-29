@@ -8,11 +8,10 @@ user process emits \code{Syscall} (\code{Sys}) when the disk handler has notifie
 and \code{Idle} otherwise. The scheduler alternates between the two user processes.
 Handlers take $\mathit{runtime} = 2$ steps.
 
-Each step is taken by one of three kinds of process: the users or the scheduler
-(U), the timer handler (T), or a secret handler, disk or NOP (S). The attacker sees
-\todo{imprecise: of the private user it sees only that it ran. What matters is that it sees \emph{when} U and T run.}the U and T steps (\cref{fig:system}). Of an S step it sees only that it happened:
-the public slots stay silent, and nothing shows which secret handler ran. It thus
-learns when the system enters S and how long it stays there, so for the attacker to
+Recall the three kinds of step (\cref{sec:interface}): U, a user process or the
+scheduler; T, the timer handler; S, a secret handler. The attacker sees when U and T
+steps happen, and of an S step only that it happened, never which secret handler
+ran. It thus learns when the system enters S and how long it stays there, so for the attacker to
 learn nothing, both must be fixed by public events; what runs inside S may depend on
 the secret. \Cref{fig:policy-ordinary,fig:phases} draw the two policies over U, T and
 S, and \cref{fig:run-ordinary,fig:run-sliced} run them on the same inputs.
@@ -88,8 +87,8 @@ immediate_init :=
   secret/.style={->, line width=1.2pt},
   stage/.style={font=\stagefont}]
 \node[ph] (u) at (0,0)   {\textbf{U}: users\\T unmasked\\D, N masked\\\texttt{None}\\steps 1--4, 11--12};
-\node[ph] (t) at (3.3,0) {\textbf{T}: timer\\all masked\\\texttt{None}\\steps 5--6};
-\node[ph] (s) at (6.6,0) {\textbf{S}: disk or NOP\\T masked\\\texttt{Some} $n$, \ldots, \texttt{0}\\steps 7--10};
+\node[ph] (t) at (3.22,0) {\textbf{T}: timer\\all masked\\\texttt{None}\\steps 5--6};
+\node[ph] (s) at (6.44,0) {\textbf{S}: disk or NOP\\T masked\\\texttt{Some} $n$, \ldots, \texttt{0}\\steps 7--10};
 \draw[->] (u) -- node[above, note]{timer\\pending} (t);
 \draw[->] (t) -- node[above, note]{completes:\\slice opens} node[below, stage]{initiate\_ir} (s);
 \draw[->] (s) to[loop above, looseness=5] node[above, note]{boundary: filler pending\\[-1pt]{\stagefont check\_handler\_completed}} (s);
@@ -102,8 +101,9 @@ immediate_init :=
   pending, takes a run the NOP handler would otherwise fill; that choice is all the
   secret decides. Each arrow is labelled with the stage of the service policy that
   takes it. Steps are those of both runs in \cref{fig:run-sliced}.}
-\note{this figure is 1.7\,pt wider than the column (overfull box); nudge the node positions.}\label{fig:phases}
+\label{fig:phases}
 \end{figure}
+
 starts in the public user with the slice counter disabled (fields as in
 \cref{sec:global-state}). The interrupt controller holds one (pending, mask) pair
 per handler, and all six bits start clear. The service policy is a single stage,
@@ -132,57 +132,7 @@ reschedule: T to U, where the scheduler hands step 8 to the private user. Withou
 disk interrupt the system never enters S. Its two steps are taken from the public
 user, and the masks, which are public, are set at steps 3 and 4 in one run only.
 
-\begin{theorem}[\m{model_immediate_not_NI}]\label{thm:leak}
-For the concrete system,
-\[
-\mathsf{model\_immediate\_concrete} \notin
-  \NI(\mathsf{in\_equiv},\, \mathsf{out\_equiv}).
-\]
-\end{theorem}
-
-\todo{optional: one sentence about \code{initiate\_next} repeats the walk-through; the rest (insertion, determinism, the failing relation) is new. Trim only that sentence.}\begin{proof}[Proof sketch]
-Let $p$ be the model and $o_G$ the output in which only the public slot is set, to
-\code{Get}. The model performs $\perf{p}{!o_G.!o_G}{\Lo}$. The disk interrupt is
-unobservable at $\Lo$, so insertion demands $\perf{p}{?\mathsf{disk}.!o_G.!o_G}{\Lo}$.
-Reduction is deterministic (\cref{sec:background}): $p$ has exactly one input step on
-\textsf{disk} and every process exactly one output step, so we only need to follow
-that run. The input step $\stepI{p}{\mathsf{disk}}{p_1}$ sets the disk pending bit and
-leaves the pid at its initial value, the public user. So the output step
-$\stepO{p_1}{o_1}{p_2}$ emits $o_1 = o_G$, and at its end \m{initiate_next} finds the
-disk handler pending and unmasked and sets the pid to the disk handler: U to S. The
-next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
-\code{None} in the public slot, and $o_2 \not\eqv{O}_\Lo o_G$.
-\end{proof}
-
-\subsection{Sliced interrupt handling}\label{sec:sliced}
-
-The sliced policy removes the bold arrows. It runs the secret handlers only in
-\emph{time slices}: S is entered only when the timer handler completes, and the
-system stays there for a fixed number of steps (\cref{fig:phases}). A slice holds
-exactly $\mathit{runs}$ handler runs ($\mathit{runs} = 2$ in the concrete system), and
-a run that no disk interrupt claims is taken by the NOP handler, so a slice is the
-same whether or not a disk interrupt is waiting. Each part of the policy below
-removes an arrow of \cref{fig:policy-ordinary} or fixes how long S lasts.
-
-The slice counter tracks the slice. Outside it, in U and T, the counter is
-\code{None}. In S, \code{Some n} counts the $n$ steps left, and \code{Some 0} marks the
-last step, at whose output the slice closes. Closing must happen once. With a plain
-number, \code{0} could not tell a closing slice from a closed one, and closing on
-every step outside a slice would unmask the timer while its own handler runs.
-
-The initial state masks the disk and NOP handlers, so no disk interrupt can take the
-system from U to S, and leaves the timer unmasked:
-\begin{lstlisting}
-sliced_init :=
-  ((initial_pid, None),
-   (false, (Some 0,      (* slice counter *)
-    ((false,true),       (* NOP *)
-     ((false,true),      (* disk *)
-      (false,false)))))) (* timer *)
-\end{lstlisting}
-Its counter, \code{Some 0}, is an empty slice that closes at the first output and
-changes nothing else.
-
+\suppressfloats[t]
 \begin{figure}[t]
 \centering
 % runs: models.v Section 11 traces; state rows: lemmas sliced_states_no_dI/_with_dI
@@ -237,13 +187,74 @@ changes nothing else.
 \label{fig:run-sliced}
 \end{figure}
 
-The service policy runs three stages on each output, right to left:
+\begin{theorem}[\m{model_immediate_not_NI}]\label{thm:leak}
+For the concrete system,
+\[
+\mathsf{model\_immediate\_concrete} \notin
+  \NI(\mathsf{in\_equiv},\, \mathsf{out\_equiv}).
+\]
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+The counterexample is the shortest trace that shows the gap: the disk interrupt
+arrives before step 1, not after it as in \cref{fig:run-ordinary}. Let $p$ be the model and $o_G$ the output in which only the public slot is set, to
+\code{Get}. The model performs $\perf{p}{!o_G.!o_G}{\Lo}$. The disk interrupt is
+unobservable at $\Lo$, so insertion demands $\perf{p}{?\mathsf{disk}.!o_G.!o_G}{\Lo}$.
+Reduction is deterministic (\cref{sec:background}): $p$ has exactly one input step on
+\textsf{disk} and every process exactly one output step, so we only need to follow
+that run. The input step $\stepI{p}{\mathsf{disk}}{p_1}$ sets the disk pending bit and
+leaves the pid at its initial value, the public user. So the output step
+$\stepO{p_1}{o_1}{p_2}$ emits $o_1 = o_G$, and at its end \m{initiate_next} finds the
+disk handler pending and unmasked and sets the pid to the disk handler: U to S. The
+next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
+\code{None} in the public slot, and $o_2 \not\eqv{O}_\Lo o_G$.
+\end{proof}
+
+\subsection{Sliced interrupt handling}\label{sec:sliced}
+
+The sliced policy removes the bold arrows. It runs the secret handlers only in
+\emph{time slices}: S is entered only when the timer handler completes, and the
+system stays there for a fixed number of steps (\cref{fig:phases}). A slice holds
+exactly $\mathit{runs}$ handler runs ($\mathit{runs} = 2$ in the concrete system), and
+a run that no disk interrupt claims is taken by the NOP handler, so a slice is the
+same whether or not a disk interrupt is waiting. Each part of the policy below
+removes an arrow of \cref{fig:policy-ordinary} or fixes how long S lasts.
+
+The slice counter tracks the slice. Outside it, in U and T, the counter is
+\code{None}. In S, \code{Some n} counts the $n$ steps left, and \code{Some 0} marks the
+last step, at whose output the slice closes. Closing must happen once. With a plain
+number, \code{0} could not tell a closing slice from a closed one, and closing on
+every step outside a slice would unmask the timer while its own handler runs.
+
+The initial state masks the disk and NOP handlers, so no disk interrupt can take the
+system from U to S, and leaves the timer unmasked:
 \begin{lstlisting}
-sliced_service runtime runs o :=
-  check_slice_count
-  (@$\circ$@) check_handler_completed runtime
-  (@$\circ$@) initiate_ir runtime runs o
+sliced_init :=
+  ((initial_pid, None),
+   (false, (Some 0,      (* slice counter *)
+    ((false,true),       (* NOP *)
+     ((false,true),      (* disk *)
+      (false,false)))))) (* timer *)
 \end{lstlisting}
+Its counter, \code{Some 0}, is an empty slice that closes at the first output and
+changes nothing else.
+
+The service policy fills the open stage of \cref{sec:state} with three stages,
+\m{sliced_service}, which run on each output in this order:
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=stealth,
+  stg/.style={draw, rounded corners=2pt, minimum height=0.4cm, inner sep=2pt,
+    font=\ttfamily\tiny}]
+\node[stg, anchor=west] (a) at (0,0) {initiate\_ir};
+\node[stg, anchor=west] (b) at ($(a.east)+(0.45,0)$) {check\_handler\_completed};
+\node[stg, anchor=west] (c) at ($(b.east)+(0.45,0)$) {check\_slice\_count};
+\draw[->] (a) -- (b);
+\draw[->] (b) -- (c);
+\draw[dashed, rounded corners=2pt] ($(a.north west)+(-0.12,0.12)$) rectangle ($(c.south east)+(0.12,-0.12)$);
+\draw[->] ($(a.west)+(-0.55,0)$) -- ($(a.west)+(-0.12,0)$);
+\draw[->] ($(c.east)+(0.12,0)$) -- ++(0.4,0);
+\end{tikzpicture}
+\end{center}
 The first stage is the ordinary policy's single stage restricted to the timer
 handler, whose output is public. It keeps the reschedule and, instead of unmasking,
 opens the slice, the only way from T to S:
@@ -302,8 +313,9 @@ non-interfering at \m{private_equiv} on input and output, then
 \end{multline*}
 \end{theorem}
 
-\todo{why do we bother with the weaker attacker? One line: the main theorem's attacker already sees the schedule; this one is the realistic user-level view.}An attacker who sees only the two user processes, and not the scheduler or the
-handlers, observes \m{model_sliced_userview}, which applies \m{parse_output} to
+The attacker of \cref{thm:main} sees the whole schedule, the scheduler and the timer
+handler included. A user-level attacker, who sees only the two user processes,
+observes \m{model_sliced_userview}, which applies \m{parse_output} to
 every output to erase all but the user slots.
 
 \begin{corollary}[\m{model_sliced_userview_NI}]

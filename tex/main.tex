@@ -66,6 +66,8 @@
 \newcommand{\Aw}{\mathsf{A}}
 \newcommand{\Ob}{\mathsf{O}}
 \newcommand{\cn}[1]{\mathsf{#1}}
+% item of the composition theorem, e.g. \comp{it:sta} -> Theorem 1(3)
+\newcommand{\comp}[1]{\cref{thm:composition}(\ref{#1})}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\note}[1]{\textcolor{orange!85!black}{[NOTE: #1]}}
 
@@ -94,12 +96,14 @@
   \expandafter\def\csname mechline@#1\endcsname{#3}}
 \DeclareRobustCommand{\m}[1]{%
   \ifcsname mechfile@#1\endcsname
-    \href{\repofile{\csname mechfile@#1\endcsname}\#L\csname mechline@#1\endcsname}{\code{#1}}%
+    \href{\repofile{\csname mechfile@#1\endcsname}\#L\csname mechline@#1\endcsname}{\textcolor{black}{\code{#1}}}%
   \else
     \code{#1}\PackageWarning{mechlinks}{No definition found for `#1'}%
   \fi}
 % \mechfile{path}{text}: link to a whole file of the mechanisation.
 \newcommand{\mechfile}[2]{\href{\repofile{#1}}{\code{#2}}}
+\newcommand{\mechlinesdef}[2]{\expandafter\def\csname mechlines@#1\endcsname{#2}}
+\newcommand{\mechlines}[1]{\csname mechlines@#1\endcsname}
 \input{mechlinks}
 
 % IEEEtran defines no theorem environments.
@@ -113,6 +117,9 @@
 \title{Timing-Sensitive Non-Interference\\for Interrupt Handling,\\
   Compositionally and Mechanically}
 
+\ifanonymous
+\author{\IEEEauthorblockN{Anonymous submission}}
+\else
 % TODO: complete the author list and affiliations.
 \author{\IEEEauthorblockN{Willard Rafnsson}
 \IEEEauthorblockA{IT University of Copenhagen, Denmark\\
@@ -121,28 +128,26 @@ wilr@itu.dk}
 \IEEEauthorblockN{Dawit Tirore}
 \IEEEauthorblockA{IT University of Copenhagen, Denmark\\
 dati@itu.dk}}
+\fi
 
 \maketitle
-\note{is CSF double-blind this year? If so, the author block and the GitHub links must switch with \textbackslash anonymoustrue (only \textbackslash repobase does now), and the \code{pdf} branch must stay out of the anonymous mirror.
-}
 \begin{abstract}
-\todo{the abstract still tells the pre-rework story (slices, dummy handler). We now have a sharper one: the attacker learns when the secret handlers run and for how long, and the fix makes both public. One sentence each for leak, requirement, fix, proof.}The security of a computer system rests on its operating system, which ties
-software to hardware and decides which process runs, when, and on whose behalf. A key part of
-this is interrupt handling. Servicing an interrupt takes time away from whichever
-process was scheduled. If a public process keeps issuing requests whose results an
-attacker can see, the handler shows up as a gap in that stream, and the attacker
-learns that the interrupt occurred. Such timing leaks through
-interrupt handling arise in several operating systems
-\todo{examples, with citations}. Leaks of this kind are studied in information flow
-control, where their absence is stated as non-interference. In this paper we use
-the process calculus of Rafnsson et al.\ to model interrupt handling as a process,
-and prove in Rocq that it is interfering: a secret disk interrupt is observable
-through the schedule alone. We then model the corresponding non-interfering
-variant, obtained by altering how interrupts are processed: they are serviced only
-inside publicly timed slices, and unused slice time is filled with a dummy handler.
-We prove it timing-sensitive non-interfering for any scheduler and user processes
-that are themselves non-interfering. The implementation of the modified interrupt
-processing is carried out in separate work \todo{cite X}.
+Interrupt handling is a key part of an operating system, and a source of timing
+leaks. Servicing an interrupt takes time from whichever process was scheduled, so an
+attacker who watches a public process sees when a handler ran and for how long. If
+the interrupt is secret, so is that information. Such leaks arise in several
+operating systems \todo{examples, with citations}. We use the process calculus of
+Rafnsson et al., whose timing-sensitive non-interference theorems compose, to model
+an operating system with interrupt handling as a single process, and prove in Rocq
+that ordinary interrupt handling leaks: a secret disk interrupt is observable
+through the schedule alone. A non-interfering policy must make \emph{when} secret
+handlers run, and for how long, depend only on public events, while \emph{which}
+secret handler runs may stay hidden. We model a policy that does so: secret handlers
+run only in time slices of fixed length, opened by the public timer handler, and
+runs no interrupt claims are filled by a dummy handler. We prove it timing-sensitive
+non-interfering for any scheduler and user processes that are themselves
+non-interfering. The implementation of this policy is carried out in separate work
+\todo{cite X}.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -160,10 +165,16 @@ verification, Rocq
 \input{sections/related}
 \input{sections/conclusion}
 
+\section*{Acknowledgment}
+\todo{draft for the IEEE/CSF policy on AI-generated content; confirm the scope and the sections, and name the model version.}
+Following the IEEE policy on AI-generated content, we disclose that Claude
+(Anthropic), an AI assistant, was used to draft and revise text and figures
+throughout the paper, and to develop parts of the Rocq mechanisation. The authors
+reviewed all AI-generated content and take full responsibility for it.
+
 \input{sections/appendix}
 
-\note{only eight references, all written from memory (see references.bib). Verify every field, and expect the related-work rework to add many.
-}\bibliographystyle{IEEEtran}
+\bibliographystyle{IEEEtran}
 \bibliography{references}
 
 \end{document}

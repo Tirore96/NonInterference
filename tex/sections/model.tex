@@ -51,7 +51,7 @@ global state, which a state cell and a feedback loop thread around the pool.
 \node[anchor=south] at (tuple.north |- pool.north) {six-tuple};
 % global state, vertically centred on the pool
 \node[draw, rounded corners=2pt, minimum width=1.3cm, minimum height=1.1cm,
-  align=center] (sta) at (0.35, 0 |- pool.center) {global\\state};
+  align=center] (sta) at (0.35, 0 |- pool.center) {global\\state\\[1pt]{\tiny (Fig.~\ref{fig:state})}};
 \draw[->] (-1.25, 0 |- sta.center) -- node[above] {interrupt} (sta.west);
 \draw[->] (sta.east) -- node[above] {pid} (pool.west |- sta.east);
 \draw[->] (tuple.east) -- ++(0.5,0) node[right] {out};
@@ -76,46 +76,94 @@ global state, which a state cell and a feedback loop thread around the pool.
 \label{fig:system}
 \end{figure}
 
-\todo{the U/T/S split of IV is already visible in the shading of the six-tuple: users and timer shaded, secret handlers white. Introduce U/T/S here, with the shading, and let IV reuse it; IV's intro then shrinks to the requirement.}\subsection{Inputs and outputs}\label{sec:interface}
+\subsection{Inputs and outputs}\label{sec:interface}
 
 The system receives interrupts. Its input type \code{T_in} has two values, the timer
 interrupt and the disk interrupt. An interrupt goes to the state
 (\cref{sec:global-state}), where it marks itself pending in the interrupt
 controller.
 
-\todo{\code{in\_equiv} as two formulas, while II-C now explains equivalences by example. Say it that way: the timer is related only to itself; the disk interrupt is unobservable at L.}The disk interrupt is the secret. The input equivalence \m{in_equiv} makes it, and
-only it, unobservable to the attacker; otherwise interrupts are related only when
-equal:
-\begin{align*}
-\mathit{ir} \doteq_\ell \unobs &\iff \mathit{ir} = \mathsf{Disk} \wedge \ell = \Lo, \\
-\mathit{ir} \doteq_\ell \mathit{ir}' &\iff \mathit{ir} = \mathit{ir}' \vee
-  (\mathit{ir} \doteq_\ell \unobs \wedge \mathit{ir}' \doteq_\ell \unobs).
-\end{align*}
+The disk interrupt is the secret. Under the input equivalence \m{in_equiv} the
+attacker does not observe the disk interrupt at all ($\mathsf{Disk} \doteq_\Lo
+\unobs$), and relates the timer interrupt only to itself; at $\Hi$ both are public.
 
 By the rule for \code{par} (\cref{fig:semantics}), the pool emits the
 outputs of all its slots together. So the system emits a six-tuple of options, the output
 type \code{T_out}, with exactly one \code{Some} on each step. The output therefore
 records not only what was computed but also \emph{who ran}: the schedule is part of
-what the system emits. The shading of the six-tuple in \cref{fig:system} shows what
-we intend to hide from the attacker in each position. \todo{with eqmaybe written out, \code{out\_equiv} fits here in one line, and the three shades are exactly three instances: eqmaybe($\{$L,H$\}$, public) dark, eqmaybe($\{$L,H$\}$, private) light, eqmaybe($\{$H$\}$, private) white. Put that in the key; V-A then only explains why it is forced.}The exact output equivalence, and why the proof forces
-its shape, come in \cref{sec:gating}. Each output, like each input, then updates the
-state.
+what the system emits. The steps it records are of three kinds, which the rest of the
+paper keeps apart: \emph{U}, a user process or the scheduler; \emph{T}, the timer
+handler; and \emph{S}, a secret handler, disk or NOP.
+
+The output equivalence \m{out_equiv} relates six-tuples position by position, by
+$\mathsf{eqpair}$, and each position by one of three equivalences, the three shades
+of \cref{fig:system}:
+\begin{itemize}
+\item $\mathsf{eqmaybe}(\{\Lo,\Hi\}, \text{public})$, dark: the attacker sees that
+  the slot ran and its value (public user, scheduler, timer handler);
+\item $\mathsf{eqmaybe}(\{\Lo,\Hi\}, \text{private})$, light: it sees that the slot
+  ran, not its value (private user);
+\item $\mathsf{eqmaybe}(\{\Hi\}, \text{private})$, white: it sees nothing (disk and
+  NOP handlers).
+\end{itemize}
+So the attacker sees the U and T steps, and of an S step only that it happened: no
+other slot ran. \Cref{sec:gating} shows that the proof forces this shape. Each
+output, like each input, then updates the state.
 \subsection{The state}\label{sec:global-state}
 
-\todo{say that the \code{inl} side is exactly S. (Shading this listing per field does not work: the pid is half public, half private. Table~II stays, see the comment there.)}The global state (\m{state_type}) is a nest of pairs:
-\begin{lstlisting}
-state_type = (cur_pid (@$\times$@) prev_pid)
-           (@$\times$@) (re_sched (@$\times$@) (slice_count (@$\times$@) ic))
-cur_pid  = Sum Bool Nat
-prev_pid = Option Nat
-re_sched = Bool
-slice_count = Option Nat
-ic       = ir_bits (@$\times$@) (ir_bits (@$\times$@) ir_bits)
-ir_bits  = Bool (@$\times$@) Bool    (* pending, mask *)
-\end{lstlisting}
+The global state (\m{state_type}, \cref{fig:state}) is the box of \cref{fig:system}
+opened up: a nest of pairs holding two pids, two flags and the interrupt controller.
+
+\suppressfloats[t]
+\begin{figure}[t]
+\centering
+% the global state of fig:system, field by field (models.v, state_type);
+% shading: public (dark) or private (white) to the attacker under the state
+% equivalence of sec:state-equiv
+\begin{tikzpicture}[font=\scriptsize,
+  f/.style={draw, minimum height=0.5cm, inner sep=1pt, align=center},
+  pub/.style={f, fill=black!28}, priv/.style={f, fill=white},
+  lab/.style={font=\scriptsize, anchor=north, align=center},
+  bit/.style={draw, minimum width=0.62cm, minimum height=0.36cm, inner sep=0pt}]
+\draw[rounded corners=2pt] (-0.15,0.45) rectangle (7.95,-2.5);
+\node[anchor=north west] at (-0.1,0.43) {global state};
+% the current pid has type Sum Bool Nat: the tag is public (the shaded sum);
+% inl carries a secret handler (S), whose Bool, which one, is private; inr
+% carries the pid of any other process (U or T), public
+\node[pub, minimum width=2.2cm, minimum height=0.78cm] (sum) at (1.02,-0.4) {};
+\node[anchor=north west, inner sep=1.5pt, font=\tiny\ttfamily] at (sum.north west) {Sum};
+\node[priv, minimum width=0.78cm, minimum height=0.34cm] (b) at (0.6,-0.4) {\texttt{Bool}};
+\node[pub, minimum width=0.78cm, minimum height=0.34cm] (n) at (1.45,-0.4) {\texttt{Nat}};
+\node[font=\tiny, anchor=north, inner sep=1pt] at (b.south) {\texttt{inl}: S};
+\node[font=\tiny, anchor=north, inner sep=1pt] at (n.south) {\texttt{inr}: U, T};
+\node[lab] at (1.02,-0.84) {current pid};
+% pids, flags, counter
+\node[pub, minimum width=1.25cm] (prev) at (3.0,-0.4) {\texttt{Option Nat}};
+\node[lab] at (3.0,-0.84) {previous pid};
+\node[pub, minimum width=0.9cm] (rs) at (4.55,-0.4) {\texttt{Bool}};
+\node[lab] at (4.55,-0.84) {reschedule};
+\node[pub, minimum width=1.45cm] (sc) at (6.45,-0.4) {\texttt{Option Nat}};
+\node[lab] at (6.45,-0.84) {slice counter};
+% the interrupt controller: one (pending, mask) pair per handler, each a Bool
+\foreach \h/\x in {N/2.35, D/3.05, T/3.75} \node at (\x,-1.4) {\h};
+\node[anchor=east] at (1.97,-1.75) {pending};
+\node[anchor=east] at (1.97,-2.15) {mask};
+\foreach \x/\st in {2.35/white, 3.05/white, 3.75/black!28}
+  \node[bit, fill=\st] at (\x,-1.75) {};
+\foreach \x in {2.35,3.05,3.75} \node[bit, fill=black!28] at (\x,-2.15) {};
+\node[anchor=west, align=left] at (4.25,-1.95) {interrupt controller:\\a \texttt{Bool} pair per handler};
+\end{tikzpicture}
+\caption{The global state of \cref{fig:system}, opened up. Dark fields are public to
+  the attacker, white ones private (\cref{sec:state-equiv}). The current pid is
+  a sum: \texttt{inl} carries a secret handler (an S step), its \texttt{Bool} saying
+  which one, and \texttt{inr} the number of any other process (U or T). The sum's tag is public, so whether
+  a secret handler runs is public; which one runs is private. So are the pending bits of the NOP (N) and disk (D) handlers. Every
+  other field, \texttt{None} included, is public.}
+\label{fig:state}
+\end{figure}
 \begin{itemize}
 \item The \emph{current pid} names the slot that runs next. The two secret
-  handlers sit on the \code{inl} side, \code{inl true} for the disk handler and
+  handlers, the S steps, sit on the \code{inl} side, \code{inl true} for the disk handler and
   \code{inl false} for the NOP handler, and every other process on the \code{inr}
   side, numbered from 0: timer handler, scheduler, private user, public user. The
   system starts in the public user (\m{initial_pid}).
@@ -123,9 +171,9 @@ ir_bits  = Bool (@$\times$@) Bool    (* pending, mask *)
   control returns when the handler finishes.
 \item The \emph{reschedule flag} \m{re_sched} sends control to the scheduler
   instead, when a handler finishes.
-\todo{`phase': stale vocabulary, as in V. Fig.~7 now draws U/T/S with counter values.}\item The \emph{slice counter} \m{slice_count} tracks the phase of a time slice for
-  the sliced policy (\cref{sec:sliced}, \cref{fig:phases}); the ordinary policy
-  leaves it \code{None}.
+\item The \emph{slice counter} \m{slice_count} counts the steps left in the current
+  time slice, for the sliced policy (\cref{sec:sliced}); the ordinary policy leaves
+  it \code{None}.
 \item The \emph{interrupt controller} \m{ic} holds a pending bit and a mask bit
   for each handler. Its entries are indexed by \m{irq}, an optional interrupt:
   \code{timer_irq} and \code{disk_irq} for the two interrupts, and
@@ -138,19 +186,43 @@ The initial state is not fixed here: it is part of the interrupt policy
 
 \subsection{Who runs next}\label{sec:state}
 
-The state is updated once per event, by
-\begin{lstlisting}
-state_step service_policy restore_invariant =
-  step_sum set_pending
-    (initiate_next restore_invariant
-     (@$\circ$@) service_policy (@$\circ$@) check_scheduler)
-\end{lstlisting}
-\code{step_sum} applies \m{set_pending} to an input, and the composition, right to
-left, to a pool output. On an interrupt, \m{set_pending} sets that interrupt's
-pending bit. On a pool output, \m{check_scheduler} first adopts the pid the
-scheduler proposed, if the scheduler ran. The next stage, \code{service_policy}, is
-left open here: it is half of the interrupt policy (\cref{sec:parameters}). Last,
-\m{initiate_next} computes the next pid.
+The state changes on both kinds of step of \cref{sec:background}, through
+\m{state_step}; under each stage are the fields of \cref{fig:state} it writes:
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, >=stealth,
+  stg/.style={draw, rounded corners=2pt, minimum height=0.4cm, inner sep=2pt,
+    font=\ttfamily\tiny},
+  open/.style={stg, dashed},
+  wr/.style={font=\tiny, anchor=north, align=center, inner sep=1pt}]
+% input step: an interrupt only records itself
+\node[anchor=west] at (-0.3,0.42) {input step $\rightsquigarrow$: an interrupt};
+\node[stg, anchor=west] (sp) at (0.2,0) {set\_pending};
+\draw[->] (-0.3,0) -- (sp);
+\draw[->] (sp.east) -- ++(0.45,0) node[right] {state};
+\node[wr] at (sp.south) {one pending bit};
+% output step: the pool's output, fed back, runs three stages
+\node[anchor=west] at (-0.3,-0.72) {output step $\rightarrow$: the pool's output, fed back};
+\node[stg, anchor=west] (cs) at (0.2,-1.14) {check\_scheduler};
+\node[open, anchor=west] (pol) at ($(cs.east)+(0.45,0)$) {service\_policy};
+\node[stg, anchor=west] (in) at ($(pol.east)+(0.45,0)$) {initiate\_next};
+\draw[->] (-0.3,-1.14) -- (cs);
+\draw[->] (cs) -- (pol);
+\draw[->] (pol) -- (in);
+\draw[->] (in.east) -- ++(0.45,0) node[right] {state};
+\node[wr] at (cs.south) {current pid};
+\node[wr] at (pol.south) {open: the\\interrupt policy};
+\node[wr] at (in.south) {pids, masks, a pending\\bit, reschedule flag};
+\end{tikzpicture}
+\end{center}
+On an input step, \m{set_pending} sets the arriving interrupt's pending bit and
+nothing else happens: the pool idles and nothing is emitted. On an output step, the
+pool's output is fed back to the state, where three stages run in turn.
+\m{check_scheduler} adopts the pid the scheduler proposed, if the scheduler ran. The
+next stage, \code{service_policy}, is left open here: it is half of the interrupt
+policy (\cref{sec:parameters}), and \cref{sec:designs} fills it twice. Last,
+\m{initiate_next} computes the next pid. (In the code the state receives both kinds
+of event as one sum, interrupts as \code{inl} and fed-back outputs as \code{inr},
+and \code{step_sum} dispatches on the tag.)
 
 \suppressfloats[t]
 \begin{figure}[t]
@@ -215,9 +287,8 @@ sec:global-state,sec:state} is fixed, except two parts, marked by the suffix
 \item \code{init_policy}, the initial state, a value of the type of
   \cref{sec:global-state}. Its masks decide which interrupts can be serviced before
   anything has happened.
-\todo{IV-B showed the sliced policy reopens masks on the counter, not on completion. `the only stage that sees a handler announce completion' frames it the old way; say `the only stage that can reopen masks'.}\item \code{service_policy}, the open stage of \cref{sec:state}. It is the only
-  stage that sees a handler announce completion, and so the only place masks can
-  be reopened: it decides when the next handler becomes eligible.
+\item \code{service_policy}, the open stage of \cref{sec:state}. It is the stage
+  that reopens masks, and so decides when the next handler becomes eligible.
 \end{itemize}
 Together they decide \emph{when a handler may run}, and we call them the
 \emph{interrupt policy}. The remaining argument, \m{restore_invariant}, is not part

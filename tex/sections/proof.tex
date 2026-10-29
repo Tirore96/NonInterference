@@ -1,169 +1,204 @@
 \section{The Security Proof}\label{sec:proof}
 
-In the terms of \cref{sec:designs}, the sliced policy makes \emph{whether} the system
-is in S public, and keeps only \emph{which} secret handler runs there private. In the two sliced runs of \cref{fig:run-sliced}, a
-secret handler runs at steps 7 to 10 in both; the runs differ only in which handler
-runs at steps 7 and 8. This section proves that the same holds for every pair of
-runs the attacker should not tell apart, and that nothing else reveals the secret.
+This section proves \cref{thm:main}: if the scheduler and the public user process are
+non-interfering at the public equivalence, and the private user process at the
+private one, then \m{model_sliced} is non-interfering at \m{in_equiv} on input and
+\m{out_equiv} on output. At the attacker's level $\Lo$ the claim reads as follows. A
+disk interrupt is unobservable at $\Lo$ (\cref{sec:interface}), so two input streams
+that differ only in disk interrupts must give outputs that \m{out_equiv} relates: at
+every step the attacker sees the same U and T steps, and whether the system is in S,
+and the two runs may differ only in \emph{which} secret handler runs there. At every
+other level each equivalence of the model is equality, and every obligation below
+holds trivially; we discuss $\Lo$ only.
 
-\todo{ten blue theorem names in one sentence. Draw the term as a tree, but accurately: map / loop / map / sta / map / maybe / pool, and each slot is swi(maybe(map \dots)), so \code{maybe\_NI} and \code{map\_NI} apply more than once (`maybe for the idling pool' is incomplete). Mark the two side conditions at swi and sta.}The proof follows the term of \m{model_sliced} from the outside in, applying one
-composition theorem per constructor (\cref{thm:composition}): \m{map_NI} for the outer
-rewiring, \m{loop_NI} for the feedback, \m{sta_NI} for the global state, \m{maybe_NI} for
-the idling pool, \m{par_NI} to split the pool into slots, \m{swi_NI} for each slot's
-gate, and at the leaves \m{out_NI} for the handler processes and the hypotheses of
-\cref{thm:main} for the scheduler and user processes. Each theorem derives the
-composite's equivalences from those of its parts, so the output equivalence is
-forced: \m{par_NI} makes \m{out_equiv} a nest of \m{eqpair}s, one component per slot,
-and \m{swi_NI} wraps each component in an $\mathsf{eqmaybe}$. Two steps leave side
-conditions specific to interrupts, one for each half of the idea. The gates of
-\m{swi_NI} must hide \emph{which} secret handler ran (\cref{sec:gating}), and the state
-of \m{sta_NI} must keep \emph{whether} one runs public (\cref{sec:state-equiv}), which
-needs an invariant of the policy (\cref{sec:restore}). All of this concerns the
-attacker's level $\Lo$: at every other level the private equivalences are equality,
-so related states and outputs are equal.
+The proof applies \cref{thm:composition} to the term of \m{model_sliced}
+(\cref{fig:system}) from the outside in. The theorem gives the outermost
+equivalences, \m{in_equiv} and \m{out_equiv}; the proof chooses those inside:
+$\eqv{E}$ on the events the state receives, $\eqv{V}$ on the state, and $\eqv{B}$
+on each gate bit.
+\begin{itemize}
+\item \emph{Feedback} (\code{map}, \code{loop}; \comp{it:map}, \comp{it:loop}). The
+  loop feeds each output back to the state as an event, so \comp{it:loop} needs one
+  equivalence on the events going in and coming out. For $\eqv{E}$ we take the sum
+  of \m{in_equiv} and \m{out_equiv}: it relates interrupts by \m{in_equiv} and
+  outputs by \m{out_equiv}, never an interrupt to an output, and an event is
+  unobservable exactly when it is a disk interrupt at $\Lo$. The maps around the
+  loop only tag and untag events.
+\item \emph{The state} (\code{sta}; \comp{it:sta}). The state update must respect
+  $\eqv{V}$. This decides \emph{whether} a secret handler runs, and it is the hard
+  obligation (\cref{sec:state-equiv,sec:update,sec:restore}).
+\item \emph{The pool} (\code{map}, \code{maybe}, \code{par}; \comp{it:map},
+  \comp{it:maybe}, \comp{it:par}). The pool's input map sends every interrupt to
+  \code{None}, which the pool ignores and no level sees, and every output to the
+  current pid. \code{par} splits the output equivalence into one component per slot.
+\item \emph{The slots} (\code{map}, \code{swi}; \comp{it:map}, \comp{it:swi}). Each
+  slot's gate must hide \emph{which} secret handler runs (\cref{sec:gating}).
+\item \emph{The slot processes.} The scheduler and the user processes are covered
+  by the hypotheses of \cref{thm:main}. Each handler is a counter, a \code{map} of a
+  \code{sta} of an \code{out}, whose state no input changes.
+\end{itemize}
+
+\subsection{The state equivalence}\label{sec:state-equiv}
+
+For the state, \comp{it:sta} asks that the update $f$ be equivalence-preserving,
+$f \in \mathsf{PE}(\eqv{E},\eqv{V})$: an unobservable event leaves the state related
+to itself; and non-interfering, $f \in \NI(\eqv{E},\eqv{V},\eqv{V})$: related events
+take related states to related states (\cref{sec:composition}). The first condition
+asks for private fields, the second for public ones. We make a field private only
+where a condition forces it, which gives the shading of \cref{fig:state}
+(\m{state_type_equiv}):
+\begin{itemize}
+\item \emph{Pending bits are private.} A disk interrupt is unobservable at $\Lo$ and
+  sets the disk pending bit, so by $\mathsf{PE}$ that bit is private. The NOP
+  pending bit is private by $\NI$: when a slice opens, the disk handler takes the
+  run the NOP handler was queued for, so after that run the NOP handler is pending
+  in one state and not in the other.
+\item \emph{The current pid is $\mathsf{eqsum}(\text{private}, \text{public})$.} Its
+  \code{inl} side holds exactly the two secret handlers (\cref{sec:global-state}),
+  and which of them runs may differ between the two states, so the value inside
+  \code{inl} is private. $\mathsf{eqsum}$ never relates an \code{inl} to an
+  \code{inr}, so \emph{whether} a secret handler runs stays public.
+\item \emph{Every other field is public:} the masks, the slice counter, the
+  reschedule flag and the previous pid. Nothing forces them private, and
+  \m{initiate_next} branches on all of them to compute the next pid, whose tag
+  must be public: two states that disagreed on a mask, or on whether a slice is
+  open, could enter S in one and not in the other.
+\end{itemize}
+The same conditions explain why \m{set_pending} sets one bit and stops: any decision
+taken on an input step, such as starting a handler or moving the counter, would
+change a public field, so everything an interrupt causes waits for a later output
+step.
+
+\subsection{The state update}\label{sec:update}
+
+$\mathsf{PE}$ concerns unobservable events only, that is, disk interrupts, which
+\m{set_pending} turns into one private bit; it is immediate. The hard obligation is
+$\NI$ for the whole update. It splits along the two lanes of \m{state_step}
+(\cref{sec:state}), since $\eqv{E}$ never relates an interrupt to an output, and
+along the output lane into one goal per stage. On the input lane \m{set_pending}
+writes a private bit. On the output lane:
+\begin{itemize}
+\item \emph{\m{check_scheduler} and the service policy are routine.} They read only
+  public fields of the state and the output, so they write the same values into
+  both states. In particular, the service policy reads only the timer handler's
+  output, which is public; this is what the restriction of \cref{sec:sliced} buys.
+\item \emph{\m{initiate_next} decides whether S is entered.} The timer's readiness
+  is public, so both states agree on it. Otherwise, in each state the secret
+  handler ready to start is the disk handler, the NOP handler, or none. Disk in one
+  state and NOP in the other is harmless: both start an \code{inl} pid, whose value
+  is private. A secret handler in one state and none in the other is fatal: one
+  state enters S and the other continues a user process.
+\end{itemize}
+So the stage needs one fact: two related states, about to choose, either both have
+a secret handler ready or neither has. The ordinary policy fails here and in the
+service policy. \m{immediate_service} unmasks when any handler completes, the disk
+handler included, so it writes public masks from a private output. And
+\m{initiate_next} meets the fatal case: a bold arrow of \cref{fig:policy-ordinary}
+taken in one run only, which is the counterexample of \cref{thm:leak}.
+
+In the states the sliced policy reaches, the public counter gives the fact: while a
+slice is open the NOP handler is ready, and otherwise neither secret handler is. But
+$\NI$ quantifies over all pairs of related states, reachable or not.
+
+\subsection{Restoring the invariant}\label{sec:restore}
+
+Restricting $\eqv{V}$ to the states that satisfy the invariant is not possible: a
+characterised equivalence relates every value to itself. Arguing over reachable
+states only would give up the per-constructor structure of the proof. Instead,
+\m{initiate_next} applies \m{restore_invariant} just before it chooses
+(\cref{sec:state}), so the proof of this stage needs to consider only states
+that satisfy the invariant. It writes into the state the masks that
+go with the counter: in an open slice it sets the NOP pending bit and the timer
+mask, otherwise the disk and NOP masks, and in both cases it copies the disk mask to
+the NOP mask. It reads only public fields, so it does the same to two related
+states, and afterwards either both have a secret handler ready or neither has. This
+is the fact \m{initiate_next} needs.
+
+It remains to show that \m{restore_invariant} is the identity wherever it is
+applied, so that it restricts what the proof considers without changing what the
+model does. Write $v_{es}$ for the state after the events $es$ from the initial state
+of \m{model_sliced}, and $c_o(v)$ for the state that \m{initiate_next} receives on
+output $o$ in state $v$, after \m{check_scheduler} and the service policy.
+
+\begin{theorem}[\m{restore_invariant_noop}]\label{thm:noop}
+Let $\mathit{runtime} \neq 1$. For all events $es$ and outputs $o$, if not all masks
+are set in $c_o(v_{es})$, then $\mathsf{restore\_invariant}\;(c_o(v_{es})) =
+c_o(v_{es})$.
+\end{theorem}
+
+\m{initiate_next} applies \m{restore_invariant} only when not all masks are set, so
+it never changes a state the model reaches. The events $es$ are arbitrary, so this
+holds whatever the pool emits.
+
+The proof of \cref{thm:noop} is an invariant between steps (\m{sliced_inv}: the disk
+and NOP masks agree, are set outside a slice, and a handler is running inside one),
+preserved by every event. At the choice point a variant (\m{choice_inv}) also allows
+a handler boundary inside a slice, where the masks are open and the NOP handler is
+pending; on such states \m{restore_invariant} is the identity.
+
+The hypothesis $\mathit{runtime} \neq 1$ marks where \m{restore_invariant} and the
+counter disagree: \m{restore_invariant} treats a closing slice, at \code{Some 0}, as
+closed. Normally no choice is made then, because the last run is still in progress.
+With one-step handlers the last boundary of a slice falls on that step, and
+\m{restore_invariant} masks the handler the boundary has just enabled.
+Non-interference is unaffected, but at $\mathit{runtime} = 1$ every slice loses its
+last handler run.
 
 \subsection{Gating a slot}\label{sec:gating}
 
-Each slot is a \code{swi} whose gate bit is computed from the pid by a \code{map}. Two
-obligations remain per slot, both parameterised by an equivalence $\eqv{B}$ on the gate
-bit that the proof may choose. \m{map_NI} requires the gate map to be unobservable-preserving,
-sending unobservable pids to unobservable bits (\m{f_PU}), and \m{swi_NI} requires, at every level, that the
-observer be aware of the gate or oblivious to the slot:
+Inside \code{sta}, \code{par} gives each slot its own component of the output
+equivalence, and each slot is a \code{swi} whose gate bit a \code{map} computes from
+the pid. Both obligations depend on the equivalence $\eqv{B}$ on the gate bit, which
+the proof chooses per slot. \comp{it:map} requires the gate map to be
+unobservable-preserving, sending unobservable pids to unobservable bits, and
+\comp{it:swi} requires, at every level, that the observer be aware of the gate or
+oblivious to the slot:
 \[
 \ell \in \Aw(\mathsf{true}, \eqv{B}) \;\cup\;
   \Ob(\mathsf{swi}\;b\;p,\; \mathsf{eqmaybe}(\Aw(\mathsf{true},\eqv{B}),\eqv{O})).
 \]
-Awareness means a bit related to \code{true} is \code{true} and observable, so the observer can
-trust the gate. Obliviousness means the observer sees none of the slot's outputs,
-whatever the input does.
+Awareness means a bit related to \code{true} is \code{true} and observable, so the
+observer can trust the gate; obliviousness means it sees none of the slot's outputs.
+At $\Lo$ the two secret pids are unobservable, and the slots fall into two groups.
 
-At $\Lo$ the two pids of the secret handlers are unobservable. For every slot except
-the disk and NOP slots, both map to \code{false}, so a $\eqv{B}$ in which \code{false}
-alone is unobservable satisfies \m{f_PU}; we call it \m{false_equiv}. Under
-\m{false_equiv} the observer is aware at every level, and the obligation is discharged
-without a case split. These slots are wrapped in $\mathsf{eqmaybe}(\{\Lo,\Hi\},\cdot)$, under which
-the attacker tells \code{Some} from \code{None}: it sees whether they ran. At step 7 of
-\cref{fig:run-sliced} they all emit \code{None} in both sliced runs, because a secret
-handler runs; this is the \emph{whether}, and it is public. The private user's slot is
-among them. Its gate is public, and its secrecy is carried by its \m{private_equiv}
-payload.
+\emph{Every other slot shows whether.} Both secret pids map to \code{false}, so the
+gate equivalence \m{false_equiv}, in which only \code{false} is unobservable, is
+preserved, and the observer is aware at every level. The output wrapper is
+$\mathsf{eqmaybe}(\{\Lo,\Hi\},\cdot)$: the attacker tells \code{Some} from
+\code{None}, so it sees whether the slot ran. While a secret handler runs, all these
+slots emit \code{None}; this is how the attacker sees that the system is in S. The
+private user's slot is among them; its secrecy is carried by its private payload.
 
-For the disk and NOP slots, one secret pid maps to \code{true} and the other to
-\code{false}, so \m{f_PU} demands that both bits be unobservable, which leaves only
-\m{private_equiv}. Then \code{true} is unobservable at $\Lo$ and awareness fails there,
-so the proof uses obliviousness. At step 7 the disk slot emits \code{Some o} in one
-run and \code{None} in the other, and the NOP slot the reverse, so both must be
-unobservable at $\Lo$. Under $\mathsf{eqmaybe}(\Aw(\mathsf{true},\eqv{B}),\eqv{O})$, \code{None} is
-unobservable exactly when the gate is hidden, and \code{Some o} exactly when the payload is. Both slots
-therefore get a private payload and the wrapper $\mathsf{eqmaybe}(\{\Hi\},\cdot)$, under which a
-handler run and a step in which nothing happened are the same observation. This is
-the \emph{which}, and it is hidden. The NOP slot is classified like the disk slot
-because a slice run is filled by one or the other.
+\emph{The disk and NOP slots hide which.} One secret pid maps to \code{true} and the
+other to \code{false}, so both bits must be unobservable: $\eqv{B}$ is the private
+equivalence, and awareness fails at $\Lo$. The proof uses obliviousness, and gets
+it by construction: both slots get a private payload and the wrapper
+$\mathsf{eqmaybe}(\{\Hi\},\cdot)$, under which every output, \code{None} included,
+is unobservable at $\Lo$. This is needed, because when a slice opens the disk slot
+emits \code{Some o} in one run and \code{None} in the other, and the NOP slot the
+reverse. The attacker learns nothing from these two slots, and learns that the
+system is in S only from the others.
 
-\subsection{The state}\label{sec:state-equiv}
+The dark and light shades of \m{out_equiv} (\cref{sec:interface}) are the payload
+equivalences of the hypotheses of \cref{thm:main}; the white shade of the disk and
+NOP slots is what this subsection requires.
 
-\todo{$\doteq^E$ (events) appears without being introduced.}\m{sta_NI} imposes two conditions on the state update $f$, and they pull in opposite
-directions. \m{f_EP} requires that an unobservable input leave the state related to
-itself, and \m{fv_NI} that related events map related states to related states:
-\[
-i \eqv{I}_\ell \unobs \Rightarrow f\,i\,v \eqv{V}_\ell v,
-\qquad
-e \eqv{E}_\ell e' \wedge v \eqv{V}_\ell v' \Rightarrow f\,e\,v \eqv{V}_\ell f\,e'\,v'.
-\]
-A disk interrupt is unobservable at $\Lo$ and sets the disk pending bit, so by
-\m{f_EP} that bit must be private. \m{initiate_next} branches on the mask bits, so by
-\m{fv_NI} they must be public: two related states that disagreed there would take
-different branches. Both hold only if the interrupt controller is classified per
-bit: the disk and NOP pending bits are private and every mask bit is public
-(\cref{tab:state-equiv}). The same constraint explains why \m{set_pending} sets one
-bit and stops. Any decision taken on an input step, such as starting a handler or
-moving the slice counter, would disturb a public field, so everything an interrupt
-causes is deferred to a later output step, where the input is no longer the thing
-being varied.
+\subsection{What the proof requires}\label{sec:requirements}
 
-\todo{same problem as the old eqmaybe table: mechanisation names (\code{private\_pending\_equiv}, \code{public\_bits\_equiv}). Write the equivalences out, or fold this into a shaded state listing in III-C.}\begin{table}[t]
-\centering
-\caption{\texttt{state\_type\_equiv}, field by field.}
-\label{tab:state-equiv}
-\footnotesize
-\begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}p{0.25\columnwidth}L>{\raggedright\arraybackslash}p{0.24\columnwidth}@{}}
-\toprule
-field & equivalence & at $\Lo$ \\
-\midrule
-current pid & \code{eqsum private_equiv public_equiv} & which secret handler is hidden \\
-previous pid, \m{re_sched}, \m{slice_count} & \m{public_equiv} & visible \\
-NOP and disk bits & \m{private_pending_equiv} & pending hidden, mask visible \\
-timer bits & \m{public_bits_equiv} & visible \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-The current pid carries the idea directly. Its \code{inl} side holds exactly the two
-secret handlers (\cref{sec:global-state}), and it is related by
-\code{eqsum private_equiv public_equiv}. Since \m{eqsum} never relates an \code{inl} to
-an \code{inr}, \emph{whether} a secret handler runs is visible, as is every public pid;
-\m{private_equiv} hides the bit inside \code{inl}, which is \emph{which} one runs.
-
-The state rows of \cref{fig:run-sliced} show the secret moving through the state with
-the phases of \cref{fig:phases} (\m{sliced_states_with_dI}). While the slice is
-closed, it is the disk pending bit. When the slice opens, the disk handler takes the
-run the filler was queued for, so during the first run it is which handler runs and
-the NOP pending bit. From the second run on, the two states agree. The public rows,
-the counter and the timer mask, never differ. The secret survives only in the private user process, which
-the disk handler notified.
-
-The core obligation is \m{fv_NI} for the whole transition. The transition is a sum,
-\m{set_pending} on interrupts and a pipeline of stages on outputs, and the event
-equivalence never relates an interrupt to an output. So the goal splits along the
-sum, and a composition lemma (\m{fv_NI_comp}) splits the pipeline into one goal per
-stage. Three stages are routine: \m{set_pending} sets one private bit, and
-\m{check_scheduler} and \code{service_policy} read only public fields of the state
-and the output, and write the same values into both states. For the service policy
-this is what the restriction of \cref{sec:sliced} buys: \m{immediate_service} reads
-the disk handler's output.
-
-\todo{this is the formal version of the bold arrows of Fig.~5. Say so: `a secret handler in one state and none in the other' is a bold arrow taken in one run only.}The fourth, \m{initiate_next}, chooses what runs next, and is where whether a secret
-handler runs is decided. The timer is public, so both states agree on it. Otherwise,
-in each state the secret handler ready to start is the disk handler, the NOP handler,
-or none. Disk in one state and NOP in the other is harmless: both start an \code{inl}
-pid, which \m{private_equiv} hides. A secret handler in one state and none in the other
-is fatal: one state starts a handler and the other continues a user process, and the
-attacker sees the difference. The slice counter is public, so related states are in
-the same phase of \cref{fig:phases}, and in the states the model reaches each phase
-fixes readiness: while a slice is open the NOP handler is ready, and while it is
-closed neither secret handler is. That rules the fatal case out. But a
-stage-by-stage proof must hold for all pairs of related states, not only those the
-model reaches, and so cannot use it.
-
-\subsection{Restoring the invariant}\label{sec:restore}
-
-\todo{`phase of Fig.~7': Fig.~7 now draws U/T/S with counter values, not phases. Align the words throughout V (`open slice' = in S).}The function \m{restore_invariant} makes the phase fix readiness in every state.
-Just before \m{initiate_next} chooses, it writes the masks of the current phase of
-\cref{fig:phases} into the state: in an open slice it sets the NOP pending bit and
-the timer mask, otherwise the disk and NOP masks, and in both cases it copies the
-disk mask to the NOP mask. It reads only public fields, so it does the same to two
-related states, and afterwards either both have a secret handler ready or neither
-has. This discharges \m{initiate_next}. In the states the model reaches, the policy
-has already done all of this (\cref{sec:sliced}), and we prove that
-\m{restore_invariant} never changes them.
-
-\todo{hard to parse. Keep the formal condition (`not all masks are set' is exactly \code{initiate\_next}'s guard) and add the gloss `that is, no handler is running', and `reachable' for the events clause.}\begin{theorem}[\m{restore_invariant_noop}]\label{thm:noop}
-Let $\mathit{runtime} \neq 1$. For every sequence of events $es$ from the initial
-state of \m{model_sliced}, and every output $o$, let $w$ be the state that
-\m{initiate_next} receives on $o$ after $es$. If not all masks are set in $w$, then
-$\mathsf{restore\_invariant}\;w = w$.
-\end{theorem}
-
-The events $es$ are arbitrary, so the theorem holds whatever the pool emits. The proof states the invariant
-between steps, shows that every event preserves it, and shows that at the choice
-point a slightly weaker invariant holds,\todo{which weaker invariant? One line, or drop the remark.} on which \m{restore_invariant} is the
-identity. One small lemma per stage of the pipeline does the bookkeeping.
-
-The hypothesis $\mathit{runtime} \neq 1$ marks where \m{restore_invariant} and the
-phases of \cref{fig:phases} disagree: \m{restore_invariant} treats a closing slice as
-closed. Normally no choice is made while a slice is closing, because its last run is
-still in progress. With one-step handlers, the last boundary of a slice falls on the
-step that ticks the counter to zero, so \m{restore_invariant} masks the handler that
-boundary has just enabled. Non-interference is unaffected (\cref{thm:main} has no
-such hypothesis), but at $\mathit{runtime} = 1$ every slice loses its last handler
-run.
+Read as rules for an implementation, the obligations of this section are
+sufficient for non-interference: an implementation that follows them can be proved
+non-interfering in the same way. We do not claim they are necessary; another choice
+of state equivalence would give other rules.
+\begin{itemize}
+\item The arrival of a secret interrupt may only record that it is pending: by
+  $\mathsf{PE}$, the input step may touch nothing but a private bit
+  (\cref{sec:state-equiv}).
+\item When S is entered, and for how long, must be fixed by public events: two
+  related states must agree on whether a secret handler is ready, which takes a
+  filler while the slice is open and the masks while it is closed
+  (\cref{sec:update,sec:restore}).
+\item The interrupt controller is split by secrecy: the secret handlers' pending
+  bits are private, and every mask is public, because \m{initiate_next} branches on
+  the masks (\cref{sec:state-equiv}).
+\end{itemize}
+The sliced policy meets all three; an implementation of it has to preserve them.

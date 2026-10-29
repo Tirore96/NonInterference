@@ -88,8 +88,8 @@ lattices). Each input and output type carries a \emph{characterised equivalence}
 \item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;
 \item $x \doteq_\ell \unobs$: an observer at $\ell$ does not see $x$ at all.
 \end{itemize}
-This definition is an alternative to Rafnsson et al.'s; the two give the same
-non-interference (\m{NI_lEquiv}). $\doteq_\ell$ is an equivalence, and the unobservable values form one
+This definition is an alternative to Rafnsson et al.'s, which adjoin $\unobs$ as a
+value; the two give the same non-interference (\m{NI_lEquiv}). $\doteq_\ell$ is an equivalence, and the unobservable values form one
 of its classes:
 \[
 x \doteq_\ell \unobs \;\Rightarrow\; \forall y.\;
@@ -131,10 +131,12 @@ the observer at $\ell$ may not see.
 
 \subsection{Equivalences}
 
-\todo{this is the story, so show it: a small table of process constructor vs.\ the equivalences it induces, with input and output columns (\code{swi} and \code{sta} change both sides), and `none' for \code{out}, \code{map}, \code{loop}. Theorem names can move into the table.}\todo{overclaim (my text): \code{out}, \code{map} and \code{loop} have no matching equivalence constructor; only the constructors that combine or gate processes do (\code{par}, \code{swi}, \code{maybe}, \code{sta}).}A composite process gets its equivalences from those of its parts: each process
-constructor has a matching constructor on equivalences (\cref{thm:composition}), so
-the equivalences of the model in \cref{sec:model} are terms built from a few
-constructors over two equivalences at the leaves.
+A composite process gets its equivalences from those of its parts
+(\cref{thm:composition}). The constructors that combine or gate processes,
+\code{par}, \code{swi}, \code{maybe} and \code{sta}, each induce a constructor on
+equivalences; the others pass equivalences through. So the equivalences of the model
+in \cref{sec:model} are terms built from a few constructors over two equivalences
+at the leaves.
 
 The \emph{public} equivalence (\code{public_equiv}) hides nothing: at every level,
 $x \doteq_\ell y$ iff $x = y$, and nothing is unobservable. The \emph{private}
@@ -194,37 +196,42 @@ f \in \mathsf{PE}(\eqv{I},\eqv{V}) &\iff \forall \ell, i, v.\;
 \ell \in \Ob(p,\doteq) &\iff \text{every output of $p$ at $\ell$ is}
   \doteq_\ell \unobs
 \end{align*}
-\todo{Aw and Ob are given as formulas only. Every abstract definition gets an example: use a slot's gate bit (aware) and the disk slot (oblivious), forward-referencing V-A.}A function is non-interfering if it maps related values to related values
+A function is non-interfering if it maps related values to related values
 (\m{f_NI}, \m{fv_NI}), unobservable-preserving if it maps unobservable values to
 unobservable ones (\m{f_PU}), and equivalence-preserving if an unobservable input
 does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $v$
 (\m{aware}) if it can tell $v$ from every other value, and \emph{oblivious} to $p$
-(\m{oblivious}) if it sees none of $p$'s outputs.
+(\m{oblivious}) if it sees none of $p$'s outputs. For example, every level is aware
+of \code{true} under the public equivalence on booleans, but $\Lo$ is not under the
+private one, where \code{true} and \code{false} are related. And $\Lo$ is oblivious
+to a process all of whose outputs it relates to $\unobs$, such as a slot whose
+outputs, \code{None} included, are classified by $\mathsf{eqmaybe}(\{\Hi\},\doteq)$
+over the private equivalence (\cref{sec:gating}).
 
-\todo{keep Theorem~1 complete, it is what everything rests on; let the constructor table above carry the intuition, and consider dropping the theorem names from the items once they are in the table.}\begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
+\begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
 For all processes, functions and equivalences of matching types:
 \begin{enumerate}
-\item (\m{out_NI}) $\mathsf{out}\;o \in \NI(\eqv{I},\eqv{O})$.
-\item (\m{map_NI}) If $p \in \NI(\eqv{I'},\eqv{O})$,
+\item\label{it:out} (\m{out_NI}) $\mathsf{out}\;o \in \NI(\eqv{I},\eqv{O})$.
+\item\label{it:map} (\m{map_NI}) If $p \in \NI(\eqv{I'},\eqv{O})$,
   $f \in \NI(\eqv{I},\eqv{I'}) \cap \mathsf{PU}(\eqv{I},\eqv{I'})$ and
   $g \in \NI(\eqv{O},\eqv{O'})$, then
   $\mathsf{map}\;f\;g\;p \in \NI(\eqv{I},\eqv{O'})$.
-\item (\m{sta_NI}) If $p \in \NI(\mathsf{eqpair\_R}(\eqv{V},\eqv{I}),\eqv{O})$,
+\item\label{it:sta} (\m{sta_NI}) If $p \in \NI(\mathsf{eqpair\_R}(\eqv{V},\eqv{I}),\eqv{O})$,
   $f \in \NI(\eqv{I},\eqv{V},\eqv{V}) \cap \mathsf{PE}(\eqv{I},\eqv{V})$ and
   $g \in \NI(\eqv{O},\eqv{V},\eqv{V})$, then
   $\mathsf{sta}\;f\;g\;v\;p \in \NI(\eqv{I},\mathsf{eqpair}(\eqv{V},\eqv{O}))$.
-\item (\m{swi_NI}) If $p \in \NI(\eqv{I},\mathsf{eqpair\_LR}(\eqv{B},\eqv{O}))$ and
+\item\label{it:swi} (\m{swi_NI}) If $p \in \NI(\eqv{I},\mathsf{eqpair\_LR}(\eqv{B},\eqv{O}))$ and
   for every $\ell$,
   $\ell \in \Aw(\mathsf{true},\eqv{B}) \cup
     \Ob(\mathsf{swi}\;b\;p,\mathsf{eqmaybe}(\Aw(\mathsf{true},\eqv{B}),\eqv{O}))$, then
   $\mathsf{swi}\;b\;p \in
     \NI(\mathsf{eqpair\_LR}(\eqv{B},\eqv{I}),\mathsf{eqmaybe}(\Aw(\mathsf{true},\eqv{B}),\eqv{O}))$.
-\item (\m{par_NI}) If $p_1 \in \NI(\eqv{I},\eqv{O_1})$ and
+\item\label{it:par} (\m{par_NI}) If $p_1 \in \NI(\eqv{I},\eqv{O_1})$ and
   $p_2 \in \NI(\eqv{I},\eqv{O_2})$, then
   $\mathsf{par}\;p_1\;p_2 \in \NI(\eqv{I},\mathsf{eqpair}(\eqv{O_1},\eqv{O_2}))$.
-\item (\m{loop_NI}) If $p \in \NI(\eqv{I},\eqv{I})$, then
+\item\label{it:loop} (\m{loop_NI}) If $p \in \NI(\eqv{I},\eqv{I})$, then
   $\mathsf{loop}\;p \in \NI(\eqv{I},\eqv{I})$.
-\item (\m{maybe_NI}) If $p \in \NI(\eqv{I},\eqv{O})$, then
+\item\label{it:maybe} (\m{maybe_NI}) If $p \in \NI(\eqv{I},\eqv{O})$, then
   $\mathsf{maybe}\;p \in \NI(\mathsf{eqmaybe}(\emptyset,\eqv{I}),\eqv{O})$.
 \end{enumerate}
 \end{theorem}

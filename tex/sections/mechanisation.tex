@@ -1,40 +1,49 @@
 \section{Mechanisation}\label{sec:mechanisation}
 
-\note{name all versions (MathComp 2.5.0, Hierarchy Builder 1.10.1, deriving 0.2.2, paco 4.2.3), and mention the CI that rebuilds the proofs and checks for axioms: cheap reproducibility evidence.}The development is about 6{,}000 lines of Rocq 9.0.1, available at
-\url{\repobase}, using Mathematical
-Components~\cite{mathcomp} and, for the coinductive definitions of the original
-paper, paco~\cite{paco} (\cref{tab:files}).
+The development is about 6{,}000 lines of Rocq 9.0.1, available at
+\url{\repobase}, using Mathematical Components~2.5.0~\cite{mathcomp} with
+Hierarchy Builder~1.10.1, deriving~0.2.2 and, for the coinductive definitions of
+the original paper, paco~4.2.3~\cite{paco} (\cref{tab:files}). Continuous
+integration rebuilds it on every change and checks that the paper's results
+assume nothing beyond the two parameters that fix the security lattice. Identifiers
+in typewriter font in this paper link to their definitions.
 
 \begin{table}[t]
 \centering
-\caption{The development.}\note{the line counts are stale (now 1188, 1321, 1166, 1743, 835). Generate them in mechlinks.py like the line links, so they cannot drift.}
+\caption{The development.}
 \label{tab:files}
 \footnotesize
 \begin{tabularx}{\columnwidth}{@{}lrL@{}}
 \toprule
 file & lines & contents \\
 \midrule
-\mechfile{theories/definitions.v}{definitions.v} & 908 & the calculus, traces, $\NI$, the equivalences \\
-\mechfile{theories/theorems.v}{theorems.v} & 1337 & the composition theorems \\
-\mechfile{theories/models.v}{models.v} & 1079 & the generic model, both policies, \cref{thm:noop}, example traces \\
-\mechfile{theories/noninterference.v}{noninterference.v} & 1749 & the model's equivalences, \cref{thm:leak,thm:main} \\
-\mechfile{theories/adequacy.v}{adequacy.v} & 904 & the original definitions, the equivalences with ours, \cref{thm:leak,thm:main} in the original's terms \\
+\mechfile{theories/definitions.v}{definitions.v} & \mechlines{definitions.v} & the calculus, traces, $\NI$, the equivalences \\
+\mechfile{theories/theorems.v}{theorems.v} & \mechlines{theorems.v} & the composition theorems \\
+\mechfile{theories/models.v}{models.v} & \mechlines{models.v} & the generic model, both policies, \cref{thm:noop}, example traces \\
+\mechfile{theories/noninterference.v}{noninterference.v} & \mechlines{noninterference.v} & the model's equivalences, \cref{thm:leak,thm:main} \\
+\mechfile{theories/adequacy.v}{adequacy.v} & \mechlines{adequacy.v} & the original definitions, the equivalences with ours, \cref{thm:leak,thm:main} in the original's terms \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\todo{add a paragraph on how the figures are backed: the runs are proved traces and the state rows come from computed lemmas. It is a selling point of a mechanisation paper and is now only in captions.}\paragraph{Types} Input and output types range over an inductive universe \m{Ty} of
+\paragraph{Figures} The runs drawn in \cref{fig:leak,fig:run-ordinary,fig:run-sliced}
+are proved traces of the models, and the state rows of
+\cref{fig:run-ordinary,fig:run-sliced} are computed by the model's own transition and
+stated as lemmas (\m{immediate_states_with_dI}, \m{sliced_states_with_dI} and their
+siblings), from which the figures are generated.
+
+\paragraph{Types} Input and output types range over an inductive universe \m{Ty} of
 codes, interpreted into \code{Set}, rather than over \code{Set} directly. This makes
 reductions invertible, which the negative result needs: refuting non-interference
 means showing that a trace is \emph{not} admitted.
 
-\paragraph{Axioms} The development assumes nothing beyond the two parameters
-that fix the security lattice: no classical logic, and no uniqueness of identity
+\paragraph{Axioms} The development assumes nothing beyond the two lattice
+parameters: no classical logic, and no uniqueness of identity
 proofs. The latter is what dependent elimination on the type-indexed reduction
 relations would need; we invert reductions through determinism of reduction
 instead, one lemma per rule (\m{inv_mapO} and its siblings).
 
-\todo{part of the development was done with AI assistance. Check whether CSF requires disclosure, and decide on a sentence.}\paragraph{Proof devices} A hook that only the proof needs, such as
+\paragraph{Proof devices} A hook that only the proof needs, such as
 \m{restore_invariant}, can hide behaviour. An earlier version of our model relied on
 it to queue the NOP filler and to return control to the scheduler after a slice;
 proving \cref{thm:noop} forced both into the interrupt policy, where they now are.
@@ -58,9 +67,9 @@ the original (\m{ObliviousDis_iff}). As a consequence, \cref{thm:leak,thm:main}
 also hold with non-interference read as in the original, hypotheses included
 (\m{model_immediate_not_NI_paper}, \m{model_sliced_NI_paper}).
 
-\todo{keep both (II-B has the one-line pointer you asked for), but use the same word in both places: `alternative definition' there, `only notational' here.}One further difference is only notational. The original adjoins the distinguished
-value $\unobs$ to every type; we keep the values as they are and make
-unobservability a predicate, tied to the equivalence by the characterisation law.
+One further difference is an alternative definition of characterised equivalence.
+The original adjoins the distinguished value $\unobs$ to every type; we keep the
+values as they are and make unobservability a predicate, tied to the equivalence by the characterisation law.
 \m{NI_lEquiv} shows that the two give the same notion of non-interference, and
 this paper uses the original notation throughout.
 

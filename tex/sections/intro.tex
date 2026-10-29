@@ -1,16 +1,15 @@
 \section{Introduction}\label{sec:intro}
 
-\todo{overall: the paper now has one organising idea (U/T/S, \emph{whether} public, \emph{which} private). IV and V use it; the intro, III, the conclusion and the abstract still speak the older language. Every section should tell the same story.}\note{the first sentences of the abstract and the intro are near-identical. Let the intro open differently.}The security of a computer system rests on its operating system. The operating
-system ties software to hardware: it owns the devices, decides which process runs and when, and stands
-between processes that must not learn about each other. Whatever an operating
-system lets one process observe about another is a potential leak, and that
-includes \emph{when} things happen, not only what values are computed.
+An operating system owns the devices, decides which process runs and when, and
+stands between processes that must not learn about each other. Whatever it lets one
+process observe about another is a potential leak, and that includes \emph{when}
+things happen, not only what values are computed.
 
-A key part of this mediation is interrupt handling. Interrupts are how an operating
-system learns that something happened: a disk transfer completed, a packet arrived,
-a timer expired. Some of these events are secret. Whether a particular process just
-received data from the disk may reveal what it is doing, so an operating system
-that keeps such an event secret has to hide that it happened at all.
+Interrupts are how an operating system learns that something happened: a disk
+transfer completed, a packet arrived, a timer expired. Some of these events are
+secret. Whether a particular process just received data from the disk may reveal
+what it is doing, so an operating system that keeps such an event secret has to
+hide that it happened at all.
 
 Ordinary interrupt handling does not hide it. As soon as the interrupt can be
 serviced, its handler runs, displacing whatever process was scheduled; the handler
@@ -27,21 +26,30 @@ attacker sees, and a private process, the legitimate consumer of the disk event,
 reacts to it. The attacker may learn nothing about the disk interrupt. \Cref{sec:model,sec:designs,sec:proof}
 model this system, exhibit the leak, and remove it.
 
-\todo{Fig.~1 and the mechanised counterexample agree (interrupt before step 1, handler at 2--3), but Fig.~6 uses another run (interrupt after step 1, handler at 3--4). Make Fig.~1 the two ordinary rows of Fig.~6, drawn in the strip style, so page 1 teaches the visual language; keep the counterexample as the minimal trace and say so in IV-A.}\begin{figure}[t]
+\begin{figure}[t]
 \centering
-\begin{tabular}{lcccc}
-\toprule
-step & 1 & 2 & 3 & 4 \\
-\midrule
-no disk interrupt   & \code{Get} & \code{Get} & \code{Get} & \code{Get} \\
-disk interrupt before step 1 & \code{Get} & ---   & ---   & \code{Get} \\
-\bottomrule
-\end{tabular}
-\caption{What the attacker sees of the public process under ordinary interrupt
-  handling, with handlers of two steps. The two runs differ only in whether a disk
-  interrupt arrives, which the attacker may not learn. The interrupt sets a pending
-  bit; step 1 was already scheduled, so the disk handler runs at steps 2 and 3, and
-  the public process does not run then. The mechanised counterexample (\cref{thm:leak}) uses steps 1 and 2.}
+% the first eight steps of the two ordinary runs of fig:run-ordinary
+\begin{tikzpicture}[font=\scriptsize,
+  cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
+  cG/.style={cell, fill=black!28}, cT/.style={cell, fill=black!28},
+  cS/.style={cell, fill=black!28}, cP/.style={cell, fill=black!10},
+  cD/.style={cell, fill=white},
+  irq/.style={line width=1.6pt},
+  dsk/.style={double, double distance=1.1pt, line width=0.55pt}]
+\foreach \i in {1,...,8} \node at (0.45*\i, 0.4) {\i};
+\node[anchor=east] at (0.15,0) {no disk interrupt};
+\foreach \c [count=\i] in {G,G,G,G,T,T,S,P} \node[c\c] at (0.45*\i,0) {\c};
+\node[anchor=east] at (0.15,-0.45) {disk interrupt};
+\foreach \c [count=\i] in {G,G,D,D,T,T,S,P} \node[c\c] at (0.45*\i,-0.45) {\c};
+\foreach \y in {0,-0.45} \draw[irq] (1.575,\y+0.23) -- (1.575,\y-0.23);
+\draw[dsk] (0.675,-0.22) -- (0.675,-0.68);
+\end{tikzpicture}
+\caption{Who runs at each step under ordinary interrupt handling, with and without a
+  disk interrupt. G: public process, P: private process, S: scheduler, T, D: timer
+  and disk handler. Shading is what the attacker sees: the step and its value (dark),
+  only that it happened (light), or nothing (white). A solid bar marks the timer
+  interrupt, a hollow bar the disk interrupt. The disk handler takes steps 3 and 4
+  from the public process, a gap the attacker sees.}
 \label{fig:leak}
 \end{figure}
 
@@ -51,41 +59,35 @@ non-interference~\cite{goguen1982}: varying what the attacker may not see must n
 change what it does see. For timing leaks, ``what it sees'' must include when each
 output appears~\cite{agat2000}.
 
-\todo{dense paragraph with no picture yet: pool, global state, interrupt controller. Point to the model figure, or cut to two sentences and leave the rest to III.}In this paper we use the process calculus of Rafnsson, Jia and
-Bauer~\cite{rafnsson2017} to state and prove such properties of interrupt handling.
-Its notion of non-interference is timing-sensitive, and its non-interference
-theorems compose: if the parts of a process are non-interfering at suitable
-equivalences, so is the whole. We model an operating system with interrupt handling
-as one closed process in this calculus. Inside it, the two user processes (one
-public, one private), the scheduler and one handler per kind of interrupt run as
-concurrent processes in a pool, and a global state, holding the interrupt
-controller, decides at each step which of them runs. Interrupts arrive as inputs to
-the whole system, and at each step the pool emits the output of the process that
-ran. We prove in
-Rocq\footnote{The mechanisation is available at \url{\repobase}.}\note{the repository link also opens VII; one place is enough.} that ordinary
-\note{every \textbackslash m name is a blue link. In running prose they distract (you flagged this in II). Consider linking only theorem names and first occurrences, or printing links black and relying on the artifact table.}interrupt handling is interfering (\m{model_immediate_not_NI}): the leak of
-\cref{fig:leak} is a counterexample.
+We use the process calculus of Rafnsson, Jia and Bauer~\cite{rafnsson2017}, whose
+non-interference is timing-sensitive and whose theorems compose: if the parts of a
+process are non-interfering at suitable equivalences, so is the whole. We model an
+operating system with interrupt handling as one closed process in this calculus
+(\cref{fig:system}): the user processes, the scheduler and the handlers run in a pool,
+and a global state decides at each step which of them runs. We prove in Rocq that
+ordinary interrupt handling is interfering (\m{model_immediate_not_NI}): the leak
+of \cref{fig:leak} is a counterexample.
 
-\todo{this paragraph predates U/T/S. State the requirement in one sentence (when secret handlers run, and for how long, must be public), then the slice as one way to meet it. The `intuitive but hard' part should then say what is hard in those terms.}We then model the corresponding non-interfering variant, obtained by altering how
-interrupts are processed. The idea is to take away a secret interrupt's power to
-choose \emph{when} its handler runs. Interrupts are serviced only inside time slices,
-each opened when the handler of the public timer completes; every handler run takes the same number of steps, and
-any part of a slice that no real interrupt claims is filled with a dummy handler,
-the NOP handler. A secret handler run then replaces a NOP run instead of displacing a user
-process, and the public schedule is the same whether or not the interrupt occurred.
+What the attacker learns is \emph{when} a secret handler runs and \emph{for how
+long}. A non-interfering policy must therefore fix both by public events; only
+\emph{which} secret handler runs may depend on the secret. We model a policy that
+does so. Secret handlers run only inside time slices, each opened when the handler
+of the public timer completes and each holding a fixed number of handler runs; a
+run that no real interrupt claims is filled by a dummy handler, the NOP handler. A
+secret handler run then replaces a NOP run instead of displacing a user process.
 That this is safe is intuitive; proving it is not. The secret still changes the
 state: it sets a pending bit, decides which handler fills a run, and changes what
 the private user process does next. The proof must show that none of this ever
-reaches what the attacker sees (\cref{sec:proof}).
-\todo{overclaim: the attacker does not see \emph{which} secret handler ran, that is the point. Say `which process ran, except which of the two secret handlers'.}We prove this variant non-interfering (\m{model_sliced_NI}), even to an attacker who
-sees, at every step, which process in the pool ran, the scheduler and the handlers
-included. Both variants are instances of a single generic model and differ only
-in their \emph{interrupt policy}: the initial state and how handler completion is
-\todo{`how handler completion is serviced' is no longer accurate: the sliced policy reopens masks on the counter, not on completion (IV-B). Say `when handlers may run'.}serviced. The result is general in two ways. It holds for every scheduler
-and every pair of user processes that are themselves non-interfering. And it holds
-for every choice of the two numbers that fix the timing of the policy: the number
-of steps one handler run takes, and the number of handler runs that fit in one
-time slice.
+decides whether, or for how long, a secret handler runs (\cref{sec:proof}).
+
+We prove this policy non-interfering (\m{model_sliced_NI}), even to an attacker who
+sees at every step which process ran, except which of the two secret handlers.
+Both policies are instances of a single generic model and differ only in their
+\emph{interrupt policy}: the part that decides when handlers may run. The result is
+general in two ways. It holds for every scheduler and every pair of user processes
+that are themselves non-interfering. And it holds for every choice of the two
+numbers that fix the timing of the policy: the number of steps one handler run
+takes, and the number of handler runs that fit in one time slice.
 
 The model fixes \emph{what} the modified interrupt processing must do; how to
 implement it in an operating system is carried out in separate work
@@ -95,18 +97,17 @@ implement it in an operating system is carried out in separate work
 \begin{itemize}
 \item A mechanised, timing-sensitive non-interference proof for interrupt handling
   (\cref{sec:designs,sec:proof}), and a mechanised counterexample for ordinary
-  interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one generic
-\todo{II-D and V say two side conditions; here and in VI (`the one hard obligation') we mean the hard one. Use one phrasing everywhere: two side conditions, one of them hard (\code{fv\_NI}).}  theorem per constructor of the model, and leaves one substantial obligation
-  specific to interrupt handling (\cref{sec:state-equiv}).
-\todo{we claim these are `forced by the proof', but the body never collects them or traces each to the obligation that forces it. Either do that (end of V, or conclusion) or soften. And phrase them in U/T/S terms.}\item Requirements, forced by the proof, on any implementation of interrupt
-  handling that is to be non-interfering (\cref{sec:proof}). The arrival of a
-  secret interrupt may only record that it is pending; every decision it influences, such as starting its handler, must be
-  deferred to a point fixed by public time. Whether a secret handler ran must be
-  indistinguishable from whether a dummy handler ran, so the time reserved for
-  handlers must be fixed in advance and always used up. And the interrupt
-  controller must be split by secrecy: which interrupts are pending is secret,
-  while the masks that decide what runs next may depend only on public
-  information. The implementation in \todo{cite X} follows these requirements.
+  interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one
+  generic theorem per constructor of the model, which leaves two side conditions
+  specific to interrupt handling, one of them hard (\cref{sec:state-equiv}).
+\item Requirements, read off the proof's obligations, on any implementation of
+  interrupt handling that is to be non-interfering (\cref{sec:requirements}). The
+  arrival of a secret interrupt may only record that it is pending. When secret
+  handlers run, and for how long, must be fixed by public events, so the time
+  reserved for them must be fixed in advance and always used up. And the interrupt
+  controller must be split by secrecy: which interrupts are pending is secret, while
+  the masks that decide what runs next are public. The implementation in
+  \todo{cite X} follows these requirements.
 \item A mechanisation of the calculus and its composition theorems. Our
   definitions depart from the original in one essential place: non-interference
   is stated over finite traces, which makes every proof an induction. We prove the
