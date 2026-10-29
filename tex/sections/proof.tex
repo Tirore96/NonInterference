@@ -15,14 +15,96 @@ The proof applies \cref{thm:composition} to the term of \m{model_sliced}
 (\cref{fig:system}) from the outside in. The theorem gives the outermost
 equivalences, \m{in_equiv} and \m{out_equiv}; the proof chooses those inside:
 $\eqv{E}$ on the events the state receives, $\eqv{V}$ on the state, and $\eqv{B}$
-on each gate bit.
+on each gate bit (\cref{fig:equivs}).
+
+\begin{figure}[t]
+\centering
+% the equivalences the proof of model_sliced_NI chooses (noninterference.v:
+% eqsum_L in_equiv out_equiv, state_type_equiv, false_equiv / private_equiv);
+% x is eqpair, + is eqsum; shading as in fig:system and fig:state
+\begin{tikzpicture}[font=\scriptsize,
+  sq/.style={draw, minimum size=0.36cm, inner sep=0pt},
+  pub/.style={sq, fill=black!28}, priv/.style={sq, fill=white},
+  ran/.style={sq, fill=black!10},
+  split/.style={sq, path picture={\fill[black!28] (path picture bounding box.south west)
+    -- (path picture bounding box.south east) -- (path picture bounding box.north east)
+    -- cycle;}},
+  lab/.style={font=\tiny, anchor=north, inner sep=1.5pt}]
+\node[anchor=east] at (0.55,0.00) {$\eqv{E} =$};
+\node[split] (n) at (0.830,0.00) {};
+\node[lab] at (n.south) {interrupt};
+\node at (1.200,0.00) {$+$};
+\node[pub, font=\tiny\sffamily] at (1.570,0.00) {T};
+\node[priv, font=\tiny\sffamily] at (1.930,0.00) {D};
+\node[priv, font=\tiny\sffamily] at (2.290,0.00) {N};
+\node[pub, font=\tiny\sffamily] at (2.650,0.00) {S};
+\node[ran, font=\tiny\sffamily] at (3.010,0.00) {P};
+\node[pub, font=\tiny\sffamily] at (3.370,0.00) {G};
+\node[lab] at (2.470,-0.18) {output};
+\node[anchor=east] at (0.55,-0.78) {$\eqv{V} =$};
+\node at (0.710,-0.78) {$($};
+\node[priv] (n) at (1.020,-0.78) {};
+\node at (1.390,-0.78) {$+$};
+\node[pub] (n) at (1.760,-0.78) {};
+\node at (2.070,-0.78) {$)$};
+\node at (2.320,-0.78) {$\times$};
+\node[pub] (n) at (2.690,-0.78) {};
+\node[lab] at (n.south) {prev.\ pid};
+\node at (3.060,-0.78) {$\times$};
+\node[pub] (n) at (3.430,-0.78) {};
+\node[lab] at (n.south) {resched.};
+\node at (3.800,-0.78) {$\times$};
+\node[pub] (n) at (4.170,-0.78) {};
+\node[lab] at (n.south) {counter};
+\node at (4.540,-0.78) {$\times$};
+\node (n) at (4.900,-0.78) {$\eqv{C}$};
+\node[lab] at (4.900,-0.96) {controller};
+\node[lab] at (1.390,-0.96) {current pid};
+\node[anchor=east] at (0.55,-1.56) {$\eqv{C} =$};
+\node (n) at (0.820,-1.56) {$\eqv{P}$};
+\node[lab] at (0.820,-1.74) {N};
+\node at (1.180,-1.56) {$\times$};
+\node (n) at (1.540,-1.56) {$\eqv{P}$};
+\node[lab] at (1.540,-1.74) {D};
+\node at (1.900,-1.56) {$\times$};
+\node at (2.150,-1.56) {$($};
+\node[pub] (n) at (2.460,-1.56) {};
+\node at (2.830,-1.56) {$\times$};
+\node[pub] (n) at (3.200,-1.56) {};
+\node at (3.510,-1.56) {$)$};
+\node[lab] at (2.830,-1.74) {T};
+\node[anchor=east] at (0.55,-2.34) {$\eqv{P} =$};
+\node[priv] (n) at (0.830,-2.34) {};
+\node[lab] at (n.south) {pending};
+\node at (1.200,-2.34) {$\times$};
+\node[pub] (n) at (1.570,-2.34) {};
+\node[lab] at (n.south) {mask};
+\node[anchor=east] at (0.55,-3.12) {$\eqv{B} =$};
+\node[split] (n) at (0.830,-3.12) {};
+\node[lab] at (n.south) {T, S, P, G};
+\node at (1.355,-3.12) {\ or\ };
+\node[priv] (n) at (1.880,-3.12) {};
+\node[lab] at (n.south) {D, N};
+\node[pub] at (0.83,-3.95) {}; \node[anchor=west] at (1.05,-3.95) {public};
+\node[priv] at (2.33,-3.95) {}; \node[anchor=west] at (2.55,-3.95) {private};
+\node[split] at (3.93,-3.95) {}; \node[anchor=west] at (4.15,-3.95) {some values unobservable at $\Lo$};
+
+\end{tikzpicture}
+\caption{The equivalences the proof chooses: on the events the state receives
+  ($\eqv{E}$), on the state ($\eqv{V}$, with $\eqv{C}$ the interrupt controller and
+  $\eqv{P}$ one of its entries), and on each gate bit ($\eqv{B}$). $\times$ pairs,
+  $+$ sums; fields and slots in the order of \cref{fig:state,fig:system}, shading as
+  there. An interrupt is unobservable when it is the disk interrupt; the split gate
+  equivalence $\eqv{F}$ is equality with \texttt{false} unobservable.}
+\label{fig:equivs}
+\end{figure}
+
 \begin{itemize}
 \item \emph{Feedback} (\code{map}, \code{loop}; \comp{it:map}, \comp{it:loop}). The
   loop feeds each output back to the state as an event, so \comp{it:loop} needs one
-  equivalence on the events going in and coming out. For $\eqv{E}$ we take the sum
-  of \m{in_equiv} and \m{out_equiv}: it relates interrupts by \m{in_equiv} and
-  outputs by \m{out_equiv}, never an interrupt to an output, and an event is
-  unobservable exactly when it is a disk interrupt at $\Lo$. The maps around the
+  equivalence on the events going in and coming out. We take for $\eqv{E}$ the sum
+  of \m{in_equiv} and \m{out_equiv}: it relates interrupts by \m{in_equiv} and outputs by \m{out_equiv}, never an interrupt to an output,
+  and an event is unobservable exactly when it is a disk interrupt at $\Lo$. The maps around the
   loop only tag and untag events.
 \item \emph{The state} (\code{sta}; \comp{it:sta}). The state update must respect
   $\eqv{V}$. This decides \emph{whether} a secret handler runs, and it is the hard
@@ -45,18 +127,18 @@ $f \in \mathsf{PE}(\eqv{E},\eqv{V})$: an unobservable event leaves the state rel
 to itself; and non-interfering, $f \in \NI(\eqv{E},\eqv{V},\eqv{V})$: related events
 take related states to related states (\cref{sec:composition}). The first condition
 asks for private fields, the second for public ones. We make a field private only
-where a condition forces it, which gives the shading of \cref{fig:state}
-(\m{state_type_equiv}):
+where a condition forces it, which gives the shading of \cref{fig:state} and
+$\eqv{V}$ in \cref{fig:equivs} (\m{state_type_equiv}):
 \begin{itemize}
 \item \emph{Pending bits are private.} A disk interrupt is unobservable at $\Lo$ and
   sets the disk pending bit, so by $\mathsf{PE}$ that bit is private. The NOP
   pending bit is private by $\NI$: when a slice opens, the disk handler takes the
   run the NOP handler was queued for, so after that run the NOP handler is pending
   in one state and not in the other.
-\item \emph{The current pid is $\mathsf{eqsum}(\text{private}, \text{public})$.} Its
+\item \emph{The current pid is $\mathsf{priv} + \mathsf{pub}$.} Its
   \code{inl} side holds exactly the two secret handlers (\cref{sec:global-state}),
   and which of them runs may differ between the two states, so the value inside
-  \code{inl} is private. $\mathsf{eqsum}$ never relates an \code{inl} to an
+  \code{inl} is private. A sum never relates an \code{inl} to an
   \code{inr}, so \emph{whether} a secret handler runs stays public.
 \item \emph{Every other field is public:} the masks, the slice counter, the
   reschedule flag and the previous pid. Nothing forces them private, and
@@ -161,19 +243,21 @@ Awareness means a bit related to \code{true} is \code{true} and observable, so t
 observer can trust the gate; obliviousness means it sees none of the slot's outputs.
 At $\Lo$ the two secret pids are unobservable, and the slots fall into two groups.
 
-\emph{Every other slot shows whether.} Both secret pids map to \code{false}, so the
-gate equivalence \m{false_equiv}, in which only \code{false} is unobservable, is
-preserved, and the observer is aware at every level. The output wrapper is
+\emph{Every other slot shows whether.} Both secret pids map to \code{false}, so we
+take for $\eqv{B}$ the equivalence $\eqv{F}$ of \cref{fig:equivs} (\m{false_equiv}):
+equality at every level, with \code{false} unobservable at $\Lo$. The
+gate map preserves unobservability, and every level is aware of \code{true}, so
+$\Aw(\mathsf{true},\eqv{F}) = \{\Lo,\Hi\}$ and the output wrapper is
 $\mathsf{eqmaybe}(\{\Lo,\Hi\},\cdot)$: the attacker tells \code{Some} from
 \code{None}, so it sees whether the slot ran. While a secret handler runs, all these
 slots emit \code{None}; this is how the attacker sees that the system is in S. The
 private user's slot is among them; its secrecy is carried by its private payload.
 
 \emph{The disk and NOP slots hide which.} One secret pid maps to \code{true} and the
-other to \code{false}, so both bits must be unobservable: $\eqv{B}$ is the private
-equivalence, and awareness fails at $\Lo$. The proof uses obliviousness, and gets
-it by construction: both slots get a private payload and the wrapper
-$\mathsf{eqmaybe}(\{\Hi\},\cdot)$, under which every output, \code{None} included,
+other to \code{false}, so both bits must be unobservable: $\eqv{B}$ is $\mathsf{priv}$, and
+$\Aw(\mathsf{true},\mathsf{priv}) = \{\Hi\}$, so awareness fails at $\Lo$. The proof
+uses obliviousness, and gets it by construction: both slots get a private payload
+and the wrapper $\mathsf{eqmaybe}(\{\Hi\},\cdot)$, under which every output, \code{None} included,
 is unobservable at $\Lo$. This is needed, because when a slice opens the disk slot
 emits \code{Some o} in one run and \code{None} in the other, and the NOP slot the
 reverse. The attacker learns nothing from these two slots, and learns that the

@@ -90,7 +90,12 @@ Fixpoint times_n n (f : nat -> Ty) : Ty :=
 Definition times_on (n : nat) (f : nat -> Ty) := times_n n (Option \o f).
 
 
-Definition T_in := TInterrupt.
+(* An interrupt is a sum, like the current pid: the secret disk interrupt on
+   the inl side, the public timer interrupt on the inr side.  interrupt_of
+   names the interrupt-controller entry it raises. *)
+Definition T_in := Sum Unit Unit.
+Definition interrupt_of (i : [T_in]) : [TInterrupt] :=
+  if i is inl _ then DiskInterrupt else TimerInterrupt.
 (* [Opub] and [Opriv] are the alphabets of the public and the secret user
    process.  They are parameters throughout: the mechanism never inspects a
    user-slot value, only whether the slot produced one, so nothing below
@@ -436,7 +441,7 @@ Definition step_sum (Opub Opriv : Ty)
    decided later, by [initiate_next].  This is the whole of the input summand:
    f_EP forbids the transition from taking any decision on an input event. *)
 Definition set_pending (i : [T_in]) (v : [state_type]) : [state_type] :=
-  update_ir_pending v (Some i) true.
+  update_ir_pending v (Some (interrupt_of i)) true.
 
 Definition is_sched_out (Opub Opriv : Ty) (o : [T_out Opub Opriv]) :=
   match o with
@@ -951,8 +956,8 @@ Proof. by case: n => [|[|[|[|[|n]]]]]. Qed.
 Definition Tsum' := ([T_in] + [T_outC])%type.
 Definition Tsum := Sum T_in T_out_userviewC.
 
-Definition dI' : Tsum' := inl DiskInterrupt.
-Definition tI' : Tsum' := inl TimerInterrupt.
+Definition dI' : Tsum' := inl (inl tt).
+Definition tI' : Tsum' := inl (inr tt).
 Definition low_out x : [T_outC] := (Some x,(None,(None,(None,(None,None))))).
 Definition high_out x : [T_outC] := (None,(Some x,(None,(None,(None,None))))).
 Definition sched_o x : [T_outC] := (None,(None,(Some x,(None,(None,None))))).
@@ -980,8 +985,8 @@ Definition out_get : [Tsum] := inr (Some (inl (GetRequest))).
 Definition out_nop : [Tsum] := inr (Some (inr Idle)).
 Definition out_syscall : [Tsum] := inr (Some (inr Syscall)).
 Definition w_None : [Tsum] := inr None.
-Definition tI : [Tsum] := inl TimerInterrupt.
-Definition dI : [Tsum] := inl DiskInterrupt.
+Definition tI : [Tsum] := inl (inr tt).
+Definition dI : [Tsum] := inl (inl tt).
 
 Definition seqtype' := seq Tsum'.
 Definition seqtype := seq ([T_in] + [T_out_userviewC]).

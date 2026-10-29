@@ -24,11 +24,17 @@ Require Export NonInterference.theories.models.
      7. The state equivalence (state_type_equiv) and the fv_NI obligation
    =================================================================== *)
 
-(* --- Section 4: the input equivalence.  in_equiv is CUSTOM: ir_dis makes
-   ONLY the disk interrupt secret, and only at bot; the timer interrupt stays
-   public.  (Paper, Section V-A.) --- *)
+(* --- Section 4: the input equivalence.  An interrupt is a sum (models.v,
+   T_in), classified like the current pid: the disk interrupt (inl) is secret,
+   unobservable at bot only; the timer interrupt (inr) is public.  (Paper,
+   Section V.) --- *)
+Definition in_equiv : cEquiv [T_in] := eqsum_L (private_equiv Unit) (public_equiv Unit).
+
+(* The earlier, hand-written definition on the two-constructor interrupt type,
+   kept to show that the sum is the same equivalence: ir_dis makes ONLY the
+   disk interrupt secret, and only at bot. *)
 Definition ir_dis (l : level) (ir : [TInterrupt]) := ir = DiskInterrupt /\ l = \bot.
-Definition in_equiv : cEquiv [T_in].
+Definition in_equiv_interrupt : cEquiv [TInterrupt].
   refine (@CEquiv _
             ir_dis
             (fun l ir ir' => ir = ir' \/ ir_dis l ir /\ ir_dis l ir')
@@ -47,6 +53,36 @@ Definition in_equiv : cEquiv [T_in].
   move:H. rewrite /ir_dis. intros;subst. ssa.
   ssa. de H0. move: H. rewrite /ir_dis. ssa.
 Defined.
+
+Definition interrupt_to_sum (ir : [TInterrupt]) : [T_in] :=
+  if ir is DiskInterrupt then inl tt else inr tt.
+
+Lemma interrupt_to_sumK : cancel interrupt_to_sum interrupt_of.
+Proof. by case. Qed.
+
+Lemma interrupt_ofK : cancel interrupt_of interrupt_to_sum.
+Proof. by case=> [[]|[]]. Qed.
+
+Lemma in_equiv_interrupt_rel l i i' :
+  rel in_equiv_interrupt l i i' <-> rel in_equiv l (interrupt_to_sum i) (interrupt_to_sum i').
+Proof.
+rewrite /in_equiv_interrupt /in_equiv /ir_dis /=.
+case: i; case: i' => /=.
+- split=> _; last by left.
+  by case: (eqVneq l \bot) => [->|/eqP ?]; [right | left].
+- by split=> //; case=> [|[_ []]].
+- by split=> //; case=> [|[[]]].
+- by split=> _ //; left.
+Qed.
+
+Lemma in_equiv_interrupt_dis l i :
+  dis in_equiv_interrupt l i <-> dis in_equiv l (interrupt_to_sum i).
+Proof.
+rewrite /in_equiv_interrupt /in_equiv /ir_dis /=; case: i => /=.
+- by split; [case | move=> ->].
+- by split; [case | ].
+Qed.
+
 
 (* out_equiv: the 6-slot pool output.  Handler slots are NOP, disk,
    timer: the first two are secret (eqmaybe_nonbot private_equiv), the timer slot
@@ -104,8 +140,8 @@ Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
   move: helper_trace.
-  move/a. move/(_ (DiskInterrupt) 0). simpl.
-  have: ir_dis \bot DiskInterrupt. ssa.
+  move/a. move/(_ (inl tt) 0). simpl.
+  have: dis in_equiv \bot (inl tt). ssa.
   move=>aa. move/(_ aa).
   move=>Htr. clear a aa.
   inv Htr; clear Htr; match_dd_out_first.
@@ -268,7 +304,7 @@ Transparent state_step pool_input immediate_init no_output f_proj.
 
 Lemma in_equiv_eq i i0 l : rel in_equiv l i i0 -> i = i0.
 Proof.
-  ssa. de H. move: H H0. rewrite /ir_dis. ssa. subst. done.
+  destruct i as [[]|[]], i0 as [[]|[]]; simpl; intuition.
 Qed.
 
 Lemma sta_comp : forall (I V O : Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (ORel : cEquiv [O]) (f f' : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V])
@@ -1400,7 +1436,7 @@ Proof.
 
   rewrite /set_pending.
   mrw. intros.
-  simpl in H. rewrite /ir_dis in H. destruct H. subst.
+  case: i H => [[]|[]] H; simpl in H; last done. subst.
 
   move: v => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. de cur.

@@ -135,8 +135,8 @@ A composite process gets its equivalences from those of its parts
 (\cref{thm:composition}). The constructors that combine or gate processes,
 \code{par}, \code{swi}, \code{maybe} and \code{sta}, each induce a constructor on
 equivalences; the others pass equivalences through. So the equivalences of the model
-in \cref{sec:model} are terms built from a few constructors over two equivalences
-at the leaves.
+in \cref{sec:model} are terms built from a few constructors over a few base
+equivalences, chiefly the two below.
 
 The \emph{public} equivalence (\code{public_equiv}) hides nothing: at every level,
 $x \doteq_\ell y$ iff $x = y$, and nothing is unobservable. The \emph{private}
@@ -159,7 +159,8 @@ $\mathsf{eqpair\_R}$ and $\mathsf{eqpair\_LR}$ make a pair unobservable when its
 component, or both components, are; they appear where a constructor pairs an input
 with a state or a gate bit. $\mathsf{eqsum}(\eqv{1},\eqv{2})$ relates a sum tag by tag
 and never relates an \code{inl} to an \code{inr}, so the tag stays public even when
-the payload is not.
+the payload is not; no sum is unobservable. Its variant $\mathsf{eqsum\_L}$ makes an
+\code{inl} unobservable when its payload is.
 
 A process that does not run emits \code{None}, and $\mathsf{eqmaybe}(L, \doteq)$ says
 who can tell. $L$ is the set of levels that see \code{None}, closed upwards: a level
@@ -180,7 +181,10 @@ $\mathsf{eqmaybe}(\emptyset,\doteq)$ from everyone.
 
 The calculus comes with one non-interference theorem per constructor. Each derives
 the equivalences of the composite from those of its parts, which is what gives the
-equivalences of a large model their shape. Their side conditions are stated with the
+equivalences of a large model their shape. We write $\eqv{I}$ and $\eqv{O}$ for
+equivalences on a process's inputs and outputs, $\eqv{V}$ for one on the state of
+a \code{sta}, and $\eqv{B}$ for one on the gate bit of a \code{swi}; the theorems
+leave them open, and \cref{sec:proof} instantiates each for the model. Their side conditions are stated with the
 following predicates on functions and levels:
 \begin{align*}
 f \in \NI(\eqv{I},\eqv{O}) &\iff \forall \ell, i, i'.\;
