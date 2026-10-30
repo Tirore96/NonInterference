@@ -38,8 +38,12 @@ user process runs next.
 The six processes run side by side in a \emph{pool} (\cref{fig:system}), and only
 one of them takes a step at a time. Each sits behind a switch, controlled by the
 current process identifier (pid): a pid names one slot, whose process takes one
-step, while every other slot emits \code{None} without moving. The pid is held in a
-global state, which a state cell and a feedback loop thread around the pool.
+step, while every other slot emits \code{None} without moving. Each slot is a
+\code{swi} whose input bit says whether the pid names it, which opens its switch;
+the slot tags each output with \code{true}, which closes the switch again, so a
+selected process takes exactly one step (\cref{fig:semantics}). The pid is held in a
+global state, which a state cell and a feedback loop thread around the pool
+(\m{reactive_system}, \cref{sec:parameters}).
 
 \begin{figure}[t]
 \centering
@@ -301,40 +305,89 @@ pool's output is fed back to the state, where three stages run in turn.
 next stage, \code{service_policy}, is left open here: it is half of the interrupt
 policy (\cref{sec:parameters}), and \cref{sec:designs} fills it twice. Last,
 \m{initiate_next} computes the next pid. (In the code the state receives both kinds
-of event as one sum, interrupts as \code{inl} and fed-back outputs as \code{inr},
-and \code{step_sum} dispatches on the tag.)
+of event as one sum, interrupts as \code{inl} and fed-back outputs as \code{inr}
+(\cref{sec:parameters}), and \code{step_sum} dispatches on the tag.)
 
 
 A handler can be started when its controller entry is pending and not masked; if
 several can, the timer goes first, then the disk, then NOP. Handlers cannot be
-interrupted: starting one sets all masks. \m{initiate_next} chooses by a priority
-rule:
+interrupted: starting one sets all masks, and the service policy unsets them when the
+handler finishes. \m{initiate_next} chooses by four rules, tried in order:
 \begin{enumerate}
-\item if a handler is running, it continues;
+\item if a handler is running (all masks are set), it continues;
 \item otherwise, if a handler can be started, it starts;
 \item otherwise, if a handler has just finished, control returns to the user
   process it interrupted, or to the scheduler if a reschedule was requested;
 \item otherwise, the current process continues.
 \end{enumerate}
-Just before the choice, \m{initiate_next} applies \m{restore_invariant}, a hook
-used only by the proof (\cref{sec:parameters}). Appendix~\ref{app:model} gives the
-code of \m{initiate_next}.
+In the code, with the rules marked:
+
+\noindent\begin{minipage}{\linewidth}
+\begin{lstlisting}
+initiate_next restore_invariant v =
+  if masks_set v then v            (* rule 1 *)
+  else let v := restore_invariant v in
+    if first_ready v is Some ir
+    then initiate_handler ir v     (* rule 2 *)
+    else if is_handler_pid v       (* rule 3 *)
+    then if get_re_sched v
+         then initiate_scheduler v
+         else initiate_prev_pid v
+    else v                         (* rule 4 *)
+\end{lstlisting}
+\end{minipage}
+\m{first_ready} picks the first handler that can be started, in the order above.
+\m{initiate_handler} saves the current pid as the previous pid, unless it is a
+secret handler, points the current pid at the handler, sets all masks and clears
+the handler's pending bit. \m{initiate_scheduler} hands control to the scheduler and
+clears \m{re_sched}; \m{initiate_prev_pid} returns to the previous pid. Between
+rules 1 and 2, \m{initiate_next} applies \m{restore_invariant}, a hook used only by
+the proof (\cref{sec:parameters}).
 
 Rule 2 is the source of the leak of \cref{fig:leak}, as \cref{sec:leak} shows step by step.
 
 \subsection{The generic model}\label{sec:parameters}
 
-Together, these parts form the generic model
+Together, these parts form the generic model, the pool inside the global state:
 \begin{lstlisting}
 model runtime init_policy service_policy
-      restore_invariant p_pub p_priv p_sched
+      restore_invariant p_pub p_priv p_sched =
+  reactive_system init_policy
+    (state_step service_policy restore_invariant)
+    no_output
+    (pool runtime p_pub p_priv p_sched)
+    pool_input
   : Proc T_in T_out
 \end{lstlisting}
-(\m{model}, written out in Appendix~\ref{app:model}). Its first argument,
-\code{runtime}, is the handler length, and its last three are the scheduler and the
-two user processes. Everything else in \cref{sec:pool,sec:interface,%
-sec:global-state,sec:state} is fixed, except two parts, marked by the suffix
-\code{_policy}:
+Its first argument, \code{runtime}, is the handler length, and its last three are
+the user processes and the scheduler; the user processes' output types, also
+arguments, are left implicit. The wrapper \m{reactive_system} is the loop of
+\cref{fig:system}, built from the constructors of \cref{fig:semantics}:
+
+\noindent\begin{minipage}{\linewidth}
+\begin{lstlisting}
+reactive_system state state_update
+                no_output p pool_input =
+  map inl (inr_or_def no_output)
+    (loop (map id snd
+      (sta state_update (fun _ v => v) state
+        (map pool_input inr (maybe p)))))
+\end{lstlisting}
+\end{minipage}
+Inside the loop an event is a sum: the outer \code{map} tags an arriving interrupt
+\code{inl}, and the inner \code{map} tags each output of the pool \code{inr}, which
+\code{loop} feeds back. The \code{sta} cell is the global state, updated by
+\code{state_update} on every event and left alone on an output. \m{pool_input}
+gives the pool the new current pid, and the private user the disk handler's output,
+after a fed-back output, and \code{None} after an interrupt, on which \code{maybe}
+leaves the pool unchanged. On the way out, \code{map id snd} drops the state that
+\code{sta} emits with each output, and \m{inr_or_def} strips the \code{inr} tag. Its
+default \m{no_output}, the all-\code{None} tuple, only makes it total: every output
+is tagged \code{inr}.
+
+Apart from the processes and the handler length, everything in
+\cref{sec:pool,sec:interface,sec:global-state,sec:state} is fixed, except two
+parts, marked by the suffix \code{_policy}:
 \begin{itemize}
 \item \code{init_policy}, the initial state, a value of the type of
   \cref{sec:global-state}. Its masks decide which interrupts can be serviced before
