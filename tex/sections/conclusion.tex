@@ -1,25 +1,11 @@
-\section{Limitations and Conclusion}\label{sec:conclusion}
+\section{Discussion and Conclusion}\label{sec:conclusion}
 
-\paragraph{Limitations} The model makes several simplifications.
-\begin{itemize}
-\item \emph{One secret interrupt.} The NOP handler exists only as the disk handler's
-  indistinguishable partner. Several secret interrupts would need a richer
-  indistinguishability argument.
-\item \emph{Equal handler lengths.} Every handler runs for the same number of steps,
-  which is what lets every mask bit be public: the boundaries the sliced policy
-  computes from the public counter fall exactly where handlers complete
-  (\cref{sec:sliced}). Variable-length handlers would force
-  the masks private, and the proof of \m{fv_NI} would have to reason across diverging
-  branches. A real system would reach a fixed length by padding.
-\item \emph{Cooperative processes, no nesting.} A selected process takes exactly one
-  step; preemption within a step is not modelled. Handlers cannot be interrupted,
-  since all masks are set while one runs.
-\item \emph{Abstract time.} One output step is one unit of time, for every process
-  and handler alike. Caches, memory contention and other microarchitectural channels
-  are outside the model.
-\item \emph{One-step handlers.} At $\mathit{runtime} = 1$ a slice loses its last
-  handler run (\cref{sec:restore}).
-\end{itemize}
+\paragraph{The model and a real system} \todo{write: how the model compares with a
+real system (time, interrupt hardware, devices and cores) and the cost of the sliced
+policy.}
+
+\paragraph{Future work} \todo{write: richer models, implementing the policy, and how
+to ensure that a real implementation is safe.}
 
 \paragraph{Conclusion} A secret interrupt leaks through the schedule alone: the
 attacker learns when its handler runs and for how long. To close the channel, both
@@ -31,8 +17,3 @@ processes, by composing generic non-interference theorems over the structure of 
 model. The proof did more than check the policy: it fixed the classification of the
 interrupt controller bit by bit, and it separated hiding what a handler computed from
 hiding that it ran.
-
-\paragraph{Future work} Several secret interrupts would need a richer argument than
-one dummy partner; variable-length handlers would need padding and private masks.
-Connecting the model to a real interrupt controller, and to the implementation of
-the policy, would carry the result to a running system.
