@@ -13,11 +13,23 @@ open, which together form the \emph{interrupt policy} (\cref{sec:parameters});
 \cref{sec:designs} fills them twice.
 
 \subsection{The processes and the pool}\label{sec:pool}
+% one float per column top from here on, so paired figures sit side by side
+\setcounter{topnumber}{1}
 
 The system runs six processes: three interrupt handlers, a scheduler, and two user
-processes. The timer, disk and NOP handlers are copies of one process: a handler
-run takes exactly \code{runtime} steps, and on its last step the handler emits
-\code{Notify} to announce completion. The public user process issues requests
+processes. The timer, disk and NOP handlers are copies of one process, a counter:
+\begin{lstlisting}
+ir_handler runtime :=
+  map id (fun o => if o.1 == 0 then Notify
+                   else Nothing)
+    (sta (fun _ v => v)                  (* input *)
+         (fun _ v => v.+1 %% runtime)    (* output *)
+         0 (out tt))
+\end{lstlisting}
+The state cell holds a step count, which no input changes and each step advances
+modulo \code{runtime}. So a handler run takes exactly \code{runtime} steps, and on
+its last step the handler emits \code{Notify} to announce completion, and
+\code{Nothing} on the others. The public user process issues requests
 (\code{Get}) whose results the attacker sees. The private user process takes the
 disk handler's output as input, and emits \code{Sys} when it has been notified of a
 disk event and \code{Idle} otherwise. When the scheduler runs, it proposes which
@@ -59,62 +71,22 @@ global state, which a state cell and a feedback loop thread around the pool.
   node[pos=0.25, below] {fed back (\texttt{loop})} (sta.south);
 % key: the shades as nested sets
 \begin{scope}[shift={(-1.2,-2.25)}]
-\draw[rounded corners=3pt, fill=white] (0,0) rectangle (7.5,-0.62);
-\draw[rounded corners=3pt, fill=black!10] (2.65,-0.08) rectangle (7.4,-0.54);
-\draw[rounded corners=3pt, fill=black!28] (4.95,-0.15) rectangle (7.3,-0.47);
-\node[anchor=west] at (0.05,-0.31) {attacker sees nothing};
-\node[anchor=west] at (2.7,-0.31) {sees that it ran};
-\node[anchor=west] at (5.0,-0.31) {\dots\ and its value};
+\draw[rounded corners=3pt, fill=white] (0,0) rectangle (7.6,-0.62);
+\draw[rounded corners=3pt, fill=black!10] (2.25,-0.08) rectangle (7.5,-0.54);
+\draw[rounded corners=3pt, fill=black!28] (5.1,-0.15) rectangle (7.4,-0.47);
+\node[anchor=west] at (0.05,-0.31) {tells nothing apart};
+\node[anchor=west] at (2.3,-0.31) {tells \texttt{Some} from \texttt{None}};
+\node[anchor=west] at (5.15,-0.31) {\dots\ and every value};
 \end{scope}
 \end{tikzpicture}
 \caption{The model. An interrupt only updates the global state. The state's pid
   selects one slot, which takes a step and emits \texttt{Some o}; every other slot
   emits \texttt{None}. Because the slots are composed with \texttt{par}, their
   outputs form a six-tuple, which is emitted and fed back to update the state. Each
-  position of the tuple is shaded by what the attacker learns of that slot (key
-  below).}
+  position of the tuple is shaded by which of its values the attacker can tell
+  apart (key below).}
 \label{fig:system}
 \end{figure}
-
-\subsection{Inputs and outputs}\label{sec:interface}
-
-The system receives interrupts. Its input type \code{T_in} has two values, the timer
-interrupt and the disk interrupt. An interrupt goes to the state
-(\cref{sec:global-state}), where it marks itself pending in the interrupt
-controller.
-
-The disk interrupt is the secret. Under the input equivalence \m{in_equiv} the
-attacker does not observe the disk interrupt at all ($\mathsf{Disk} \doteq_\Lo
-\unobs$), and relates the timer interrupt only to itself; at $\Hi$ both are public.
-
-By the rule for \code{par} (\cref{fig:semantics}), the pool emits the
-outputs of all its slots together. So the system emits a six-tuple of options, the output
-type \code{T_out}, with exactly one \code{Some} on each step. The output therefore
-records not only what was computed but also \emph{who ran}: the schedule is part of
-what the system emits. The steps it records are of three kinds, which the rest of the
-paper keeps apart: \emph{U}, a user process or the scheduler; \emph{T}, the timer
-handler; and \emph{S}, a secret handler, disk or NOP.
-
-The output equivalence \m{out_equiv} relates six-tuples position by position, by
-$\mathsf{eqpair}$, and each position by one of three equivalences, the three shades
-of \cref{fig:system}:
-\begin{itemize}
-\item $\mathsf{eqmaybe}(\{\Lo,\Hi\}, \text{public})$, dark: the attacker sees that
-  the slot ran and its value (public user, scheduler, timer handler);
-\item $\mathsf{eqmaybe}(\{\Lo,\Hi\}, \text{private})$, light: it sees that the slot
-  ran, not its value (private user);
-\item $\mathsf{eqmaybe}(\{\Hi\}, \text{private})$, white: it sees nothing (disk and
-  NOP handlers).
-\end{itemize}
-So the attacker sees the U and T steps, and of an S step only that it happened: no
-other slot ran. \Cref{sec:gating} shows that the proof forces this shape. Each
-output, like each input, then updates the state.
-\subsection{The state}\label{sec:global-state}
-
-The global state (\m{state_type}, \cref{fig:state}) is the box of \cref{fig:system}
-opened up: a nest of pairs holding two pids, two flags and the interrupt controller.
-
-\suppressfloats[t]
 \begin{figure}[t]
 \centering
 % the global state of fig:system, field by field (models.v, state_type);
@@ -153,14 +125,57 @@ opened up: a nest of pairs holding two pids, two flags and the interrupt control
 \foreach \x in {2.35,3.05,3.75} \node[bit, fill=black!28] at (\x,-2.15) {};
 \node[anchor=west, align=left] at (4.25,-1.95) {interrupt controller:\\a \texttt{Bool} pair per handler};
 \end{tikzpicture}
-\caption{The global state of \cref{fig:system}, opened up. Dark fields are public to
-  the attacker, white ones private (\cref{sec:state-equiv}). The current pid is
+\caption{The global state of \cref{fig:system}, opened up, shaded as there: the
+  attacker tells every value of a dark field apart, and none of a white one
+  (\cref{sec:state-equiv}). The current pid is
   a sum: \texttt{inl} carries a secret handler (an S step), its \texttt{Bool} saying
   which one, and \texttt{inr} the number of any other process (U or T). The sum's tag is public, so whether
   a secret handler runs is public; which one runs is private. So are the pending bits of the NOP (N) and disk (D) handlers. Every
   other field, \texttt{None} included, is public.}
 \label{fig:state}
 \end{figure}
+
+\subsection{Inputs and outputs}\label{sec:interface}
+
+The system receives interrupts. Its input type \code{T_in} is a sum, like the
+current pid of \cref{sec:global-state}: \code{inl} is the disk interrupt and
+\code{inr} the timer interrupt. An interrupt goes to the state
+(\cref{sec:global-state}), where it marks itself pending in the interrupt
+controller.
+
+The disk interrupt is the secret. The input equivalence \m{in_equiv} is
+$\text{private} + \text{public}$, a sum under which an \code{inl} is unobservable
+when its payload is: the attacker does not observe the disk interrupt at all, and
+relates the timer interrupt only to itself; at $\Hi$ both are public.
+
+By the rule for \code{par} (\cref{fig:semantics}), the pool emits the
+outputs of all its slots together. So the system emits a six-tuple of options, the output
+type \code{T_out}, with exactly one \code{Some} on each step. The output therefore
+records not only what was computed but also \emph{who ran}: the schedule is part of
+what the system emits. The steps it records are of three kinds, which the rest of the
+paper keeps apart: \emph{U}, a user process or the scheduler; \emph{T}, the timer
+handler; and \emph{S}, a secret handler, disk or NOP.
+
+The output equivalence \m{out_equiv} relates six-tuples position by position, by
+$\mathsf{eqpair}$, and each position by one of three equivalences, the three shades
+of \cref{fig:system}:
+\begin{itemize}
+\item $\mathsf{eqmaybe}(\{\Lo,\Hi\}, \text{public})$, dark: the attacker tells every
+  output apart, so it sees whether the slot ran and its value (public user,
+  scheduler, timer handler);
+\item $\mathsf{eqmaybe}(\{\Lo,\Hi\}, \text{private})$, light: it tells \code{Some}
+  from \code{None}, so it sees whether the slot ran, not its value (private user);
+\item $\mathsf{eqmaybe}(\{\Hi\}, \text{private})$, white: it tells nothing apart, so
+  it sees nothing (disk and NOP handlers).
+\end{itemize}
+So the attacker sees the U and T steps, and of an S step only that it happened: no
+other slot ran. \Cref{sec:gating} shows that the proof forces this shape. Each
+output, like each input, then updates the state.
+\subsection{The state}\label{sec:global-state}
+
+The global state (\m{state_type}, \cref{fig:state}) is the box of \cref{fig:system}
+opened up: a nest of pairs holding two pids, two flags and the interrupt controller.
+
 \begin{itemize}
 \item The \emph{current pid} names the slot that runs next. The two secret
   handlers, the S steps, sit on the \code{inl} side, \code{inl true} for the disk handler and
@@ -184,6 +199,33 @@ opened up: a nest of pairs holding two pids, two flags and the interrupt control
 The initial state is not fixed here: it is part of the interrupt policy
 (\cref{sec:parameters}).
 
+\begin{figure}[t]
+\centering
+% the ordinary policy over three kinds of step; steps from models.v lemmas
+% immediate_states_no_dI / _with_dI
+\begin{tikzpicture}[font=\scriptsize, >=stealth,
+  ph/.style={draw, rounded corners, align=center, minimum width=1.6cm,
+    minimum height=1.1cm, inner sep=3.5pt},
+  note/.style={align=center, font=\scriptsize},
+  secret/.style={->, line width=1.2pt}]
+\node[ph] (u) at (0,0)   {\textbf{U}: users\\all unmasked\\steps 1--2, 7--12};
+\node[ph] (t) at (3.3,0) {\textbf{T}: timer\\all masked\\steps 5--6};
+\node[ph] (s) at (6.6,0) {\textbf{S}: disk\\all masked\\steps 3--4};
+\draw[->] ([yshift=6pt]u.east) -- node[above, note]{timer\\pending} ([yshift=6pt]t.west);
+\draw[->] ([yshift=-6pt]t.west) -- node[below, note]{completes,\\none pending} ([yshift=-6pt]u.east);
+\draw[secret] ([yshift=6pt]t.east) -- node[above, note]{disk\\pending} ([yshift=6pt]s.west);
+\draw[->] ([yshift=-6pt]s.west) -- node[below, note]{completes,\\timer pending} ([yshift=-6pt]t.east);
+\draw[secret] (u.north) to[bend left=22] node[above, note]{disk pending} (s.north);
+\draw[->] (s.south) to[bend left=22] node[below, note]{completes, none pending} (u.south);
+\end{tikzpicture}
+\caption{The ordinary policy over three kinds of step: U, the users and the scheduler;
+  T, the timer handler; S, a secret handler. Each state gives the masks and the steps
+  of the run with the disk interrupt in \cref{fig:run-ordinary}; without it, S is
+  never entered. Bold arrows are triggered by the disk interrupt: it decides when S
+  is entered. Every completion arrow is taken by \texttt{immediate\_service}, which
+  reads the completing handler's output, the disk's included.}
+\label{fig:policy-ordinary}
+\end{figure}
 \subsection{Who runs next}\label{sec:state}
 
 The state changes on both kinds of step of \cref{sec:background}, through
@@ -224,34 +266,6 @@ policy (\cref{sec:parameters}), and \cref{sec:designs} fills it twice. Last,
 of event as one sum, interrupts as \code{inl} and fed-back outputs as \code{inr},
 and \code{step_sum} dispatches on the tag.)
 
-\suppressfloats[t]
-\begin{figure}[t]
-\centering
-% the ordinary policy over three kinds of step; steps from models.v lemmas
-% immediate_states_no_dI / _with_dI
-\begin{tikzpicture}[font=\scriptsize, >=stealth,
-  ph/.style={draw, rounded corners, align=center, minimum width=1.6cm,
-    minimum height=1.1cm, inner sep=3.5pt},
-  note/.style={align=center, font=\scriptsize},
-  secret/.style={->, line width=1.2pt}]
-\node[ph] (u) at (0,0)   {\textbf{U}: users\\all unmasked\\steps 1--2, 7--12};
-\node[ph] (t) at (3.3,0) {\textbf{T}: timer\\all masked\\steps 5--6};
-\node[ph] (s) at (6.6,0) {\textbf{S}: disk\\all masked\\steps 3--4};
-\draw[->] ([yshift=6pt]u.east) -- node[above, note]{timer\\pending} ([yshift=6pt]t.west);
-\draw[->] ([yshift=-6pt]t.west) -- node[below, note]{completes,\\none pending} ([yshift=-6pt]u.east);
-\draw[secret] ([yshift=6pt]t.east) -- node[above, note]{disk\\pending} ([yshift=6pt]s.west);
-\draw[->] ([yshift=-6pt]s.west) -- node[below, note]{completes,\\timer pending} ([yshift=-6pt]t.east);
-\draw[secret] (u.north) to[bend left=22] node[above, note]{disk pending} (s.north);
-\draw[->] (s.south) to[bend left=22] node[below, note]{completes, none pending} (u.south);
-\end{tikzpicture}
-\caption{The ordinary policy over three kinds of step: U, the users and the scheduler;
-  T, the timer handler; S, a secret handler. Each state gives the masks and the steps
-  of the run with the disk interrupt in \cref{fig:run-ordinary}; without it, S is
-  never entered. Bold arrows are triggered by the disk interrupt: it decides when S
-  is entered. Every completion arrow is taken by \texttt{immediate\_service}, which
-  reads the completing handler's output, the disk's included.}
-\label{fig:policy-ordinary}
-\end{figure}
 
 A handler can be started when its controller entry is pending and not masked; if
 several can, the timer goes first, then the disk, then NOP. Handlers cannot be

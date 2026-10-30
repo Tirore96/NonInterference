@@ -17,11 +17,6 @@ model runtime init_policy service_policy
 first step, and \m{pool_input} passes each slot the current pid and the disk
 handler's output.
 
-\paragraph{Handlers} \code{ir_handler runtime} counts its output steps modulo
-\code{runtime}. Its output type \code{THandlerOutput} has two values: it emits
-\code{Notify} on the step that completes a run and \code{Nothing} (a handler value,
-not the option \code{None}) otherwise.
-
 \paragraph{The pool} Each slot is a \code{swi} whose gate bit is computed from the
 pid. Each slot's output is tagged with the constant \code{true}, which closes its
 switch after one output step, so a selected process takes exactly one step.

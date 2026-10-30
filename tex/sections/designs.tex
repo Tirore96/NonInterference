@@ -55,26 +55,6 @@ S, and \cref{fig:run-ordinary,fig:run-sliced} run them on the same inputs.
 \caption{The ordinary policy on the concrete system of this section, without and with a disk interrupt: who runs at each step (G: public user, P: private user, S: scheduler, T, D: timer and disk handler), and the state in which the step takes place ($\bullet$: set). Shading as in \cref{fig:system}: public cells shaded. A solid bar marks the timer interrupt, a hollow bar the disk interrupt; framed cells differ between the two runs. The disk handler takes steps 3 and 4 from the public user and holds the masks set meanwhile, so the runs differ in public cells. Both runs are proved traces, and the states are computed by the model's own transition (\protect\mechfile{theories/models.v}{models.v}, Section 11).}
 \label{fig:run-ordinary}
 \end{figure}
-
-\subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
-
-\m{model_immediate} services an interrupt as soon as no handler is running
-(\cref{fig:policy-ordinary}). A pending timer interrupt takes the system from U to T,
-and a pending disk interrupt takes it to S, from U or from T, at whatever step it
-arrives. Each completion unmasks everything and moves on to the next pending handler,
-or back to U. The two bold arrows into S are the leak: the secret decides when S is
-entered.
-
-The initial state
-\begin{lstlisting}
-immediate_init :=
-  ((initial_pid, None),
-   (false, (None,        (* slice counter *)
-    ((false,false),      (* NOP *)
-     ((false,false),     (* disk *)
-      (false,false)))))) (* timer *)
-\end{lstlisting}
-\suppressfloats[t]
 \begin{figure}[t]
 \centering
 \providecommand{\stagefont}{\ttfamily\tiny}
@@ -103,6 +83,25 @@ immediate_init :=
   takes it. Steps are those of both runs in \cref{fig:run-sliced}.}
 \label{fig:phases}
 \end{figure}
+
+\subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
+
+\m{model_immediate} services an interrupt as soon as no handler is running
+(\cref{fig:policy-ordinary}). A pending timer interrupt takes the system from U to T,
+and a pending disk interrupt takes it to S, from U or from T, at whatever step it
+arrives. Each completion unmasks everything and moves on to the next pending handler,
+or back to U. The two bold arrows into S are the leak: the secret decides when S is
+entered.
+
+The initial state
+\begin{lstlisting}
+immediate_init :=
+  ((inr 3, None),       (* public user *)
+   (false, (None,        (* slice counter *)
+    ((false,false),      (* NOP *)
+     ((false,false),     (* disk *)
+      (false,false)))))) (* timer *)
+\end{lstlisting}
 
 starts in the public user with the slice counter disabled (fields as in
 \cref{sec:global-state}). The interrupt controller holds one (pending, mask) pair
@@ -230,7 +229,7 @@ The initial state masks the disk and NOP handlers, so no disk interrupt can take
 system from U to S, and leaves the timer unmasked:
 \begin{lstlisting}
 sliced_init :=
-  ((initial_pid, None),
+  ((inr 3, None),       (* public user *)
    (false, (Some 0,      (* slice counter *)
     ((false,true),       (* NOP *)
      ((false,true),      (* disk *)

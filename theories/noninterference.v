@@ -269,6 +269,34 @@ Lemma false_equiv_aware : forall l, aware false_equiv true l.
 Proof.
 intros. rewrite /aware. intros. ssa. subst. simpl. intro. ssa.
 Qed.
+(* false_equiv is private + public, like in_equiv: read a gate bit as a sum,
+   false on the inl side (unobservable at bot) and true on the inr side
+   (public).  It agrees with eqsum_L along bool_to_sum, on relatedness and on
+   unobservability, at every level.  (Paper, Fig. 9.) *)
+Definition bool_to_sum (b : bool) : [Sum Unit Unit] := if b then inr tt else inl tt.
+
+Lemma false_equiv_sum_rel l b b' :
+  rel false_equiv l b b' <->
+  rel (eqsum_L (private_equiv Unit) (public_equiv Unit)) l (bool_to_sum b) (bool_to_sum b').
+Proof.
+rewrite /false_equiv /bool_to_sum /=.
+case: b; case: b' => /=.
+- by split=> _.
+- by split.
+- by split.
+- split=> _ //.
+  by case: (eqVneq l \bot) => [->|/eqP ?]; [right | left].
+Qed.
+
+Lemma false_equiv_sum_dis l b :
+  dis false_equiv l b <->
+  dis (eqsum_L (private_equiv Unit) (public_equiv Unit)) l (bool_to_sum b).
+Proof.
+rewrite /false_equiv /bool_to_sum /=; case: b => /=.
+- by split; case.
+- by split; [case | move=> ->].
+Qed.
+
 
 (* === Section 7a: the state equivalence.  Classification across two bot-related
    states: masks PUBLIC everywhere; the secret handlers' (disk, NOP)
