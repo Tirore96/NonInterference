@@ -1,5 +1,5 @@
 \section{An Operating System as One Process}\label{sec:model}
-
+\todo{do a pass here, consider the handler just added}
 \Cref{sec:background} gave us a calculus of processes, equivalences that say what
 an observer at each level sees, and one composition theorem per constructor. We now
 use the calculus to write an operating system with interrupt handling as a single
@@ -60,11 +60,17 @@ global state, which a state cell and a feedback loop thread around the pool.
 \node[draw, dashed, rounded corners=2pt, fit=(t)(u), inner sep=3pt] (pool) {};
 \node[draw, rounded corners=2pt, fit=(ot)(ou), inner sep=2pt] (tuple) {};
 \node[anchor=south] at (pool.north) {pool: six slots in \texttt{par}};
-\node[anchor=south] at (tuple.north |- pool.north) {six-tuple};
+% the output is a product, the input a sum: the operator is in the title
+\node[anchor=south] at (tuple.north |- pool.north) {output: $\times$};
 % global state, vertically centred on the pool
 \node[draw, rounded corners=2pt, minimum width=1.3cm, minimum height=1.1cm,
   align=center] (sta) at (0.35, 0 |- pool.center) {global\\state\\[1pt]{\tiny (Fig.~\ref{fig:state})}};
-\draw[->] (-1.25, 0 |- sta.center) -- node[above] {interrupt} (sta.west);
+% the input is a sum, laid out like the output: disk (inl) white, timer (inr) dark
+\node[hid, minimum width=0.85cm, font=\scriptsize] (id) at ($(-1.4, 0 |- sta.center)+(0,0.21)$) {disk};
+\node[val, minimum width=0.85cm, font=\scriptsize] (it) at ($(-1.4, 0 |- sta.center)+(0,-0.21)$) {timer};
+\node[draw, rounded corners=2pt, fit=(id)(it), inner sep=2pt] (input) {};
+\node[anchor=south] at (input.north) {input: $+$};
+\draw[->] (input.east) -- (sta.west);
 \draw[->] (sta.east) -- node[above] {pid} (pool.west |- sta.east);
 \draw[->] (tuple.east) -- ++(0.5,0) node[right] {out};
 \draw[->] ($(tuple.east)+(0.25,0)$) |- ($(pool.south)+(0,-0.35)$) -|
@@ -82,9 +88,10 @@ global state, which a state cell and a feedback loop thread around the pool.
 \caption{The model. An interrupt only updates the global state. The state's pid
   selects one slot, which takes a step and emits \texttt{Some o}; every other slot
   emits \texttt{None}. Because the slots are composed with \texttt{par}, their
-  outputs form a six-tuple, which is emitted and fed back to update the state. Each
-  position of the tuple is shaded by which of its values the attacker can tell
-  apart (key below).}
+  outputs form a product, a six-tuple, which is emitted and fed back to update the
+  state. The input is a sum of the two interrupts. Each position of the output, and
+  each alternative of the input, is shaded by which of its values the attacker can
+  tell apart (key below).}
 \label{fig:system}
 \end{figure}
 \begin{figure}[t]
@@ -92,46 +99,37 @@ global state, which a state cell and a feedback loop thread around the pool.
 % the global state of fig:system, field by field (models.v, state_type);
 % shading: public (dark) or private (white) to the attacker under the state
 % equivalence of sec:state-equiv
+% laid out like the columns of fig:system: a framed column with its operator in the
+% title, a nested sum or product side by side within a row
 \begin{tikzpicture}[font=\scriptsize,
-  f/.style={draw, minimum height=0.5cm, inner sep=1pt, align=center},
-  pub/.style={f, fill=black!28}, priv/.style={f, fill=white},
-  lab/.style={font=\scriptsize, anchor=north, align=center},
-  bit/.style={draw, minimum width=0.62cm, minimum height=0.36cm, inner sep=0pt}]
-\draw[rounded corners=2pt] (-0.15,0.45) rectangle (7.95,-2.5);
-\node[anchor=north west] at (-0.1,0.43) {global state};
-% the current pid has type Sum Bool Nat: the tag is public (the shaded sum);
-% inl carries a secret handler (S), whose Bool, which one, is private; inr
-% carries the pid of any other process (U or T), public
-\node[pub, minimum width=2.2cm, minimum height=0.78cm] (sum) at (1.02,-0.4) {};
-\node[anchor=north west, inner sep=1.5pt, font=\tiny\ttfamily] at (sum.north west) {Sum};
-\node[priv, minimum width=0.78cm, minimum height=0.34cm] (b) at (0.6,-0.4) {\texttt{Bool}};
-\node[pub, minimum width=0.78cm, minimum height=0.34cm] (n) at (1.45,-0.4) {\texttt{Nat}};
-\node[font=\tiny, anchor=north, inner sep=1pt] at (b.south) {\texttt{inl}: S};
-\node[font=\tiny, anchor=north, inner sep=1pt] at (n.south) {\texttt{inr}: U, T};
-\node[lab] at (1.02,-0.84) {current pid};
-% pids, flags, counter
-\node[pub, minimum width=1.25cm] (prev) at (3.0,-0.4) {\texttt{Option Nat}};
-\node[lab] at (3.0,-0.84) {previous pid};
-\node[pub, minimum width=0.9cm] (rs) at (4.55,-0.4) {\texttt{Bool}};
-\node[lab] at (4.55,-0.84) {reschedule};
-\node[pub, minimum width=1.45cm] (sc) at (6.45,-0.4) {\texttt{Option Nat}};
-\node[lab] at (6.45,-0.84) {slice counter};
-% the interrupt controller: one (pending, mask) pair per handler, each a Bool
-\foreach \h/\x in {N/2.35, D/3.05, T/3.75} \node at (\x,-1.4) {\h};
-\node[anchor=east] at (1.97,-1.75) {pending};
-\node[anchor=east] at (1.97,-2.15) {mask};
-\foreach \x/\st in {2.35/white, 3.05/white, 3.75/black!28}
-  \node[bit, fill=\st] at (\x,-1.75) {};
-\foreach \x in {2.35,3.05,3.75} \node[bit, fill=black!28] at (\x,-2.15) {};
-\node[anchor=west, align=left] at (4.25,-1.95) {interrupt controller:\\a \texttt{Bool} pair per handler};
+  c/.style={draw, minimum height=0.42cm, inner sep=0pt, font=\ttfamily\scriptsize},
+  pub/.style={c, fill=black!28}, priv/.style={c, fill=white}]
+% fields, one row each, cells spanning x = 0 .. 3.0
+\node[anchor=east] at (-0.1,0) {current pid: $+$};
+\node[priv, minimum width=1.5cm] at (0.75,0) {S: Bool};
+\node[pub, minimum width=1.5cm] at (2.25,0) {U, T: Nat};
+\foreach \y/\l/\t in {-0.42/previous pid/Option Nat, -0.84/reschedule/Bool,
+                      -1.26/slice counter/Option Nat}
+  {\node[anchor=east] at (-0.1,\y) {\l};
+   \node[pub, minimum width=3.0cm] at (1.5,\y) {\t};}
+% the interrupt controller: one entry per handler, each pending x mask
+\node[anchor=east] at (-0.1,-1.74) {interrupt controller: $\times$};
+\node at (0.75,-1.74) {pending: \texttt{Bool}};
+\node at (2.25,-1.74) {mask: \texttt{Bool}};
+\foreach \y/\l/\p in {-2.1/NOP/priv, -2.52/disk/priv, -2.94/timer/pub}
+  {\node[anchor=east] at (-0.1,\y) {\l};
+   \node[\p, minimum width=1.5cm] at (0.75,\y) {};
+   \node[pub, minimum width=1.5cm] at (2.25,\y) {};}
+\draw[rounded corners=2pt] (-0.07,-3.22) rectangle (3.07,0.28);
+\node[anchor=south] at (1.5,0.28) {global state: $\times$};
 \end{tikzpicture}
-\caption{The global state of \cref{fig:system}, opened up, shaded as there: the
-  attacker tells every value of a dark field apart, and none of a white one
-  (\cref{sec:state-equiv}). The current pid is
-  a sum: \texttt{inl} carries a secret handler (an S step), its \texttt{Bool} saying
-  which one, and \texttt{inr} the number of any other process (U or T). The sum's tag is public, so whether
-  a secret handler runs is public; which one runs is private. So are the pending bits of the NOP (N) and disk (D) handlers. Every
-  other field, \texttt{None} included, is public.}
+\caption{The global state of \cref{fig:system}, field by field, laid out and shaded
+  as there (\cref{sec:state-equiv}). The current pid is a sum: its \texttt{inl}
+  side holds a secret handler (an S step), a \texttt{Bool} saying which one, and
+  its \texttt{inr} side the number of any other process (U or T). The tag is
+  public, so whether a secret handler runs is public; which one runs is private.
+  So are the pending bits of the NOP and disk handlers. Every other field,
+  \texttt{None} included, is public.}
 \label{fig:state}
 \end{figure}
 
@@ -226,6 +224,46 @@ The initial state is not fixed here: it is part of the interrupt policy
   reads the completing handler's output, the disk's included.}
 \label{fig:policy-ordinary}
 \end{figure}
+% Fig. 6 belongs to Section IV-A; its source sits here so it pairs with Fig. 5
+\begin{figure}[t]
+\centering
+% runs: models.v Section 11 traces; state rows: lemmas immediate_states_no_dI/_with_dI
+\begin{tikzpicture}[font=\scriptsize,
+  cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
+  pub/.style={cell, fill=black!28}, priv/.style={cell, fill=white},
+  cG/.style={pub}, cT/.style={pub}, cS/.style={pub}, cP/.style={cell, fill=black!10},
+  cD/.style={priv}, cN/.style={priv},
+  head/.style={anchor=west, font=\scriptsize\itshape},
+  diff/.style={draw, line width=1.3pt, minimum width=0.45cm, minimum height=0.4cm},
+  irq/.style={line width=1.6pt},
+  dsk/.style={double, double distance=1.1pt, line width=0.55pt}]
+\foreach \i in {1,...,12} \node at (0.45*\i, 0.4) {\i};
+% without the disk interrupt
+\node[head] at (-1.75,0.00) {without the disk interrupt};
+\node[anchor=east] at (0.15,-0.42) {runs};
+\foreach \c [count=\i] in {G,G,G,G,T,T,S,P,P,P,P,P} \node[c\c] at (0.45*\i,-0.42) {\c};
+\draw[irq] (1.575,-0.19) -- (1.575,-0.65);
+\node[anchor=east] at (0.15,-0.82) {masks};
+\foreach \c [count=\i] in {{},{},{},{},{$\bullet$},{$\bullet$},{},{},{},{},{},{}} \node[pub] at (0.45*\i,-0.82) {\c};
+\node[anchor=east] at (0.15,-1.22) {disk pending};
+\foreach \c [count=\i] in {{},{},{},{},{},{},{},{},{},{},{},{}} \node[priv] at (0.45*\i,-1.22) {\c};
+% with the disk interrupt
+\node[head] at (-1.75,-1.87) {with the disk interrupt};
+\node[anchor=east] at (0.15,-2.29) {runs};
+\foreach \c [count=\i] in {G,G,D,D,T,T,S,P,P,P,P,P} \node[c\c] at (0.45*\i,-2.29) {\c};
+\foreach \i in {3,4} \node[diff] at (0.45*\i,-2.29) {};
+\draw[irq] (1.575,-2.06) -- (1.575,-2.52);
+\draw[dsk] (0.675,-2.06) -- (0.675,-2.52);
+\node[anchor=east] at (0.15,-2.69) {masks};
+\foreach \c [count=\i] in {{},{},{$\bullet$},{$\bullet$},{$\bullet$},{$\bullet$},{},{},{},{},{},{}} \node[pub] at (0.45*\i,-2.69) {\c};
+\foreach \i in {3,4} \node[diff] at (0.45*\i,-2.69) {};
+\node[anchor=east] at (0.15,-3.09) {disk pending};
+\foreach \c [count=\i] in {{},{$\bullet$},{},{},{},{},{},{},{},{},{},{}} \node[priv] at (0.45*\i,-3.09) {\c};
+\foreach \i in {2} \node[diff] at (0.45*\i,-3.09) {};
+\end{tikzpicture}
+\caption{The ordinary policy on the concrete system of \cref{sec:designs}, without and with a disk interrupt: who runs at each step (G: public user, P: private user, S: scheduler, T, D: timer and disk handler), and the state in which the step takes place ($\bullet$: set). Shading as in \cref{fig:system}: public cells shaded. A solid bar marks the timer interrupt, a hollow bar the disk interrupt; framed cells differ between the two runs. The disk handler takes steps 3 and 4 from the public user and holds the masks set meanwhile, so the runs differ in public cells. Both runs are proved traces, and the states are computed by the model's own transition (\protect\mechfile{theories/models.v}{models.v}, Section 11).}
+\label{fig:run-ordinary}
+\end{figure}
 \subsection{Who runs next}\label{sec:state}
 
 The state changes on both kinds of step of \cref{sec:background}, through
@@ -310,3 +348,15 @@ of it. It writes into the state an invariant that the policy already maintains,
 for the benefit of the proof (\cref{sec:restore}); it never changes a state the
 model reaches (\cref{thm:noop}), and it is the identity where the proof needs no
 help. \Cref{sec:designs} fills the two parts of the interrupt policy twice.
+
+The model is parametric in more than the policy. The scheduler, the two user
+processes and their output types are arguments, as is the handler length; the sliced
+policy adds the number of handler runs per slice. \Cref{thm:main} holds for all of
+them, provided each slot process is non-interfering at its own classification: the
+mechanism cannot make a leaking process secure, only add no leak of its own. The
+handler length and slice size need no condition, because a slice is defined as
+$\mathit{runs}\cdot\mathit{runtime}$ steps and so ends on a handler boundary. This
+generality rests on one property of the state update: it reads only \emph{whether} a
+user slot emitted, never what, so no user behaviour reaches the schedule. What is
+fixed is the mechanism under study: the three handlers, and the six slots in the
+order the state update reads them.

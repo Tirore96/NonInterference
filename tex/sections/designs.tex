@@ -18,45 +18,6 @@ S, and \cref{fig:run-ordinary,fig:run-sliced} run them on the same inputs.
 
 \begin{figure}[t]
 \centering
-% runs: models.v Section 11 traces; state rows: lemmas immediate_states_no_dI/_with_dI
-\begin{tikzpicture}[font=\scriptsize,
-  cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
-  pub/.style={cell, fill=black!28}, priv/.style={cell, fill=white},
-  cG/.style={pub}, cT/.style={pub}, cS/.style={pub}, cP/.style={cell, fill=black!10},
-  cD/.style={priv}, cN/.style={priv},
-  head/.style={anchor=west, font=\scriptsize\itshape},
-  diff/.style={draw, line width=1.3pt, minimum width=0.45cm, minimum height=0.4cm},
-  irq/.style={line width=1.6pt},
-  dsk/.style={double, double distance=1.1pt, line width=0.55pt}]
-\foreach \i in {1,...,12} \node at (0.45*\i, 0.4) {\i};
-% without the disk interrupt
-\node[head] at (-1.75,0.00) {without the disk interrupt};
-\node[anchor=east] at (0.15,-0.42) {runs};
-\foreach \c [count=\i] in {G,G,G,G,T,T,S,P,P,P,P,P} \node[c\c] at (0.45*\i,-0.42) {\c};
-\draw[irq] (1.575,-0.19) -- (1.575,-0.65);
-\node[anchor=east] at (0.15,-0.82) {masks};
-\foreach \c [count=\i] in {{},{},{},{},{$\bullet$},{$\bullet$},{},{},{},{},{},{}} \node[pub] at (0.45*\i,-0.82) {\c};
-\node[anchor=east] at (0.15,-1.22) {disk pending};
-\foreach \c [count=\i] in {{},{},{},{},{},{},{},{},{},{},{},{}} \node[priv] at (0.45*\i,-1.22) {\c};
-% with the disk interrupt
-\node[head] at (-1.75,-1.87) {with the disk interrupt};
-\node[anchor=east] at (0.15,-2.29) {runs};
-\foreach \c [count=\i] in {G,G,D,D,T,T,S,P,P,P,P,P} \node[c\c] at (0.45*\i,-2.29) {\c};
-\foreach \i in {3,4} \node[diff] at (0.45*\i,-2.29) {};
-\draw[irq] (1.575,-2.06) -- (1.575,-2.52);
-\draw[dsk] (0.675,-2.06) -- (0.675,-2.52);
-\node[anchor=east] at (0.15,-2.69) {masks};
-\foreach \c [count=\i] in {{},{},{$\bullet$},{$\bullet$},{$\bullet$},{$\bullet$},{},{},{},{},{},{}} \node[pub] at (0.45*\i,-2.69) {\c};
-\foreach \i in {3,4} \node[diff] at (0.45*\i,-2.69) {};
-\node[anchor=east] at (0.15,-3.09) {disk pending};
-\foreach \c [count=\i] in {{},{$\bullet$},{},{},{},{},{},{},{},{},{},{}} \node[priv] at (0.45*\i,-3.09) {\c};
-\foreach \i in {2} \node[diff] at (0.45*\i,-3.09) {};
-\end{tikzpicture}
-\caption{The ordinary policy on the concrete system of this section, without and with a disk interrupt: who runs at each step (G: public user, P: private user, S: scheduler, T, D: timer and disk handler), and the state in which the step takes place ($\bullet$: set). Shading as in \cref{fig:system}: public cells shaded. A solid bar marks the timer interrupt, a hollow bar the disk interrupt; framed cells differ between the two runs. The disk handler takes steps 3 and 4 from the public user and holds the masks set meanwhile, so the runs differ in public cells. Both runs are proved traces, and the states are computed by the model's own transition (\protect\mechfile{theories/models.v}{models.v}, Section 11).}
-\label{fig:run-ordinary}
-\end{figure}
-\begin{figure}[t]
-\centering
 \providecommand{\stagefont}{\ttfamily\tiny}
 % the sliced policy over the states of fig:policy-ordinary; steps and counter
 % values from models.v lemmas sliced_states_no_dI / _with_dI
@@ -83,55 +44,6 @@ S, and \cref{fig:run-ordinary,fig:run-sliced} run them on the same inputs.
   takes it. Steps are those of both runs in \cref{fig:run-sliced}.}
 \label{fig:phases}
 \end{figure}
-
-\subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
-
-\m{model_immediate} services an interrupt as soon as no handler is running
-(\cref{fig:policy-ordinary}). A pending timer interrupt takes the system from U to T,
-and a pending disk interrupt takes it to S, from U or from T, at whatever step it
-arrives. Each completion unmasks everything and moves on to the next pending handler,
-or back to U. The two bold arrows into S are the leak: the secret decides when S is
-entered.
-
-The initial state
-\begin{lstlisting}
-immediate_init :=
-  ((inr 3, None),       (* public user *)
-   (false, (None,        (* slice counter *)
-    ((false,false),      (* NOP *)
-     ((false,false),     (* disk *)
-      (false,false)))))) (* timer *)
-\end{lstlisting}
-
-starts in the public user with the slice counter disabled (fields as in
-\cref{sec:global-state}). The interrupt controller holds one (pending, mask) pair
-per handler, and all six bits start clear. The service policy is a single stage,
-which reacts to any handler finishing:
-\begin{lstlisting}
-immediate_service o v :=
-  if is_ir_out_done o is Some ir then
-    let v := unset_masks v in
-    if ir is timer_irq then update_re_sched v true
-    else v
-  else v
-\end{lstlisting}
-\m{is_ir_out_done} names the handler, if any, that emits \code{Notify} in the output
-\code{o}. The service policy then unmasks everything, and after the timer handler
-also requests a reschedule. It thus reads the output of whichever handler completes,
-the disk handler's included. \m{restore_invariant} is the identity.
-
-The run with the disk interrupt in \cref{fig:run-ordinary} shows the policy at work.
-The pid of each step is computed at the output of the step before (\cref{sec:state}).
-The disk interrupt arrives after step 1 and only sets the disk pending bit, so step 2
-still belongs to the public user. At the output of step 2, \m{initiate_next} finds
-the disk handler pending and unmasked and starts it, setting all masks: U to S. The
-timer interrupt that arrives meanwhile stays pending until the disk handler emits
-\code{Notify} at step 4: S to T. The timer handler's completion at step 6 requests a
-reschedule: T to U, where the scheduler hands step 8 to the private user. Without the
-disk interrupt the system never enters S. Its two steps are taken from the public
-user, and the masks, which are public, are set at steps 3 and 4 in one run only.
-
-\suppressfloats[t]
 \begin{figure}[t]
 \centering
 % runs: models.v Section 11 traces; state rows: lemmas sliced_states_no_dI/_with_dI
@@ -185,6 +97,53 @@ user, and the masks, which are public, are set at steps 3 and 4 in one run only.
 \caption{The sliced policy on the same inputs, laid out as \cref{fig:run-ordinary}; N: NOP handler. The disk and NOP masks are set between all steps and are not shown. The framed cells, where the runs differ, are all private: the disk pending bit until the slice opens, then which handler fills the first run and the NOP pending bit. On the right, the private user's output at step 12; the braces mark the slice, its last step being the closing one (\cref{fig:phases}).}
 \label{fig:run-sliced}
 \end{figure}
+
+\subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
+
+\m{model_immediate} services an interrupt as soon as no handler is running
+(\cref{fig:policy-ordinary}). A pending timer interrupt takes the system from U to T,
+and a pending disk interrupt takes it to S, from U or from T, at whatever step it
+arrives. Each completion unmasks everything and moves on to the next pending handler,
+or back to U. The two bold arrows into S are the leak: the secret decides when S is
+entered.
+
+The initial state
+\begin{lstlisting}
+immediate_init :=
+  ((inr 3, None),       (* public user *)
+   (false, (None,        (* slice counter *)
+    ((false,false),      (* NOP *)
+     ((false,false),     (* disk *)
+      (false,false)))))) (* timer *)
+\end{lstlisting}
+
+starts in the public user with the slice counter disabled (fields as in
+\cref{sec:global-state}). The interrupt controller holds one (pending, mask) pair
+per handler, and all six bits start clear. The service policy is a single stage,
+which reacts to any handler finishing:
+\begin{lstlisting}
+immediate_service o v :=
+  if is_ir_out_done o is Some ir then
+    let v := unset_masks v in
+    if ir is timer_irq then update_re_sched v true
+    else v
+  else v
+\end{lstlisting}
+\m{is_ir_out_done} names the handler, if any, that emits \code{Notify} in the output
+\code{o}. The service policy then unmasks everything, and after the timer handler
+also requests a reschedule. It thus reads the output of whichever handler completes,
+the disk handler's included. \m{restore_invariant} is the identity.
+
+The run with the disk interrupt in \cref{fig:run-ordinary} shows the policy at work.
+The pid of each step is computed at the output of the step before (\cref{sec:state}).
+The disk interrupt arrives after step 1 and only sets the disk pending bit, so step 2
+still belongs to the public user. At the output of step 2, \m{initiate_next} finds
+the disk handler pending and unmasked and starts it, setting all masks: U to S. The
+timer interrupt that arrives meanwhile stays pending until the disk handler emits
+\code{Notify} at step 4: S to T. The timer handler's completion at step 6 requests a
+reschedule: T to U, where the scheduler hands step 8 to the private user. Without the
+disk interrupt the system never enters S. Its two steps are taken from the public
+user, and the masks, which are public, are set at steps 3 and 4 in one run only.
 
 \begin{theorem}[\m{model_immediate_not_NI}]\label{thm:leak}
 For the concrete system,

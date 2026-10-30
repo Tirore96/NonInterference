@@ -81,8 +81,8 @@ change of value.
 \subsection{Characterised equivalences and non-interference}
 Security is stated relative to a lattice of levels $\ell$. Everything in this paper
 can be read with the two-point lattice $\Lo \sqsubseteq \Hi$: the attacker $\Lo$,
-and $\Hi$, who sees everything (\cref{sec:generality} discusses arbitrary
-lattices). Each input and output type carries a \emph{characterised equivalence}
+and $\Hi$, who sees everything; the mechanisation is over an arbitrary bounded lattice
+(\cref{sec:mechanisation}). Each input and output type carries a \emph{characterised equivalence}
 (\m{cEquiv}) $\doteq$, which says, for each level $\ell$:
 \begin{itemize}
 \item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;

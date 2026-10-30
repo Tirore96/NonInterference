@@ -43,6 +43,17 @@ proofs. The latter is what dependent elimination on the type-indexed reduction
 relations would need; we invert reductions through determinism of reduction
 instead, one lemma per rule (\m{inv_mapO} and its siblings).
 
+\paragraph{Levels} For presentation, this paper reads levels as the two-point
+lattice. The mechanisation, like the calculus of Rafnsson et al., works over an
+arbitrary bounded lattice, for two reasons: it mechanises the existing theory as it
+stands, and it lets other models, whose security claims need more levels, build on
+it. Over a lattice, a characterised equivalence must also be monotone downwards: what
+a level relates stays related below it, and likewise for unobservability. Our models
+need nothing more. Every equivalence in them treats the bottom level, read as $\Lo$,
+apart from all others, so the proofs split on $\ell = \Lo$ against $\ell \neq \Lo$,
+and the second case covers every other level at once; the set $\{\Hi\}$ in
+$\mathsf{eqmaybe}(\{\Hi\},\doteq)$ stands for all levels but $\Lo$.
+
 \paragraph{Proof devices} A hook that only the proof needs, such as
 \m{restore_invariant}, can hide behaviour. An earlier version of our model relied on
 it to queue the NOP filler and to return control to the scheduler after a slice;
