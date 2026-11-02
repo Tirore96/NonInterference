@@ -540,6 +540,15 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
     (state_step service_policy restore_invariant) (no_output Opub Opriv)
     (pool runtime p_pub p_priv p_sched) (@pool_input Opub Opriv).
 
+(* The user view of a model: [parse_output] on every output, keeping the two
+   user slots and erasing the scheduler and all three handlers.  Like [model],
+   it is shared by both policies. *)
+Definition userview (Opub Opriv : Ty) (p : Proc T_in (T_out Opub Opriv))
+  : Proc T_in (T_out_userview Opub Opriv) :=
+  map id (@parse_output Opub Opriv) p.
+
+Definition out_equiv_userview (Opub Opriv : Ty) : cEquiv [T_out_userview Opub Opriv] := eqmaybe_nobody (eqsum (public_equiv Opub) (private_equiv Opriv)).
+
 
 (* #################################################################
    PART II -- the two interrupt policies
@@ -869,9 +878,7 @@ Definition model_sliced_userview (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out_userview Opub Opriv) :=
-  map id (@parse_output Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
-
-Definition out_equiv_userview (Opub Opriv : Ty) : cEquiv [T_out_userview Opub Opriv] := eqmaybe_nobody (eqsum (public_equiv Opub) (private_equiv Opriv)).
+  userview (model_sliced runtime runs p_pub p_priv p_sched).
 
 
 (* #################################################################
@@ -932,6 +939,7 @@ Definition model_immediate_concrete := model_immediate handler_runtime p_pub_con
 Definition model_sliced_concrete := model_sliced handler_runtime slice_runs p_pub_concrete p_priv_concrete scheduler.
 Definition model_sliced_userview_concrete :=
   model_sliced_userview handler_runtime slice_runs p_pub_concrete p_priv_concrete scheduler.
+Definition model_immediate_userview_concrete := userview model_immediate_concrete.
 
 (* Sanity, at this instance: the computed test agrees with the enumeration
    [Some 2 | Some 4] it replaced, on every value the counter can reach (the

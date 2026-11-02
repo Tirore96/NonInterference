@@ -16,6 +16,14 @@ the values the private user emits. At every
 other level each equivalence of the model is equality, and every obligation below
 holds trivially; we discuss $\Lo$ only.
 
+\Cref{cor:userview} adds one layer outside the model: \code{userview} is
+a \code{map}, so by \comp{it:map} (\m{map_NI}) it suffices that \m{parse_output}
+maps \m{out_equiv}-related outputs to \m{out_equiv_userview}-related ones. It
+does, because it reads only the two user slots. Two related outputs agree on which
+user slot, if any, emitted, and on the public user's value, so their images agree
+on the tag and the public value; every other step becomes \code{None} on both
+sides.
+
 The proof applies \cref{thm:composition} to \m{model_sliced}
 (\cref{fig:system}) from the outside in. The theorem gives the outermost
 equivalences, \m{in_equiv} and \m{out_equiv}, shaded in \cref{fig:system}; the proof

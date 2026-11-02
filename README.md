@@ -20,11 +20,12 @@ and user processes that are themselves non-interfering.
 |---|---|---|
 | `out_NI`, `map_NI`, `sta_NI`, `swi_NI`, `par_NI`, `loop_NI`, `maybe_NI` ([`theorems.v`](theories/theorems.v)) | Theorem 1 (composition) | none |
 | `model_immediate_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 2 (the leak) | none |
-| `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (no leak) | none |
+| `model_immediate_userview_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (the leak in the user view) | none |
+| `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (no leak) | none |
 | `model_sliced_userview_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 1 | none |
-| `restore_invariant_noop` ([`models.v`](theories/models.v)) | Theorem 4 | none |
+| `restore_invariant_noop` ([`models.v`](theories/models.v)) | Theorem 5 | none |
 | `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VII-A: our definitions equal the original's | none |
-| `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 2 and 3 in the original's terms | none |
+| `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 2 and 4 in the original's terms | none |
 
 Every result depends only on the two parameters `d` and `L` that fix the security
 lattice: no classical logic and no uniqueness of identity proofs. Reductions are
@@ -38,7 +39,7 @@ inverted through determinism of reduction (`inv_*` lemmas in
 | [`theories/definitions.v`](theories/definitions.v) | the calculus, traces, `NI`, the equivalences |
 | [`theories/theorems.v`](theories/theorems.v) | the composition theorems of Rafnsson et al. |
 | [`theories/models.v`](theories/models.v) | the generic model, both interrupt policies, a concrete system and its traces |
-| [`theories/noninterference.v`](theories/noninterference.v) | the model's equivalences and Theorems 2 and 3 |
+| [`theories/noninterference.v`](theories/noninterference.v) | the model's equivalences and Theorems 2–4 |
 | [`theories/adequacy.v`](theories/adequacy.v) | the original definitions, their equivalence with ours, the main results in the original's terms |
 
 ## Building

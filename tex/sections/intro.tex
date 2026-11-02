@@ -17,6 +17,8 @@ takes a few steps, and then the displaced process resumes. Suppose a public proc
 issuing requests whose results an attacker can see. While the handler runs, those
 requests stop, and the attacker sees a gap in the stream exactly as long as the
 handler (\cref{fig:leak}). The interrupt has leaked through the \emph{schedule}.
+The attacker needs no view of the schedule itself: the gap is in the public
+process's own output, as the user-view rows of \cref{fig:leak} show.
 Timing leaks through interrupt handling of this kind arise in several operating
 systems \todo{examples, with citations}.
 
@@ -39,17 +41,25 @@ model this system, exhibit the leak, and remove it.
 \foreach \i in {1,...,8} \node at (0.45*\i, 0.4) {\i};
 \node[anchor=east] at (0.15,0) {no disk interrupt};
 \foreach \c [count=\i] in {G,G,G,G,T,T,S,P} \node[c\c] at (0.45*\i,0) {\c};
-\node[anchor=east] at (0.15,-0.45) {disk interrupt};
-\foreach \c [count=\i] in {G,G,D,D,T,T,S,P} \node[c\c] at (0.45*\i,-0.45) {\c};
-\foreach \y in {0,-0.45} \draw[irq] (1.575,\y+0.23) -- (1.575,\y-0.23);
-\draw[dsk] (0.675,-0.22) -- (0.675,-0.68);
+% user view: parse_output keeps the two user slots, every other step is None
+\node[anchor=east] at (0.15,-0.42) {user view};
+\foreach \s/\c [count=\i] in {cG/G,cG/G,cG/G,cG/G,cD/{},cD/{},cD/{},cP/P}
+  \node[\s] at (0.45*\i,-0.42) {\c};
+\node[anchor=east] at (0.15,-0.95) {disk interrupt};
+\foreach \c [count=\i] in {G,G,D,D,T,T,S,P} \node[c\c] at (0.45*\i,-0.95) {\c};
+\node[anchor=east] at (0.15,-1.37) {user view};
+\foreach \s/\c [count=\i] in {cG/G,cG/G,cD/{},cD/{},cD/{},cD/{},cD/{},cP/P}
+  \node[\s] at (0.45*\i,-1.37) {\c};
+\foreach \y in {0,-0.95} \draw[irq] (1.575,\y+0.23) -- (1.575,\y-0.23);
+\draw[dsk] (0.675,-0.72) -- (0.675,-1.18);
 \end{tikzpicture}
 \caption{Who runs at each step under ordinary interrupt handling, with and without a
   disk interrupt. G: public process, P: private process, S: scheduler, T, D: timer
   and disk handler. Shading is what the attacker sees: the step and its value (dark),
   only that it happened (light), or nothing (white). A solid bar marks the timer
   interrupt, a hollow bar the disk interrupt. The disk handler takes steps 3 and 4
-  from the public process, a gap the attacker sees.}
+  from the public process, a gap the attacker sees. Under each run, its
+  user view: only the two user processes, every other step blank. Here the gap can also be seen.}
 \label{fig:leak}
 \end{figure}
 
@@ -66,7 +76,8 @@ operating system with interrupt handling as one closed process in this calculus
 (\cref{fig:system}): the user processes, the scheduler and the handlers run in a pool,
 and a global state decides at each step which of them runs. We prove in Rocq that
 ordinary interrupt handling is interfering (\m{model_immediate_not_NI}): the leak
-of \cref{fig:leak} is a counterexample.
+of \cref{fig:leak} is a counterexample, in the user view as well
+(\m{model_immediate_userview_not_NI}).
 
 What the attacker learns is \emph{when} a secret handler runs and \emph{for how
 long}. A non-interfering policy must therefore fix both by public events; only
@@ -82,6 +93,8 @@ decides whether, or for how long, a secret handler runs (\cref{sec:proof}).
 
 We prove this policy non-interfering (\m{model_sliced_NI}), even to an attacker who
 sees at every step which process ran, except which of the two secret handlers.
+The user view is a projection of this output, so the result carries over
+to it (\m{model_sliced_userview_NI}).
 Both policies are instances of a single generic model and differ only in their
 \emph{interrupt policy}: the part that decides when handlers may run. The result is
 general in two ways. It holds for every scheduler and every pair of user processes

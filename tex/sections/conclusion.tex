@@ -14,6 +14,7 @@ secret. Servicing secret handlers only in time slices of fixed length, opened by
 public timer handler and padded by a dummy handler, achieves this. We proved the leak
 and its absence in Rocq, the latter for any non-interfering scheduler and user
 processes, by composing generic non-interference theorems over the structure of the
-model. The proof did more than check the policy: it fixed the classification of the
+model. Both results hold for an attacker who sees the whole schedule and for
+the user view, which shows only the two user processes. The proof did more than check the policy: it fixed the classification of the
 interrupt controller bit by bit, and it separated hiding what a handler computed from
 hiding that it ran.

@@ -19,7 +19,8 @@ Require Export NonInterference.theories.models.
 
    Paper: Sections IV and V.  Structure:
      4. The model's equivalences : in_equiv, out_equiv (out_equiv_userview is in models.v)
-     5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI)
+     5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI),
+        nor is its user view                          (model_immediate_userview_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
      7. The state equivalence (state_type_equiv) and the fv_NI obligation
    =================================================================== *)
@@ -124,7 +125,23 @@ Lemma helper_trace : Trace out_equiv_concrete \bot [::out_get';out_get'] model_i
 Proof.
   eapply Trace_imp. 2:eapply helper_trace'.
   intros. simpl in H. subst. auto.
-Qed.  
+Qed.
+
+(* The same two public requests, seen through the user view. *)
+Definition two_gets : seqtype := [::out_get;out_get].
+
+Lemma helper_trace_userview' : Trace (public_equiv _) \bot two_gets model_immediate_userview_concrete.
+Proof.
+  have <-: map_tr (@parse_output TPublicOutput TTypeSyscall) [::out_get';out_get'] = two_gets by [].
+  eapply Trace_map. 2:eapply helper_trace'.
+  mrw. ssa. subst. done.
+Qed.
+
+Lemma helper_trace_userview : Trace out_equiv_userviewC \bot two_gets model_immediate_userview_concrete.
+Proof.
+  eapply Trace_imp. 2:eapply helper_trace_userview'.
+  intros. simpl in H. subst. auto.
+Qed.
 
 
 (*Opaque otherwise the inversion tactic take forever*)
@@ -148,6 +165,23 @@ Proof.
   do 2 (match goal with Ht : Trace _ _ (_ :: _) _ |- _ => inv Ht; clear Ht end;
         match_dd_out_first).
   (* the second public request is missing: the public slot emitted None *)
+  match goal with Hr : rel _ _ _ _ |- _ => solve [move: Hr; clear; simpl; ssa] end.
+Qed.
+
+(* The leak survives the user view: the missing public request is a user-slot
+   output, which [parse_output] keeps.  Same witness, same proof. *)
+Lemma model_immediate_userview_not_NI : ~ NI in_equiv out_equiv_userviewC model_immediate_userview_concrete.
+Proof.
+  intro. rewrite /NI in H. move: (H \bot). clear H.
+  rewrite /NI_l. case=>_ [] + _. intros.
+  move: helper_trace_userview. rewrite /two_gets.
+  move/a. move/(_ (inl tt) 0). simpl.
+  have: dis in_equiv \bot (inl tt). ssa.
+  move=>aa. move/(_ aa).
+  move=>Htr. clear a aa.
+  inv Htr; clear Htr; match_dd_out_first.
+  do 2 (match goal with Ht : Trace _ _ (_ :: _) _ |- _ => inv Ht; clear Ht end;
+        match_dd_out_first).
   match goal with Hr : rel _ _ _ _ |- _ => solve [move: Hr; clear; simpl; ssa] end.
 Qed.
 
@@ -1770,6 +1804,7 @@ Qed.
    out_equiv_userview-related ones).  (Paper, Section V.) === *)
 Lemma model_sliced_userview_NI : NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
+  rewrite /model_sliced_userview /userview.
   eapply map_NI. eauto. eauto.
   2: apply model_sliced_NI.
   mrw. intros.
