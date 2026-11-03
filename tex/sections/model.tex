@@ -30,7 +30,9 @@ its last step the handler emits \code{Notify} to announce completion, and
 \code{Nothing} on the others. The public user process issues requests
 (\code{Get}) whose results the attacker sees. The private user process takes the
 disk handler's output as input, and emits \code{Sys} when it has been notified of a
-disk event and \code{Idle} otherwise. When the scheduler runs, it proposes which
+disk event and \code{Idle} otherwise. \note{The private user process takes an
+input so that the effect of the disk handler's run is visible in user space: it is
+the legitimate consumer of the disk event.} When the scheduler runs, it proposes which
 user process runs next.
 
 The six processes run side by side in a \emph{pool} (\cref{fig:system}), and only

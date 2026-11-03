@@ -645,6 +645,49 @@ Proof.
   apply/rel_eqpair2; con; rewrite !pair_rewr; done.
 Qed.
 
+(* The scheduler's choice: it reads only the scheduler's output, which is
+   public, and whether the user slots emitted. *)
+Lemma apply_scheduler_choice_NI :
+  fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv (@apply_scheduler_choice Opub Opriv).
+Proof.
+  rewrite /apply_scheduler_choice.
+
+  mrw. intros.
+
+  destruct (eqVneq l \bot).
+  2: {  apply out_equiv_not_bot in H. 2:apply/eqP=>//. subst.
+        apply state_type_equiv_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
+  subst.
+
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] /public_equiv_eq H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
+  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
+
+  move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] _ /rel_eqpair[] _ +.
+  move: i=>[a[] b[] c[] d[] e f].
+  move: i'=>[a'[] b'[] c'[] d'[] e' f'].
+  rewrite !pair_rewr /is_sched_out. subst.
+
+  case/rel_eqmaybe_all2.
+  move=>[]x []y []-> []->// /public_equiv_eq ->//.
+  move=>[]->[]->//.
+
+  case/rel_eqmaybe_all2.
+  move=>[]x' []y' []-> []->// Hpr.
+  move=>[]->[]->//.
+
+  case/rel_eqmaybe_all2.
+  move=>[]x0 []y0 []-> []->// /public_equiv_eq ->//.
+
+  move=>_. (*drop*)
+
+  apply/rel_eqpair2;con;try solve [ssa].
+
+  move=>[]->[]->//.
+Qed.
+
 Lemma update_slice_count_rel : forall l v v' c,
   rel state_type_equiv l v v' ->
   rel state_type_equiv l (update_slice_count v c) (update_slice_count v' c).
@@ -766,51 +809,10 @@ Proof.
   destruct i';rewrite !pair_rewr //.
   destruct i';rewrite !pair_rewr //.    
 
-  (*the output summand, initiate_next o service_policy o check_scheduler*)
+  (*the output summand, initiate_next o service_policy*)
   apply fv_NI_comp.
 
-  (*check_scheduler*)
-  rewrite /check_scheduler.
-
-  mrw. intros.
-
-  destruct (eqVneq l \bot).
-  2: {  apply out_equiv_not_bot in H. 2:apply/eqP=>//. subst.
-        apply state_type_equiv_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
-  subst.  
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] /public_equiv_eq H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6. 
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-
-  move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] _ /rel_eqpair[] _ +.
-  move: i=>[a[] b[] c[] d[] e f].
-  move: i'=>[a'[] b'[] c'[] d'[] e' f']. 
-  rewrite !pair_rewr /is_sched_out. subst.
- 
-  case/rel_eqmaybe_all2.
-  move=>[]x []y []-> []->// /public_equiv_eq ->//.
-  move=>[]->[]->//.
-
-  case/rel_eqmaybe_all2.
-  move=>[]x' []y' []-> []->// Hpr.
-  move=>[]->[]->//.
-
-  case/rel_eqmaybe_all2.
-  move=>[]x0 []y0 []-> []->// /public_equiv_eq ->//.
-
-  move=>_. (*drop*)
-
-  apply/rel_eqpair2;con;try solve [ssa].
-
-  move=>[]->[]->//.
-
-
-  (*service_policy, itself a composition of three stages*)
-  apply fv_NI_comp.
-
+  (*service_policy: open_slice_on_timer, then tick_slice*)
   apply fv_NI_comp.
 
   mrw. intros.
@@ -863,17 +865,22 @@ Proof.
     + by apply update_slice_count_rel.
   - done.
 
-  (*initiate_next: the outermost stage of the output summand*)
+  (*initiate_next: the outermost stage of the output summand.  Its first step,
+    apply_scheduler_choice, takes related arguments to related states; the rest
+    reads only the state*)
   mrw. intros.
+  have Hs := apply_scheduler_choice_NI H H0.
+  rewrite /initiate_next.
+  move: (apply_scheduler_choice i v) (apply_scheduler_choice i' v') Hs.
+  clear v v' H0 => v v' H0.
+  cbv zeta.
   destruct (eqVneq l \bot).
   2: { apply state_type_equiv_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
 
   subst.
 
-  (*initiate_next ignores the output, so the out_equiv hypothesis is not needed*)
+  (*the rest ignores the output, so the out_equiv hypothesis is not needed*)
   clear H.
-
-  rewrite /initiate_next.
 
   have: masks_set v = masks_set v'.
 

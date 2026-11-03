@@ -447,13 +447,13 @@ Definition is_sched_out (Opub Opriv : Ty) (o : [T_out Opub Opriv]) :=
   | (None,(None,(Some n,_))) => Some n
   | _ => None
   end.
-Definition check_scheduler (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type])  :=
+Definition apply_scheduler_choice (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type])  :=
   if is_sched_out o is Some n then update_cur_pid v (inr n) else v.
 
-(* [check_scheduler] installs the pid a scheduler output names as the current
-   one.  Note this reads the scheduler slot only -- the user slots are inspected
-   for None-ness and nothing more (see [is_sched_out]), which is what keeps the
-   state transition independent of what userspace does. *)
+(* [apply_scheduler_choice] installs the pid a scheduler output names as the
+   current one.  Note this reads the scheduler slot only -- the user slots are
+   inspected for None-ness and nothing more (see [is_sched_out]), which is what
+   keeps the state transition independent of what userspace does. *)
 
 (* The pid of the handler an interrupt runs in. *)
 Definition ir_handler_pid (ir : [irq]) : [cur_pid] :=
@@ -497,8 +497,12 @@ Definition initiate_scheduler  (v : [state_type]) := update_re_sched (update_pre
 Definition get_prev_pid_wrap (v : [state_type]) : [Option cur_pid] := if get_prev_pid v is Some n then Some (inr n) else None.
 Definition initiate_prev_pid  (v : [state_type]) := update_prev_pid (update_cur_pid v (odflt scheduler_pid (get_prev_pid_wrap v))) None.
 
-Definition initiate_next (restore_invariant :  [state_type] -> [state_type]) :  [state_type] -> [state_type] :=
-  fun v => if (masks_set v) then v (*handler running*) else
+(* Choose the next pid.  First install the scheduler's choice, if the scheduler
+   has just run; then apply rules 1-4. *)
+Definition initiate_next (Opub Opriv : Ty) (restore_invariant :  [state_type] -> [state_type])
+  (o : [T_out Opub Opriv]) (v : [state_type]) : [state_type] :=
+  let v := apply_scheduler_choice o v in
+  if (masks_set v) then v (*handler running*) else
              let v := restore_invariant v (*apply time slice logic to bools*) in
              if first_ready v is Some ir then initiate_handler ir v (*first or later handler in the time slice is initiated here; inside a slice the NOP handler is always pending, so one runs*) else
                if is_handler_pid v then if get_re_sched v then initiate_scheduler v else initiate_prev_pid v  (*mask not set but we are in handler pid, we have just finished the time slice*) else
@@ -512,7 +516,7 @@ Definition initiate_next (restore_invariant :  [state_type] -> [state_type]) :  
    eqsum_L constrains the input summand alone. *)
 Definition state_step (Opub Opriv : Ty) (service_policy : [T_out Opub Opriv] -> [state_type] -> [state_type]) (restore_invariant : [state_type] -> [state_type]) : [Sum T_in (T_out Opub Opriv)] -> [state_type] -> [state_type] :=
   step_sum set_pending
-           (fun o => (initiate_next restore_invariant) \o (service_policy o) \o (@check_scheduler Opub Opriv o)).
+           (fun o => initiate_next restore_invariant o \o service_policy o).
 
 
 (* === 7. The generic model ===
@@ -699,9 +703,10 @@ Definition sliced_inv (v : [state_type]) : bool :=
   (if timeslice_live (get_slice_count v) then masks_set v
    else get_ir_mask v disk_irq).
 
-(* The state [initiate_next] makes its choice from. *)
+(* The state [initiate_next] makes its choice from: after the service policy and
+   the scheduler's choice. *)
 Definition choice_state (o : [T_out Opub Opriv]) v :=
-  sliced_service runtime runs o (check_scheduler o v).
+  apply_scheduler_choice o (sliced_service runtime runs o v).
 
 (* At that point: as [sliced_inv], except that at a handler boundary inside a
    slice the masks are open and the NOP handler is pending. *)
@@ -719,11 +724,20 @@ Lemma masks_setE v : masks_set v =
 Proof. by rewrite /masks_set /= andbT. Qed.
 
 (* One lemma per stage of [choice_state], stated on the fields the invariant reads. *)
-Lemma check_scheduler_bits (o : [T_out Opub Opriv]) v :
-  [/\ get_slice_count (check_scheduler o v) = get_slice_count v,
-      forall ir, get_ir_mask (check_scheduler o v) ir = get_ir_mask v ir &
-      forall ir, get_ir_pending (check_scheduler o v) ir = get_ir_pending v ir].
-Proof. rewrite /check_scheduler. by case: (is_sched_out o). Qed.
+Lemma apply_scheduler_choice_bits (o : [T_out Opub Opriv]) v :
+  [/\ get_slice_count (apply_scheduler_choice o v) = get_slice_count v,
+      forall ir, get_ir_mask (apply_scheduler_choice o v) ir = get_ir_mask v ir &
+      forall ir, get_ir_pending (apply_scheduler_choice o v) ir = get_ir_pending v ir].
+Proof. rewrite /apply_scheduler_choice. by case: (is_sched_out o). Qed.
+
+(* The scheduler's choice writes only the current pid, which [choice_inv] does
+   not read. *)
+Lemma choice_inv_apply_scheduler_choice (o : [T_out Opub Opriv]) w :
+  choice_inv (apply_scheduler_choice o w) = choice_inv w.
+Proof.
+case: (apply_scheduler_choice_bits o w) => Cc Cm Cp.
+by rewrite /choice_inv masks_setE !masks_setE Cc !Cm Cp.
+Qed.
 
 Lemma open_slice_on_timer_mask (o : [T_out Opub Opriv]) v ir :
   get_ir_mask (open_slice_on_timer runtime runs o v) ir = get_ir_mask v ir.
@@ -774,13 +788,13 @@ Qed.
 Lemma choice_inv_step (o : [T_out Opub Opriv]) v : sliced_inv v -> choice_inv (choice_state o v).
 Proof.
 move=> Hv.
-have -> : choice_state o v =
-          tick_slice runtime (open_slice_on_timer runtime runs o (check_scheduler o v)) by [].
-case: (check_scheduler_bits o v) => Cc Cm Cp.
-set v1 := open_slice_on_timer runtime runs o (check_scheduler o v).
-have M1 : forall ir, get_ir_mask v1 ir = get_ir_mask v ir by move=> ir; rewrite open_slice_on_timer_mask Cm.
+rewrite /choice_state choice_inv_apply_scheduler_choice.
+have -> : sliced_service runtime runs o v =
+          tick_slice runtime (open_slice_on_timer runtime runs o v) by [].
+set v1 := open_slice_on_timer runtime runs o v.
+have M1 : forall ir, get_ir_mask v1 ir = get_ir_mask v ir by move=> ir; rewrite open_slice_on_timer_mask.
 have C1 : get_slice_count v1 = if tI_out o is Some Notify then Some (runs * runtime) else get_slice_count v
-  by rewrite open_slice_on_timer_count Cc.
+  by rewrite open_slice_on_timer_count.
 move: Hv; rewrite /sliced_inv /choice_inv masks_setE => /andP [/eqP Hdk Hl].
 case E1: (get_slice_count v1) => [[|n]|].
 - (* closing: disk and NOP masked, no slice *)
@@ -823,9 +837,10 @@ case: e => [i|o] Hv.
 - move: v Hv => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] Hv.
   by case: i.
 - have -> : state_step (@sliced_service runtime runs Opub Opriv) restore_invariant (inr o) v =
-            initiate_next restore_invariant (choice_state o v) by [].
-  have := choice_inv_step o Hv; move: (choice_state o v) => w Hw.
-  rewrite /initiate_next.
+            initiate_next restore_invariant o (sliced_service runtime runs o v) by [].
+  have := choice_inv_step o Hv; rewrite /initiate_next /choice_state.
+  move: (apply_scheduler_choice o (sliced_service runtime runs o v)) => w Hw.
+  cbv zeta.
   case Ms: (masks_set w).
   + move: Hw; rewrite /choice_inv /sliced_inv Ms => /andP [-> H].
     by case: (timeslice_live _) H.

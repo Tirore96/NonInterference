@@ -91,6 +91,52 @@ handler run in both states (C1 explicitly allows disk in one and NOP in the
 other). It makes *both run a secret handler, or neither*: otherwise one state
 enters S while the other returns to U, and the pid's public tag exposes it.
 
+### 3a. What made the invariant necessary in initiate_next (explanation)
+
+The invariant is needed in exactly one case of `initiate_next`'s non-interference
+proof: **a secret handler is ready in one related state and none is ready in the
+other.**
+
+**Why that case is fatal.** `initiate_next` picks the next pid. In the state with a
+ready secret handler, rule 2 starts it: the pid becomes `inl _`, and the system
+enters S. In the other state rule 2 doesn't apply, so rule 3 or 4 returns to (or
+continues) a user process or the scheduler: the pid becomes `inr _`, and the
+system stays in U. The current pid's tag is public, so the two resulting states
+are no longer related, and on the next step the attacker sees S in one run and U
+in the other. (Every other case is fine: timer ready in both, since its pending
+bit and mask are public; a secret handler in both, even disk in one and NOP in the
+other, since which one runs is private; none in both, since rules 3 and 4 read
+only public fields.)
+
+**Why the case can arise in the proof.** The proof must work for *every* pair of
+related states, not only reachable ones: `sta_NI` quantifies over all related
+pairs, and chaining the stages passes only relatedness from one stage to the
+next. Related states agree on the counter and on every mask, but may differ in the
+private pending bits. Take two related states outside a slice (counter `None`)
+with the disk and NOP handlers *unmasked*, which is unreachable but not excluded
+by relatedness: if the disk handler is pending in one and not the other, and the
+NOP handler is pending in neither, one starts the disk handler and the other does
+not.
+
+**What the invariant (the image of `restore_invariant`) rules out.** It makes "is
+a secret handler ready?" depend only on public fields:
+- *Outside a slice, the disk and NOP masks are set.* So no secret handler is ready
+  in either state.
+- *Inside a slice, the NOP handler is pending.* So whenever the NOP handler is
+  unmasked it is ready, whatever the disk handler does.
+- *The NOP mask equals the disk mask.* So if the disk handler is unmasked, so is
+  the NOP handler: the disk's pending bit can then only decide *which* secret
+  handler runs, never *whether* one does.
+
+(`restore_invariant` also masks the timer inside a slice. That isn't needed for
+this argument, since timer readiness is public anyway; it matches the shape the
+policy really has at a handler boundary, which is what lets `restore_invariant` be
+the identity on reachable states, Theorem 5.)
+
+In the Rocq this is the `ready_cases2` split in `initiate_next`'s proof: the four
+`exfalso` branches (secret in one, none in the other, either way round) are the
+only places that unfold `restore_invariant`.
+
 ## 4. The invariants: `sliced_inv`, `choice_inv`, and restore_invariant
 
 "Open slice" = `timeslice_live`: the counter is `Some n` with `n > 0`.
