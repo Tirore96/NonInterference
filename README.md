@@ -23,7 +23,8 @@ and user processes that are themselves non-interfering.
 | `model_immediate_userview_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (the leak in the user view) | none |
 | `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (no leak) | none |
 | `model_sliced_userview_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 1 | none |
-| `restore_invariant_noop` ([`models.v`](theories/models.v)) | Theorem 5 | none |
+| `sta_NI_inv` ([`theorems.v`](theories/theorems.v)) | composition of a stateful process under a state invariant (our addition) | none |
+| `sliced_run_gated` ([`models.v`](theories/models.v)) | the slice invariant holds of every reachable state (replaces Theorem 5; paper not yet updated) | none |
 | `eqmaybe_sum_rel`, `eqsum_sum_rel`, `eqsum_L_sum_rel`, `eqvisible_public_rel` and their `_dis` siblings ([`definitions.v`](theories/definitions.v)) | §VI-B: the paper's sum notation equals the mechanised equivalences | none |
 | `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VII-A: our definitions equal the original's | none |
 | `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 2 and 4 in the original's terms | none |

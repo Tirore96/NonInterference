@@ -6,6 +6,7 @@ From NonInterference.theories Require Import theorems models noninterference ade
 Print Assumptions out_NI.
 Print Assumptions map_NI.
 Print Assumptions sta_NI.
+Print Assumptions sta_NI_inv.
 Print Assumptions swi_NI.
 Print Assumptions par_NI.
 Print Assumptions loop_NI.
@@ -13,7 +14,7 @@ Print Assumptions maybe_NI.
 Print Assumptions model_immediate_not_NI.
 Print Assumptions model_sliced_NI.
 Print Assumptions model_sliced_userview_NI.
-Print Assumptions restore_invariant_noop.
+Print Assumptions sliced_run_gated.
 Print Assumptions NI_paper.
 Print Assumptions ObliviousDis_iff.
 Print Assumptions NI_lEquiv.

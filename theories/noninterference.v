@@ -369,43 +369,19 @@ Proof.
   destruct i as [[]|[]], i0 as [[]|[]]; simpl; intuition.
 Qed.
 
-Lemma sta_comp : forall (I V O : Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (ORel : cEquiv [O]) (f f' : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V])
-                        (v : [V]) (p : Proc (Times V I) O),
-    fv_NI ORel VRel VRel g ->
-    fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
-    fv_NI IRel VRel VRel f' -> f_EP IRel VRel f' ->
-    NI (eqpair_R VRel IRel) ORel p ->    
-    NI IRel (eqpair VRel ORel) (sta (fun i => (f i) \o (f' i)) g v p).
-Proof.
-  intros.
-  apply sta_NI;eauto.
-  move: H0 H2. clear.
-  rewrite /fv_NI. intros. eauto.
-  move: H1 H3. clear.
-  rewrite /f_EP. intros. eauto.
-Qed.
-
-
 (* === The composition-breakdown technique.  state_step is
-   step_sum set_pending (initiate_next(restore_invariant) o service_policy o
-   check_scheduler).  fv_NI_step_sum splits a goal into the two summands, and
-   fv_NI_comp discharges fv_NI of the output pipeline from fv_NI of its stages.
-   The event equivalence is eqsum_L: an input may be unobservable, an output never
-   is, which is why f_EP_step_sum reduces to a condition on set_pending alone.
-   Cost: every
-   stage is proved over ALL related states, forgetting the reachable subset --
-   restore_invariant repairs this before initiate_next, and on every reachable
-   state it changes nothing (models.v, restore_invariant_noop).  (docs §4c, §4d.) === *)
+   step_sum set_pending (fun o => initiate_next o \o service_policy o).
+   fv_NI_step_sum splits a goal into the two summands, and fv_NI_comp
+   discharges fv_NI of a pipeline from fv_NI of its stages.  The event
+   equivalence is eqsum_L: an input may be unobservable, an output never is,
+   which is why f_EP_step_sum reduces to a condition on set_pending alone.
+   initiate_next is non-interfering only on states the sliced policy reaches,
+   so for the sliced model the output summand is proved under the slice
+   invariant (fv_NI_step_sum_on, and sta_NI_inv in theorems.v). === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
 intros. move: H H0. rewrite /fv_NI. ssa.
-Qed.
-
-Lemma f_EP_comp : forall (I V: Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (f f' : [I]  -> [V] ->  [V]),
-    f_EP IRel VRel f -> f_EP IRel VRel f' -> f_EP IRel VRel (fun i => (f' i) \o (f i)).
-Proof.
-intros. move: H H0. rewrite /f_EP. ssa. eauto.
 Qed.
 
 (* An event equivalence never relates an inl to an inr, so a goal about [step_sum f
@@ -421,6 +397,20 @@ Proof.
   rewrite /step_sum. eauto. done. done.
   destruct H3. destruct i. done. destruct i'. done.
   rewrite /step_sum. eauto.
+Qed.
+
+(* As fv_NI_step_sum, with the output summand needed only on states in P. *)
+Lemma fv_NI_step_sum_on : forall (P : [state_type] -> Prop) f g,
+    fv_NI in_equiv state_type_equiv state_type_equiv f ->
+    fv_NI_on P (out_equiv Opub Opriv) state_type_equiv g ->
+    fv_NI_on P (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv (@step_sum Opub Opriv f g).
+Proof.
+  move=> P f g Hf Hg l e e' He v v' Pv Pv' Hv.
+  case: e e' He => [i|o] [i'|o'] He; rewrite /step_sum.
+  - apply: Hf Hv; exact: rel_eqsum_L' He.
+  - by case/eqsum_L_llrr: He => -[].
+  - by case/eqsum_L_llrr: He => -[].
+  - apply: Hg Pv Pv' Hv; exact: rel_eqsum_L2' He.
 Qed.
 
 (* Under eqsum_L only an inl is ever unobservable, so f_EP of a step_sum is a
@@ -755,32 +745,110 @@ Proof.
   apply update_slice_count_rel; apply update_mask_rel; exact: set_masks_rel.
 Qed.
 
-Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
+(* === initiate_next, through the public part of the state ===
+
+   At level \bot two states are related exactly when their public fields
+   agree; [pub_view] collects them.  The scheduler and handler bookkeeping in
+   [initiate_next] computes public fields from public fields, so it suffices to
+   show that two related states take the same branch, up to which secret
+   handler they start.  Whether a handler is running and whether the timer
+   handler is ready are public.  Whether a secret handler is ready is not, and
+   this is where the slice invariant enters: by [secret_ready_iff_slice] it
+   agrees with whether a slice is open, which is public. *)
+Definition pub_view (v : [state_type]) :=
+  (if get_cur_pid v is inr n then Some n else None, get_prev_pid v, get_re_sched v,
+   get_slice_count v, get_ir_mask v timer_irq, get_ir_mask v disk_irq,
+   get_ir_mask v nop_irq, get_ir_pending v timer_irq).
+
+Lemma state_rel_bot v v' : rel state_type_equiv \bot v v' <-> pub_view v = pub_view v'.
 Proof.
-  rewr;simpl;rewr;simpl.
-  eapply map_NI.
-  instantiate (1:= eqsum_L in_equiv (out_equiv Opub Opriv)). ssa. ssa.
-  mrw. intros.
-  2:eapply loop_NI. apply eqsum_L_llrr in H as H'. destruct H'.
-  destruct i. destruct i'. ssa. ssa. ssa.
-  destruct i. ssa. destruct i'. ssa.
-  apply rel_eqsum_L2' in H.
-  rewrite /inr_or_def. done.
+move: v v' => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] [[cur' prev'] [rs' [c' [[dp' dm'] [[kp' km'] [tp' tm']]]]]].
+split.
+- move/rel_eqpair=> [] /rel_eqpair[] + + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [] /rel_eqpair [] + + /rel_eqpair[] /rel_eqpair[] + + /rel_eqpair [] + +.
+  rewrite !pair_rewr => /eqsum_split Hs.
+  move=> /public_equiv_eq -> /public_equiv_eq -> /public_equiv_eq -> _ /public_equiv_eq -> _ /public_equiv_eq -> /public_equiv_eq -> /public_equiv_eq ->.
+  by case: Hs => [[x][y][->][->] _|[x][y][->][->] /public_equiv_eq ->].
+- rewrite /pub_view /get_cur_pid /get_prev_pid /get_pids /get_re_sched /get_bool_state /get_slice_count /get_ic_count /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ir_pending /get_pending' /=.
+  case=> Hc -> -> -> -> -> -> ->.
+  by case: cur cur' Hc => [b|n] [b'|n'] //= => [_|[->]]; intuition.
+Qed.
 
-  eapply map_NI.
-  eauto. eauto.
-  mrw. intros.
-  case/rel_eqpair: H;eauto.
-  instantiate (1:= state_type_equiv).
+(* Starting a handler: the public result depends only on whether it is the
+   timer's. *)
+Lemma pub_view_initiate_handler ir ir' w w' :
+  pub_view w = pub_view w' -> (ir == timer_irq) = (ir' == timer_irq) ->
+  pub_view (initiate_handler ir w) = pub_view (initiate_handler ir' w').
+Proof.
+move: w w' => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] [[cur' prev'] [rs' [c' [[dp' dm'] [[kp' km'] [tp' tm']]]]]].
+rewrite /pub_view /get_cur_pid /get_prev_pid /get_pids /get_re_sched /get_bool_state /get_slice_count /get_ic_count /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ir_pending /get_pending' /=.
+case=> Hc -> -> -> -> -> -> ->.
+case: ir ir' => [[]|] [[]|] //= _; case: cur cur' Hc => [b|n] [b'|n'] //=; try case=> ->; by vm_compute.
+Qed.
 
-  (*state update: This part is long. Involves set_pending, check_scheduler and the two service-policy stages*)
-  apply sta_NI.
-  mrw;eauto.
+(* The last branch of [initiate_next]: no handler ready. *)
+Definition leave_handlers (w : [state_type]) :=
+  if is_handler_pid w then if get_re_sched w then initiate_scheduler w else initiate_prev_pid w else w.
 
-  (*split the transition into its input and output summands*)
-  apply fv_NI_step_sum.
+Lemma pub_view_leave_handlers w w' :
+  pub_view w = pub_view w' -> pub_view (leave_handlers w) = pub_view (leave_handlers w').
+Proof.
+move: w w' => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] [[cur' prev'] [rs' [c' [[dp' dm'] [[kp' km'] [tp' tm']]]]]].
+rewrite /pub_view /get_cur_pid /get_prev_pid /get_pids /get_re_sched /get_bool_state /get_slice_count /get_ic_count /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ir_pending /get_pending' /=.
+case=> Hc -> -> -> -> -> -> ->.
+case: cur cur' Hc => [b|n] [b'|n'] //=; try case=> ->; try case: n' => [|n']; case: rs'; by vm_compute.
+Qed.
 
-  (*set_pending: the input summand*)
+Lemma first_readyE u : first_ready u =
+  if ir_ready u timer_irq then Some timer_irq else
+  if ir_ready u disk_irq then Some disk_irq else
+  if ir_ready u nop_irq then Some nop_irq else None.
+Proof.
+rewrite /first_ready /=.
+by case: (ir_ready u timer_irq); case: (ir_ready u disk_irq); case: (ir_ready u nop_irq).
+Qed.
+
+(* ⦃≐ ∧ secret_ready_iff_slice on both sides⦄ initiate_next ⦃≐⦄ *)
+Lemma initiate_next_NI_on l (o o' : [T_out Opub Opriv]) v v' :
+  rel (out_equiv Opub Opriv) l o o' -> rel state_type_equiv l v v' ->
+  secret_ready_iff_slice v -> secret_ready_iff_slice v' ->
+  rel state_type_equiv l (initiate_next o v) (initiate_next o' v').
+Proof.
+move=> Ho Hv Sv Sv'.
+have Hs := apply_scheduler_choice_NI Ho Hv.
+case: (apply_scheduler_choice_gated o v) => Mv _ _ Rv Ov.
+case: (apply_scheduler_choice_gated o' v') => Mv' _ _ Rv' Ov'.
+have {Sv Mv Rv Ov} Sw : secret_ready_iff_slice (apply_scheduler_choice o v)
+  by rewrite /secret_ready_iff_slice Mv Rv Ov.
+have {Sv' Mv' Rv' Ov'} Sw' : secret_ready_iff_slice (apply_scheduler_choice o' v')
+  by rewrite /secret_ready_iff_slice Mv' Rv' Ov'.
+rewrite /initiate_next; cbv zeta.
+move: (apply_scheduler_choice o v) (apply_scheduler_choice o' v') Hs Sw Sw' => w w' Hw Sw Sw'.
+clear Ho Hv.
+case: (eqVneq l \bot) => [El|Hl]; last first.
+  by rewrite (state_type_equiv_not_bot (elimN eqP Hl) Hw); apply rel_refl.
+subst l.
+move/state_rel_bot: Hw => Hw.
+have := Hw; rewrite /pub_view => -[_ _ _ Hc Ht Hd Hn Hp].
+(* a handler is running: nothing changes *)
+rewrite !masks_setE Ht Hd Hn.
+case Ms: [&& _, _ & _]; first by apply/state_rel_bot.
+(* otherwise both states agree on whether a secret handler is ready *)
+move: Sw Sw'; rewrite /secret_ready_iff_slice !masks_setE Ht Hd Hn Ms => Sw Sw'.
+have Hsr : secret_ready w = secret_ready w' by rewrite Sw // Sw' // /slice_open Hc.
+have Hrt : ir_ready w timer_irq = ir_ready w' timer_irq by rewrite /ir_ready Hp Ht.
+apply/state_rel_bot.
+move: Hsr; rewrite /secret_ready !first_readyE Hrt.
+case: ifP => _; first by move=> _; apply: pub_view_initiate_handler.
+case: (ir_ready w disk_irq); case: (ir_ready w nop_irq); case: (ir_ready w' disk_irq); case: (ir_ready w' nop_irq) => //= _;
+  first [by apply: pub_view_initiate_handler | by apply: pub_view_leave_handlers].
+Qed.
+
+(* === The stages of the sliced state update === *)
+
+(* set_pending: the input summand *)
+Lemma set_pending_NI : fv_NI in_equiv state_type_equiv state_type_equiv set_pending.
+Proof.
+
   rewrite /set_pending.
   mrw. intros.
   apply in_equiv_eq in H;subst.
@@ -808,15 +876,34 @@ Proof.
   destruct i';rewrite !pair_rewr //.
   destruct i';rewrite !pair_rewr //.
   destruct i';rewrite !pair_rewr //.    
+Qed.
 
-  (*the output summand, initiate_next o service_policy*)
+Lemma set_pending_EP : f_EP in_equiv state_type_equiv set_pending.
+Proof.
+  rewrite /set_pending.
+  mrw. intros.
+  case: i H => [[]|[]] H; simpl in H; last done. subst.
+
+  move: v => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. de cur.
+  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
+  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
+  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
+  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
+  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. ssa.
+Qed.
+
+(* service_policy: observe_timer_output, then tick_slice.  Both read only public
+   fields, so they need no invariant. *)
+Lemma sliced_service_NI :
+  fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv (@sliced_service runtime runs Opub Opriv).
+Proof.
+  rewrite /sliced_service.
   apply fv_NI_comp.
 
-  (*service_policy: open_slice_on_timer, then tick_slice*)
-  apply fv_NI_comp.
 
   mrw. intros.
-  rewrite /open_slice_on_timer.
+  rewrite /observe_timer_output.
 
   have: tI_out i = tI_out i'.
 
@@ -858,686 +945,57 @@ Proof.
   move: H2=>/public_equiv_eq->//.
   move=>->.
 
-  case: (get_slice_count v') => [[|n]|].
+  case: (get_slice_count v') => [|[|n]].
+  - done.
   - by apply close_slice_rel.
   - case: (slice_at_boundary _ _).
     + by apply queue_secret_run_rel; apply update_slice_count_rel.
     + by apply update_slice_count_rel.
-  - done.
+Qed.
 
-  (*initiate_next: the outermost stage of the output summand.  Its first step,
-    apply_scheduler_choice, takes related arguments to related states; the rest
-    reads only the state*)
+(* The output summand, on states satisfying the slice invariant: the service
+   policy keeps states related (sliced_service_NI) and leaves them at a handler
+   boundary at most (sliced_service_gated), which gives initiate_next the fact
+   it needs (secret_gated_at_boundary_ready). *)
+Lemma sliced_output_NI_on :
+  fv_NI_on secret_gated (out_equiv Opub Opriv) state_type_equiv
+    (fun o => initiate_next o \o @sliced_service runtime runs Opub Opriv o).
+Proof.
+move=> l o o' Ho v v' Pv Pv' Hv /=.
+apply: initiate_next_NI_on; first exact: Ho.
+- exact: (sliced_service_NI Ho Hv).
+- exact/secret_gated_at_boundary_ready/sliced_service_gated.
+- exact/secret_gated_at_boundary_ready/sliced_service_gated.
+Qed.
+
+
+Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
+Proof.
+  rewr;simpl;rewr;simpl.
+  eapply map_NI.
+  instantiate (1:= eqsum_L in_equiv (out_equiv Opub Opriv)). ssa. ssa.
   mrw. intros.
-  have Hs := apply_scheduler_choice_NI H H0.
-  rewrite /initiate_next.
-  move: (apply_scheduler_choice i v) (apply_scheduler_choice i' v') Hs.
-  clear v v' H0 => v v' H0.
-  cbv zeta.
-  destruct (eqVneq l \bot).
-  2: { apply state_type_equiv_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
-
-  subst.
-
-  (*the rest ignores the output, so the out_equiv hypothesis is not needed*)
-  clear H.
-
-  have: masks_set v = masks_set v'.
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask']. 
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-
-  move: H4 H5 H6.
-  move=>/public_equiv_eq ->.
-  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /public_equiv_eq ->.
-  move=>/rel_eqpair[] _. rewrite !pair_rewr=> /public_equiv_eq ->. ssa.
-  move=>->.
-  
-  destruct (masks_set v'). done. 
-
-  have: ir_ready  (restore_invariant v) timer_irq =
-          ir_ready (restore_invariant v') timer_irq. 
-
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-
-  move: H6. move/rel_eqpair=>[]. rewrite !pair_rewr. move=>/public_equiv_eq->/public_equiv_eq->.
-  move/public_equiv_eq : H2=>->//. 
-  
-  move/ready_cases2P. rewrite /ready_cases2.
-
-  move=>[[]Hready[]Hready'[]Hfirst Hfirst'|[]Hready[]Hready'[]Haux Haux'].
-  rewrite Hfirst Hfirst'.
-
-  clear Hready Hready' Hfirst Hfirst'.
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con.
-  rewrite /initiate_handler !pair_rewr. ssa.
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.  
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.  
-  
-  move:Haux Haux'.
-  rewrite /ready_aux2.
-  move=>[[]HreadyD Hfirst|].
-  move=>[[]HreadyD' Hfirst'|[]].
-  rewrite Hfirst Hfirst'.
-
-
-  clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD'.
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con.
-  rewrite /initiate_handler !pair_rewr. ssa. 
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  apply/rel_eqpair2. con.
-
-  move/public_equiv_eq : H2=>->.
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.  
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. eauto. ssa.
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. eauto. ssa.
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_equiv_eq->//. 
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /public_equiv_eq ->/public_equiv_eq ->. ssa.
-
-  move/public_equiv_eq : H4=>->//.
-
-  move=>[]HreadyD'[]HreadyDef' Hfirst'.
-  rewrite Hfirst Hfirst'.
-
-  clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef'.
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con.
-  rewrite /initiate_handler !pair_rewr. ssa. 
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  apply/rel_eqpair2. con.
-
-  move/public_equiv_eq : H2=>->.
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.  
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. eauto. ssa.
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. eauto. ssa.
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_equiv_eq->//. 
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /public_equiv_eq ->/public_equiv_eq ->. ssa.
-
-  move/public_equiv_eq : H4=>->//.
-
-
-  move=>[]HreadyD'[]HreadyDef' Hfirst'.
-  rewrite Hfirst Hfirst'. exfalso.
-  clear Hready Hready' Hfirst Hfirst'.
-  
-  move: v H0 HreadyD HreadyD' HreadyDef'=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
-  rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
-
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state !pair_rewr.
-  move=>+ /negP + /negP.
-  rewrite !negb_and !negbK.
-  move/andP. case.
-  rewrite orbC [ false || _ ]/orb.
-  move=>Hpending.
-  rewrite !negb_or !negbK.
-  move/andP. case. move=>Hmask Hir.
-  move/orP. case.
-  simpl. move/orP. case.
-  move=>HH. move/orP. case.
-  move/andP. ssa. ssa. apply/negP. apply H0. done. 
-  move/orP. case. intro. apply/negP. apply Hmask. done.
-  intro. apply/negP. apply b. done. done.
-  move/orP. case. intro. rewrite a in Hmask. done.
-  rewrite Hir. done.
-
-  move=>[[]HreadyD[]HreadyDef Hfirst|].
-  move=>[[]HreadyD' Hfirst'|].
-  rewrite Hfirst Hfirst'.
-
-  clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef.
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con.
-  rewrite /initiate_handler !pair_rewr. ssa. 
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  apply/rel_eqpair2. con.
-
-  move/public_equiv_eq : H2=>->.
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.  
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. eauto. ssa.
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. eauto. ssa.
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_equiv_eq->//. 
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /public_equiv_eq ->/public_equiv_eq ->. ssa.
-
-  move/public_equiv_eq : H4=>->//.  
-  
-
-  move=>[[]HreadyD'[]HreadyDef' Hfirst'|].
-  rewrite Hfirst Hfirst'.
-
-  clear Hready Hready' Hfirst Hfirst' HreadyD HreadyD' HreadyDef HreadyDef'.
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con.
-  rewrite /initiate_handler !pair_rewr. ssa. 
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  apply/rel_eqpair2. con.
-
-  move/public_equiv_eq : H2=>->.
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.  
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->. rewrite !pair_rewr //.
-  move/public_equiv_eq : H1=>->//.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->/public_equiv_eq ->. rewrite !pair_rewr //.
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. eauto. ssa.
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. eauto. ssa.
-  apply/rel_eqpair2. con.
-
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr. move=>/public_equiv_eq->//. 
-  move/rel_eqpair2 : H0=>[]. rewrite !pair_rewr.
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_/public_equiv_eq ->//. 
-  move=>[]i0'[]i1'[]->[]-> /public_equiv_eq ->/public_equiv_eq ->. ssa.
-
-  move/public_equiv_eq : H4=>->//.  
-
-  move=>[]HreadyD'[]HreadyDef' Hfirst'.
-  rewrite Hfirst Hfirst'. exfalso.
-
-  clear Hready HreadyD Hready' Hfirst Hfirst'.
-  
-  move: v H0 HreadyD' HreadyDef HreadyDef'=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
-  rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
-
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state.  
-  move/negP. rewrite !negb_and !negbK.
-  move/orP. case. move/orP. case.
-  intro.
-  move/andP. case. move/orP. case.
-  move=>b.
-  rewrite negb_or negbK. move/andP.
-  case. move=>c d.
-  move/negP. rewrite negb_and negb_or.
-  move/orP. case. rewrite d. ssa. rewrite d. ssa.
-  rewrite negb_and negbK orbC /=in b0.
-  by rewrite b0 in c.
-  move=>->.  rewrite negb_or negbK.
-  move/andP. case.
-  move=>b c. move/negP.
-  rewrite negb_and negb_or.
-  move/orP. case. ssa.
-  rewrite negb_and b. ssa. ssa.
-  move/orP. case.
-  move=>a. move/andP. case.
-  move/orP. case. move=>b.
-  rewrite !negb_or !negbK. move/andP. case.
-  rewrite a. ssa.
-  move=>b. rewrite !negb_or !negbK.
-  move/andP. case. rewrite a. ssa.
-  move=>a. move/andP. case. move/orP. case.
-  move=>b. rewrite !negb_or negbK.
-  move/andP. case. move=>c.
-  move=>d. rewrite d in a. done.
-  move=>b. rewrite b in a. done.
-
-  move=>[]HreadyD[]HreadyDef Hfirst.
-  move=>[[]HreadyD'[]Hfirst'|].
-  rewrite Hfirst Hfirst'. exfalso.
-
-  clear Hready Hready' Hfirst Hfirst'.
-  
-  move: v H0 HreadyD' HreadyD HreadyDef => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
-  rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
-
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state.  
-  move/andP. case. intro.
-  rewrite negb_or negbK. move/andP. case.
-  intro. intro.
-  move/negP. rewrite negb_and negb_or.
-  move/orP. case. move/andP. case.
-  move=> c _.
-  move/negP. rewrite negb_and negb_or.
-  move/orP. case. move/andP. case.
-  intro. rewrite b. done. rewrite negb_and negbK.
-  move/orP. case. intro. rewrite a1 in a0. done.
-  rewrite b. done. rewrite negb_and negbK.
-  move/orP. case. intro. rewrite a1 in a0. done.
-  rewrite b. done.
-
-  move=>[[]HreadyD'[]HreadyDef' Hfirst'|].
-  rewrite Hfirst Hfirst'. exfalso.
-
-  clear Hready Hready' Hfirst Hfirst'.
-  
-  move: v H0 HreadyD' HreadyD HreadyDef HreadyDef' => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[_] /rel_eqpair[_] /rel_eqpair[] HH /rel_eqpair[]/rel_eqpair[_ H4] /rel_eqpair[] /rel_eqpair[] _ H5 /rel_eqpair[] _ H6.
-  rewrite !pair_rewr in HH H4 H5 H6.  
-  move: HH H4 H5 H6. move=>/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->/public_equiv_eq->. 
-
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state !pair_rewr.
-  rewrite /ir_ready /get_ir_pending /get_pending' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /restore_invariant /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ic_count /get_bool_state /update_bool_state !pair_rewr /timeslice_live /get_slice_count /get_ic_count /get_bool_state.
-
-  move/negP. rewrite !negb_and !negb_or.
-  move/orP. case. intro.
-
-  move/negP. rewrite ?negb_and ?negb_or.
-  move/orP. case. intro.
-
-  move/negP. rewrite ?negb_and ?negb_or.
-  move/orP. case. move/andP. case. intro. intro.
-
-  move/andP. case. move/orP. case. intro.
-  move/andP. case. intro. rewrite b. done.
-  intro. rewrite b0 in b. done.
-  rewrite !negbK.
-  move/orP. case. intro.
-  move/andP. case.
-  move/orP. case. intro.
-  move/andP. case. intro. rewrite a1 in a3. done.
-  intro.
-  rewrite b a1. done.
-  intro. move/andP. case.
-  move/orP. case. intro.
-  move/andP. case. intro. intro. rewrite b0 in b. done.
-  intro. rewrite b0 in b. done.
-  rewrite !negbK. move/orP. case. intro.
-  move/negP. rewrite !negb_and !negb_or.
-  move/orP. case. move/andP. case. intro.
-  intro. move/andP. case. move/orP. case.
-  intro. move/andP. case. intro.
-  intro. rewrite b0 in b. done.
-  intro. rewrite b0 in b. done.
-  rewrite negbK. rewrite a0. simpl. 
-  move=>_. move/andP. ssa. intro.
-  move/negP. rewrite negb_and negb_or.
-  move/orP. case. move/andP. case. intro. rewrite b.
-  move=>_. move/andP. case. move/orP. case.
-  intro. move/andP. case. intro. intro. rewrite b0 in b. done.
-  intro. rewrite b0 in b. done.
-  rewrite negb_and negbK. move/orP. case. intro. move/andP.
-  case. move/orP. case. intro. move/andP.  rewrite a0. ssa.
-  intro. rewrite b0 in b. done.
-  move=>_. move/andP. case. move/orP. case. intro.
-  move/andP. case. intro. intro. rewrite b0 in b. done.
-  intro. rewrite b0 in b. done.
-  rewrite !negb_and !negbK. move/orP. case.
-  intro. 
-  move/negP.
-  rewrite !negb_and negbK.
-  move/orP. case.
-  move/orP. case. intro.
-  move/negP. rewrite negb_and negb_or.
-  move/orP. case.
-  move/andP. case. intro. intro.
-  move/andP. case.
-  move/orP. case.
-  intro. move/andP. case. intro. intro. rewrite b0 in b. done.
-  intro. rewrite b0 in b. done.
-  rewrite !negb_and negbK. move/orP. case.
-  intro.
-  move/andP. case. move/orP. case.
-  intro. move/andP. case. rewrite a1. done.
-  move=>->. rewrite a1. done.
-  intro. move/andP. case.
-  move/orP. case. intro. move/andP. case.
-  rewrite a. done.
-  intro. rewrite b0 in b. done.
-  done. move/orP. case. intro.
-  move/negP. rewrite negb_and negb_or.
-  rewrite negb_and.
-  move/orP. case. move/andP. case.
-  intro. intro. move/andP. case.
-  move/orP. case. intro. rewrite a. done.
-  intro. rewrite b0 in b. done.
-  rewrite negbK. move/orP. case. intro.
-  move/andP. case. move/orP. case.
-  intro. move/andP. case. intro. rewrite a in a3. done.
-  move=>->. rewrite a. done.
-  intro. move/andP. case.
-  move/orP. case. intro.
-  move/andP. case. intro. intro. rewrite b0 in b. done.
-  intro. rewrite b0 in b. done.
-  intro.
-  move/negP. rewrite negb_and negb_or.
-  move/orP. case. move/andP. case.
-  intro. intro.
-  move/andP. case. move/orP. case.
-  intro. move/andP. case. intro.
-  intro. rewrite b1 in b0. done.
-  intro. rewrite b1 in b0. done.
-  rewrite !negb_and negbK. move/orP. case.
-  intro. move/andP. case.
-  move/orP. case. intro. move/andP. case.
-  rewrite a0. done.
-  intro. rewrite b0 in b. done.
-  intro. move/andP. case. move/orP. case.
-  intro. move/andP. case. intro.
-  intro. rewrite b1 in b. done.
-  intro. rewrite b1 in b. done.
-  intro. 
-  move/negP. rewrite negb_and negb_or.
-  move/orP. case. move/andP. case. intro.
-  intro.
-  move/negP. rewrite !negb_and. move/orP. 
-  rewrite negb_or.
-  case. move/andP. case. intro.
-  intro. move/andP. case. move/orP. case.
-  intro. move/andP. case. intro. intro. rewrite b2 in b1. done.
-  intro. rewrite b2 in b1. done.
-  rewrite negbK. move/orP. case. intro.
-  move/andP. case. move/orP. case. intro.
-  move/andP. case. intro. intro. rewrite b1 in b. done.
-  intro. rewrite b1 in b. move/andP. rewrite a0. ssa.
-  intro.
-  move/andP. case. move/orP. case.
-  move=>b2. move/andP. case. intro. intro.
-  rewrite b3 in b1. done.
-  intro. rewrite b2 in b1. done.
-  rewrite negb_and !negbK. move/orP. case.
-  intro.
-  move/negP. case.
-  rewrite !negb_and negb_or.
-  move/orP. case.
-  move/andP. case. intro. intro. move/andP. case.
-  move/orP. case. intro. rewrite a. ssa.
-  intro. rewrite b1 in b0. done.
-  rewrite negbK. rewrite a. ssa.
-  intro.
-  move/negP. rewrite negb_and negb_or.
-  move/orP. case. move/andP. case.
-  intro. intro. move/andP. case.
-  move/orP. case. intro.
-  move/andP. case. intro. intro. rewrite b2 in b1. done.
-  intro. rewrite b2 in b1. done.
-  rewrite negb_and negbK. move/orP. case.
-  intro. move/andP. case. move/orP.
-  case. intro. move/andP. case. rewrite a. done.
-  intro. rewrite b1 in b. done.
-  intro. move/andP. case.
-  move/orP. case. intro. move/andP. case.
-  intro. intro. rewrite b2 in b. done.
-  intro. rewrite b2 in b. done.
-
-  move=>[]HreadyD'[]HreadyDef' Hfirst'.
-  rewrite Hfirst Hfirst'.
-
-  clear Hready Hready' HreadyD HreadyDef Hfirst HreadyD' HreadyDef' Hfirst'.
-
-  have: is_handler_pid (restore_invariant v) = is_handler_pid (restore_invariant v').
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-
-  move: H0.
-  case/rel_eqpair. rewrite !pair_rewr.
-  move=>+ /public_equiv_eq ->.
-
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_. ssa.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->. ssa.
-  move=>->.
-  destruct (is_handler_pid _).
-  have: get_re_sched (restore_invariant v) = get_re_sched (restore_invariant v').
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-  move/rel_eqpair : H0. case. rewrite !pair_rewr.
-
-  move=>+ /public_equiv_eq ->.
-  move/public_equiv_eq : H1=>->.
-
-  move/eqsum_split.
-  case.
-  move=>[]i0'[]i1'[]->[]->_. ssa.
-  move=>[]i0'[]i1'[]->[]->/public_equiv_eq ->. ssa.
-
-  move=>->.
-  destruct (get_re_sched (restore_invariant v')).
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.  
-
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. rewrite !pair_rewr. done. done.
-  apply/rel_eqpair2. con. done.
-  apply/rel_eqpair2. con. done.
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con.  eauto. rewrite !pair_rewr.
-
-  move/public_equiv_eq : H4=>->.
-  move/rel_eqpair2 : H5.
-  case. rewrite !pair_rewr. move=>_ /public_equiv_eq ->//.
-  move/public_equiv_eq :H2=>->. done.
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. done. 
-  move/public_equiv_eq : H2=>->. rewrite !pair_rewr.
-  move/rel_eqpair2 : H5. case. rewrite !pair_rewr. move=>_ /public_equiv_eq ->. ssa.
-  apply/rel_eqpair2. con. rewrite !pair_rewr.
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr.
-  move/public_equiv_eq ->. done.
-  rewrite !pair_rewr.
-  move/rel_eqpair2 : H6. case. rewrite !pair_rewr.
-  move=>/public_equiv_eq -> /public_equiv_eq ->//.
-  move/public_equiv_eq : H2=>->//.
-
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.    
-
-  move/rel_eqpair : H0. case. rewrite !pair_rewr.
-  move=>_ /public_equiv_eq ->.
-  move/public_equiv_eq : H1=>->.
-  move/public_equiv_eq : H2=>->.
-  move/public_equiv_eq : H4=>->.  ssa.
-  rewrite /odflt /oapp /get_prev_pid /get_prev_pid_wrap /get_prev_pid /get_pids !pair_rewr.
-  destruct prev'. done.
-  destruct scheduler_pid. auto. done.
-  subst. cbv. case_if. done.
-  destruct slice_count'. done. done.
-  subst. ssa. subst. done. subst. done.
-
-  
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.    
-
-  ssa. subst. done.
-  subst. cbv. case_if. done.
-  destruct slice_count'. done. done. subst. done. subst. done.
-  subst. done.
-
-
-  
-  (*f_EP concerns the input summand only: set_pending*)
-  apply f_EP_step_sum.
-
-  rewrite /set_pending.
+  2:eapply loop_NI. apply eqsum_L_llrr in H as H'. destruct H'.
+  destruct i. destruct i'. ssa. ssa. ssa.
+  destruct i. ssa. destruct i'. ssa.
+  apply rel_eqsum_L2' in H.
+  rewrite /inr_or_def. done.
+
+  eapply map_NI.
+  eauto. eauto.
   mrw. intros.
-  case: i H => [[]|[]] H; simpl in H; last done. subst.
+  case/rel_eqpair: H;eauto.
+  instantiate (1:= state_type_equiv).
 
-  move: v => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. de cur.
-  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
-  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
-  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
-  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa.
-  apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. ssa.
-  ssa.
+  (*state update, under the slice invariant (sta_NI_inv with secret_gated)*)
+  apply: (@sta_NI_inv _ _ _ secret_gated).
+  - move=> e v; exact: state_step_gated.
+  - by [].
+  - by move=> l i i' _ v v' _ _ Hv.
+  - apply fv_NI_step_sum_on; [exact: set_pending_NI | exact: sliced_output_NI_on].
+  - move=> l i Hi v _; move: l i Hi v; apply: f_EP_step_sum; exact: set_pending_EP.
+  - exact: sliced_init_gated.
+
 
   (*map*)
   eapply map_NI.

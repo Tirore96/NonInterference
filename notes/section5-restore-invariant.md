@@ -404,3 +404,96 @@ Restructure V-B around `sta`:
 
 The function-vs-predicate decision (§5) changes how steps 3–5 are told; draft with
 the function, or settle the predicate first.
+
+## 7. Draft: the invariant chain with `sta_NI_inv` (2026-11-03)
+
+Replaces `restore_invariant` in the model. The invariant is not about the image of
+a function; it says directly when the secret handlers may run. The proof must
+cover unreachable related pairs (`sta_NI` quantifies over all of them), and the
+policy's guarantee holds only inductively (true initially, preserved by every
+step), so `sta_NI_inv` carries it along the run.
+
+### Definitions
+
+```coq
+Definition slice_open (v : [state_type]) : bool :=
+  if get_slice_count v is Some n then 0 < n else false.
+
+(* A handler boundary inside a slice: the disk and NOP handlers unmasked, the
+   timer masked, the NOP handler queued. *)
+Definition handler_boundary (w : [state_type]) : bool :=
+  [&& get_ir_pending w nop_irq, get_ir_mask w timer_irq,
+      ~~ get_ir_mask w disk_irq & ~~ get_ir_mask w nop_irq].
+
+(* The secret handlers are shut out unless a slice is open: inside a slice, the
+   state is in the allowed shape [also] or a handler is running; outside, they
+   are masked; and their masks agree. *)
+Definition gated (also : [state_type] -> bool) (v : [state_type]) : bool :=
+  (if slice_open v then also v || masks_set v
+   else get_ir_mask v disk_irq) &&
+  (get_ir_mask v nop_irq == get_ir_mask v disk_irq).
+
+(* the states the system rests in *)
+Definition secret_gated := gated (fun _ => false).
+
+(* the state initiate_next chooses from: possibly at a handler boundary *)
+Definition secret_gated_at_boundary := gated handler_boundary.
+
+Definition secret_ready (w : [state_type]) : bool :=
+  ir_ready w disk_irq || ir_ready w nop_irq.
+
+(* what the choice needs *)
+Definition secret_ready_iff_slice (w : [state_type]) : Prop :=
+  ~~ masks_set w -> secret_ready w = slice_open w.
+```
+
+`secret_gated` unfolds to the old `sliced_inv` (`false || masks_set v =
+masks_set v`), and `secret_gated v → secret_gated_at_boundary v` because `gated`
+is monotone in `also`.
+
+**To explain in the paper (later):** `handler_boundary` is exactly what
+`queue_secret_run` establishes (its postcondition), and the disjunction
+`handler_boundary v || masks_set v` mirrors the `if` in `tick_slice`: at a
+boundary, `tick_slice` applies `queue_secret_run`, which gives the left
+disjunct; otherwise it leaves the masks alone, and a handler is still running,
+which is the right disjunct. Hence the order of the operands.
+
+### The chain
+
+Step on an event `e`: `step (inl i) = set_pending i`;
+`step (inr o) = initiate_next o ∘ service_policy o`, with
+`service_policy o = tick_slice ∘ observe_timer_output o`, and `initiate_next o`
+first applying `apply_scheduler_choice o`, then rules 1–4.
+
+Notation: `{P} f {Q}` means for all `v`, `P v → Q (f v)`; `⦃R⦄ f ⦃S⦄` means for
+related events `e ≐ e'`, `R v v' → S (f e v) (f e' v')`; `P²` means both states
+satisfy `P`; `≐V` is the state equivalence.
+
+Unary (every state the system rests in is `secret_gated`):
+1. `secret_gated sliced_init`
+2. `{secret_gated} set_pending i {secret_gated}`
+3. `{secret_gated} service_policy o {secret_gated_at_boundary}`
+4. `{secret_gated_at_boundary} initiate_next o {secret_gated}`
+5. 2, 3, 4: `{secret_gated} step e {secret_gated}` for every event `e`
+6. 1, 5, induction on the run: every reachable state is `secret_gated`
+
+Bridge:
+7. `secret_gated_at_boundary w → secret_ready_iff_slice w` (not all masks set
+   and slice open: the boundary disjunct holds, so NOP is pending and unmasked,
+   hence ready; slice closed: disk masked, NOP mask equal, neither ready)
+
+Relational (one step keeps related states related):
+8. `⦃≐V⦄ set_pending ⦃≐V⦄`, and PE: unobservable `i` gives `set_pending i v ≐V v`
+9. `⦃≐V⦄ service_policy ⦃≐V⦄` (all related pairs)
+10. 9 + (3 and 7 on each side):
+    `⦃≐V ∧ secret_gated²⦄ service_policy ⦃≐V ∧ secret_ready_iff_slice²⦄`
+11. `⦃≐V ∧ secret_ready_iff_slice²⦄ initiate_next ⦃≐V⦄` (the scheduler's choice
+    keeps both; in the fatal case `slice_open` is public, so both states agree on
+    `secret_ready`)
+12. 10, 11: `⦃≐V ∧ secret_gated²⦄ initiate_next o ∘ service_policy o ⦃≐V⦄`
+13. 8, 12: `⦃≐V ∧ secret_gated²⦄ step ⦃≐V⦄`
+
+Conclusion:
+14. `sta_NI_inv` with `P := secret_gated`: initial (1), preservation (5),
+    `fv_NI_on P` (13), `f_EP_on P` (PE of 8). Theorem 4 follows, with no
+    `restore_invariant` in the model.
