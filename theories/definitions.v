@@ -797,7 +797,100 @@ Defined.
 
 Definition eqmaybe_nobody {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
   apply:eqmaybe. apply VRel. apply:Option_presP_nobody.
-Defined. 
+Defined.
+
+
+(* --- The paper's sum notation and the definitions above ---
+   The paper writes every sum and option equivalence with one sum former,
+   [eqsum_LR] (written ≐1 + ≐2), and two helpers: [eqvisible] (written ≐°)
+   and [unit_equiv P] (written 1_L), with options read as V + 1.  The
+   definitions above stay as they are; the lemmas below show that each one
+   agrees with its sum form at every level, in what it relates and in what it
+   makes unobservable, so no proof depends on the presentation. *)
+
+(* Each injection is unobservable exactly when its payload is, and an inl is
+   related to an inr exactly when both are unobservable. *)
+Definition eqsum_LR {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) : cEquiv ([Sum I O]).
+  refine (@CEquiv _
+            (fun l x => match x with | inl i => dis IRel l i | inr o => dis ORel l o end)
+            (fun l x y => match x,y with
+                          | inl i1, inl i2 => rel IRel l i1 i2
+                          | inr o1, inr o2 => rel ORel l o1 o2
+                          | inl i, inr o => dis IRel l i /\ dis ORel l o
+                          | inr o, inl i => dis ORel l o /\ dis IRel l i
+                          end)
+            _ _ _ _).
+  - move=> l. con.
+    + by case.
+    + by move=> [x|x] [y|y] /=; [eauto|case|case|eauto].
+    + move=> [x|x] [y|y] [z|z] /=; try (by eauto);
+        try (by case; eauto); try (by move=> H; case; eauto);
+        try (by case=> ?? ?; split; eauto);
+        try (by move=> ? [? ?]; split; eauto);
+        try (by case=> ? ? [? ?]; eauto).
+  - move=> l0 l1 Hord [x|x] [y|y] /=; eauto; case; eauto.
+  - move=> l0 l1 Hord [x|x] /=; eauto.
+  - move=> l [x|x] Hx [y|y] /=; split; eauto; try (by case); try (by move=> ?; split).
+Defined.
+
+(* The same relation with nothing unobservable: under a sum it keeps the tag
+   visible. *)
+Definition eqvisible {A : Set} (ARel : cEquiv A) : cEquiv A.
+  refine (@CEquiv _ (fun _ _ => False) (rel ARel) _ _ _ _).
+  - exact: equiv.
+  - by case: ARel.
+  - done.
+  - done.
+Defined.
+
+(* The unit, unobservable exactly at the levels outside P. *)
+Definition unit_equiv (P : levelPred) : presP P -> cEquiv ([Unit]).
+  move=> HP.
+  refine (@CEquiv _ (fun l _ => ~ P l) (fun _ _ _ => True) _ _ _ _).
+  - move=> l. con; done.
+  - done.
+  - move=> l0 l1 Hord _ H1 H0. apply: H1. exact: HP H0.
+  - by move=> l [] H [].
+Defined.
+
+Definition option_to_sum {V : Ty} (v : [Option V]) : [Sum V Unit] :=
+  if v is Some v' then inl v' else inr tt.
+
+(* eqmaybe P ≐ is ≐ + 1_P, along option_to_sum. *)
+Lemma eqmaybe_sum_rel (V : Ty) (P : levelPred) (HP : presP P) (VRel : cEquiv [V]) l v v' :
+  rel (eqmaybe VRel HP) l v v' <-> rel (eqsum_LR VRel (unit_equiv HP)) l (option_to_sum v) (option_to_sum v').
+Proof. by case: v => [v|]; case: v' => [v'|]. Qed.
+
+Lemma eqmaybe_sum_dis (V : Ty) (P : levelPred) (HP : presP P) (VRel : cEquiv [V]) l v :
+  dis (eqmaybe VRel HP) l v <-> dis (eqsum_LR VRel (unit_equiv HP)) l (option_to_sum v).
+Proof. by case: v. Qed.
+
+(* eqsum ≐1 ≐2 is ≐1° + ≐2°. *)
+Lemma eqsum_sum_rel (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l x y :
+  rel (eqsum ARel BRel) l x y <-> rel (eqsum_LR (eqvisible ARel) (eqvisible BRel)) l x y.
+Proof. by case: x => x; case: y => y //=; split; case. Qed.
+
+Lemma eqsum_sum_dis (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l x :
+  dis (eqsum ARel BRel) l x <-> dis (eqsum_LR (eqvisible ARel) (eqvisible BRel)) l x.
+Proof. by case: x. Qed.
+
+(* eqsum_L ≐1 ≐2 is ≐1 + ≐2°. *)
+Lemma eqsum_L_sum_rel (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l x y :
+  rel (eqsum_L ARel BRel) l x y <-> rel (eqsum_LR ARel (eqvisible BRel)) l x y.
+Proof. by case: x => x; case: y => y //=; split; case. Qed.
+
+Lemma eqsum_L_sum_dis (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l x :
+  dis (eqsum_L ARel BRel) l x <-> dis (eqsum_LR ARel (eqvisible BRel)) l x.
+Proof. by case: x. Qed.
+
+(* pub° is pub: nothing public is unobservable. *)
+Lemma eqvisible_public_rel (A : Ty) l x y :
+  rel (eqvisible (public_equiv A)) l x y <-> rel (public_equiv A) l x y.
+Proof. done. Qed.
+
+Lemma eqvisible_public_dis (A : Ty) l x :
+  dis (eqvisible (public_equiv A)) l x <-> dis (public_equiv A) l x.
+Proof. done. Qed.
 
 Lemma rel_eq : forall (I : Set) (IRel : cEquiv I) (x : I) l, rel IRel l x x.
 Proof.

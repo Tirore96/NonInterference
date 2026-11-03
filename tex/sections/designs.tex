@@ -67,7 +67,7 @@ user, and the masks, which are public, are set at steps 3 and 4 in one run only.
 For the concrete system,
 \[
 \mathsf{model\_immediate\_concrete} \notin
-  \NI(\mathsf{in\_equiv},\, \mathsf{out\_equiv}).
+  \NI(\Ein,\, \Eout).
 \]
 \end{theorem}
 
@@ -83,17 +83,17 @@ leaves the pid at its initial value, the public user. So the output step
 $\stepO{p_1}{o_1}{p_2}$ emits $o_1 = o_G$, and at its end \m{initiate_next} finds the
 disk handler pending and unmasked and sets the pid to the disk handler: U to S. The
 next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
-\code{None} in the public slot, and $o_2 \not\eqv{O}_\Lo o_G$.
+\code{None} in the public slot, and $o_2 \not\Eout_\Lo o_G$.
 \end{proof}
 
 The leak is visible in the user view as well:
 
 \begin{theorem}[\m{model_immediate_userview_not_NI}]\label{thm:leak-userview}
 For the concrete system,
-\begin{multline*}
-\mathsf{userview}\;\mathsf{model\_immediate\_concrete}\\
-  \notin \NI(\mathsf{in\_equiv},\, \mathsf{out\_equiv\_userview}).
-\end{multline*}
+\[
+\mathsf{userview}\;\mathsf{model\_immediate\_concrete}
+  \notin \NI(\Ein,\, \Euser).
+\]
 \end{theorem}
 
 The missing \code{Get} is a public-user output, which \m{parse_output}
@@ -185,28 +185,3 @@ handlers, so U cannot lead to S, unmasks the timer and disables the
 counter.\footnote{With one-step handlers the last run of each slice is lost
 (\cref{sec:restore}); non-interference is unaffected.} \m{restore_invariant} only
 matters to the proof (\cref{sec:restore}).
-
-In \cref{fig:run-sliced} the slice opens at the output of step 6, which is also its
-first boundary, so S runs steps 7 to 10 in both runs, and the scheduler runs at step
-11. The runs differ only inside S, in which handler fills the first run, and in what
-the private user emits afterwards. By \cref{fig:system}, the attacker sees neither, so
-the two runs look the same to it. The same holds for any two runs that differ only
-in inputs the attacker cannot see:
-
-\begin{theorem}[\m{model_sliced_NI}]\label{thm:main}
-If the scheduler and the public user process are non-interfering at
-\m{public_equiv} on input and output, and the private user process is
-non-interfering at \m{private_equiv} on input and output, then
-\begin{multline*}
-\mathsf{model\_sliced}\;\mathit{runtime}\;\mathit{runs}\;p_{pub}\;p_{priv}\;p_{sched}\\
-  \in \NI(\mathsf{in\_equiv},\, \mathsf{out\_equiv}).
-\end{multline*}
-\end{theorem}
-
-The result carries over to the user view (\cref{sec:interface}), which
-\cref{sec:proof} derives from it:
-
-\begin{corollary}[\m{model_sliced_userview_NI}]\label{cor:userview}
-Under the same hypotheses, the user view of the sliced model,
-\m{model_sliced_userview}, is non-interfering at \m{out_equiv_userview}.
-\end{corollary}

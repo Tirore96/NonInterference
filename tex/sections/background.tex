@@ -3,7 +3,9 @@
 This section recalls the calculus and definitions of Rafnsson et
 al.~\cite{rafnsson2017}, in the form we mechanise. The one essential difference is
 that non-interference is stated over finite traces; \cref{sec:departures} proves
-it equivalent to the original.
+it equivalent to the original. We also add sum types, which the original
+lacks, and write optional values and the model's interrupts as sums; their
+equivalences are proved equal to the mechanised ones (\cref{sec:agreement}).
 
 \subsection{Processes, traces and time}
 
@@ -67,7 +69,8 @@ emits \code{Some o} for an output \code{(c,o)} of \code{p}. The phase is toggled
 tag \code{c} and by the bit carried on each input. \code{par p1 p2} gives every input to
 both parts and emits both outputs as a pair. \code{loop p} feeds each output of
 \code{p} back to it as an input. \code{maybe p} makes the input optional: \code{None}
-leaves \code{p} unchanged.
+leaves \code{p} unchanged. We write $A + 1$ for the optional values of
+$A$, with \code{Some v} and \code{None} its two injections.
 
 Reduction is deterministic, and a process never blocks.
 
@@ -81,7 +84,8 @@ change of value.
 \subsection{Characterised equivalences and non-interference}
 Security is stated relative to a lattice of levels $\ell$. Everything in this paper
 can be read with the two-point lattice $\Lo \sqsubseteq \Hi$: the attacker $\Lo$,
-and $\Hi$, who sees everything; the mechanisation is over an arbitrary bounded lattice
+and $\Hi$, who sees everything; the mechanisation is over any partial order
+with a least element, in particular any bounded lattice
 (\cref{sec:mechanisation}). Each input and output type carries a \emph{characterised equivalence}
 (\m{cEquiv}) $\doteq$, which says, for each level $\ell$:
 \begin{itemize}
@@ -90,11 +94,7 @@ and $\Hi$, who sees everything; the mechanisation is over an arbitrary bounded l
 \end{itemize}
 This definition is an alternative to Rafnsson et al.'s, which adjoin $\unobs$ as a
 value; the two give the same non-interference (\m{NI_lEquiv}). $\doteq_\ell$ is an equivalence, and the unobservable values form one
-of its classes:
-\[
-x \doteq_\ell \unobs \;\Rightarrow\; \forall y.\;
-  (y \doteq_\ell \unobs \Leftrightarrow x \doteq_\ell y).
-\]
+of its classes: they are related to each other and to nothing else.
 So at each level the type is partitioned into classes the observer cannot tell
 apart, and one of them, the \emph{distinguished class}, holds the values the
 observer does not see. It is empty when the level hides nothing. We write
@@ -138,10 +138,11 @@ equivalences; the others pass equivalences through. So the equivalences of the m
 in \cref{sec:model} are terms built from a few constructors over a few base
 equivalences, chiefly the two below.
 
-The \emph{public} equivalence (\code{public_equiv}) hides nothing: at every level,
-$x \doteq_\ell y$ iff $x = y$, and nothing is unobservable. The \emph{private}
-equivalence (\code{private_equiv}) hides everything from the attacker: at $\Lo$ every
+We say that $\doteq$ \emph{hides} $x$ at $\ell$ when $x \doteq_\ell \unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
+$x \doteq_\ell y$ iff $x = y$. The \emph{private}
+equivalence $\priveq$ (\m{private_equiv}) hides everything from the attacker: at $\Lo$ every
 value is unobservable, so all values are related, and at $\Hi$ it is the public one.
+The superscript is the lowest level that sees the values.
 On the handler output $\{\mathtt{Notify}, \mathtt{Nothing}\}$, for example,
 \begin{align*}
 \text{public:}\ & \mathtt{Notify} \not\doteq_\Lo \mathtt{Nothing},
@@ -153,29 +154,39 @@ The model gives the timer handler's output the public equivalence and the disk
 handler's the private one: the attacker learns when the timer handler finishes, but
 not when the disk handler does.
 
-$\mathsf{eqpair}(\eqv{1},\eqv{2})$ relates pairs componentwise, and no pair is
-unobservable; it is the output equivalence of \code{par}. Its variants
-$\mathsf{eqpair\_R}$ and $\mathsf{eqpair\_LR}$ make a pair unobservable when its right
-component, or both components, are; they appear where a constructor pairs an input
-with a state or a gate bit. $\mathsf{eqsum}(\eqv{1},\eqv{2})$ relates a sum tag by tag
-and never relates an \code{inl} to an \code{inr}, so the tag stays public even when
-the payload is not; no sum is unobservable. Its variant $\mathsf{eqsum\_L}$ makes an
-\code{inl} unobservable when its payload is.
+The other equivalences are built from these by the following
+formers.
 
-A process that does not run emits \code{None}, and $\mathsf{eqmaybe}(L, \doteq)$ says
-who can tell. $L$ is the set of levels that see \code{None}, closed upwards: a level
-above one that sees it sees it too. $\mathsf{eqmaybe}(L,\doteq)$ is the least
-equivalence on options with
-\begin{align*}
-\mathsf{Some}\;v \doteq_\ell \mathsf{Some}\;v' &\iff v \doteq_\ell v', \\
-\mathsf{Some}\;v \doteq_\ell \unobs &\iff v \doteq_\ell \unobs, \\
-\mathsf{None} \doteq_\ell \unobs &\iff \ell \notin L.
-\end{align*}
-By the characterisation law, \code{Some v} and \code{None} are then related at $\ell$
-exactly when both are unobservable there. We write $L$ out at each use:
-$\mathsf{eqmaybe}(\{\Lo,\Hi\},\doteq)$ lets every observer see that a process did not
-run, $\mathsf{eqmaybe}(\{\Hi\},\doteq)$ hides it from the attacker, and
-$\mathsf{eqmaybe}(\emptyset,\doteq)$ from everyone.
+\begin{definition}[Equivalence formers]\label{def:formers}
+Let $\eqv{X}$ and $\eqv{Y}$ be equivalences on $X$ and $Y$. At each level $\ell$,
+each former below relates and hides values as stated, and also relates any two
+values it hides.
+\begin{itemize}
+\item \emph{Pairs} (\m{eqpair}, \m{eqpair_R}, \m{eqpair_LR}). $\eqo{X} \times
+  \eqo{Y}$, $\eqo{X} \times_R \eqo{Y}$ and $\eqo{X} \times_{LR} \eqo{Y}$ relate
+  $(x,y)$ and $(x',y')$ when $x \eqv{X}_\ell x'$ and $y \eqv{Y}_\ell y'$. The first
+  hides no pair, the second hides $(x,y)$ when $\eqv{Y}$ hides $y$, and the third
+  when $\eqv{X}$ hides $x$ and $\eqv{Y}$ hides $y$.
+\item \emph{Sums} (\m{eqsum_LR}). $\eqo{X} + \eqo{Y}$ relates $\mathsf{inl}\;x$ and
+  $\mathsf{inl}\;x'$ when $x \eqv{X}_\ell x'$, and $\mathsf{inr}\;y$ and
+  $\mathsf{inr}\;y'$ when $y \eqv{Y}_\ell y'$. It hides $\mathsf{inl}\;x$ when
+  $\eqv{X}$ hides $x$, and $\mathsf{inr}\;y$ when $\eqv{Y}$ hides $y$.
+\item \emph{Unit} (\m{unit_equiv}). For a set $S$ of levels, closed upwards, $1^S$
+  relates the unit's element $\star$ to itself and hides it at the levels outside
+  $S$. We write $1^\ell$ for $1^S$ with $S$ the levels at or above $\ell$.
+\end{itemize}
+\end{definition}
+
+$\times$ is the output equivalence of \code{par}; $\times_R$ and $\times_{LR}$
+appear where a constructor pairs an input with a state or a gate bit. Sums are our
+addition, and a conservative one: every constructor and theorem is parametric in
+its types, and none changes. An \code{inl} and an \code{inr} are related exactly
+when both are hidden; otherwise the tag is visible.
+
+A process that does not run emits \code{None}, and under ${\doteq} + \one^S$ the levels
+in $S$ see that it did not run; \code{Some v} and \code{None} are related at $\ell$
+exactly when both are hidden. So $1^\Lo$ lets every observer see \code{None},
+$1^\Hi$ hides it from the attacker, and $1^\emptyset$ hides it from everyone.
 
 \subsection{Compositional theorems}\label{sec:composition}
 
@@ -209,8 +220,7 @@ does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $v$
 of \code{true} under the public equivalence on booleans, but $\Lo$ is not under the
 private one, where \code{true} and \code{false} are related. And $\Lo$ is oblivious
 to a process all of whose outputs it relates to $\unobs$, such as a slot whose
-outputs, \code{None} included, are classified by $\mathsf{eqmaybe}(\{\Hi\},\doteq)$
-over the private equivalence (\cref{sec:gating}).
+outputs, \code{None} included, are classified by $\priveq + \one^\Hi$ (\cref{sec:gating}).
 
 \begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
 For all processes, functions and equivalences of matching types:
@@ -220,23 +230,23 @@ For all processes, functions and equivalences of matching types:
   $f \in \NI(\eqv{I},\eqv{I'}) \cap \mathsf{PU}(\eqv{I},\eqv{I'})$ and
   $g \in \NI(\eqv{O},\eqv{O'})$, then
   $\mathsf{map}\;f\;g\;p \in \NI(\eqv{I},\eqv{O'})$.
-\item\label{it:sta} (\m{sta_NI}) If $p \in \NI(\mathsf{eqpair\_R}(\eqv{V},\eqv{I}),\eqv{O})$,
+\item\label{it:sta} (\m{sta_NI}) If $p \in \NI(\eqo{V} \times_R \eqo{I},\eqv{O})$,
   $f \in \NI(\eqv{I},\eqv{V},\eqv{V}) \cap \mathsf{PE}(\eqv{I},\eqv{V})$ and
   $g \in \NI(\eqv{O},\eqv{V},\eqv{V})$, then
-  $\mathsf{sta}\;f\;g\;v\;p \in \NI(\eqv{I},\mathsf{eqpair}(\eqv{V},\eqv{O}))$.
-\item\label{it:swi} (\m{swi_NI}) If $p \in \NI(\eqv{I},\mathsf{eqpair\_LR}(\eqv{B},\eqv{O}))$ and
+  $\mathsf{sta}\;f\;g\;v\;p \in \NI(\eqv{I},\eqo{V} \times \eqo{O})$.
+\item\label{it:swi} (\m{swi_NI}) If $p \in \NI(\eqv{I},\eqo{B} \times_{LR} \eqo{O})$ and
   for every $\ell$,
   $\ell \in \Aw(\mathsf{true},\eqv{B}) \cup
-    \Ob(\mathsf{swi}\;b\;p,\mathsf{eqmaybe}(\Aw(\mathsf{true},\eqv{B}),\eqv{O}))$, then
+    \Ob(\mathsf{swi}\;b\;p,\eqo{O} + \one^{\Aw(\mathsf{true},\eqv{B})})$, then
   $\mathsf{swi}\;b\;p \in
-    \NI(\mathsf{eqpair\_LR}(\eqv{B},\eqv{I}),\mathsf{eqmaybe}(\Aw(\mathsf{true},\eqv{B}),\eqv{O}))$.
+    \NI(\eqo{B} \times_{LR} \eqo{I},\eqo{O} + \one^{\Aw(\mathsf{true},\eqv{B})})$.
 \item\label{it:par} (\m{par_NI}) If $p_1 \in \NI(\eqv{I},\eqv{O_1})$ and
   $p_2 \in \NI(\eqv{I},\eqv{O_2})$, then
-  $\mathsf{par}\;p_1\;p_2 \in \NI(\eqv{I},\mathsf{eqpair}(\eqv{O_1},\eqv{O_2}))$.
+  $\mathsf{par}\;p_1\;p_2 \in \NI(\eqv{I},\eqo{O_1} \times \eqo{O_2})$.
 \item\label{it:loop} (\m{loop_NI}) If $p \in \NI(\eqv{I},\eqv{I})$, then
   $\mathsf{loop}\;p \in \NI(\eqv{I},\eqv{I})$.
 \item\label{it:maybe} (\m{maybe_NI}) If $p \in \NI(\eqv{I},\eqv{O})$, then
-  $\mathsf{maybe}\;p \in \NI(\mathsf{eqmaybe}(\emptyset,\eqv{I}),\eqv{O})$.
+  $\mathsf{maybe}\;p \in \NI(\eqo{I} + \one^\emptyset,\eqv{O})$.
 \end{enumerate}
 \end{theorem}
 
@@ -244,4 +254,8 @@ Two of these carry substantial side conditions: the state update of \code{sta} m
 be non-interfering and equivalence-preserving, and \code{swi} requires every observer
 to be aware of the gate or oblivious to the gated process. These are the two
 obligations the proof of \cref{sec:proof} has to discharge for the model.
+
+% one float per column top from here on, so paired figures sit side by side
+\setcounter{topnumber}{1}
+\input{sections/fig-model}
 

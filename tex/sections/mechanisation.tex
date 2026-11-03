@@ -44,15 +44,16 @@ relations would need; we invert reductions through determinism of reduction
 instead, one lemma per rule (\m{inv_mapO} and its siblings).
 
 \paragraph{Levels} For presentation, this paper reads levels as the two-point
-lattice. The mechanisation, like the calculus of Rafnsson et al., works over an
-arbitrary bounded lattice, for two reasons: it mechanises the existing theory as it
+lattice. The mechanisation works over any partial order with a least
+element, and so over any bounded lattice, as the calculus of Rafnsson et al.\ does,
+for two reasons: it mechanises the existing theory as it
 stands, and it lets other models, whose security claims need more levels, build on
-it. Over a lattice, a characterised equivalence must also be monotone downwards: what
+it. Over such an order, a characterised equivalence must also be monotone downwards: what
 a level relates stays related below it, and likewise for unobservability. Our models
 need nothing more. Every equivalence in them treats the bottom level, read as $\Lo$,
 apart from all others, so the proofs split on $\ell = \Lo$ against $\ell \neq \Lo$,
-and the second case covers every other level at once; the set $\{\Hi\}$ in
-$\mathsf{eqmaybe}(\{\Hi\},\doteq)$ stands for all levels but $\Lo$.
+and the second case covers every other level at once; $\Hi$ in
+$\priveq$ and $1^\Hi$ stands for all levels but $\Lo$.
 
 \paragraph{Proof devices} A hook that only the proof needs, such as
 \m{restore_invariant}, can hide behaviour. An earlier version of our model relied on
@@ -80,8 +81,35 @@ also hold with non-interference read as in the original, hypotheses included
 
 One further difference is an alternative definition of characterised equivalence.
 The original adjoins the distinguished value $\unobs$ to every type; we keep the
-values as they are and make unobservability a predicate, tied to the equivalence by the characterisation law.
+values as they are and make unobservability a predicate, tied to the equivalence
+by requiring the unobservable values to form one of its classes.
 \m{NI_lEquiv} shows that the two give the same notion of non-interference, and
 this paper uses the original notation throughout.
 
 The composition theorems themselves are proved directly for our definitions.
+
+\subsection{Notation and the mechanised definitions}\label{sec:agreement}
+
+The paper writes some equivalences differently from their mechanised definitions,
+and keeps the two forms equal by proof. The mechanisation follows the original for
+options: \code{Option} is a type code, classified by \m{eqmaybe}. Sums, which we
+add, come there with two equivalences: \m{eqsum}, under which no sum is
+unobservable, and \m{eqsum_L}, under which an \code{inl} is when its payload is.
+The paper uses one sum former instead, $\eqo{X} + \eqo{Y}$ (\m{eqsum_LR}), with
+$\doteq^\circ$ (\m{eqvisible}) and $1^S$ (\m{unit_equiv}). For each mechanised form,
+an agreement lemma shows that, at every level, it relates and hides
+exactly what its paper form does: $\mathsf{eqmaybe}(S,\doteq)$ is ${\doteq} + \one^S$
+along the map from options to sums (\m{eqmaybe_sum_rel}, \m{eqmaybe_sum_dis}),
+$\mathsf{eqsum}(\eqv{X},\eqv{Y})$ is ${\eqv{X}^\circ} + {\eqv{Y}^\circ}$
+(\m{eqsum_sum_rel}), $\mathsf{eqsum\_L}(\eqv{X},\eqv{Y})$ is
+$\eqo{X} + {\eqv{Y}^\circ}$ (\m{eqsum_L_sum_rel}), and $(\pubeq)^\circ$ is
+$\pubeq$ (\m{eqvisible_public_rel}). No proof depends on the presentation, and
+the calculus is the original's, with sums added.
+
+Interrupts are the same technique applied the other way round: there the
+mechanisation was changed to match the presentation. The input type is the sum
+$\mathit{Unit} + \mathit{Unit}$, with the disk interrupt on the \code{inl} side, and
+\m{in_equiv} is $\priveq + \pubeq$. The earlier definition, over a
+two-constructor type, is kept as \m{in_equiv_interrupt}, and
+\m{in_equiv_interrupt_rel} and \m{in_equiv_interrupt_dis} show that the two
+agree.

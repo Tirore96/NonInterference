@@ -71,6 +71,18 @@
 \newcommand{\comp}[1]{\cref{thm:composition}(\ref{#1})}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\note}[1]{\textcolor{orange!85!black}{[NOTE: #1]}}
+% the model's input, output and user-view equivalences (Definitions 3 and 5)
+\newcommand{\Ein}{\mathcal{I}}
+\newcommand{\Eout}{\mathcal{O}}
+\newcommand{\Euser}{\mathcal{U}}
+% equivalences as operands of + and x.  \doteq is a relation symbol, and TeX turns a
+% binary operator after a relation into an ordinary symbol with no space, so an
+% equivalence used as an operand is braced, which makes it an ordinary symbol.
+\newcommand{\pubeq}{{\doteq^{\Lo}}}
+\newcommand{\priveq}{{\doteq^{\Hi}}}
+\newcommand{\privvis}{{\doteq^{\Hi\circ}}}
+\newcommand{\eqo}[1]{{\eqv{#1}}}
+\newcommand{\one}{1}
 
 % ---------------------------------------------------------------- mechanisation
 % Every link to the mechanisation goes through \mech, so the target is set here

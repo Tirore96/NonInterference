@@ -1,35 +1,71 @@
 \section{The Security Proof}\label{sec:proof}
-This section proves \cref{thm:main}. Writing $\mathsf{pub}$ and $\mathsf{priv}$ for
-the public and private equivalences, it states
-\begin{align*}
-&p_{sched}, p_{pub} \in \NI(\mathsf{pub},\mathsf{pub}) \;\wedge\;
-  p_{priv} \in \NI(\mathsf{priv},\mathsf{priv}) \\
-&\quad\Rightarrow\;
-  \mathsf{model\_sliced} \in \NI(\mathsf{in\_equiv},\mathsf{out\_equiv}).
-\end{align*}
+This section proves that the sliced policy is non-interfering, with $\Ein$ and
+$\Eout$ of \cref{def:io}:
+
+\begin{theorem}[\m{model_sliced_NI}]\label{thm:main}
+If the scheduler and the public user process are non-interfering at
+$\pubeq$ on input and output, and the private user process is
+non-interfering at $\priveq$ on input and output, then
+\[
+\mathsf{model\_sliced}\;\mathit{runtime}\;\mathit{runs}\;p_{pub}\;p_{priv}\;p_{sched}
+  \in \NI(\Ein,\, \Eout).
+\]
+\end{theorem}
+
+\todo{Section-wide: write every step the way the corollary's proof now reads:
+name the process term, the item of Theorem 1 with its instance ($p$, $f$, $g$, the
+equivalences), list its side conditions, and say why each holds. Several steps
+below give only the gist and leave the instance implicit.}
+
 At the attacker's level $\Lo$ the conclusion reads as follows. A
 disk interrupt is unobservable at $\Lo$ (\cref{sec:interface}), so two input streams
-that differ only in disk interrupts must give outputs that \m{out_equiv} relates: at
-every step the attacker sees the same U and T steps, and whether the system is in S,
-and the two runs may differ only in \emph{which} secret handler runs there, and in
-the values the private user emits. At every
-other level each equivalence of the model is equality, and every obligation below
-holds trivially; we discuss $\Lo$ only.
+that differ only in disk interrupts must give outputs that $\Eout$ relates.
 
-\Cref{cor:userview} adds one layer outside the model: \code{userview} is
-a \code{map}, so by \comp{it:map} (\m{map_NI}) it suffices that \m{parse_output}
-maps \m{out_equiv}-related outputs to \m{out_equiv_userview}-related ones. It
-does, because it reads only the two user slots. Two related outputs agree on which
-user slot, if any, emitted, and on the public user's value, so their images agree
-on the tag and the public value; every other step becomes \code{None} on both
-sides.
+The result carries over to the user view (\cref{sec:interface}):
 
+\begin{corollary}[\m{model_sliced_userview_NI}]\label{cor:userview}
+Under the same hypotheses, the user view of the sliced model,
+\m{model_sliced_userview}, is in $\NI(\Ein, \Euser)$.
+\end{corollary}
+
+\todo{``adds one layer outside the model'' mixes the term (a map around
+model\_sliced) with the proof (one more use of map\_NI). Say it as a proof: put
+this in a proof environment, starting ``The user view is the process \dots''.}
+Its proof adds one layer outside the model. The user view is the process
+\[
+\mathsf{map}\;\mathsf{id}\;\mathsf{parse\_output}\;\mathsf{model\_sliced},
+\]
+so \comp{it:map} (\m{map_NI}) applies with $p \in \NI(\Ein,\Eout)$ by \cref{thm:main},
+$f = \mathsf{id}$ and $g = \mathsf{parse\_output}$. Its side conditions are
+$\mathsf{id} \in \NI(\Ein,\Ein) \cap \mathsf{PU}(\Ein,\Ein)$, which holds
+trivially, and
+$g \in \NI(\Eout,\Euser)$, that is,
+\[
+o \eqv{\Eout}_\ell o' \;\Rightarrow\; g\,o \eqv{\Euser}_\ell g\,o'
+\]
+for every level $\ell$ and outputs $o$, $o'$. This holds because \m{parse_output} reads only the two user
+slots. If $o \eqv{\Eout}_\ell o'$, then $o$ and $o'$ agree on which user slot, if
+any, emitted, and on the public user's value, so $g\,o$ and $g\,o'$ agree on the tag
+and the public value; if neither user slot emitted, $g\,o$ and $g\,o'$ are both
+\code{None}.
+
+\todo{``from the outside in'' is not explained. Say what it means: model\_sliced
+is a term (the reactive\_system listing of Section III-E); the proof applies one
+item of Theorem 1 per constructor, starting at the outermost and moving to its
+argument; each application turns the goal for the term into goals for its
+argument, at equivalences the item dictates, plus side conditions on its
+functions. Consider displaying the unfolded term once here, so that each bullet
+below can point at its constructor.}
 The proof applies \cref{thm:composition} to \m{model_sliced}
 (\cref{fig:system}) from the outside in. The theorem gives the outermost
-equivalences, \m{in_equiv} and \m{out_equiv}, shaded in \cref{fig:system}; the proof
+equivalences, $\Ein$ and $\Eout$, shaded in \cref{fig:system}; the proof
 chooses those inside, $\eqv{V}$ on the state (\cref{fig:state}) and $\eqv{B}$ on
 each gate bit (\cref{sec:gating}).
 
+\todo{``five layers'' is informal and the grouping is ours, not the term's: the
+term has four maps (the outer inl map, map id snd, the pool's input map, the gate
+maps) and the bullets do not say which map each refers to. Use the constructor
+order of the listing, and name each map.}
 The term has five layers. For each, from the outside in, we name its constructors,
 the items of \cref{thm:composition} that apply, and what they require:
 \begin{itemize}
@@ -37,20 +73,33 @@ the items of \cref{thm:composition} that apply, and what they require:
   outer map tags each interrupt \code{inl}, and the loop feeds each output back
   tagged \code{inr}, so the state receives one sum of events. \comp{it:loop} asks
   for the process inside the loop to be in $\NI(\eqv{E},\eqv{E})$, where we write
-  $\eqv{E}$ for $\mathsf{in\_equiv} + \mathsf{out\_equiv}$, the two equivalences of
-  \cref{fig:system} side by side. Being a sum, it never relates
-  an interrupt to an output, and a disk interrupt is unobservable at $\Lo$.
+  $\eqv{E}$ for $\Ein + \Eout$, the two equivalences of
+  \cref{fig:system} side by side. No output is unobservable, so it never
+  relates an interrupt to an output, and a disk interrupt is unobservable at $\Lo$.
+  \todo{Inaccurate: the loop does not tag outputs inr, the inner map
+  (map pool\_input inr) does. The side conditions of map\_NI for the outer map
+  ($\mathsf{inl} \in \NI \cap \mathsf{PU}$, inr\_or\_def $\in \NI$) and for
+  map id snd are not stated.}
 \item \emph{The state} (\code{sta}; \comp{it:sta}). The state update $f$ must
   satisfy $f \in \NI(\eqv{E},\eqv{V},\eqv{V}) \cap \mathsf{PE}(\eqv{E},\eqv{V})$. It
   decides whether a secret handler runs, and it is the hard obligation
   (\cref{sec:state-equiv,sec:update,sec:restore}).
+  \todo{$f$ here is sta's state update, but $f$ was map's input function one
+  bullet up and in the corollary. sta\_NI also requires the output update
+  ($g$, the identity here) to be in $\NI(\eqv{O},\eqv{V},\eqv{V})$, and gives the
+  inner process inputs at $\eqv{V} \times_R \eqv{E}$; neither is mentioned.}
 \item \emph{The pool} (\code{map}, \code{maybe}, \code{par}; \comp{it:map},
   \comp{it:maybe}, \comp{it:par}). The pool idles on interrupts (\cref{sec:state}):
   its input map sends each to \code{None}, on which \code{maybe} idles
   (\cref{fig:semantics}), and every output to the current pid. \code{maybe} gives
-  the pool's input the equivalence $\mathsf{eqmaybe}(\emptyset,\cdot)$, under which no
+  the pool's input the equivalence $\cdot + \one^\emptyset$, under which no
   level sees \code{None}, so the map is in $\mathsf{PU}$. \code{par} splits the output
   equivalence into one component per slot.
+  \todo{Name the map (map pool\_input inr) and the equivalence: ``$\cdot +
+  1^\emptyset$'' leaves the payload (pid $\times$ disk output) unnamed. State
+  pool\_input's side conditions exactly ($\NI$ and $\mathsf{PU}$ from
+  $\eqv{V} \times_R \eqv{E}$). ``par splits'' reads backwards: par\_NI composes
+  the slots' equivalences into the product.}
 \item \emph{The slots} (\code{map}, \code{swi}; \comp{it:map}, \comp{it:swi}). Each
   gate map must be in $\NI$ into $\eqv{B}$, and each slot must satisfy the
   awareness-or-obliviousness condition of \comp{it:swi}; this hides which secret
@@ -64,6 +113,11 @@ the items of \cref{thm:composition} that apply, and what they require:
 
 \subsection{The state equivalence}\label{sec:state-equiv}
 
+\todo{$\eqv{V}$ is given only by the shading of Fig.~4 and the bullets below.
+Give it a definition like Definition 3 ($\eqv{V} \triangleq \dots$, one factor
+per field), then justify each factor. ``The first condition asks for private
+fields, the second for public ones'' is vague: say that PE is easier to meet the
+more fields are private, NI the more are public.}
 For the state, \comp{it:sta} asks for $f \in \mathsf{PE}(\eqv{E},\eqv{V})$, so an
 unobservable event leaves the state related to itself, and $f \in
 \NI(\eqv{E},\eqv{V},\eqv{V})$, so related events take related states to related
@@ -78,11 +132,12 @@ where a condition forces it, which gives $\eqv{V}$, the shading of \cref{fig:sta
   when a slice opens, the disk handler takes the
   run the NOP handler was queued for, so after that run the NOP handler is pending
   in one state and not in the other.
-\item \emph{The current pid is $\mathsf{priv} + \mathsf{pub}$.} Its
+\item \emph{The current pid is $\privvis + \pubeq$.} Its
   \code{inl} side holds exactly the two secret handlers (\cref{sec:global-state}),
   and which of them runs may differ between the two states, so the value inside
-  \code{inl} is private. A sum never relates an \code{inl} to an
-  \code{inr}, so \emph{whether} a secret handler runs stays public.
+  \code{inl} is private. The $^\circ$ makes no \code{inl} unobservable, so
+  the sum never relates an \code{inl} to an \code{inr}, and \emph{whether} a secret
+  handler runs stays public.
 \item \emph{Every other field is public:} the masks, the slice counter, the
   reschedule flag and the previous pid. Nothing forces them private, and
   \m{initiate_next} branches on all of them to compute the next pid, whose tag
@@ -102,24 +157,45 @@ hard obligation is $f \in \NI(\eqv{E},\eqv{V},\eqv{V})$. It splits along the two
 lanes of \m{state_step} (\cref{sec:state}), since $\eqv{E}$ never relates an
 interrupt to an output, into
 \begin{gather*}
-\mathsf{set\_pending} \in \NI(\mathsf{in\_equiv},\eqv{V},\eqv{V})
+\mathsf{set\_pending} \in \NI(\Ein,\eqv{V},\eqv{V})
 \quad\text{and} \\
-s \in \NI(\mathsf{out\_equiv},\eqv{V},\eqv{V})
+s \in \NI(\Eout,\eqv{V},\eqv{V})
 \end{gather*}
+\todo{above, what is s?}
+\todo{Answer to the above: say before the display that the output lane is the
+composite $\mathsf{initiate\_next} \circ \mathsf{service\_policy} \circ
+\mathsf{check\_scheduler}$ (Section III-D), and that fv\_NI\_comp lets the proof
+show $\NI$ for each of the three stages $s$ separately.}
 for each stage $s$ of the output lane (\m{fv_NI_comp}). The first holds because
-\m{set_pending} writes a private bit. On the output lane:
-\begin{itemize}
-\item \emph{\m{check_scheduler} and the service policy are routine.} They read only
-  public fields of the state and the output, so they write the same values into
-  both states. In particular, the service policy reads only the timer handler's
-  output, which is public; this is what the restriction of \cref{sec:sliced} buys.
-\item \emph{\m{initiate_next} decides whether S is entered.} The timer's readiness
-  is public, so both states agree on it. Otherwise, in each state the secret
-  handler ready to start is the disk handler, the NOP handler, or none. Disk in one
-  state and NOP in the other is harmless: both start an \code{inl} pid, whose value
-  is private. A secret handler in one state and none in the other is fatal: one
-  state enters S and the other continues a user process.
-\end{itemize}
+\m{set_pending} writes a private bit. The output lane of the sliced policy has six
+stages, applied in this order:
+\begin{enumerate}
+\item \m{check_scheduler} reads the scheduler's output and writes the current pid
+  from it;
+\item \m{initiate_ir} reads the timer handler's output and, on \code{Notify},
+  loads the counter and sets the reschedule flag;
+\item \m{check_handler_completed} reads the counter and, at a handler boundary,
+  unmasks the disk and NOP handlers, masks the timer and sets the NOP pending bit;
+\item \m{check_slice_count} reads the counter and ticks it, and at \code{Some 0}
+  masks the disk and NOP handlers, unmasks the timer and disables the counter;
+\item \m{restore_invariant} reads the counter and writes masks and the NOP pending
+  bit to match it (\cref{sec:restore});
+\item \m{initiate_next} reads the masks, the pending bits, the pid and the
+  reschedule flag, and chooses the next pid by the rules of \cref{sec:state}.
+\end{enumerate}
+The first five read only public fields of the state and public slots of the
+output, so on related arguments they write the same values, private bits included,
+and their obligations are routine. The service policy, stages 2 to 4, reads only
+the timer handler's output; this is what the restriction of \cref{sec:sliced} buys.
+\m{initiate_next} is different: it reads the private pending bits. The timer's
+readiness is public, so both states agree on it. Otherwise, in each state the
+secret handler ready to start is the disk handler, the NOP handler, or none. Disk in
+one state and NOP in the other is harmless: both start an \code{inl} pid, whose
+value is private. A secret handler in one state and none in the other is fatal: one
+state enters S and the other continues a user process.
+\todo{``about to choose'' is informal; state the fact as a property of two
+states $v \eqv{V}_\Lo v'$ that reach initiate\_next, and give it a name the next
+two subsections can refer to.}
 So the stage needs one fact: two related states, about to choose, either both have
 a secret handler ready or neither has. The ordinary policy fails here and in the
 service policy. \m{immediate_service} unmasks when any handler completes, the disk
@@ -129,26 +205,55 @@ taken in one run only, which is the counterexample of \cref{thm:leak}.
 
 In the states the sliced policy reaches, the public counter gives the fact: while a
 slice is open the NOP handler is ready, and otherwise neither secret handler is. But
-$\NI(\mathsf{out\_equiv},\eqv{V},\eqv{V})$ quantifies over all pairs of related states,
+$\NI(\Eout,\eqv{V},\eqv{V})$ quantifies over all pairs of related states,
 reachable or not.
 
 \subsection{Restoring the invariant}\label{sec:restore}
 
-Restricting $\eqv{V}$ to the states that satisfy the invariant is not possible: a
-characterised equivalence relates every value to itself. Arguing over reachable
-states only would give up the per-constructor structure of the proof. Instead,
-\m{initiate_next} applies \m{restore_invariant} just before it chooses
-(\cref{sec:state}), so the proof of this stage needs to consider only states
-that satisfy the invariant. It writes into the state the masks that
-go with the counter: in an open slice it sets the NOP pending bit and the timer
-mask, otherwise the disk and NOP masks, and in both cases it copies the disk mask to
-the NOP mask. It reads only public fields, so $\mathsf{restore\_invariant} \in
-\NI(\eqv{V},\eqv{V})$, and afterwards either both related states have a secret
-handler ready or neither has. This is the fact \m{initiate_next} needs.
+The output lane is one function of the output and the state, the composite of the
+six stages of \cref{sec:update}. Proving it non-interfering in one piece would mean
+following all their branches at once. \m{fv_NI_comp} instead proves it stage by
+stage: if every stage takes related arguments to related states, so does their
+composite. The price is what the composite forgets between stages. Each stage's
+obligation is stated for every pair of related states, so all that passes from one
+stage to the next is that the two states are related. What an earlier stage
+establishes about its result is lost: that \m{check_handler_completed} has just
+made the NOP handler pending, or that \m{check_slice_count} has just masked the
+disk and NOP handlers. \m{initiate_next} must therefore be non-interfering on
+\emph{every} pair of related states, and that fails. Two related states agree on
+the counter and the masks but may differ in the private pending bits; if the disk
+and NOP handlers are unmasked, the disk handler is pending in one state, and no
+secret handler in the other, one state enters S and the other does not.
 
-It remains to show that \m{restore_invariant} is the identity wherever it is
-applied, so that it restricts what the proof considers without changing what the
-model does. Write $v_{es}$ for the state after the events $es$ from the initial state
+What is forgotten is the link between the counter and the secret handlers' bits.
+The sliced policy maintains it on every state it reaches in which not all masks are
+set, that is, at every choice that rule~1 of \m{initiate_next} does not settle:
+\begin{enumerate}
+\item the NOP mask equals the disk mask;
+\item inside an open slice, the NOP handler is pending and the timer masked;
+\item outside a slice, the disk and NOP handlers are masked.
+\end{enumerate}
+With these three conditions, whether a secret handler is ready depends only on the
+counter and the masks, which are public: inside a slice, exactly when the disk and
+NOP handlers are unmasked; outside it, never. So two related states that satisfy
+them agree on whether a secret handler is ready, which is the fact
+\m{initiate_next} needs.
+
+Two ways of putting the conditions back fail. $\eqv{V}$ cannot be restricted to the
+states that satisfy them, because a characterised equivalence relates every value
+to itself. And arguing over reachable states only would give up the per-constructor
+structure of the proof. Instead the model writes the conditions into the state:
+\m{initiate_next} applies \m{restore_invariant} just before it chooses
+(\cref{sec:state}). \m{restore_invariant} reads the counter and, in an open slice,
+sets the NOP pending bit and the timer mask, otherwise the disk and NOP masks, and in
+both cases copies the disk mask to the NOP mask. Every state it returns satisfies
+the three conditions, so the proof of the choice needs to consider only states in
+its image. It reads only public fields, so it is itself a routine stage,
+$\mathsf{restore\_invariant} \in \NI(\eqv{V},\eqv{V})$.
+
+The proof of \cref{thm:main} needs nothing more. What remains is to show that the
+restriction costs nothing: \m{restore_invariant} is the identity wherever the model
+applies it, so \m{model_sliced} behaves exactly as the sliced policy without it. Write $v_{es}$ for the state after the events $es$ from the initial state
 of \m{model_sliced}, and $c_o(v)$ for the state that \m{initiate_next} receives on
 output $o$ in state $v$, after \m{check_scheduler} and the service policy.
 
@@ -181,12 +286,17 @@ last handler run.
 Inside \code{sta}, \code{par} gives each slot its own component of the output
 equivalence, and each slot is a \code{swi} whose gate bit a \code{map} computes from
 the pid. Both obligations depend on the equivalence $\eqv{B}$ on the gate bit, which
-the proof chooses per slot. With $g$ the gate map on pids, \comp{it:map} and
+the proof chooses per slot.
+\todo{$g$ is reused yet again (map's output function, parse\_output, now the
+gate map). Give the gate map its own name. Also ``Inside sta'' and ``par gives
+each slot its own component'' describe the term, not the proof step; state the
+instance of map\_NI and swi\_NI per slot as in the corollary.}
+With $g$ the gate map on pids, \comp{it:map} and
 \comp{it:swi} require
 \begin{gather*}
-g \in \NI(\mathsf{priv}+\mathsf{pub},\, \eqv{B}), \\
+g \in \NI(\privvis+\pubeq,\, \eqv{B}), \\
 \forall \ell.\; \ell \in \Aw(\mathsf{true}, \eqv{B}) \;\cup\;
-  \Ob(\mathsf{swi}\;b\;p,\; \mathsf{eqmaybe}(\Aw(\mathsf{true},\eqv{B}),\eqv{O})):
+  \Ob(\mathsf{swi}\;b\;p,\; \eqo{O} + \one^{\Aw(\mathsf{true},\eqv{B})}):
 \end{gather*}
 related pids go to related bits, and every observer is aware of the gate or
 oblivious to the slot. (The other condition of \comp{it:map}, $g \in \mathsf{PU}$,
@@ -220,32 +330,37 @@ pids are related, and the slots fall into two groups (\cref{fig:equivs}).
 \end{wrapfigure}
 \emph{Every other slot shows whether.} Both secret pids map to \code{false}, so
 related pids go to equal bits, and we take for $\eqv{B}$ the equivalence $\eqv{F}$
-of \cref{fig:equivs} (\m{false_equiv}): private $+$ public on a bit read as a sum,
+of \cref{fig:equivs} (\m{false_equiv}): $\priveq + \pubeq$ on a bit read as a sum,
 \code{false} on the private side (\m{false_equiv_sum_rel}). So \code{false} is
 unobservable at $\Lo$ and \code{true} is public. Every level is aware of
 \code{true}, so
 $\Aw(\mathsf{true},\eqv{F}) = \{\Lo,\Hi\}$ and the output wrapper is
-$\mathsf{eqmaybe}(\{\Lo,\Hi\},\cdot)$: the attacker tells \code{Some} from
+\todo{``output wrapper'' is not a term the paper defines: it is the output
+equivalence $\eqv{O} + 1^{\Aw(\mathsf{true},\eqv{B})}$ that swi\_NI gives. Say
+that, here and in the next paragraph.}
+$\cdot + \one^\Lo$: the attacker tells \code{Some} from
 \code{None}, so it sees whether the slot ran. While a secret handler runs, all these
 slots emit \code{None}; this is how the attacker sees that the system is in S. The
 private user's slot is among them; its secrecy is carried by its private payload.
 
 \emph{The disk and NOP slots hide which.} One secret pid maps to \code{true} and the
 other to \code{false}, so $g \in \NI$ needs \code{true} and \code{false} related at
-$\Lo$: $\eqv{B}$ is $\mathsf{priv}$, and
-$\Aw(\mathsf{true},\mathsf{priv}) = \{\Hi\}$, so awareness fails at $\Lo$. The proof
+$\Lo$: $\eqv{B}$ is $\priveq$, and
+$\Aw(\mathsf{true},\priveq) = \{\Hi\}$, so awareness fails at $\Lo$. The proof
 uses obliviousness, and gets it by construction: both slots get a private payload
-and the wrapper $\mathsf{eqmaybe}(\{\Hi\},\cdot)$, under which every output, \code{None} included,
+and the wrapper $\cdot + \one^\Hi$, under which every output, \code{None} included,
 is unobservable at $\Lo$. This is needed, because when a slice opens the disk slot
 emits \code{Some o} in one run and \code{None} in the other, and the NOP slot the
 reverse. The attacker learns nothing from these two slots, and learns that the
 system is in S only from the others.
 
-The dark and light shades of \m{out_equiv} (\cref{sec:interface}) are the payload
+The dark and light slots of $\Eout$ (\cref{def:io}) carry the payload
 equivalences of the hypotheses of \cref{thm:main}; the white shade of the disk and
 NOP slots is what this subsection requires.
 
 \subsection{What the proof requires}\label{sec:requirements}
+\todo{cut this subsection; the intro's second contributions bullet (the
+requirements) cites it and needs rewording when it goes.}
 
 Read as rules for an implementation, the obligations of this section are
 sufficient for non-interference: an implementation that follows them can be proved

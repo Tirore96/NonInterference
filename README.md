@@ -24,6 +24,7 @@ and user processes that are themselves non-interfering.
 | `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (no leak) | none |
 | `model_sliced_userview_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 1 | none |
 | `restore_invariant_noop` ([`models.v`](theories/models.v)) | Theorem 5 | none |
+| `eqmaybe_sum_rel`, `eqsum_sum_rel`, `eqsum_L_sum_rel`, `eqvisible_public_rel` and their `_dis` siblings ([`definitions.v`](theories/definitions.v)) | §VI-B: the paper's sum notation equals the mechanised equivalences | none |
 | `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VII-A: our definitions equal the original's | none |
 | `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 2 and 4 in the original's terms | none |
 
