@@ -163,6 +163,20 @@ enters S while the other returns to U, and the pid's public tag exposes it.
     removes less than it first seems, but it pushes an essential part of the proof
     into the metatheory, which is interesting in itself.
   - New theorems go at the bottom of theorems.v (prior work above stays untouched).
+  - **Done (2026-11-03): `sta_NI_inv`** at the bottom of theorems.v, section
+    `StaInvariant`, axiom-free (only `d`, `L`). Statement: if `P` is preserved by
+    `f` and `g` (`pres_on`), the initial state satisfies `P`, `g` and `f` satisfy
+    `fv_NI_on P` (fv_NI for related states that both satisfy `P`), `f` satisfies
+    `f_EP_on P`, and `p ∈ NI(≐V ×_R ≐I, ≐O)`, then
+    `sta f g v p ∈ NI(≐I, ≐V × ≐O)`. The proof is sta_NI's with `P` threaded
+    through the `lthread` lemmas (`*_on` copies): every state the proof hands to
+    `f` or `g` is an iterate of `f`/`g` from the initial state.
+  - Not yet done: using it for `model_sliced`. That needs (a) `P := sliced_inv`
+    with preservation by `state_step` minus restore_invariant, (b) a version of
+    the output-lane proof where `initiate_next` gets `choice_inv` from
+    `sliced_inv` via the earlier stages (a pre/postcondition chaining, since
+    `fv_NI_comp` alone forgets it), and (c) removing restore_invariant from
+    `model` and its instances.
 
 ## 6. Plan for Section V (keep)
 

@@ -1319,3 +1319,213 @@ Proof.
     have Ht2' := Hrm2 _ i n Hdis Ht2.
     by apply: proj_to_par.
 Qed.
+
+
+(* ===================================================================
+   OUR ADDITION (not in Rafnsson et al.): sta under a state invariant.
+
+   sta_NI asks for fv_NI and f_EP on *every* pair of related states.  When the
+   state updates preserve a predicate P that the initial state satisfies, every
+   state the sta ever holds satisfies P, and it suffices to prove the two
+   obligations for states in P.  The proof is sta_NI's, with P threaded through
+   the lthread lemmas: every state the proof passes to f or g is an iterate of
+   f and g from the initial state, so P holds of it.
+   =================================================================== *)
+
+(* f maps states in P to states in P. *)
+Definition pres_on (I V : Ty) (P : [V] -> Prop) (f : [I] -> [V] -> [V]) :=
+  forall i v, P v -> P (f i v).
+
+(* fv_NI and f_EP, restricted to states in P. *)
+Definition fv_NI_on (I V : Ty) (P : [V] -> Prop) (IRel : cEquiv [I]) (VRel : cEquiv [V])
+  (f : [I] -> [V] -> [V]) :=
+  forall l (i i' : [I]), rel IRel l i i' ->
+  forall (v v' : [V]), P v -> P v' -> rel VRel l v v' -> rel VRel l (f i v) (f i' v').
+
+Definition f_EP_on (I V : Ty) (P : [V] -> Prop) (IRel : cEquiv [I]) (VRel : cEquiv [V])
+  (f : [I] -> [V] -> [V]) :=
+  forall l i, dis IRel l i -> forall v, P v -> rel VRel l (f i v) v.
+
+Section StaInvariant.
+
+Variables (I O V : Ty) (P : [V] -> Prop) (VRel : cEquiv [V]) (IRel : cEquiv [I])
+          (ORel : cEquiv [O]) (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]).
+
+Hypothesis Hpf : pres_on P f.
+Hypothesis Hpg : pres_on P g.
+
+(* The side goals the lemmas below leave: an obligation hypothesis, membership in
+   P of an iterate of f or g, or an obligation applied to related arguments. *)
+Ltac side_on Hf Hg :=
+  solve [ done | apply Hf | apply Hg
+        | apply Hpf; done | apply Hpg; done
+        | apply Hf; eauto; (apply Hpf || apply Hpg); done
+        | apply Hg; eauto; (apply Hpf || apply Hpg); done
+        | apply Hf; eauto | apply Hg; eauto | eauto ].
+
+Lemma lthread_stable_on : forall l L v v',
+    fv_NI_on P IRel VRel f -> fv_NI_on P ORel VRel g ->
+    P v -> P v' -> rel VRel l v v' -> lthread VRel f g l v L -> lthread VRel f g l v' L.
+Proof.
+  intros l L. elim: L => [|a L' IH] v v' Hf Hg Pv Pv' Hvv' Hl; first done.
+  destruct a as [[w x]|[w x]]; simpl in *; destruct Hl as [Hw Hl]; split.
+  - eapply rel_trans. apply Hw. apply Hf; eauto.
+  - apply (IH (f x v)); side_on Hf Hg.
+  - eapply rel_trans. apply Hw. apply Hg; eauto.
+  - apply (IH (g x v)); side_on Hf Hg.
+Qed.
+
+Lemma sta_conv_on : forall l L (p : Proc (Times V I) O) v,
+    fv_NI_on P ORel VRel g -> fv_NI_on P IRel VRel f -> P v ->
+    NI (eqpair_R VRel IRel) ORel p ->
+    Trace ORel l (projOl L) p -> lthread VRel f g l v L ->
+    Trace (eqpair VRel ORel) l (projIl L) (sta f g v p).
+Proof.
+  intros l L. elim: L => [|a L' IH] p v Hg Hf Pv HNI HT Hl.
+  - simpl. con.
+  - destruct a as [[w x]|[w x]]; simpl in *; destruct Hl as [Hw Hl].
+    + move: (HNI l) => [Hrel _].
+      have Hsw : rel (eqpair_R VRel IRel) l (w,x) (f x v, x) by (left; split; [apply Hw | apply rel_refl]).
+      apply (Hrel (projOl L') (w,x) (f x v, x) 0 Hsw) in HT.
+      simpl in HT. inv HT.
+      econ. econ. reflexivity. apply H1.
+      eapply IH. apply Hg. apply Hf. apply Hpf; done. eapply NI_reduceI. apply HNI. apply H1. apply H3. apply Hl.
+    + inv HT.
+      econ. econ. reflexivity. apply H1.
+      apply rel_eqpair2. split. eapply rel_trans. apply Hg; eauto.
+        apply rel_sym. apply Hw. apply H2.
+      eapply IH. apply Hg. apply Hf. apply Hpg; done. eapply NI_reduceO. apply HNI. apply H1. apply H4.
+      eapply lthread_stable_on; last apply Hl; side_on Hf Hg.
+Qed.
+
+Lemma sta_proj_lthread_on : forall (p : Proc (Times V I) O) l v ts,
+    fv_NI_on P IRel VRel f -> fv_NI_on P ORel VRel g -> P v ->
+    Trace (eqpair VRel ORel) l ts (sta f g v p) ->
+    exists T, ts = projIl T /\ Trace ORel l (projOl T) p /\ lthread VRel f g l v T.
+Proof.
+  intros p l v ts. move: p v. elim: ts.
+  - intros p v Hf Hg Pv HT. exists nil. ssa.
+  - intros a ts IH p v Hf Hg Pv HT. inv HT.
+    + match_dd.
+      move: (IH _ _ Hf Hg (Hpf _ Pv) H3) => [T] [Hpi] [Hpo] Hlt.
+      exists (inl (f i v, i) :: T). split; [|split].
+      * simpl. rewrite Hpi. done.
+      * simpl. econ. eauto. apply Hpo.
+      * simpl. split. apply rel_refl. apply Hlt.
+    + match_dd. destruct o as [vobs oobs].
+      move: H2 => /rel_eqpair /= [HV HO].
+      move: (IH _ _ Hf Hg (Hpg _ Pv) H4) => [T] [Hpi] [Hpo] Hlt.
+      exists (inr (vobs, oobs) :: T). split; [|split].
+      * simpl. rewrite Hpi. done.
+      * simpl. econ. eauto. apply HO. apply Hpo.
+      * simpl. split.
+        eapply rel_trans. apply rel_sym. apply HV. apply Hg; eauto.
+        eapply lthread_stable_on; last apply Hlt; side_on Hf Hg.
+Qed.
+
+Lemma lthread_swap_on : forall l T'' n w i i' v,
+    fv_NI_on P IRel VRel f -> fv_NI_on P ORel VRel g -> P v -> rel IRel l i i' ->
+    lthread VRel f g l v (insert n (inl (w, i)) T'') ->
+    lthread VRel f g l v (insert n (inl (w, i')) T'').
+Proof.
+  intros l T''. elim: T'' => [|a T0 IH] n w i i' v Hf Hg Pv Hii Hl.
+  - destruct n; simpl in *.
+    + destruct Hl as [Hw _]. split. eapply rel_trans. apply Hw.
+      apply Hf; eauto. done.
+    + done.
+  - destruct n.
+    + destruct Hl as [Hw Hl]. split.
+      * eapply rel_trans. apply Hw. apply Hf; eauto.
+      * eapply lthread_stable_on; last apply Hl; side_on Hf Hg.
+    + simpl in Hl |- *. destruct a as [[w2 x2]|[w2 x2]]; destruct Hl as [Hw2 Hl]; split.
+      * apply Hw2.
+      * eapply IH; [apply Hf | apply Hg | apply Hpf; done | apply Hii | apply Hl].
+      * apply Hw2.
+      * eapply IH; [apply Hf | apply Hg | apply Hpg; done | apply Hii | apply Hl].
+Qed.
+
+Lemma lthread_insert_dis_on : forall l T n i v,
+    fv_NI_on P IRel VRel f -> fv_NI_on P ORel VRel g -> f_EP_on P IRel VRel f -> dis IRel l i ->
+    P v -> lthread VRel f g l v T ->
+    exists w, lthread VRel f g l v (insert n (inl (w, i)) T).
+Proof.
+  intros l T n i v Hf Hg Hep Hdi. revert T v. induction n as [| n' IH]; intros T v Pv Hlt.
+  - exists (f i v). simpl. split.
+    + apply rel_refl.
+    + eapply lthread_stable_on; last apply Hlt; side_on Hf Hg.
+  - destruct T as [| a' T0].
+    + exists v. simpl. done.
+    + destruct a' as [[w0 i0] | [w0 o0]]; simpl in *; destruct Hlt as [Hw0 Hlt].
+      * have Pv' : P (f i0 v) by apply Hpf.
+        destruct (IH T0 (f i0 v) Pv' Hlt) as [w Hw].
+        exists w. split; assumption.
+      * have Pv' : P (g o0 v) by apply Hpg.
+        destruct (IH T0 (g o0 v) Pv' Hlt) as [w Hw].
+        exists w. split; assumption.
+Qed.
+
+Lemma lthread_remove_dis_on : forall l T'' n w i v,
+    fv_NI_on P IRel VRel f -> fv_NI_on P ORel VRel g -> f_EP_on P IRel VRel f -> dis IRel l i ->
+    P v -> lthread VRel f g l v (insert n (inl (w, i)) T'') ->
+    lthread VRel f g l v T''.
+Proof.
+  intros l T'' n w i v Hf Hg Hep Hdi Pv Hlt.
+  move: T'' v Pv Hlt. elim: n => [| n' IH] T'' v Pv Hlt.
+  - destruct T'' as [| a' T0]; simpl in Hlt.
+    + done.
+    + destruct Hlt as [Hw Hlt].
+      eapply lthread_stable_on; last apply Hlt; side_on Hf Hg.
+  - destruct T'' as [| a' T0].
+    + simpl. done.
+    + destruct a' as [[w0 i0] | [w0 o0]]; simpl in Hlt |- *; destruct Hlt as [Hw0 Hlt].
+      * split; [apply Hw0 | eapply IH; [apply Hpf; done | apply Hlt]].
+      * split; [apply Hw0 | eapply IH; [apply Hpg; done | apply Hlt]].
+Qed.
+
+(* sta_NI under the invariant P: the obligations on f and g are needed only for
+   states in P, provided the initial state is in P and f and g preserve P. *)
+Lemma sta_NI_inv : forall (p : Proc (Times V I) O) v,
+    fv_NI_on P ORel VRel g -> fv_NI_on P IRel VRel f -> f_EP_on P IRel VRel f -> P v ->
+    NI (eqpair_R VRel IRel) ORel p ->
+    NI IRel (eqpair VRel ORel) (sta f g v p).
+Proof.
+  intros p v Hg Hf Hep Pv Hp. rewrite /NI /NI_l. intros l. ssa.
+  - intros t i i' n Hii HT.
+    eapply sta_proj_lthread_on in HT; [| apply Hf | apply Hg | apply Pv].
+    move: HT => [T] [Heq] [Htp] Hlt.
+    symmetry in Heq. move/(projIl_insert_inv v) : Heq => [w] [T''] [HT' Ht''].
+    subst T. subst t.
+    rewrite projOl_insert in Htp. simpl in Htp.
+    move: (Hp l) => [Hrel _].
+    eapply (Hrel (projOl T'') (w,i) (w,i') n) in Htp;
+      last by (left; split; [apply rel_refl | apply Hii]).
+    have Hl' : lthread VRel f g l v (insert n (inl (w, i')) T'').
+    { eapply lthread_swap_on; [apply Hf | apply Hg | apply Pv | apply Hii | apply Hlt]. }
+    have Hfin : Trace (eqpair VRel ORel) l (projIl (insert n (inl (w, i')) T'')) (sta f g v p).
+    { eapply sta_conv_on; [apply Hg | apply Hf | apply Pv | apply Hp | | apply Hl'].
+      rewrite projOl_insert. simpl. apply Htp. }
+    rewrite projIl_insert in Hfin. simpl in Hfin. apply Hfin.
+  - intros t i n Hdi HT.
+    eapply sta_proj_lthread_on in HT; [| apply Hf | apply Hg | apply Pv].
+    move: HT => [T] [Heq [Htp Hlt]]. subst t.
+    have [w Hw] : exists w, lthread VRel f g l v (insert n (inl (w, i)) T).
+    { eapply lthread_insert_dis_on; [apply Hf | apply Hg | apply Hep | apply Hdi | apply Pv | apply Hlt]. }
+    have -> : insert n (inl i) (projIl T) = projIl (insert n (inl (w, i)) T) by rewrite projIl_insert.
+    eapply sta_conv_on; [apply Hg | apply Hf | apply Pv | apply Hp | | exact Hw].
+    rewrite projOl_insert. simpl.
+    move: (Hp l) => [_ [Hins _]]. eapply Hins. 2: apply Htp.
+    simpl. apply Hdi.
+  - intros t i n Hdi HT.
+    eapply sta_proj_lthread_on in HT; [| apply Hf | apply Hg | apply Pv].
+    move: HT => [T] [Heq [Htp Hlt]].
+    symmetry in Heq. move/(projIl_insert_inv v) : Heq => [w] [T''] [HT' Ht''].
+    subst T. subst t.
+    have Hl' : lthread VRel f g l v T''.
+    { eapply lthread_remove_dis_on; [apply Hf | apply Hg | apply Hep | apply Hdi | apply Pv | apply Hlt]. }
+    eapply sta_conv_on; [apply Hg | apply Hf | apply Pv | apply Hp | | exact Hl'].
+    rewrite projOl_insert in Htp. simpl in Htp.
+    move: (Hp l) => [_ [_ Hrem]]. eapply Hrem; [|apply Htp].
+    simpl. apply Hdi.
+Qed.
+
+End StaInvariant.
