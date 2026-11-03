@@ -27,14 +27,14 @@ obligations on the state update `f = state_step`:
 
 Order of application (`state_step`'s output summand is
 `initiate_next restore_invariant ∘ sliced_service ∘ check_scheduler`, and
-`sliced_service = check_slice_count ∘ check_handler_completed ∘ initiate_ir`):
+`sliced_service = tick_slice ∘ check_handler_completed ∘ open_slice_on_timer`):
 
 | # | stage | reads | writes |
 |---|---|---|---|
 | 1 | `check_scheduler` | scheduler's output (public) | current pid |
-| 2 | `initiate_ir` | timer handler's output (public) | counter, reschedule flag |
+| 2 | `open_slice_on_timer` | timer handler's output (public) | counter, reschedule flag |
 | 3 | `check_handler_completed` | counter | at a boundary: unmask disk/NOP, mask timer, NOP pending := true |
-| 4 | `check_slice_count` | counter | tick; at `Some 0`: mask disk/NOP, unmask timer, counter := None |
+| 4 | `tick_slice` | counter | tick; at `Some 0`: mask disk/NOP, unmask timer, counter := None |
 | 5 | `restore_invariant` | counter, disk mask | NOP pending, masks (see §4) |
 | 6 | `initiate_next` (the choice) | masks, pending bits, pid, prev pid, reschedule flag | pid, prev pid, masks, one pending bit |
 
@@ -177,6 +177,170 @@ enters S while the other returns to U, and the pid's public tag exposes it.
     `sliced_inv` via the earlier stages (a pre/postcondition chaining, since
     `fv_NI_comp` alone forgets it), and (c) removing restore_invariant from
     `model` and its instances.
+
+## 6a. Plan: replace restore_invariant by the invariant (Rocq only; paper deferred)
+
+**Not pursued (2026-11-03).** The invariants `sliced_inv`/`choice_inv` differ too
+much from `restore_invariant`; an invariant used this way should correspond to
+"the state is in the image of restore_invariant". Kept for reference.
+
+### Notation
+
+- `choose w`: rules 2–4 of `initiate_next` (start the first ready handler; else
+  return from a finished handler; else continue).
+- `next_R w := if masks_set w then w else choose (restore_invariant w)`: today's
+  `initiate_next restore_invariant`.
+- `next w := if masks_set w then w else choose w`: the target, no hook.
+- `pre o v := sliced_service o (check_scheduler o v)`: stages 1–4
+  (`choice_state o v` in models.v).
+- `step_R` / `step`: `step_sum set_pending (fun o v => next_R (pre o v))` /
+  the same with `next`. `step_R` is today's `state_step _ restore_invariant`.
+
+### The observation behind Phase 1, precisely
+
+1. `restore_invariant_id` (exists): if `choice_inv w` and not `masks_set w`, then
+   `restore_invariant w = w`.
+2. Hence, for every `w` with `choice_inv w`: `next_R w = next w`. If all masks are
+   set, both return `w` without calling `restore_invariant`; otherwise
+   `restore_invariant w = w` by 1, so both compute `choose w`.
+3. `choice_inv_step` (exists): `sliced_inv v → choice_inv (pre o v)`.
+4. Hence, for every `v` with `sliced_inv v` and every event `e`:
+   `step_R e v = step e v`. On an input both are `set_pending`; on an output
+   `step_R (inr o) v = next_R (pre o v) = next (pre o v) = step (inr o) v` by 3
+   and 2.
+
+So `step` and `step_R` agree on the set `sliced_inv`. `sta_NI_inv` with
+`P := sliced_inv` asks for `fv_NI` only between related states that both satisfy
+`sliced_inv`, and on those states `step` can be rewritten to `step_R`, whose
+`fv_NI` over *all* related states is already proved. No new relational reasoning
+is needed: the existing proof is reused verbatim.
+
+That is a checkpoint, not the goal: Phase 1 still uses `restore_invariant` inside
+the proof. Phase 2 removes it.
+
+### Decision to make first: runtime = 1
+
+`choice_inv_step` (hence `sliced_inv_step`) holds only under the section hypothesis
+`runtime_ne1 : runtime != 1` (used in `hc_ge2` and in one case of
+`choice_inv_step`). Today Theorem 4 needs no such hypothesis, because
+`restore_invariant` repairs the state unconditionally. With the invariant as a
+proof assumption, runtime = 1 must be handled. What happens there: at counter
+`Some 1` the last boundary fires (`check_handler_completed` opens the disk and NOP
+masks and sets the NOP pending bit), then `tick_slice` ticks the counter to
+`Some 0`, which is not an open slice, so `choice_inv` (disk masked outside a
+slice) fails. Without the hook, `next` starts a secret handler there (NOP pending
+and unmasked in both related states), and the next step closes the slice under it.
+Options:
+- (a) Extend the invariant to allow this "closing boundary": outside an open slice,
+  `choice_inv` also accepts counter `Some 0` with the boundary shape (NOP pending,
+  timer masked, disk and NOP unmasked); `sliced_inv` likewise accepts a running
+  handler at `Some 0` (all masks set, which it already does). Secret readiness then
+  depends only on the counter and the masks, both public, so the C2 argument still
+  goes through, and Theorem 4 keeps holding for every runtime. Cost: re-prove
+  `choice_inv_step`/`sliced_inv_step` for the wider invariant.
+- (b) Add `runtime != 1` as a hypothesis of Theorem 4 and Corollary 1. Cheap, but
+  the theorem gets weaker than today's.
+Recommendation: try (a); fall back to (b) only if (a) gets out of hand. Note that
+(a) also changes the model's behaviour at runtime = 1 compared with today (the last
+run is no longer lost, but overlaps the slice's closing step), which the paper's
+runtime = 1 remark must then describe.
+
+### Phase 1: take restore_invariant out of the model (checkpoint)
+
+1. **models.v, definitions.** `initiate_next` loses its parameter (`next` above);
+   `state_step` loses `restore_invariant`; `model` loses the `restore_invariant`
+   argument; `model_immediate` drops `id`; `model_sliced` drops
+   `restore_invariant`. Keep `restore_invariant` and `restore_invariant_id` (moved
+   next to the invariants) as proof devices.
+2. **models.v, invariant lemmas for the new step.** Define `step_R` locally (the old
+   step) and prove `step_agree : sliced_inv v → step_R e v = step e v`
+   (observation 4). Re-prove `sliced_inv_step`, `sliced_run_inv` for `step` (from
+   the old proofs: the only change is that the `restore_invariant_id` rewrite is no
+   longer needed). Add `sliced_init_inv : sliced_inv sliced_init`.
+3. **models.v §10–11 fallout.** The `rewr` Ltac, the `sta (state_step _ _)` match
+   pattern, `scanl (state_step service restore …)` and the state-row lemmas
+   (`immediate_states_*`, `sliced_states_*`) lose an argument. The computed traces
+   and states do not change (the hook was the identity on reachable states); the
+   `vm_compute` proofs should go through unchanged.
+4. **noninterference.v, a step-level lemma.** Factor today's proof of
+   `fv_NI (eqsum_L in_equiv out_equiv) state_type_equiv state_type_equiv step_R`
+   (the long script inside `model_sliced_NI`) into a standalone lemma
+   `step_R_fv_NI`, and likewise `step_R_f_EP`.
+5. **noninterference.v, `model_sliced_NI` via `sta_NI_inv`** with
+   `P := sliced_inv`, `f := step`, `g := (fun _ v => v)`:
+   - `pres_on P f`: `sliced_inv_step` (step 2);
+   - `pres_on P g`: trivial;
+   - `fv_NI_on P f`: given `e ≐ e'`, `v ≐ v'`, `sliced_inv v`, `sliced_inv v'`,
+     rewrite `step e v` and `step e' v'` with `step_agree`, then `step_R_fv_NI`;
+   - `fv_NI_on P g`: trivial;
+   - `f_EP_on P f`: from `step_R_f_EP` via `step_agree` (inputs only);
+   - `P v0`: `sliced_init_inv`.
+6. **Remove Theorem 5 from the model's story.** `restore_invariant_noop` is no
+   longer a statement about the model; delete it (or keep it as a lemma about
+   `step_R`). Its role is taken by `sliced_run_inv`.
+7. **Build** off OneDrive, `Print Assumptions` for `model_sliced_NI` and
+   `model_sliced_userview_NI` (still only `d`, `L`), regenerate mechlinks.
+
+### Phase 2: no restore_invariant in the proof either
+
+The goal is to prove `fv_NI_on sliced_inv` of the output lane of `step` directly,
+with the invariant passed from stage to stage as pre/postconditions, so that
+`restore_invariant`, `restore_invariant_id`, `step_R` and `step_agree` can be
+deleted.
+
+8. **A composition lemma with conditions** (noninterference.v, next to
+   `fv_NI_comp`):
+   `fv_NI_comp_on : (forall i v, P v -> Q (s1 i v)) -> fv_NI IRel VRel VRel s1 ->
+    fv_NI_on Q IRel VRel s2 -> fv_NI_on P IRel VRel (fun i => s2 i \o s1 i)`.
+   Stage 1 is proved over all related states (as today) and maps `P` into `Q`;
+   stage 2 needs only states in `Q`. Proof: a few lines. This is the precise form
+   of "the composite forgets": `fv_NI_comp` passes only relatedness; the new lemma
+   also passes a single-state fact (`Q`) that each side satisfies.
+9. **A step_sum lemma with conditions:** `fv_NI_step_sum_on`, as
+   `fv_NI_step_sum` but concluding `fv_NI_on P` from `fv_NI_on P` (or `fv_NI`) of
+   each lane.
+10. **The key new lemma: secret readiness is public under `choice_inv`.**
+    `secret_ready_public : choice_inv w -> ~~ masks_set w ->
+     (ir_ready w disk_irq || ir_ready w nop_irq) = timeslice_live (get_slice_count w)`
+    (with option (a) of the runtime decision, extended by the closing-boundary
+    case). Reason: outside an open slice the disk mask is set and the NOP mask equals
+    it, so neither is ready; inside, not all masks are set, so `choice_inv` gives the
+    boundary shape: the NOP handler is pending and unmasked, so it is ready. Proof:
+    a case split on the bits, like `restore_invariant_id` (vm_compute).
+11. **`initiate_next` on `choice_inv` states:** `next_fv_NI_on :
+    fv_NI_on choice_inv out_equiv state_type_equiv (fun _ => next)`. Proof: today's
+    `initiate_next` script with `restore_invariant v` replaced by `v`:
+    - A (rule 1), B (timer), C1 (secret in both) and C3 (none in both) are
+      unchanged except that the trivial `restore_invariant` rewrites disappear;
+    - C2 (secret in one, none in the other): instead of unfolding
+      `restore_invariant`, apply `secret_ready_public` to both states; their
+      counters are public, hence equal, so secret readiness is equal: contradiction.
+      This replaces the four long `exfalso` scripts by one argument.
+12. **Chain the output lane:** `pre` is `fv_NI` over all related states (the
+    existing stage proofs for `check_scheduler` and the three service stages,
+    composed with `fv_NI_comp`), and `choice_inv_step` gives
+    `sliced_inv v -> choice_inv (pre o v)`. Then `fv_NI_comp_on` with
+    `P := sliced_inv`, `Q := choice_inv` and step 11 gives `fv_NI_on sliced_inv` of
+    the output lane; `fv_NI_step_sum_on` adds the input lane (`set_pending`, `fv_NI`
+    as today).
+13. **`model_sliced_NI`:** the `fv_NI_on P f` obligation of step 5 now comes from
+    step 12 instead of `step_agree`.
+14. **Delete** `restore_invariant`, `restore_invariant_id`, `restore_invariant_noop`,
+    `step_R`, `step_agree`, `step_R_fv_NI`, `step_R_f_EP` and the comments that
+    describe the hook (models.v header, §7 comment, §8 table, noninterference.v
+    "composition-breakdown technique" comment, `ready_cases2` uses on restored
+    states). Rebuild, check axioms, regenerate mechlinks.
+
+### What the result says, for the paper later
+
+- Theorem 4 is proved with `sta_NI_inv` and `P := sliced_inv`; the model has no
+  proof hook.
+- The invariant theorem (`sliced_run_inv`, from `sliced_inv_step`) replaces
+  Theorem 5 and is now used: it discharges `pres_on`.
+- The forgetting of stage-by-stage composition is repaired by passing `choice_inv`
+  from the service stages to the choice (`fv_NI_comp_on`), and the one place it
+  matters is C2, via `secret_ready_public`: under the invariant, whether a secret
+  handler is ready is a function of public fields.
 
 ## 6. Plan for Section V (keep)
 

@@ -645,6 +645,73 @@ Proof.
   apply/rel_eqpair2; con; rewrite !pair_rewr; done.
 Qed.
 
+Lemma update_slice_count_rel : forall l v v' c,
+  rel state_type_equiv l v v' ->
+  rel state_type_equiv l (update_slice_count v c) (update_slice_count v' c).
+Proof.
+  intros l v v' c.
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 H3.
+  move: H0 H1 H2 H3.
+  move: v=> [[cur prev]] [re_sched] [slice_count] ic.
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] ic'.
+  rewrite /update_slice_count /update_ic_count /get_ic_count /get_bool_state /update_bool_state ?pair_rewr.
+  move=> H0 H1 H2 H3.
+  apply/rel_eqpair2; con; rewrite ?pair_rewr; first done.
+  apply/rel_eqpair2; con; rewrite ?pair_rewr; first done.
+  apply/rel_eqpair2; con; rewrite ?pair_rewr; [by apply rel_eq | done].
+Qed.
+
+Lemma update_mask_rel : forall l v v' ir b,
+  rel state_type_equiv l v v' ->
+  rel state_type_equiv l (update_ir_mask v ir b) (update_ir_mask v' ir b).
+Proof.
+  intros l v v' ir b.
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[]H2 /rel_eqpair[]/rel_eqpair[]H3 H4/rel_eqpair[]/rel_eqpair[]H5 H6/rel_eqpair[]H7 H8.
+  move: H0 H1 H2 H3 H4 H5 H6 H7 H8.
+  move: v=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+  rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_mask /update_ir_bits /update_ir_bits' !pair_rewr.
+  move=> H0 H1 H2 H3 H4 H5 H6 H7 H8.
+  rewrite /get_ic /update_ic /get_bool_state /update_bool_state /get_ir_mask /get_mask' /update_ir_mask /update_ir_bits /update_ir_bits' !pair_rewr.
+  apply/rel_eqpair2;con;first ssa.
+  apply/rel_eqpair2;con;first ssa.
+  apply/rel_eqpair2.
+  rewrite !pair_rewr.
+  con. done.
+  case: ir => [[]|]; rewrite /get_ir_bits /get_ir_bits' /get_ic /get_bool_state ?pair_rewr;
+  repeat (apply/rel_eqpair2; con); rewrite ?pair_rewr; try done; try apply rel_eq; eauto.
+Qed.
+
+(* The slice's mask operations write the same values into both states. *)
+Lemma set_masks_rel l v v' :
+  rel state_type_equiv l v v' -> rel state_type_equiv l (set_masks v) (set_masks v').
+Proof.
+  move=> H; cbv beta iota fix delta [set_masks all_interrupts foldr].
+  by do 3 apply update_mask_rel.
+Qed.
+
+Lemma unset_masks_rel l v v' :
+  rel state_type_equiv l v v' -> rel state_type_equiv l (unset_masks v) (unset_masks v').
+Proof.
+  move=> H; cbv beta iota fix delta [unset_masks all_interrupts foldr].
+  by do 3 apply update_mask_rel.
+Qed.
+
+Lemma queue_secret_run_rel l v v' :
+  rel state_type_equiv l v v' ->
+  rel state_type_equiv l (queue_secret_run v) (queue_secret_run v').
+Proof.
+  move=> H; rewrite /queue_secret_run.
+  apply update_pending_rel; apply update_mask_rel; exact: unset_masks_rel.
+Qed.
+
+Lemma close_slice_rel l v v' :
+  rel state_type_equiv l v v' -> rel state_type_equiv l (close_slice v) (close_slice v').
+Proof.
+  move=> H; rewrite /close_slice.
+  apply update_slice_count_rel; apply update_mask_rel; exact: set_masks_rel.
+Qed.
+
 Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
   rewr;simpl;rewr;simpl.
@@ -747,7 +814,7 @@ Proof.
   apply fv_NI_comp.
 
   mrw. intros.
-  rewrite /initiate_ir.
+  rewrite /open_slice_on_timer.
 
   have: tI_out i = tI_out i'.
 
@@ -773,39 +840,15 @@ Proof.
   apply/rel_eqpair2. con;ssa. done.
 
 
-  apply fv_NI_comp.
+  (*tick_slice: reads only the counter, which is public, so both states take
+    the same branch, and each branch writes the same values into both*)
   mrw. intros.
-  rewrite /check_handler_completed.
+  rewrite /tick_slice.
 
   have: get_slice_count v = get_slice_count v'.
 
   move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
-
-  move: H2=>/public_equiv_eq->//.
-  move=>->.
-  destruct (handler_completed runtime (get_slice_count v')).
-
-  apply update_pending_rel.
-  apply/rel_eqpair2. con. ssa.
-  apply/rel_eqpair2. con. ssa.  
-  apply/rel_eqpair2. con. ssa.
-  apply/rel_eqpair2. con. 
-  apply/rel_eqpair2. con. ssa. eauto.
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. ssa. eauto.
-  apply/rel_eqpair2. con. ssa. ssa. done.
-
-  mrw. intros.
-  rewrite /check_slice_count.
-
-  have: get_slice_count v = get_slice_count v'.
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].  
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
 
   move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
   rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
@@ -813,32 +856,12 @@ Proof.
   move: H2=>/public_equiv_eq->//.
   move=>->.
 
-  destruct (get_slice_count v').
-  destruct n.
-
-  apply/rel_eqpair2. con. ssa.
-  apply/rel_eqpair2. con. ssa.  
-  apply/rel_eqpair2. con. ssa.
-  apply/rel_eqpair2. con. 
-  apply/rel_eqpair2. con. ssa. eauto.
-  apply/rel_eqpair2. con.
-  apply/rel_eqpair2. con. ssa. eauto.
-  apply/rel_eqpair2. con. ssa. ssa.
-
-  apply/rel_eqpair2. con. ssa.
-  apply/rel_eqpair2. con. ssa.  
-  apply/rel_eqpair2. con. ssa.
-  apply/rel_eqpair2. con. 
-  apply/rel_eqpair2. con. ssa.
-
-  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
-  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].    rewrite !pair_rewr.
-
-  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
-  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6. eauto.
-  
-  apply/rel_eqpair2. con. ssa.
-  apply/rel_eqpair2. con. ssa. ssa. done.
+  case: (get_slice_count v') => [[|n]|].
+  - by apply close_slice_rel.
+  - case: (slice_at_boundary _ _).
+    + by apply queue_secret_run_rel; apply update_slice_count_rel.
+    + by apply update_slice_count_rel.
+  - done.
 
   (*initiate_next: the outermost stage of the output summand*)
   mrw. intros.
