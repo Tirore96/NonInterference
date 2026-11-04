@@ -1,6 +1,6 @@
 % Draft for IEEE CSF.  Class: IEEEtran in conference mode, as CSF requires.
-% TODO: check the current CSF call for the page limit and whether submissions
-% must be anonymised (if so, replace the author block below).
+% CSF 2027: at most 12 pages, not counting the AI acknowledgment, the bibliography and
+% well-marked appendices; double-blind (see \anonymoustrue below).
 \PassOptionsToPackage{obeyspaces,spaces}{url}
 \documentclass[conference]{IEEEtran}
 
@@ -79,6 +79,13 @@
 \newcommand{\Ein}{\mathcal{I}}
 \newcommand{\Eout}{\mathcal{O}}
 \newcommand{\Euser}{\mathcal{U}}
+% the proof's own equivalences: on the state, on what reaches a slot, on a gate bit
+% (\Eb in general, \Ef for the visible slots), on the output of a slot's process
+\newcommand{\Ev}{\mathcal{V}}
+\newcommand{\Eq}{\mathcal{Q}}
+\newcommand{\Ef}{\mathcal{F}}
+\newcommand{\Eb}{\mathcal{B}}
+\newcommand{\Ey}{\mathcal{Y}}
 % equivalences as operands of + and x.  \doteq is a relation symbol, and TeX turns a
 % binary operator after a relation into an ordinary symbol with no space, so an
 % equivalence used as an operand is braced, which makes it an ordinary symbol.
@@ -150,7 +157,6 @@ dati@itu.dk}}
 
 \maketitle
 \begin{abstract}
-\todo{page budget: the body ends on p14 and the acknowledgment spills to p15, with two paragraphs of \cref{sec:conclusion} unwritten. My note says 12 pages excluding references and AI acknowledgment; recheck the call. About 2 pages must go, and the lemmas add a little. Largest candidates are marked below.}
 Interrupt handling is a key part of an operating system, and a source of timing
 leaks. Servicing an interrupt takes time from whichever process was scheduled, so an
 attacker who watches a public process sees when a handler ran and for how long. If
@@ -192,5 +198,8 @@ reviewed all AI-generated content and take full responsibility for it.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
+
+\appendices
+\input{sections/appendix}
 
 \end{document}

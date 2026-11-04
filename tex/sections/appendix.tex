@@ -1,0 +1,132 @@
+% The appendices, which the CSF page limit does not count.  main.tex inputs this file
+% after \appendices.  \crefalias makes \cref print "Appendix A".
+\section{Reduction Rules}\label{sec:rules}\crefalias{section}{appendix}
+
+\Cref{fig:semantics} gives the reduction rules of the seven constructors described in
+\cref{sec:background}.
+
+\begin{figure*}[t]
+\centering\small
+\begin{mathpar}
+\inferrule{ }{\stepI{\cn{out}\;o}{i}{\cn{out}\;o}}
+\and
+\inferrule{ }{\stepO{\cn{out}\;o}{o}{\cn{out}\;o}}
+\and
+\inferrule{\stepI{p}{f\,i}{p'}}{\stepI{\cn{map}\;f\;g\;p}{i}{\cn{map}\;f\;g\;p'}}
+\and
+\inferrule{\stepO{p}{o}{p'}}{\stepO{\cn{map}\;f\;g\;p}{g\,o}{\cn{map}\;f\;g\;p'}}
+\\
+\inferrule{\stepI{p}{i}{p'}}{\stepI{\cn{swi}\;b\;p}{(b',\,i)}{\cn{swi}\;(b \oplus b')\;p'}}
+\and
+\inferrule{ }{\stepO{\cn{swi}\;\cn{false}\;p}{\cn{None}}{\cn{swi}\;\cn{false}\;p}}
+\and
+\inferrule{\stepO{p}{(c,\,o)}{p'}}{\stepO{\cn{swi}\;\cn{true}\;p}{\cn{Some}\;o}{\cn{swi}\;(\neg c)\;p'}}
+\\
+\inferrule{ }{\stepI{\cn{maybe}\;p}{\cn{None}}{\cn{maybe}\;p}}
+\and
+\inferrule{\stepI{p}{i}{p'}}{\stepI{\cn{maybe}\;p}{\cn{Some}\;i}{\cn{maybe}\;p'}}
+\and
+\inferrule{\stepO{p}{o}{p'}}{\stepO{\cn{maybe}\;p}{o}{\cn{maybe}\;p'}}
+\\
+\inferrule{\stepI{p}{(f\,i\,v,\;i)}{p'}}
+  {\stepI{\cn{sta}\;f\;g\;v\;p}{i}{\cn{sta}\;f\;g\;(f\,i\,v)\;p'}}
+\and
+\inferrule{\stepO{p}{o}{p'}}
+  {\stepO{\cn{sta}\;f\;g\;v\;p}{(g\,o\,v,\;o)}{\cn{sta}\;f\;g\;(g\,o\,v)\;p'}}
+\\
+\inferrule{\stepI{p_1}{i}{p_1'} \\ \stepI{p_2}{i}{p_2'}}
+  {\stepI{\cn{par}\;p_1\;p_2}{i}{\cn{par}\;p_1'\;p_2'}}
+\and
+\inferrule{\stepO{p_1}{o_1}{p_1'} \\ \stepO{p_2}{o_2}{p_2'}}
+  {\stepO{\cn{par}\;p_1\;p_2}{(o_1,\,o_2)}{\cn{par}\;p_1'\;p_2'}}
+\\
+\inferrule{\stepI{p}{i}{p'}}{\stepI{\cn{loop}\;p}{i}{\cn{loop}\;p'}}
+\and
+\inferrule{\stepO{p}{o}{p'} \\ \stepI{p'}{o}{p''}}{\stepO{\cn{loop}\;p}{o}{\cn{loop}\;p''}}
+\end{mathpar}
+\caption{Reduction rules (\m{reduceI}, \m{reduceO}). Wavy arrows are input steps, straight arrows output steps; $\oplus$ is exclusive or.}
+\label{fig:semantics}
+\end{figure*}
+
+\section{Non-Interference over Finite Traces}\label{sec:departures}\crefalias{section}{appendix}
+
+Our definitions follow Rafnsson et al., with one essential departure. The original
+defines non-interference as a coinductive simulation over infinite streams of
+labels, whose clauses apply at the head of a stream. We quantify over finite traces
+instead, with closure clauses that apply at an arbitrary position (\cref{def:ni}).
+This makes every proof in the development an induction on a trace.
+
+The original definition is written out in \mechfile{theories/adequacy.v}{adequacy.v},
+and \m{NI_paper} proves the two equivalent. The proof passes through infinite
+streams (\m{NI_SNI}) and rests on two properties: finite and infinite behaviour
+determine each other, which needs reduction to be deterministic (to assemble
+finite runs into one infinite run) and never to block (to continue a finite run);
+and insertion commutes with taking prefixes. Obliviousness, the other definition
+that quantifies over behaviour, is likewise stated over traces and equivalent to
+the original (\m{ObliviousDis_iff}). As a consequence, \cref{thm:leak,thm:main}
+also hold with non-interference read as in the original, hypotheses included
+(\m{model_immediate_not_NI_paper}, \m{model_sliced_NI_paper}).
+
+One further difference is an alternative definition of characterised equivalence.
+The original adjoins the distinguished value $\unobs$ to every type; we keep the
+values as they are and make unobservability a predicate, tied to the equivalence
+by requiring the unobservable values to form one of its classes.
+\m{NI_lEquiv} shows that the two give the same notion of non-interference, and
+this paper uses the original notation throughout.
+
+The composition theorems themselves are proved directly for our definitions.
+
+\section{Notation and the Mechanised Definitions}\label{sec:agreement}\crefalias{section}{appendix}
+
+The paper writes some equivalences differently from their mechanised definitions,
+and keeps the two forms equal by proof. The mechanisation classifies options by
+\m{eqmaybe}, as the original does, and sums by \m{eqsum} and \m{eqsum_L}; the paper
+uses one sum former, $\eqo{X} + \eqo{Y}$ (\m{eqsum_LR}), with
+$\doteq^\circ$ (\m{eqvisible}) and $1^S$ (\m{unit_equiv}). Agreement lemmas show
+that, at every level, each mechanised form relates and hides
+exactly what its paper form does: $\mathsf{eqmaybe}(S,\doteq)$ is ${\doteq} + \one^S$
+along the map from options to sums (\m{eqmaybe_sum_rel}, \m{eqmaybe_sum_dis}),
+$\mathsf{eqsum}(\eqv{X},\eqv{Y})$ is ${\eqv{X}^\circ} + {\eqv{Y}^\circ}$
+(\m{eqsum_sum_rel}), $\mathsf{eqsum\_L}(\eqv{X},\eqv{Y})$ is
+$\eqo{X} + {\eqv{Y}^\circ}$ (\m{eqsum_L_sum_rel}), and $(\pubeq)^\circ$ is
+$\pubeq$ (\m{eqvisible_public_rel}). Likewise \m{in_equiv} agrees with
+\m{in_equiv_interrupt}, over a two-constructor type (\m{in_equiv_interrupt_rel},
+\m{in_equiv_interrupt_dis}). No proof depends on the presentation, and the calculus is
+the original's with sums added, which change no constructor or theorem.
+
+\section{The Development}\label{sec:development}\crefalias{section}{appendix}
+
+\Cref{tab:files} lists the files of the development.
+
+\begin{table}[t]
+\centering
+\caption{The development.}
+\label{tab:files}
+\footnotesize
+\begin{tabularx}{\columnwidth}{@{}lrL@{}}
+\toprule
+file & lines & contents \\
+\midrule
+\mechfile{theories/definitions.v}{definitions.v} & \mechlines{definitions.v} & the calculus, traces, $\NI$, the equivalences \\
+\mechfile{theories/theorems.v}{theorems.v} & \mechlines{theorems.v} & the composition theorems \\
+\mechfile{theories/generic_model.v}{generic_model.v} & \mechlines{generic_model.v} & the generic model \\
+\mechfile{theories/concrete_system.v}{concrete_system.v} & \mechlines{concrete_system.v} & a concrete system, the state along a run \\
+\mechfile{theories/model_immediate.v}{model_immediate.v} & \mechlines{model_immediate.v} & the ordinary policy and its traces \\
+\mechfile{theories/model_sliced.v}{model_sliced.v} & \mechlines{model_sliced.v} & the sliced policy, the slice invariant (\cref{lem:gated}), its traces \\
+\mechfile{theories/noninterference.v}{noninterference.v} & \mechlines{noninterference.v} & the model's equivalences, \cref{lem:state-cell,lem:slot}, \cref{thm:leak,thm:main,cor:leak-userview,cor:userview} \\
+\mechfile{theories/adequacy.v}{adequacy.v} & \mechlines{adequacy.v} & the original definitions, the equivalences with ours, \cref{thm:leak,thm:main} in the original's terms \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+For presentation, this paper reads levels as the two-point
+lattice. The mechanisation works over any partial order with a least
+element, and so over any bounded lattice, as the calculus of Rafnsson et al.\ does,
+for two reasons: it mechanises the existing theory as it
+stands, and it lets other models, whose security claims need more levels, build on
+it. Over such an order, a characterised equivalence must also be monotone downwards: what
+a level relates stays related below it, and likewise for unobservability. Our models
+need nothing more. Every equivalence in them treats the bottom level, read as $\Lo$,
+apart from all others, so the proofs split on $\ell = \Lo$ against $\ell \neq \Lo$,
+and the second case covers every other level at once; $\Hi$ in
+$\priveq$ and $1^\Hi$ stands for all levels but $\Lo$.

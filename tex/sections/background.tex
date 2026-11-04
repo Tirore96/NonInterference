@@ -1,67 +1,18 @@
 \section{Background: Composable Timing-Sensitive Non-Interference}\label{sec:background}
 
 This section recalls the calculus and definitions of Rafnsson et
-al.~\cite{rafnsson2017}, in the form we mechanise. The one essential difference is
-that non-interference is stated over finite traces; \cref{sec:departures} proves
-it equivalent to the original. We also add sum types, which the original
-lacks, and write optional values and the model's interrupts as sums; their
-equivalences are proved equal to the mechanised ones (\cref{sec:agreement}).
-And we add a variant of the composition theorem for state cells that
-needs its side conditions only on states satisfying an invariant
+al.~\cite{rafnsson2017}, in the form we mechanise (\cref{sec:departures}). We add sum
+types, in which we also write optional values and the model's interrupts
+(\cref{sec:agreement}), and a composition theorem for state cells under an invariant
 (\cref{thm:sta-pred}).
-
-\todo{page budget: this section takes about three and a half pages. Candidates: the opening above (see the departures comment in \cref{sec:intro}), the prose after \cref{def:formers}, which partly repeats it, and the examples after the predicates.}
 
 \subsection{Processes, traces and time}
 
 A process $p : \Proc{I}{O}$ has an input type $I$ and an output type $O$. It moves
 in one of two ways, by receiving an input, $\stepI{p}{i}{p'}$, or by emitting an
 output, $\stepO{p}{o}{p'}$, in any order. Processes are built from seven
-constructors, whose reduction rules are given in \cref{fig:semantics}. The
+constructors, whose reduction rules are in \cref{sec:rules}. The
 operating system of \cref{sec:model} is a single closed term over them.
-
-\begin{figure*}[t]
-\centering\small
-\begin{mathpar}
-\inferrule{ }{\stepI{\cn{out}\;o}{i}{\cn{out}\;o}}
-\and
-\inferrule{ }{\stepO{\cn{out}\;o}{o}{\cn{out}\;o}}
-\and
-\inferrule{\stepI{p}{f\,i}{p'}}{\stepI{\cn{map}\;f\;g\;p}{i}{\cn{map}\;f\;g\;p'}}
-\and
-\inferrule{\stepO{p}{o}{p'}}{\stepO{\cn{map}\;f\;g\;p}{g\,o}{\cn{map}\;f\;g\;p'}}
-\\
-\inferrule{\stepI{p}{i}{p'}}{\stepI{\cn{swi}\;b\;p}{(b',\,i)}{\cn{swi}\;(b \oplus b')\;p'}}
-\and
-\inferrule{ }{\stepO{\cn{swi}\;\cn{false}\;p}{\cn{None}}{\cn{swi}\;\cn{false}\;p}}
-\and
-\inferrule{\stepO{p}{(c,\,o)}{p'}}{\stepO{\cn{swi}\;\cn{true}\;p}{\cn{Some}\;o}{\cn{swi}\;(\neg c)\;p'}}
-\\
-\inferrule{ }{\stepI{\cn{maybe}\;p}{\cn{None}}{\cn{maybe}\;p}}
-\and
-\inferrule{\stepI{p}{i}{p'}}{\stepI{\cn{maybe}\;p}{\cn{Some}\;i}{\cn{maybe}\;p'}}
-\and
-\inferrule{\stepO{p}{o}{p'}}{\stepO{\cn{maybe}\;p}{o}{\cn{maybe}\;p'}}
-\\
-\inferrule{\stepI{p}{(f\,i\,v,\;i)}{p'}}
-  {\stepI{\cn{sta}\;f\;g\;v\;p}{i}{\cn{sta}\;f\;g\;(f\,i\,v)\;p'}}
-\and
-\inferrule{\stepO{p}{o}{p'}}
-  {\stepO{\cn{sta}\;f\;g\;v\;p}{(g\,o\,v,\;o)}{\cn{sta}\;f\;g\;(g\,o\,v)\;p'}}
-\\
-\inferrule{\stepI{p_1}{i}{p_1'} \\ \stepI{p_2}{i}{p_2'}}
-  {\stepI{\cn{par}\;p_1\;p_2}{i}{\cn{par}\;p_1'\;p_2'}}
-\and
-\inferrule{\stepO{p_1}{o_1}{p_1'} \\ \stepO{p_2}{o_2}{p_2'}}
-  {\stepO{\cn{par}\;p_1\;p_2}{(o_1,\,o_2)}{\cn{par}\;p_1'\;p_2'}}
-\\
-\inferrule{\stepI{p}{i}{p'}}{\stepI{\cn{loop}\;p}{i}{\cn{loop}\;p'}}
-\and
-\inferrule{\stepO{p}{o}{p'} \\ \stepI{p'}{o}{p''}}{\stepO{\cn{loop}\;p}{o}{\cn{loop}\;p''}}
-\end{mathpar}
-\caption{Reduction rules (\m{reduceI}, \m{reduceO}). Wavy arrows are input steps, straight arrows output steps; $\oplus$ is exclusive or.}
-\label{fig:semantics}
-\end{figure*}
 
 \code{out o} ignores its input and always emits \code{o}. \code{map f g p} translates
 inputs by \code{f} on the way into \code{p} and outputs by \code{g} on the way out.
@@ -91,7 +42,7 @@ Security is stated relative to a lattice of levels $\ell$. Everything in this pa
 can be read with the two-point lattice $\Lo \sqsubseteq \Hi$: the attacker $\Lo$,
 and $\Hi$, who sees everything; the mechanisation is over any partial order
 with a least element, in particular any bounded lattice
-(\cref{sec:mechanisation}). Each input and output type carries a \emph{characterised equivalence}
+(\cref{sec:development}). Each input and output type carries a \emph{characterised equivalence}
 (\m{cEquiv}) $\doteq$, which says, for each level $\ell$:
 \begin{itemize}
 \item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;
@@ -118,7 +69,7 @@ compared up to $\eqv{O}_\ell$ (\m{Trace}):
   {\perf{p}{!o.t}{\ell}}
 \end{mathpar}
 
-\begin{definition}[Non-interference, \m{NI}]\label{def:ni}\todo{new label so \cref{sec:departures} can stop hard-coding ``Definition 1''.}
+\begin{definition}[Non-interference, \m{NI}]\label{def:ni}
 $p \in \NI(\eqv{I}, \eqv{O})$ iff for all $\ell$, $t$, $t'$, $i$ and $i'$:
 \begin{align*}
 i \eqv{I}_\ell i' &\;\Rightarrow\; \bigl(\perf{p}{t.?i.t'}{\ell} \Rightarrow
@@ -137,24 +88,14 @@ the observer at $\ell$ may not see.
 \subsection{Equivalences}
 
 A composite process gets its equivalences from those of its parts
-(\cref{thm:composition}). The constructors that combine or gate processes,
-\code{par}, \code{swi}, \code{maybe} and \code{sta}, each induce a constructor on
-equivalences; the others pass equivalences through. So the equivalences of the model
-in \cref{sec:model} are terms built from a few constructors over a few base
-equivalences, chiefly the two below.
+(\cref{thm:composition}), so those of the model in \cref{sec:model} are terms over a
+few base equivalences, chiefly the two below.
 
 We say that $\doteq$ \emph{hides} $x$ at $\ell$ when $x \doteq_\ell \unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
 $x \doteq_\ell y$ iff $x = y$. The \emph{private}
 equivalence $\priveq$ (\m{private_equiv}) hides everything from the attacker: at $\Lo$ every
 value is unobservable, so all values are related, and at $\Hi$ it is the public one.
 The superscript is the lowest level that sees the values.
-On the handler output $\{\mathtt{Notify}, \mathtt{Nothing}\}$, for example,
-\begin{align*}
-\text{public:}\ & \mathtt{Notify} \not\doteq_\Lo \mathtt{Nothing},
-  \quad \mathtt{Notify} \not\doteq_\Lo \unobs, \\
-\text{private:}\ & \mathtt{Notify} \doteq_\Lo \mathtt{Nothing} \doteq_\Lo \unobs,
-  \quad \mathtt{Notify} \not\doteq_\Hi \mathtt{Nothing}.
-\end{align*}
 The model gives the timer handler's output the public equivalence and the disk
 handler's the private one: the attacker learns when the timer handler finishes, but
 not when the disk handler does.
@@ -185,9 +126,7 @@ values it hides.
 \end{definition}
 
 $\times$ is the output equivalence of \code{par}; $\times_R$ and $\times_{LR}$
-appear where a constructor pairs an input with a state or a gate bit. Sums are our
-addition, and a conservative one: every constructor and theorem is parametric in
-its types, and none changes. An \code{inl} and an \code{inr} are related exactly
+appear where a constructor pairs an input with a state or a gate bit. An \code{inl} and an \code{inr} are related exactly
 when both are hidden; otherwise the tag is visible. $^\circ$ keeps the tag
 visible on a side that would hide it. We write $\privvis$ for $(\priveq)^\circ$: at
 $\Lo$ all its values are related, yet none is hidden, so under a sum the attacker
@@ -200,13 +139,10 @@ $1^\Hi$ hides it from the attacker, and $1^\emptyset$ hides it from everyone.
 
 \subsection{Compositional theorems}\label{sec:composition}
 
-The calculus comes with one non-interference theorem per constructor. Each derives
-the equivalences of the composite from those of its parts, which is what gives the
-equivalences of a large model their shape. We write $\eqv{I}$ and $\eqv{O}$ for
-equivalences on a process's inputs and outputs, $\eqv{V}$ for one on the state of
-a \code{sta}, and $\eqv{B}$ for one on the gate bit of a \code{swi}; the theorems
-leave them open, and \cref{sec:proof} instantiates each for the model. Their side conditions are stated with the
-following predicates on functions and levels:
+The calculus comes with one non-interference theorem per constructor. We write
+$\eqv{V}$ for an equivalence on the state of a \code{sta} and $\eqv{B}$ for one on the
+gate bit of a \code{swi}; \cref{sec:proof} instantiates them for the model. The side
+conditions are stated with the following predicates on functions and levels:
 \begin{align*}
 f \in \NI(\eqv{I},\eqv{O}) &\iff \forall \ell, i, i'.\;
   i \eqv{I}_\ell i' \Rightarrow f\,i \eqv{O}_\ell f\,i' \\
@@ -228,9 +164,7 @@ does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $v$
 (\m{aware}) if it can tell $v$ from every other value, and \emph{oblivious} to $p$
 (\m{oblivious}) if it sees none of $p$'s outputs. For example, every level is aware
 of \code{true} under the public equivalence on booleans, but $\Lo$ is not under the
-private one, where \code{true} and \code{false} are related. And $\Lo$ is oblivious
-to a process all of whose outputs it relates to $\unobs$, such as a slot whose
-outputs, \code{None} included, are classified by $\priveq + \one^\Hi$ (\cref{sec:gating}).
+private one, where \code{true} and \code{false} are related.
 
 \begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
 For all processes, functions and equivalences of matching types:
@@ -263,7 +197,8 @@ For all processes, functions and equivalences of matching types:
 Two of these carry substantial side conditions: the state update of \code{sta} must
 be non-interfering and equivalence-preserving, and \code{swi} requires every observer
 to be aware of the gate or oblivious to the gated process. These are the two
-obligations the proof of \cref{sec:proof} has to discharge for the model.\todo{name the two lemmas here once they exist, so the reader can follow the thread from here to their proofs.}
+obligations the proof of \cref{sec:proof} has to discharge for the model
+(\cref{lem:state-cell,lem:slot}).
 
 \comp{it:sta} asks for its side conditions on every pair of related states,
 reachable or not. We add a variant that asks for them only on the states that satisfy
@@ -272,7 +207,7 @@ Write $\NI_P$ and $\mathsf{PE}_P$ for the predicates above with $v$ and $v'$
 restricted to states satisfying $P$, and say that $f$ \emph{preserves} $P$ if
 $P\,v \Rightarrow P\,(f\,i\,v)$ for all $i$ and $v$.
 
-\begin{theorem}[\m{sta_NI_pred}]\label{thm:sta-pred}\todo{add a readable name next to the link, as \cref{thm:composition} has: ``Composition under an invariant''.}
+\begin{theorem}[Composition under an invariant, \m{sta_NI_pred}]\label{thm:sta-pred}
 If $P\,v$ holds, $f$ and $g$ preserve $P$,
 $p \in \NI(\eqo{V} \times_R \eqo{I},\eqv{O})$,
 $f \in \NI_P(\eqv{I},\eqv{V},\eqv{V}) \cap \mathsf{PE}_P(\eqv{I},\eqv{V})$ and

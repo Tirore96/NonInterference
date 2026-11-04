@@ -26,7 +26,7 @@
   invariant (\cref{def:gated}) as it passes through, and on the right the
   relational obligation of each stage. The predicates are Hoare triples on single
   states; only \m{initiate_next} needs one, the fact of \cref{def:ready}. The input
-  update's \m{set_pending} writes one private bit: it preserves \m{secret_gated} and is
+  update's \m{set_pending} writes one pending bit: it preserves \m{secret_gated} and is
   non-interfering on every related pair.}
 \label{fig:lane}
 \end{figure}

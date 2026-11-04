@@ -59,8 +59,7 @@ the disk handler pending and unmasked and starts it, setting all masks: U to S. 
 timer interrupt that arrives meanwhile stays pending until the disk handler emits
 \code{Notify} at step 4: S to T. The timer handler's completion at step 6 requests a
 reschedule: T to U, where the scheduler hands step 8 to the private user. Without the
-disk interrupt the system never enters S. Its two steps are taken from the public
-user, and the masks, which are public, are set at steps 3 and 4 in one run only.
+disk interrupt the system never enters S.
 
 \input{sections/fig-io}
 To state the leak we classify what the system receives and emits. Its input
@@ -74,18 +73,13 @@ current pid of \cref{sec:global-state}: \code{inl} is the disk interrupt and
 \begin{definition}[Input and output equivalences]\label{def:io}
 The input equivalence $\Ein$ (\m{in_equiv}) and the output equivalence $\Eout$
 (\m{out_equiv}) are
-\begin{alignat*}{2}
-\Ein &\triangleq{} && \priveq + \pubeq, \\
-\Eout &\triangleq{} && \hphantom{{}\times{}}(\pubeq + \one^\Lo) \\
-&&& {}\times (\priveq + \one^\Lo) \\
-&&& {}\times (\pubeq + \one^\Lo) \\
-&&& {}\times (\priveq + \one^\Hi) \\
-&&& {}\times (\priveq + \one^\Hi) \\
-&&& {}\times (\pubeq + \one^\Lo),
-\end{alignat*}
-one factor per slot, in the order public user, private user, scheduler, NOP,
-disk and timer handler, with $\times$ associating to the right, as the output
-nests.
+\begin{align*}
+\Ein &\triangleq \priveq + \pubeq, \\
+\Eout &\triangleq (\pubeq + \one^\Lo) \times (\priveq + \one^\Lo) \times (\pubeq + \one^\Lo) \\
+&\quad{} \times (\priveq + \one^\Hi) \times (\priveq + \one^\Hi) \times (\pubeq + \one^\Lo),
+\end{align*}
+one factor per slot of \cref{fig:io}, with $\times$ associating to the right, as the
+output nests.
 \end{definition}
 \end{minipage}
 \medskip
@@ -94,15 +88,15 @@ The disk interrupt is thus hidden from the attacker, and the timer interrupt is
 public. Of each output the attacker sees whether the slot ran and its value on the
 dark slots of \cref{fig:io}, only whether it ran on the light slot, and nothing
 on the white ones.
-So the attacker sees when the U and T steps happen, and of an S step
-only that it happened, never which secret handler ran:
-no other slot ran.\todo{the clause after the colon is cryptic: say that the attacker infers an S step from all visible slots being empty.} \Cref{sec:gating} shows that the proof forces this shape.
+So the attacker sees when the U and T steps happen. On an S step it sees that those
+slots are all empty, which shows that a secret handler ran and leaves open
+which. \Cref{sec:gating} shows that the proof forces this shape.
 
 The attacker thus learns when the system enters S and how long it stays there, so for
 it to learn nothing, both must be fixed by public events; what runs inside S may depend on
 the secret. The ordinary policy fails this:
 
-\begin{theorem}[\m{model_immediate_not_NI}]\label{thm:leak}\todo{the results are titled only by Rocq names. Add readable names next to the links, here and on \cref{cor:leak-userview,thm:main,cor:userview}: ``Ordinary handling leaks'', ``Sliced handling is non-interfering''.}
+\begin{theorem}[Leak, \m{model_immediate_not_NI}]\label{thm:leak}
 For the concrete system,
 \[
 \mathsf{model\_immediate\_concrete} \notin
@@ -126,18 +120,11 @@ next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
 \end{proof}
 
 The output above includes the scheduler and the timer handler. We also state
-the result for what user space itself emits. The \emph{user view} keeps only
-the two user slots, as one
-value of type \code{(Opub + Opriv) + 1}:
-\begin{lstlisting}
-parse_output o :=
-  match o with
-  | (Some v, _)         => Some (inl v)
-  | (None, (Some v, _)) => Some (inr v)
-  | _                   => None
-  end
-userview m := map id parse_output m
-\end{lstlisting}
+the result for what user space itself emits. The \emph{user view}
+\code{map id parse_output m} keeps only the two user slots: \m{parse_output} maps an
+output to one value of type \code{(Opub + Opriv) + 1}, the public user's as
+\code{Some (inl v)}, the private user's as \code{Some (inr v)}, and any other as
+\code{None}.
 
 At $\Lo$ a private-user output and \code{None} are both hidden, so a plain sum
 would relate them and hide whether the private user ran. So the user view
@@ -151,17 +138,18 @@ The user-view equivalence $\Euser$ (\m{out_equiv_userview}) is
 \end{definition}
 
 So the attacker still sees when the private user runs. The user view thus erases only public
-information: the scheduler and the timer handler, and which of them, or S, ran.\todo{awkward ending: rephrase what the view erases.}
+information: the outputs of the scheduler and the timer handler, and, on a step where
+no user process ran, whether the step was theirs or an S step.
 
-The private user's input of \cref{sec:loop} pays off here.\todo{filler sentence: cut it and start from ``In this view''.} In this view the
-disk interrupt has an effect: on the concrete system, the private
+In this view the
+disk interrupt has an effect, through the private user's input (\cref{sec:loop}): on the concrete system, the private
 user emits \code{Sys} in the run with a disk interrupt where it emits \code{Idle} in
 the run without one (\m{trace_with_dI}, \m{trace_no_dI}). The interrupt thus reaches
 user space, and only through a value the attacker cannot see.
 
 The leak is visible in the user view as well:
 
-\begin{corollary}[\m{model_immediate_userview_not_NI}]\label{cor:leak-userview}
+\begin{corollary}[User-view leak,\newline \m{model_immediate_userview_not_NI}]\label{cor:leak-userview}
 For the concrete system,
 \[
 \mathsf{userview}\;\mathsf{model\_immediate\_concrete}
@@ -169,10 +157,11 @@ For the concrete system,
 \]
 \end{corollary}
 
-\todo{put this paragraph in a proof environment, so all results have the same visual shape.}
+\begin{proof}
 The missing \code{Get} is a public-user output, which \m{parse_output}
 keeps, so the counterexample and the proof are those of \cref{thm:leak}, with
 every output passed through \m{parse_output}.
+\end{proof}
 
 \input{sections/fig-sliced}
 
@@ -194,16 +183,8 @@ closes at the output of the step at which it reads \code{1}. Closing thus happen
 exactly once: at \code{0} there is nothing to close, so the timer is never unmasked
 while its own handler runs.
 
-The initial state masks the disk and NOP handlers, so no disk interrupt can take the
-system from U to S, and leaves the timer unmasked:
-\begin{lstlisting}
-sliced_init :=
-  ((inr 3, None),       (* public user *)
-   (false, (0,           (* slice counter *)
-    ((false,true),       (* NOP *)
-     ((false,true),      (* disk *)
-      (false,false)))))) (* timer *)
-\end{lstlisting}
+The initial state \m{sliced_init} is \m{immediate_init} with the disk and NOP masks
+set, so no disk interrupt can take the system from U to S, and the timer unmasked.
 
 The service policy uses both stages of \cref{sec:state}, \m{observe_timer_output}
 and then \m{tick_slice}; \m{sliced_service} is their composite. The first stage is the
@@ -257,7 +238,7 @@ the timer and sets the counter to \code{0}.
 
 The sliced policy is non-interfering:
 
-\begin{theorem}[\m{model_sliced_NI}]\label{thm:main}
+\begin{theorem}[Security, \m{model_sliced_NI}]\label{thm:main}
 If the scheduler and the public user process are non-interfering at
 $\pubeq$ on input and output, and the private user process is
 non-interfering at $\priveq$ on input and output, then
@@ -267,7 +248,7 @@ non-interfering at $\priveq$ on input and output, then
 \]
 \end{theorem}
 
-At the attacker's level $\Lo$ the conclusion reads as follows. A
+\Cref{sec:proof} proves the theorem. At the attacker's level $\Lo$ the conclusion reads as follows. A
 disk interrupt is unobservable at $\Lo$ (\cref{def:io}), so two input streams
 that differ only in disk interrupts must give outputs that $\Eout$ relates.
 
@@ -279,9 +260,14 @@ behaviour reaches the schedule.
 
 The result carries over to the user view:
 
-\begin{corollary}[\m{model_sliced_userview_NI}]\label{cor:userview}
+\begin{corollary}[User-view security,\newline \m{model_sliced_userview_NI}]\label{cor:userview}
 Under the same hypotheses, the user view of the sliced model,
 \m{model_sliced_userview}, is in $\NI(\Ein, \Euser)$.
 \end{corollary}
 
-\Cref{sec:proof} proves both.\todo{once the corollary's proof moves here, this becomes a pointer for \cref{thm:main} alone; attach it to the theorem.}
+\begin{proof}
+The user view is $\mathsf{map}\;\mathsf{id}\;\mathsf{parse\_output}\;\mathsf{model\_sliced}$,
+so \comp{it:map} applies with \cref{thm:main}. The input function \code{id} is trivial, and
+$\mathsf{parse\_output} \in \NI(\Eout,\Euser)$ because outputs that $\Eout$ relates
+agree on which user slot, if any, emitted, and on the public user's value.
+\end{proof}

@@ -948,6 +948,158 @@ Lemma input_update_EP :
   f_EP (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv (@input_update Opub Opriv).
 Proof. by move=> l [i|o] Hi v //; apply: set_pending_EP. Qed.
 
+(* The state cell: the first hard step of the proof of model_sliced_NI.  For any
+   inner process, the obligations of sta_NI_pred hold with the slice invariant.
+   (Paper, Section V-C.) *)
+Lemma sliced_state_cell_NI p :
+  NI (eqpair_R state_type_equiv (eqsum_L in_equiv (out_equiv Opub Opriv)))
+     (out_equiv Opub Opriv) p ->
+  NI (eqsum_L in_equiv (out_equiv Opub Opriv))
+     (eqpair state_type_equiv (out_equiv Opub Opriv))
+     (sta (@input_update Opub Opriv)
+        (output_update (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime))
+        sliced_init p).
+Proof.
+move=> Hp.
+apply: (@sta_NI_pred _ _ _ secret_gated) Hp.
+- move=> e v; exact: input_update_gated.
+- move=> o v; exact: output_update_gated.
+- exact: sliced_output_NI_on.
+- move=> l e e' He v v' _ _ Hv; exact: (input_update_NI He Hv).
+- move=> l e He v _; exact: (input_update_EP He).
+- exact: sliced_init_gated.
+Qed.
+
+(* One slot of the pool, as process_pool builds it.  [proj] is the slot's part of
+   the fed-back handler output. *)
+Definition pool_slot (A O : Ty) (n : nat) (b : bool)
+    (proj : [T_intermediate] -> [Option A]) (p : Proc A O) :
+    Proc (Times cur_pid T_intermediate) (Option O) :=
+  map ((fun i => (slot_pid i.1 == n, proj i.2))
+         : [Times cur_pid T_intermediate] -> [Times Bool (Option A)]) id
+    (swi b (maybe (map id ((fun o => (true, o)) : [O] -> [Times Bool O]) p))).
+
+(* The equivalence on what reaches a slot: the current pid and the handler output. *)
+Definition slot_in_equiv : cEquiv [Times cur_pid T_intermediate] :=
+  eqpair (eqsum (private_equiv Bool) (public_equiv _)) (eqmaybe_nobody (private_equiv _)).
+
+(* The second hard step, for a slot no secret pid selects.  Both secret pids close
+   its gate, so the gate is public and every level is aware of it: the attacker
+   sees whether the slot ran.  (Paper, Section V-D.) *)
+Lemma slot_visible_NI (A O : Ty) n b proj (IRel : cEquiv [A]) (YRel : cEquiv [O]) p :
+  slot_pid (inl true) != n -> slot_pid (inl false) != n ->
+  f_NI (eqmaybe_nobody (private_equiv _)) (eqmaybe_nobody IRel) proj ->
+  NI IRel YRel p ->
+  NI slot_in_equiv (eqmaybe_all YRel) (pool_slot n b proj p).
+Proof.
+move=> Ht Hf Hproj Hp.
+rewrite /pool_slot /slot_in_equiv.
+eapply map_NI.
+instantiate (1:= eqpair_LR false_equiv (eqmaybe_nobody IRel)).
+- mrw. move=> l i i' /rel_eqpair[Hpid Hin].
+  apply rel_eqpair_LR2. split; last exact: Hproj.
+  case/eqsum_split: Hpid.
+  + have N z : (slot_pid (inl z) == n) = false by case: z; apply/negbTE.
+    move=> [x][y][Ei [Ei' _]]; rewrite Ei Ei'.
+    by move: (N x) (N y); rewrite /= => -> ->.
+  + by move=> [x][y][-> [-> /public_equiv_eq ->]].
+- mrw. by move=> l i.
+- instantiate (1:= eqmaybe_aware YRel false_equiv).
+  mrw. move=> l [x|] [y|] H.
+  + exact: H.
+  + by case: H=> _ /(_ (@false_equiv_aware l)).
+  + by case: H=> /(_ (@false_equiv_aware l)).
+  + done.
+- apply swi_NI.
+  + move=> l. left. exact: false_equiv_aware.
+  + eapply maybe_NI. eapply map_NI; eauto.
+    mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
+Qed.
+
+(* The second hard step, for a slot a secret pid selects.  Which secret pid is
+   current is private, so the gate is private and the attacker cannot trust it;
+   instead it sees none of the slot's outputs.  (Paper, Section V-D.) *)
+Lemma slot_hidden_NI (A O : Ty) n b proj (IRel : cEquiv [A]) (YRel : cEquiv [O]) p :
+  f_NI (eqmaybe_nobody (private_equiv _)) (eqmaybe_nobody IRel) proj ->
+  NI IRel (private_equiv O) p ->
+  NI slot_in_equiv (eqmaybe_nonbot (private_equiv O)) (pool_slot n b proj p).
+Proof.
+move=> Hproj Hp.
+rewrite /pool_slot /slot_in_equiv.
+eapply map_NI.
+instantiate (1:= eqpair_LR (private_equiv _) (eqmaybe_nobody IRel)).
+- mrw. move=> l i i' /rel_eqpair[Hpid Hin].
+  apply rel_eqpair_LR2. split; last exact: Hproj.
+  case: (eqVneq l \bot) => [->|/eqP Hl]; first exact: private_bot.
+  refine (private_not_bot Hl _).
+  case/eqsum_split: Hpid.
+  + move=> [x][y][Ei [Ei' Hxy]]; rewrite Ei Ei'.
+    by rewrite (private_not_bot' Hl Hxy).
+  + by move=> [x][y][-> [-> /public_equiv_eq ->]].
+- mrw. by move=> l i.
+- instantiate (1:= eqmaybe_aware (private_equiv _) (private_equiv _)).
+  mrw. intros. apply rel_eqmaybe_aware2 in H.
+  destruct H. destruct H. destruct H. destruct H. destruct H0.
+  subst. apply rel_eqmaybe_all. eauto.
+  destruct H. destruct H. subst. auto.
+  destruct H. destruct i. ssa. destruct i'. ssa. ssa. de i'.
+- apply swi_NI.
+  + move=> l.
+    destruct (eqVneq l \bot). subst. right.
+    (* At bot the gate cannot be trusted, but everything the switch emits is
+       unobservable there: the gate is hidden, so None is, and so is every
+       payload. *)
+    apply oblivious_all_dis. case=> [o|] /=; first done.
+    move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by (simpl; right).
+    by move: (Ha _ Hr)=>[].
+    left. intro. intros.
+    move/private_not_bot' : H=>->//. ssa.
+    intro. subst. rewrite eqxx in i. done.
+    intro. subst. rewrite eqxx in i. done.
+  + apply maybe_NI. eapply map_NI; eauto.
+    mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
+Qed.
+
+(* The handlers: a counter, at the equivalence of its output. *)
+Lemma ir_handler_private_NI :
+  NI (public_equiv Empty) (private_equiv THandlerOutput) (ir_handler runtime).
+Proof.
+  rewrite /ir_handler.
+  eapply map_NI. eauto. eauto.
+  mrw. intros.
+  move:H. instantiate (1:=eqpair (private_equiv _) (public_equiv _)).
+  move/rel_eqpair. case=>HH _.
+  simpl in HH. destruct HH. destruct H. rewrite H0.
+  case_if. auto. auto. subst. auto.
+  eapply sta_NI.
+  mrw. intros. simpl in H0. destruct H0. ssa. subst. auto.
+  mrw. intros. auto.
+  mrw. intros. auto.
+  apply out_NI.
+  Unshelve. all: apply public_equiv.
+Qed.
+
+Lemma ir_handler_public_NI :
+  NI (public_equiv Empty) (public_equiv THandlerOutput) (ir_handler runtime).
+Proof.
+  rewrite /ir_handler.
+  eapply map_NI. eauto. eauto.
+  instantiate (1:=eqpair _ _).
+  mrw. move=> l i i' /rel_eqpair[] + _.
+  instantiate (1:= public_equiv _). move=>/public_equiv_eq ->. ssa.
+  eapply sta_NI.
+  mrw. intros. move: H0.
+  move/public_equiv_eq=>->//.
+  mrw. intros. eauto.
+  mrw. intros. auto.
+  apply out_NI.
+  Unshelve. all: apply public_equiv.
+Qed.
+
+Lemma slot_no_input (A : Ty) (IRel : cEquiv [A]) :
+  f_NI (eqmaybe_nobody (private_equiv THandlerOutput)) (eqmaybe_nobody IRel)
+       (fun _ => None).
+Proof. by mrw. Qed.
 
 Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
@@ -968,14 +1120,8 @@ Proof.
   apply: rel_eqsum_L2.
   case/rel_eqpair: H;eauto.
 
-  (*state update, under the slice invariant (sta_NI_pred with secret_gated)*)
-  apply: (@sta_NI_pred _ _ _ secret_gated).
-  - move=> e v; exact: input_update_gated.
-  - move=> o v; exact: output_update_gated.
-  - exact: sliced_output_NI_on.
-  - move=> l e e' He v v' _ _ Hv; exact: (input_update_NI He Hv).
-  - move=> l e He v _; exact: (input_update_EP He).
-  - exact: sliced_init_gated.
+  (*state update, under the slice invariant*)
+  apply: sliced_state_cell_NI.
 
 
   (*map*)
@@ -1022,248 +1168,20 @@ Proof.
 
   by [].
 
+  (*the slots, in pool order*)
   eapply maybe_NI.
-  eapply par_NI.
-  eapply map_NI.
-  instantiate (1:= eqpair_LR false_equiv (_)).
-  mrw. intros. apply rel_eqpair in H. destruct H.
-  apply rel_eqpair_LR2. con. 2:eauto.
-  clear H0.
-  case/eqsum_split:H.
-  move=>[]x[]y[]->[]->. intros.
-  simpl in b. destruct b. destruct H. subst. eauto.
-  subst. simpl. case_if. case_if. done. done.
-  case_if. done. done.
-  move=>[]x[]y[]->[]->/public_equiv_eq->/=. done.
-  mrw. intros. ssa.
-  instantiate (1:= eqmaybe_aware (public_equiv _) false_equiv).
-  mrw. intros. apply rel_eqmaybe_aware2 in H.
-  destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe_all. eauto.
-  destruct H. destruct H. subst. auto.
-  destruct H. destruct i. ssa. destruct i'. ssa. auto.
-
-  apply swi_NI.
-  intros. left. intro. intros.
-  simpl in H. subst. ssa. intro. ssa.
-  
-  eapply maybe_NI. eapply map_NI. eauto. eauto.
-  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
-  apply p_pub_NI.
-  
-
   apply par_NI.
-  (*map*)
-
-  eapply map_NI.
-  instantiate (1:= eqpair_LR false_equiv _).
-  mrw. intros. apply rel_eqpair in H. destruct H.
-  apply rel_eqpair_LR2. con. 
-  clear H0.
-  case/eqsum_split:H.
-  move=>[]x[]y[]->[]->. intros.
-  simpl in b. destruct b. destruct H. subst. eauto.
-  subst. simpl. case_if. case_if. done. done.
-  case_if. done. done.
-  move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
-  mrw. intros. ssa.
-  instantiate (1:= eqmaybe_aware (private_equiv _) false_equiv).
-  mrw. intros. apply rel_eqmaybe_aware2 in H.
-  destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe_all. eauto.
-  destruct H. destruct H. subst. auto.
-  destruct H. destruct i. ssa. destruct i'. ssa. ssa. intro. apply H0. intro. ssa. subst.
-  intro. ssa. de i'. intro. apply H. intro. ssa. intro. apply H. intro. intros. subst.
-  ssa. 
-
-  apply swi_NI.
-  intros. left. intro. intros.
-  simpl in H. subst. ssa. intro. ssa.
-  
-  eapply maybe_NI. eapply map_NI. eauto. eauto.
-  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
-
-  apply p_priv_NI.
-  
+  exact: (@slot_visible_NI Empty Opub 5 _ _ (public_equiv _) _ _ erefl erefl (slot_no_input _) p_pub_NI).
   apply par_NI.
-  (*map*)
-
-  eapply map_NI.
-  instantiate (1:= eqpair_LR false_equiv _).
-  mrw. intros. apply rel_eqpair in H. destruct H.
-  apply rel_eqpair_LR2. con. 
-  clear H0.
-  case/eqsum_split:H.
-  move=>[]x[]y[]->[]->. intros.
-  simpl in b. destruct b. destruct H. subst. eauto.
-  subst. simpl. case_if. case_if. done. done.
-  case_if. done. done.
-  move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
-  mrw. intros. ssa.
-  instantiate (1:= eqmaybe_aware (public_equiv _) false_equiv).
-  mrw. intros. apply rel_eqmaybe_aware2 in H.
-  destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe_all. eauto.
-  destruct H. destruct H. subst. auto.
-  destruct H. destruct i. ssa. destruct i'. ssa. ssa.
-  
-  apply swi_NI.
-  intros. left. intro. intros.
-  simpl in H. subst. ssa. intro. ssa.
-  
-  eapply maybe_NI. eapply map_NI. eauto. eauto.
-  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
-
-  apply p_sched_NI.
-
+  exact: (@slot_visible_NI THandlerOutput Opriv 4 _ id (private_equiv _) (private_equiv _) _ erefl erefl (fun _ _ _ H => H) p_priv_NI).
   apply par_NI.
-  (*map*)
-
-  eapply map_NI.
-  instantiate (1:= eqpair_LR (private_equiv _) _).
-  mrw. intros. apply rel_eqpair in H. destruct H.
-  apply rel_eqpair_LR2. con. 
-  clear H0.
-  case/eqsum_split:H.
-  move=>[]x[]y[]->[]->. intros.
-  simpl in b. destruct b. destruct H. subst. eauto. eauto.
-  move=>[]x[]y[]->[]->/public_equiv_eq->/=.
-  destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_nobody (private_equiv _)). auto.
-  mrw. intros. ssa.
-  instantiate (1:= eqmaybe_aware (private_equiv _) (private_equiv _)).
-  mrw. intros. apply rel_eqmaybe_aware2 in H.
-  destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe_all. eauto.
-  destruct H. destruct H. subst. auto.
-  destruct H. destruct i. ssa. destruct i'. ssa. ssa. de i'.
-  
-  apply swi_NI.
-  intros.
-  destruct (eqVneq l \bot). subst. right.
-  (* At bot the gate cannot be trusted, but everything the switch emits is
-     unobservable there: the gate is hidden, so None is, and so is every
-     payload. *)
-  apply oblivious_all_dis. case=> [o|] /=; first done.
-  move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by (simpl; right).
-  by move: (Ha _ Hr)=>[].
-  left. intro. intros.
-  move/private_not_bot' : H=>->//. ssa.
-  intro. subst. rewrite eqxx in i. done.
-  intro. subst. rewrite eqxx in i. done.
-
-  apply maybe_NI.
-  eapply map_NI. eauto. eauto.
-
-  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
-
-  eapply map_NI. eauto. eauto.
-  mrw. intros.
-  move:H. instantiate (1:=eqpair (private_equiv _) (public_equiv _)).
-  move/rel_eqpair. case=>HH _.
-  simpl in HH. destruct HH. destruct H. rewrite H0.
-  case_if. auto. auto. subst. auto.
-  
-  eapply sta_NI.
-  mrw. intros. simpl in H0. destruct H0. ssa. subst. auto.
-  mrw. intros. auto.
-  mrw. intros. auto.
-  apply out_NI.
-
-
+  exact: (@slot_visible_NI Empty Nat 3 _ _ (public_equiv _) _ _ erefl erefl (slot_no_input _) p_sched_NI).
   apply par_NI.
-  (*map*)
-
-  eapply map_NI.
-  instantiate (1:= eqpair_LR (private_equiv _) _).
-  mrw. intros. apply rel_eqpair in H. destruct H.
-  apply rel_eqpair_LR2. con. 
-  clear H0.
-  case/eqsum_split:H.
-  move=>[]x[]y[]->[]->. intros.
-  simpl in b. destruct b. destruct H. subst. eauto. eauto.
-  move=>[]x[]y[]->[]->/public_equiv_eq->/=.
-  destruct (eqVneq l \bot). auto. left. ssa. intro. apply/negP. apply i0. apply/eqP. done.
-  instantiate (1:= eqmaybe_nobody (private_equiv _)). auto.
-  mrw. intros. ssa.
-  instantiate (1:= eqmaybe_aware (private_equiv _) (private_equiv _)).
-  mrw. intros. apply rel_eqmaybe_aware2 in H.
-  destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe_all. eauto.
-  destruct H. destruct H. subst. auto.
-  destruct H. destruct i. ssa. destruct i'. ssa. ssa. de i'.
-  
-  apply swi_NI.
-  intros.
-  destruct (eqVneq l \bot). subst. right.
-  (* At bot the gate cannot be trusted, but everything the switch emits is
-     unobservable there: the gate is hidden, so None is, and so is every
-     payload. *)
-  apply oblivious_all_dis. case=> [o|] /=; first done.
-  move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by (simpl; right).
-  by move: (Ha _ Hr)=>[].
-  left. intro. intros.
-  move/private_not_bot' : H=>->//. ssa.
-  intro. subst. rewrite eqxx in i. done.
-  intro. subst. rewrite eqxx in i. done.
-
-  apply maybe_NI.
-  eapply map_NI. eauto. eauto.
-
-  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
-
-  eapply map_NI. eauto. eauto.
-  mrw. intros.
-  move:H. instantiate (1:=eqpair (private_equiv _) (public_equiv _)).
-  move/rel_eqpair. case=>HH _.
-  simpl in HH. destruct HH. destruct H. rewrite H0.
-  case_if. auto. auto. subst. auto.
-  
-  eapply sta_NI.
-  mrw. intros. simpl in H0. destruct H0. ssa. subst. auto.
-  mrw. intros. auto.
-  mrw. intros. auto.
-  apply out_NI.
-
-  eapply map_NI.
-  instantiate (1:= eqpair_LR false_equiv _).
-  mrw. intros. apply rel_eqpair in H. destruct H.
-  apply rel_eqpair_LR2. con. 
-  clear H0.
-  case/eqsum_split:H.
-  move=>[]x[]y[]->[]->. intros.
-  simpl in b. destruct b. destruct H. subst. eauto.
-  subst. simpl. case_if. case_if. done. done.
-  case_if. done. done.
-  move=>[]x[]y[]->[]->/public_equiv_eq->/=. done. eauto.
-  mrw. intros. ssa.
-  instantiate (1:= eqmaybe_aware (public_equiv _) false_equiv).
-  mrw. intros. apply rel_eqmaybe_aware2 in H.
-  destruct H. destruct H. destruct H. destruct H. destruct H0.
-  subst. apply rel_eqmaybe_all. eauto.
-  destruct H. destruct H. subst. auto.
-  destruct H. destruct i. ssa. destruct i'. ssa. ssa.
-  
-  apply swi_NI.
-  intros. left. intro. intros.
-  simpl in H. subst. ssa. intro. ssa.
-  
-  eapply maybe_NI. eapply map_NI. eauto. eauto.
-  mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
-
-  eapply map_NI. eauto. eauto.
-  instantiate (1:=eqpair _ _).
-  mrw. move=> l i i' /rel_eqpair[] + _.
-  instantiate (1:= public_equiv _). move=>/public_equiv_eq ->. ssa.
-  eapply sta_NI.
-  mrw. intros. move: H0.
-  move/public_equiv_eq=>->//.
-  mrw. intros. eauto.
-  mrw. intros. auto.
-  apply out_NI.
-
-  Unshelve. all: apply public_equiv.
-Qed.  
+  exact: (@slot_hidden_NI Empty THandlerOutput 2 _ _ (public_equiv _) (private_equiv _) _ (slot_no_input _) ir_handler_private_NI).
+  apply par_NI.
+  exact: (@slot_hidden_NI Empty THandlerOutput 1 _ _ (public_equiv _) (private_equiv _) _ (slot_no_input _) ir_handler_private_NI).
+  exact: (@slot_visible_NI Empty THandlerOutput 0 _ _ (public_equiv _) _ _ erefl erefl (slot_no_input _) ir_handler_public_NI).
+Qed.
 
 
 (* === Section 6 (payoff): the top result.  model_sliced_userview = map id

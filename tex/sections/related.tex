@@ -13,24 +13,23 @@ Sabelfeld and Sands give a probabilistic, timing-sensitive non-interference for
 multi-threaded programs~\cite{sabelfeld2000}, Mantel and Sudbrock a notion of
 security that holds for a whole class of schedulers~\cite{mantel2010}, and Stefan et
 al.\ address termination and timing channels in a concurrent information-flow
-system~\cite{stefan2012}. These works treat the scheduler as given and ask which
+system~\cite{stefan2012}. Vassena et al.\ mechanise non-interference for concurrent
+lazy programs, parametrically in a deterministic scheduler~\cite{vassena2017}. These works treat the scheduler as given and ask which
 programs are secure under it. We treat the interrupt mechanism, which decides when
-handlers preempt the scheduled process, as the object to be made secure, for any
-non-interfering scheduler and user processes.
+handlers preempt the scheduled process, as the object to be made secure.
 
 \paragraph{Timing-channel mitigation} Predictive mitigation delays outputs to a
 schedule predicted from public information, bounding what their timing
 leaks~\cite{askarov2010}, also in a language-based setting~\cite{zhang2012}. Our
-requirement has the same shape, applied to the interrupt mechanism: when secret
-handlers run, and for how long, must be fixed by public events. The sliced policy
-meets it exactly, so nothing leaks, at the cost of reserving handler time whether or
-not it is used.
+requirement has the same shape: when secret handlers run, and for how long, must be
+fixed by public events. The sliced policy meets it exactly, at the cost of reserving
+handler time whether or not it is used.
 
-\paragraph{Composable timing-sensitive non-interference} Our proofs rest on the
-calculus of Rafnsson et al.~\cite{rafnsson2017}, whose definitions are
-timing-sensitive by construction and whose theorems compose. We mechanise the
-calculus and its composition theorems, and apply them to a model of interrupt
-handling.
+\paragraph{Composable timing-sensitive non-interference} Rafnsson and Sabelfeld
+investigate how information-flow security composes in interactive
+systems~\cite{rafnsson2014}. Our proofs rest on the
+calculus of Rafnsson et al.~\cite{rafnsson2017}, which we mechanise and apply to a
+model of interrupt handling.
 
 \paragraph{Verified operating systems} Murray et al.\ formulate non-interference for
 operating system kernels~\cite{murray2012} and prove it for seL4~\cite{murray2013},
@@ -41,4 +40,6 @@ as space, and includes the partitioning of interrupts among its
 mechanisms\todo{check this characterisation against~\cite{ge2019}}; our sliced policy
 is an instance of that idea in a small model. What we add is a timing-sensitive,
 compositional, mechanised proof that the mechanism is secure, for any
-non-interfering scheduler and user processes.\todo{change 4: cite Zagieboylo et al.\ (CSF 2019) as a mechanised proof that leaves asynchronous events outside its formal result: one clause in our own words, as a contrast. Check the entry via Crossref. Optional, your call: Rafnsson and Sabelfeld (2014) under composition, and Vassena et al.\ (2017) under scheduling, whose proofs are parametric in a deterministic scheduler.}
+non-interfering scheduler and user processes. At the hardware interface, Zagieboylo et
+al.\ design an instruction set that controls timing channels and leave exceptions and
+asynchrony outside their formal proof~\cite{zagieboylo2019}.

@@ -23,9 +23,8 @@ Timing leaks through interrupt handling of this kind arise in several operating
 systems \todo{examples, with citations}.
 
 This is the example we follow throughout the paper. The secret is \emph{whether a
-disk interrupt occurred}. A public process issues requests whose results the
-attacker sees, and a private process, the legitimate consumer of the disk event,
-reacts to it. The attacker may learn nothing about the disk interrupt. \Cref{sec:model,sec:designs,sec:proof}
+disk interrupt occurred}, and a private process, the legitimate consumer of the disk
+event, reacts to it. \Cref{sec:model,sec:designs,sec:proof}
 model this system, exhibit the leak, and remove it.
 
 \begin{figure}[t]
@@ -91,17 +90,13 @@ state: it sets a pending bit, decides which handler fills a run, and changes wha
 the private user process does next. The proof must show that none of this ever
 decides whether, or for how long, a secret handler runs (\cref{sec:proof}).
 
-\todo{page budget: this paragraph and the previous one restate the abstract and are stated again in the contributions; the introduction runs to two pages. Tighten to one statement of the policy and one of the result.}
 We prove this policy non-interfering (\m{model_sliced_NI}), even to an attacker who
-sees at every step which process ran, except which of the two secret handlers.
-The user view is a projection of this output, so the result carries over
-to it (\m{model_sliced_userview_NI}).
+sees at every step which process ran, except which of the two secret handlers, and
+the result carries over to the user view (\m{model_sliced_userview_NI}).
 Both policies are instances of a single generic model and differ only in their
-\emph{interrupt policy}: the part that decides when handlers may run. The result is
-general in two ways. It holds for every scheduler and every pair of user processes
-that are themselves non-interfering. And it holds for every choice of the two
-numbers that fix the timing of the policy: the number of steps one handler run
-takes, and the number of handler runs that fit in one time slice.
+\emph{interrupt policy}: the part that decides when handlers may run. The result
+holds for every non-interfering scheduler and pair of user processes, every handler
+length and every number of handler runs per time slice.
 
 The model fixes \emph{what} the modified interrupt processing must do; how to
 implement it in an operating system is carried out in separate work
@@ -112,8 +107,8 @@ implement it in an operating system is carried out in separate work
 \item A mechanised, timing-sensitive non-interference proof for interrupt handling
   (\cref{sec:designs,sec:proof}), and a mechanised counterexample for ordinary
   interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one
-  generic theorem per constructor of the model, which leaves two side conditions
-  specific to interrupt handling, one of them hard (\cref{sec:state-equiv}).\todo{inconsistent: \cref{sec:proof} now calls both steps hard. Align, and point to the two lemmas once they exist.}
+  generic theorem per constructor of the model, which leaves two hard steps
+  specific to interrupt handling (\cref{lem:state-cell,lem:slot}).
 \item Requirements, read off the proof's obligations, that suffice for an
   implementation of interrupt handling to be non-interfering
   (\cref{sec:state-equiv,sec:update,sec:invariant}). The
@@ -123,19 +118,9 @@ implement it in an operating system is carried out in separate work
   controller is split by secrecy: which interrupts are pending is secret, while
   the masks that decide what runs next are public. The implementation in
   \todo{cite X} follows these requirements.
-\item A mechanisation of the calculus and its composition theorems. Our
-  definitions depart from the original in one essential place: non-interference
-  is stated over finite traces, which makes every proof an induction. We prove the
-  definition equivalent to the original coinductive one, so our main results also
-  hold in the original's terms (\cref{sec:mechanisation}). We also add sum
-  types, which the original lacks, and present its optional values and parts of
-  the model as sums, proved equal to the mechanised definitions, and a
-  composition theorem for state cells under an invariant, which lets the proof use
-  what the policy maintains on the states it reaches.\todo{the departures are told three times: here, in the opening of \cref{sec:background} and in \cref{sec:departures}. Keep one line here and one there.}
+\item A mechanisation of the calculus and its composition theorems, with
+  non-interference over finite traces, which makes every proof an induction, proved
+  equivalent to the original coinductive definition (\cref{sec:mechanisation}). We
+  add sum types and a composition theorem for state cells under an invariant, which
+  lets the proof use what the policy maintains on the states it reaches.
 \end{itemize}
-
-\Cref{sec:background} recalls the calculus and the definition of non-interference.
-\Cref{sec:model} presents the generic model and \cref{sec:designs} what the attacker sees of it and the two interrupt policies.
-\Cref{sec:proof} gives the proof, and \cref{sec:mechanisation} describes the
-mechanisation.
-\Cref{sec:related,sec:conclusion} discuss related work and limitations.\todo{update when the scope paragraph lands in \cref{sec:mechanisation}.}

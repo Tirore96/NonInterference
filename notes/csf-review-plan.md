@@ -1,8 +1,12 @@
 # Plan: applying the CSF presentation review
 
-Status: awaiting approval. Nothing below is applied yet. The 34 `\todo` comments in
-`tex/` mark where each item goes. They are removed as they are done; your own open
-todos (citations, AI acknowledgment, Ge et al., unwritten conclusion paragraphs) stay.
+Status: all stages applied (uncommitted). The confirmed limit is 12 pages, not counting
+the AI acknowledgment, the bibliography and well-marked appendices. The body ends about
+three-quarters down the right column of p12, which leaves about 20 column lines for
+your two conclusion paragraphs, counting the lines their todos take now. Stage 6 went
+with appendices (`tex/sections/appendix.tex`, after the bibliography): A reduction
+rules, B finite traces, C notation, D development table and levels. Your own open todos
+(citations, AI acknowledgment, Ge et al., unwritten conclusion paragraphs) stay.
 
 **Rule for the whole plan:** the other CSF papers inform only how we present things.
 No definition, wording, example or result of theirs enters the paper. The only trace
