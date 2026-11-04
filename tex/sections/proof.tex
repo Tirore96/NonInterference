@@ -80,12 +80,14 @@ the items of \cref{thm:composition} that apply, and what they require:
   (map pool\_input inr) does. The side conditions of map\_NI for the outer map
   ($\mathsf{inl} \in \NI \cap \mathsf{PU}$, inr\_or\_def $\in \NI$) and for
   map id snd are not stated.}
-\item \emph{The state} (\code{sta}; \comp{it:sta}). The state update $f$ must
-  satisfy $f \in \NI(\eqv{E},\eqv{V},\eqv{V}) \cap \mathsf{PE}(\eqv{E},\eqv{V})$. It
-  decides whether a secret handler runs, and it is the hard obligation
-  (\cref{sec:state-equiv,sec:update,sec:restore}).
+\item \emph{The state} (\code{sta}; \changed{\cref{thm:sta-pred}, with $P$ the slice
+  invariant \m{secret_gated} of \cref{sec:invariant}}). The state update $f$ must
+  \changed{preserve $P$ and} satisfy $f \in \changed{\NI_P}(\eqv{E},\eqv{V},\eqv{V})
+  \cap \changed{\mathsf{PE}_P}(\eqv{E},\eqv{V})$\changed{, and $P$ must hold of the
+  initial state}. It decides whether a secret handler runs, and it is the hard
+  obligation (\cref{sec:state-equiv,sec:update,sec:invariant}).
   \todo{$f$ here is sta's state update, but $f$ was map's input function one
-  bullet up and in the corollary. sta\_NI also requires the output update
+  bullet up and in the corollary. sta\_NI\_inv also requires the output update
   ($g$, the identity here) to be in $\NI(\eqv{O},\eqv{V},\eqv{V})$, and gives the
   inner process inputs at $\eqv{V} \times_R \eqv{E}$; neither is mentioned.}
 \item \emph{The pool} (\code{map}, \code{maybe}, \code{par}; \comp{it:map},
@@ -144,6 +146,11 @@ where a condition forces it, which gives $\eqv{V}$, the shading of \cref{fig:sta
   must be public: two states that disagreed on a mask, or on whether a slice is
   open, could enter S in one and not in the other.
 \end{itemize}
+\changed{Conversely, at $\Lo$ two states are related exactly when their public fields
+agree (\m{state_rel_bot}), and above $\Lo$ exactly when they are equal. So a stage
+whose result has public fields computed from public fields alone, of the state and
+of the output, is non-interfering; we call such a stage \emph{routine}.}
+
 The same conditions explain why \m{set_pending} sets one bit and stops: any decision
 taken on an input step, such as starting a handler or moving the counter, would
 change a public field, so everything an interrupt causes waits for a later output
@@ -151,135 +158,110 @@ step.
 
 \subsection{The state update}\label{sec:update}
 
-$f \in \mathsf{PE}(\eqv{E},\eqv{V})$ concerns unobservable events only, that is, disk
-interrupts, which \m{set_pending} turns into one private bit; it is immediate. The
-hard obligation is $f \in \NI(\eqv{E},\eqv{V},\eqv{V})$. It splits along the two
-lanes of \m{state_step} (\cref{sec:state}), since $\eqv{E}$ never relates an
-interrupt to an output, into
-\begin{gather*}
-\mathsf{set\_pending} \in \NI(\Ein,\eqv{V},\eqv{V})
-\quad\text{and} \\
-s \in \NI(\Eout,\eqv{V},\eqv{V})
-\end{gather*}
-\todo{above, what is s?}
-\todo{Answer to the above: say before the display that the output lane is the
-composite $\mathsf{initiate\_next} \circ \mathsf{service\_policy} \circ
-\mathsf{check\_scheduler}$ (Section III-D), and that fv\_NI\_comp lets the proof
-show $\NI$ for each of the three stages $s$ separately.}
-for each stage $s$ of the output lane (\m{fv_NI_comp}). The first holds because
-\m{set_pending} writes a private bit. The output lane of the sliced policy has six
-stages, applied in this order:
-\begin{enumerate}
-\item \m{check_scheduler} reads the scheduler's output and writes the current pid
-  from it;
-\item \m{initiate_ir} reads the timer handler's output and, on \code{Notify},
-  loads the counter and sets the reschedule flag;
-\item \m{check_handler_completed} reads the counter and, at a handler boundary,
-  unmasks the disk and NOP handlers, masks the timer and sets the NOP pending bit;
-\item \m{check_slice_count} reads the counter and ticks it, and at \code{Some 0}
-  masks the disk and NOP handlers, unmasks the timer and disables the counter;
-\item \m{restore_invariant} reads the counter and writes masks and the NOP pending
-  bit to match it (\cref{sec:restore});
-\item \m{initiate_next} reads the masks, the pending bits, the pid and the
-  reschedule flag, and chooses the next pid by the rules of \cref{sec:state}.
-\end{enumerate}
-The first five read only public fields of the state and public slots of the
-output, so on related arguments they write the same values, private bits included,
-and their obligations are routine. The service policy, stages 2 to 4, reads only
-the timer handler's output; this is what the restriction of \cref{sec:sliced} buys.
-\m{initiate_next} is different: it reads the private pending bits. The timer's
+\input{sections/fig-lane}
+\changed{$f \in \mathsf{PE}_P(\eqv{E},\eqv{V})$ concerns unobservable events only,
+that is, disk interrupts, which \m{set_pending} turns into one private bit; it holds
+on every state. The hard obligation is $f \in \NI_P(\eqv{E},\eqv{V},\eqv{V})$. It
+splits along the two lanes of \m{state_step} (\cref{sec:state}), since $\eqv{E}$
+never relates an interrupt to an output (\m{fv_NI_step_sum_on}). The input lane,
+\m{set_pending}, is in $\NI(\Ein,\eqv{V},\eqv{V})$ on every pair of states, because
+it writes a private bit (\m{set_pending_NI}). The output lane on output $o$ is the
+composite $\mathsf{initiate\_next}\;o \circ \mathsf{sliced\_service}\;o$, and the
+proof takes its stages one at a time (\m{fv_NI_comp}). \Cref{fig:lane} gives each
+stage's obligation.
+
+Both stages of the service policy, \m{observe_timer_output} and \m{tick_slice},
+are routine (\cref{sec:state-equiv}): they read the counter, which is public, and the
+timer handler's output, which is public too; this is what the restriction of
+\cref{sec:sliced} buys. So the service policy is non-interfering on every pair of
+related states (\m{sliced_service_NI}).}
+\m{initiate_next} is different: it reads the private pending bits. \changed{Its
+first step, the scheduler's choice, is routine. Then} the timer's
 readiness is public, so both states agree on it. Otherwise, in each state the
 secret handler ready to start is the disk handler, the NOP handler, or none. Disk in
 one state and NOP in the other is harmless: both start an \code{inl} pid, whose
 value is private. A secret handler in one state and none in the other is fatal: one
-state enters S and the other continues a user process.
-\todo{``about to choose'' is informal; state the fact as a property of two
-states $v \eqv{V}_\Lo v'$ that reach initiate\_next, and give it a name the next
-two subsections can refer to.}
-So the stage needs one fact: two related states, about to choose, either both have
-a secret handler ready or neither has. The ordinary policy fails here and in the
-service policy. \m{immediate_service} unmasks when any handler completes, the disk
+state enters S and the other continues a user process. \changed{So the stage needs
+one fact of each of the two states it receives:}
+
+\begin{definition}[\m{secret_ready_iff_slice}]\label{def:ready}
+\changed{A state $w$ satisfies \m{secret_ready_iff_slice} if, unless all masks are
+set in $w$, a secret handler is ready in $w$ exactly when a slice is open in $w$,
+that is, when its counter is not \code{0}.}
+\end{definition}
+
+\changed{Whether a slice is open is public. So two related states that satisfy
+\cref{def:ready} agree on whether a secret handler is ready, and
+\m{initiate_next} takes them to related states (\m{initiate_next_NI_on}).}
+The ordinary policy fails here and in the service policy.
+\changed{\m{observe_handler_output}} unmasks when any handler completes, the disk
 handler included, so it writes public masks from a private output. And
 \m{initiate_next} meets the fatal case: a bold arrow of \cref{fig:policy-ordinary}
 taken in one run only, which is the counterexample of \cref{thm:leak}.
 
-In the states the sliced policy reaches, the public counter gives the fact: while a
-slice is open the NOP handler is ready, and otherwise neither secret handler is. But
-$\NI(\Eout,\eqv{V},\eqv{V})$ quantifies over all pairs of related states,
-reachable or not.
+\subsection{The slice invariant}\label{sec:invariant}
 
-\subsection{Restoring the invariant}\label{sec:restore}
+\changed{In the states the sliced policy reaches, \cref{def:ready} holds whenever
+\m{initiate_next} chooses: while a slice is open the NOP handler is ready, and
+otherwise neither secret handler is. No single step establishes this. It holds
+because it held of the state before, back to the initial state: it is an inductive
+property, and two related states that are not reachable may violate it. Two
+unreachable states outside a slice with the disk and NOP handlers unmasked, the disk
+handler pending in one only, are related, and \m{initiate_next} starts a secret
+handler in one and not in the other. So \comp{it:sta}, which asks for
+$f \in \NI(\eqv{E},\eqv{V},\eqv{V})$ on every pair of related states, fails, and $\eqv{V}$ cannot be restricted instead, because a characterised
+equivalence relates every value to itself. \Cref{thm:sta-pred} asks for the
+obligations only on the states that satisfy a predicate $P$, provided $P$ holds
+initially and the state update preserves it. For $P$ we take the invariant the sliced
+policy maintains between steps.}
 
-The output lane is one function of the output and the state, the composite of the
-six stages of \cref{sec:update}. Proving it non-interfering in one piece would mean
-following all their branches at once. \m{fv_NI_comp} instead proves it stage by
-stage: if every stage takes related arguments to related states, so does their
-composite. The price is what the composite forgets between stages. Each stage's
-obligation is stated for every pair of related states, so all that passes from one
-stage to the next is that the two states are related. What an earlier stage
-establishes about its result is lost: that \m{check_handler_completed} has just
-made the NOP handler pending, or that \m{check_slice_count} has just masked the
-disk and NOP handlers. \m{initiate_next} must therefore be non-interfering on
-\emph{every} pair of related states, and that fails. Two related states agree on
-the counter and the masks but may differ in the private pending bits; if the disk
-and NOP handlers are unmasked, the disk handler is pending in one state, and no
-secret handler in the other, one state enters S and the other does not.
+\begin{definition}[slice invariant]\label{def:gated}
+\changed{Let \m{slice_open} hold of a state whose counter is not \code{0}, and
+\m{handler_boundary} of a state in which the NOP handler is pending, the timer masked
+and the disk and NOP handlers unmasked. For a predicate $A$ on states, $v$ is
+\emph{gated by} $A$ (\m{gated}) if
+\begin{itemize}
+\item inside a slice, $A\,v$ holds or all masks are set, and outside a slice the
+  disk mask is set; and
+\item the NOP mask equals the disk mask.
+\end{itemize}
+A state satisfies \m{secret_gated} if it is gated by the false predicate, and
+\m{secret_gated_at_boundary} if it is gated by \m{handler_boundary}.}
+\end{definition}
 
-What is forgotten is the link between the counter and the secret handlers' bits.
-The sliced policy maintains it on every state it reaches in which not all masks are
-set, that is, at every choice that rule~1 of \m{initiate_next} does not settle:
-\begin{enumerate}
-\item the NOP mask equals the disk mask;
-\item inside an open slice, the NOP handler is pending and the timer masked;
-\item outside a slice, the disk and NOP handlers are masked.
-\end{enumerate}
-With these three conditions, whether a secret handler is ready depends only on the
-counter and the masks, which are public: inside a slice, exactly when the disk and
-NOP handlers are unmasked; outside it, never. So two related states that satisfy
-them agree on whether a secret handler is ready, which is the fact
-\m{initiate_next} needs.
+\changed{Between steps, then, the secret handlers are masked outside a slice, and a
+handler is running inside one. Where \m{initiate_next} chooses, a slice may also be at
+a handler boundary, in exactly the shape \m{queue_secret_run} leaves; that is the
+disjunct $A$, and it follows the \code{if} of \m{tick_slice}. The invariant passes
+through the output lane as Hoare triples (\cref{fig:lane}):
+\begin{align*}
+&\{\mathsf{secret\_gated}\}\;\mathsf{sliced\_service}\;o \\
+&\qquad\{\mathsf{secret\_gated\_at\_boundary}\}, \\
+&\{\mathsf{secret\_gated\_at\_boundary}\}\;\mathsf{initiate\_next}\;o\;
+  \{\mathsf{secret\_gated}\}, \\
+&\{\mathsf{secret\_gated}\}\;\mathsf{set\_pending}\;i\;\{\mathsf{secret\_gated}\}
+\end{align*}
+(\m{sliced_service_gated}, \m{initiate_next_gated}, \m{set_pending_gated}), and
+the middle state gives \m{initiate_next} its fact: every state that satisfies
+\m{secret_gated_at_boundary} satisfies \cref{def:ready}
+(\m{secret_gated_at_boundary_ready}). At a boundary the NOP handler is ready;
+outside a slice both secret handlers are masked. With \m{sliced_init_gated}, by
+induction on the events:}
 
-Two ways of putting the conditions back fail. $\eqv{V}$ cannot be restricted to the
-states that satisfy them, because a characterised equivalence relates every value
-to itself. And arguing over reachable states only would give up the per-constructor
-structure of the proof. Instead the model writes the conditions into the state:
-\m{initiate_next} applies \m{restore_invariant} just before it chooses
-(\cref{sec:state}). \m{restore_invariant} reads the counter and, in an open slice,
-sets the NOP pending bit and the timer mask, otherwise the disk and NOP masks, and in
-both cases copies the disk mask to the NOP mask. Every state it returns satisfies
-the three conditions, so the proof of the choice needs to consider only states in
-its image. It reads only public fields, so it is itself a routine stage,
-$\mathsf{restore\_invariant} \in \NI(\eqv{V},\eqv{V})$.
+\begin{lemma}[\m{sliced_run_gated}]\label{lem:gated}
+\changed{For every sequence of events, the state that \m{model_sliced} reaches from
+its initial state satisfies \m{secret_gated}.}
+\end{lemma}
 
-The proof of \cref{thm:main} needs nothing more. What remains is to show that the
-restriction costs nothing: \m{restore_invariant} is the identity wherever the model
-applies it, so \m{model_sliced} behaves exactly as the sliced policy without it. Write $v_{es}$ for the state after the events $es$ from the initial state
-of \m{model_sliced}, and $c_o(v)$ for the state that \m{initiate_next} receives on
-output $o$ in state $v$, after \m{check_scheduler} and the service policy.
-
-\begin{theorem}[\m{restore_invariant_noop}]\label{thm:noop}
-Let $\mathit{runtime} \neq 1$. For all events $es$ and outputs $o$, if not all masks
-are set in $c_o(v_{es})$, then $\mathsf{restore\_invariant}\;(c_o(v_{es})) =
-c_o(v_{es})$.
-\end{theorem}
-
-\m{initiate_next} applies \m{restore_invariant} only when not all masks are set, so
-it never changes a state the model reaches. The events $es$ are arbitrary, so this
-holds whatever the pool emits.
-
-The proof of \cref{thm:noop} is an invariant between steps (\m{sliced_inv}: the disk
-and NOP masks agree, are set outside a slice, and a handler is running inside one),
-preserved by every event. At the choice point a variant (\m{choice_inv}) also allows
-a handler boundary inside a slice, where the masks are open and the NOP handler is
-pending; on such states \m{restore_invariant} is the identity.
-
-The hypothesis $\mathit{runtime} \neq 1$ marks where \m{restore_invariant} and the
-counter disagree: \m{restore_invariant} treats a closing slice, at \code{Some 0}, as
-closed. Normally no choice is made then, because the last run is still in progress.
-With one-step handlers the last boundary of a slice falls on that step, and
-\m{restore_invariant} masks the handler the boundary has just enabled.
-Non-interference is unaffected, but at $\mathit{runtime} = 1$ every slice loses its
-last handler run.
+\changed{The events are arbitrary, so this holds whatever the pool emits. The
+obligations of \cref{thm:sta-pred}, with $P$ the invariant \m{secret_gated}, now
+follow. $P$ holds initially; $f$ preserves it by the triples, and the output update
+$g$, the identity, trivially. $f \in \mathsf{PE}_P$ holds on every state. For
+$f \in \NI_P(\eqv{E},\eqv{V},\eqv{V})$, the input lane holds on every pair, and on
+the output lane two related states satisfying $P$ are taken by the service policy
+to related states satisfying \cref{def:ready}, on which \m{initiate_next} is
+non-interfering (\m{sliced_output_NI_on}). The model contains nothing that only the
+proof needs: the invariant is a predicate on its states.}
 
 \subsection{Gating a slot}\label{sec:gating}
 
@@ -373,7 +355,7 @@ of state equivalence would give other rules.
 \item When S is entered, and for how long, must be fixed by public events: two
   related states must agree on whether a secret handler is ready, which takes a
   filler while the slice is open and the masks while it is closed
-  (\cref{sec:update,sec:restore}).
+  (\cref{sec:update,sec:invariant}).
 \item The interrupt controller is split by secrecy: the secret handlers' pending
   bits are private, and every mask is public, because \m{initiate_next} branches on
   the masks (\cref{sec:state-equiv}).

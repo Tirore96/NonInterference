@@ -37,7 +37,7 @@ Even a monolithic proof of the step would face the same unreachable pairs.
 
 ## The new shape
 
-- **A new composition theorem, `sta_NI_inv`** (theorems.v, section
+- **A new composition theorem, `sta_NI_pred`** (theorems.v, section
   `StaInvariant`, our addition, like sum types): if a predicate `P` holds of the
   initial state and the state updates preserve it, `fv_NI` and `f_EP` are needed
   only for states in `P`. Its proof is `sta_NI`'s with `P` threaded through the
@@ -52,7 +52,7 @@ Even a monolithic proof of the step would face the same unreachable pairs.
   secret handler is ready exactly when a slice is open; slice-openness is public).
 - **The model loses `restore_invariant`**; Theorem 5 disappears, and its role is
   taken by the invariant theorem (every reachable state is `secret_gated`), which
-  is now *used* (it discharges `sta_NI_inv`'s preservation obligation).
+  is now *used* (it discharges `sta_NI_pred`'s preservation obligation).
 - **The stage split stays**, but now passes a single-state fact from the service
   policy to `initiate_next` (`fv_NI_comp_on`), instead of only relatedness.
 
@@ -80,7 +80,7 @@ Even a monolithic proof of the step would face the same unreachable pairs.
   (`pub_view_initiate_handler`, `pub_view_leave_handlers`).
 - The paper must be updated later: Section III (no `restore_invariant` in
   `initiate_next` or `model`), IV (counter encoding, runtime = 1 remark), V (the
-  new story and the chain), VI (`sta_NI_inv` as an addition), and Theorem 5.
+  new story and the chain), VI (`sta_NI_pred` as an addition), and Theorem 5.
 
 ## As implemented (2026-11-03)
 
@@ -98,7 +98,7 @@ Even a monolithic proof of the step would face the same unreachable pairs.
 | R9 | `sliced_service_NI` (all pairs) | noninterference.v |
 | R11 | `initiate_next_NI_on` (via `state_rel_bot`) | noninterference.v |
 | R10, R12 | `sliced_output_NI_on`, `fv_NI_step_sum_on` | noninterference.v |
-| R14 | `model_sliced_NI` via `sta_NI_inv` with `P := secret_gated` | noninterference.v |
+| R14 | `model_sliced_NI` via `sta_NI_pred` with `P := secret_gated` | noninterference.v |
 
 No hypothesis on `runtime`. Removed: `restore_invariant`, `timeslice_live`,
 `sliced_inv`, `choice_inv`, `choice_state`, `restore_invariant_id`,
@@ -106,4 +106,4 @@ No hypothesis on `runtime`. Removed: `restore_invariant`, `timeslice_live`,
 `model`, `state_step` and `initiate_next` lost their `restore_invariant`
 parameter. The traces are unchanged except that every counter value in the
 state rows shifts by one. `Print Assumptions` (ci/axioms.v, which now also lists
-`sta_NI_inv` and `sliced_run_gated`): only `d` and `L`.
+`sta_NI_pred` and `sliced_run_gated`): only `d` and `L`.

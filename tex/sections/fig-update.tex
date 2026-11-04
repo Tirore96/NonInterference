@@ -1,0 +1,29 @@
+% The state update of Section III-D (models.v, state_step), in the notation of the two
+% kinds of step, and what the two policies of Section IV put in its open stages.
+% model.tex inputs this file before fig-ordinary, so that the two ordinary figures and
+% the two sliced ones pair.
+\begin{figure}[t]
+\centering
+{\footnotesize
+\begin{align*}
+&\stepI{v}{i}{\mathsf{set\_pending}\;i\;v} \\
+&\stepO{v}{o}{\mathsf{initiate\_next}\;o\;(\mathsf{advance\_policy}\;
+  (\mathsf{observe\_policy}\;o\;v))}
+\end{align*}
+\vspace{-1ex}
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & \code{observe_policy} & \code{advance_policy} \\
+\midrule
+ordinary & \code{observe_handler_output} & \code{id} \\
+sliced & \code{observe_timer_output} & \code{tick_slice} \\
+\bottomrule
+\end{tabular}
+}
+\caption{How a step changes the state $v$ (\m{state_step}). An input only records the
+  interrupt. An output first passes through the two stages of the service policy, the
+  first of which reads the output and the second only the state, and then
+  \m{initiate_next} chooses who runs next. Only the sliced policy uses the second
+  stage.}
+\label{fig:update}
+\end{figure}

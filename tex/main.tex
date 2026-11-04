@@ -15,7 +15,11 @@
 \newcolumntype{L}{>{\raggedright\arraybackslash}X}
 \usepackage{xcolor}
 \usepackage{tikz}
-\usetikzlibrary{fit,calc}
+\usetikzlibrary{fit,calc,decorations.pathmorphing}
+% an arrow of the policy diagrams taken because an interrupt is pending, drawn like
+% the input step \stepI
+\tikzset{intr/.style={->, decorate, decoration={snake, amplitude=0.6pt,
+  segment length=4pt, post length=3pt}}}
 \usepackage{listings}
 \usepackage{hyperref}
 \hypersetup{colorlinks,linkcolor=black,citecolor=black,urlcolor=blue!50!black}
@@ -71,6 +75,9 @@
 \newcommand{\comp}[1]{\cref{thm:composition}(\ref{#1})}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\note}[1]{\textcolor{orange!85!black}{[NOTE: #1]}}
+% review marks for the restore_invariant removal; delete the colour once reviewed
+\definecolor{changedcolor}{rgb}{0,0.2,0.85}
+\newcommand{\changed}[1]{{\color{changedcolor}#1}}
 % the model's input, output and user-view equivalences (Definitions 3 and 5)
 \newcommand{\Ein}{\mathcal{I}}
 \newcommand{\Eout}{\mathcal{O}}
@@ -122,6 +129,7 @@
 % IEEEtran defines no theorem environments.
 \newtheorem{theorem}{Theorem}
 \newtheorem{corollary}{Corollary}
+\newtheorem{lemma}{Lemma}
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}
 

@@ -8,8 +8,8 @@ interrupt occurred. We first introduce the processes the system runs and
 the pool in which they run (\cref{sec:pool}), and what the system receives and
 emits (\cref{sec:interface}). We then describe the state
 (\cref{sec:global-state}) and how each event updates it, ending in the choice of
-who runs next (\cref{sec:state}). The resulting generic model leaves two parts
-open, which together form the \emph{interrupt policy} (\cref{sec:parameters});
+who runs next (\cref{sec:state}). The resulting generic model leaves \changed{three}
+parts open, which together form the \emph{interrupt policy} (\cref{sec:parameters});
 \cref{sec:designs} fills them twice.
 
 \subsection{The processes and the pool}\label{sec:pool}
@@ -125,6 +125,7 @@ writing $\privvis$ for $(\priveq)^\circ$.
 So the attacker still sees when the private user runs. The user view thus erases only public
 information: the scheduler and the timer handler, and which of them, or S, ran.
 
+\input{sections/fig-update}
 \input{sections/fig-ordinary}
 
 \subsection{The state}\label{sec:global-state}
@@ -142,9 +143,9 @@ opened up: a nest of pairs holding two pids, two flags and the interrupt control
   control returns when the handler finishes.
 \item The \emph{reschedule flag} \m{re_sched} sends control to the scheduler
   instead, when a handler finishes.
-\item The \emph{slice counter} \m{slice_count} counts the steps left in the current
-  time slice, for the sliced policy (\cref{sec:sliced}); the ordinary policy leaves
-  it \code{None}.
+\item The \emph{slice counter} \m{slice_count} \changed{counts the output steps until
+  the current time slice closes, and is \code{0} outside a slice}, for the sliced
+  policy (\cref{sec:sliced}); the ordinary policy leaves it \changed{\code{0}}.
 \item The \emph{interrupt controller} \m{ic} holds a pending bit and a mask bit
   for each handler. Its entries are indexed by \m{irq}, of type
   $\mathit{Interrupt} + 1$:
@@ -161,40 +162,15 @@ The initial state is not fixed here: it is part of the interrupt policy
 \subsection{Who runs next}\label{sec:state}
 
 The state changes on both kinds of step of \cref{sec:background}, through
-\m{state_step}; under each stage are the fields of \cref{fig:state} it writes:
-\begin{center}
-\begin{tikzpicture}[font=\scriptsize, >=stealth,
-  stg/.style={draw, rounded corners=2pt, minimum height=0.4cm, inner sep=2pt,
-    font=\ttfamily\tiny},
-  open/.style={stg, dashed},
-  wr/.style={font=\tiny, anchor=north, align=center, inner sep=1pt}]
-% input step: an interrupt only records itself
-\node[anchor=west] at (-0.3,0.42) {input step $\rightsquigarrow$: an interrupt};
-\node[stg, anchor=west] (sp) at (0.2,0) {set\_pending};
-\draw[->] (-0.3,0) -- (sp);
-\draw[->] (sp.east) -- ++(0.45,0) node[right] {state};
-\node[wr] at (sp.south) {one pending bit};
-% output step: the pool's output, fed back, runs three stages
-\node[anchor=west] at (-0.3,-0.72) {output step $\rightarrow$: the pool's output, fed back};
-\node[stg, anchor=west] (cs) at (0.2,-1.14) {check\_scheduler};
-\node[open, anchor=west] (pol) at ($(cs.east)+(0.45,0)$) {service\_policy};
-\node[stg, anchor=west] (in) at ($(pol.east)+(0.45,0)$) {initiate\_next};
-\draw[->] (-0.3,-1.14) -- (cs);
-\draw[->] (cs) -- (pol);
-\draw[->] (pol) -- (in);
-\draw[->] (in.east) -- ++(0.45,0) node[right] {state};
-\node[wr] at (cs.south) {current pid};
-\node[wr] at (pol.south) {open: the\\interrupt policy};
-\node[wr] at (in.south) {pids, masks, a pending\\bit, reschedule flag};
-\end{tikzpicture}
-\end{center}
+\m{state_step} (\changed{\cref{fig:update}}).
 On an input step, \m{set_pending} sets the arriving interrupt's pending bit and
 nothing else happens: the pool idles and nothing is emitted. On an output step, the
-pool's output is fed back to the state, where three stages run in turn.
-\m{check_scheduler} adopts the pid the scheduler proposed, if the scheduler ran. The
-next stage, \code{service_policy}, is left open here: it is half of the interrupt
-policy (\cref{sec:parameters}), and \cref{sec:designs} fills it twice. Last,
-\m{initiate_next} computes the next pid. (In the code the state receives both kinds
+pool's output is fed back to the state, where \changed{three stages run in turn. The
+first two together are the \emph{service policy}, and are left open here: they are
+part of the interrupt policy (\cref{sec:parameters}), and \cref{sec:designs} fills
+them twice. \code{observe_policy} reacts to what the output says, and
+\code{advance_policy} reads only the state. The third}, \m{initiate_next}, computes
+the next pid. (In the code the state receives both kinds
 of event as one sum, interrupts as \code{inl} and fed-back outputs as \code{inr}
 (\cref{sec:parameters}), and \code{step_sum} dispatches on the tag.)
 
@@ -202,7 +178,9 @@ of event as one sum, interrupts as \code{inl} and fed-back outputs as \code{inr}
 A handler can be started when its controller entry is pending and not masked; if
 several can, the timer goes first, then the disk, then NOP. Handlers cannot be
 interrupted: starting one sets all masks, and the service policy unsets them when the
-handler finishes. \m{initiate_next} chooses by four rules, tried in order:
+handler finishes. \changed{\m{initiate_next} first adopts the pid the scheduler
+proposed, if the scheduler ran (\m{apply_scheduler_choice}), and then} chooses by
+four rules, tried in order:
 \begin{enumerate}
 \item if a handler is running (all masks are set), it continues;
 \item otherwise, if a handler can be started, it starts;
@@ -214,10 +192,10 @@ In the code, with the rules marked:
 
 \noindent\begin{minipage}{\linewidth}
 \begin{lstlisting}
-initiate_next restore_invariant v =
+initiate_next o v =
+  let v := apply_scheduler_choice o v in
   if masks_set v then v            (* rule 1 *)
-  else let v := restore_invariant v in
-    if first_ready v is Some ir
+  else if first_ready v is Some ir
     then initiate_handler ir v     (* rule 2 *)
     else if is_handler_pid v       (* rule 3 *)
     then if get_re_sched v
@@ -230,9 +208,7 @@ initiate_next restore_invariant v =
 \m{initiate_handler} saves the current pid as the previous pid, unless it is a
 secret handler, points the current pid at the handler, sets all masks and clears
 the handler's pending bit. \m{initiate_scheduler} hands control to the scheduler and
-clears \m{re_sched}; \m{initiate_prev_pid} returns to the previous pid. Between
-rules 1 and 2, \m{initiate_next} applies \m{restore_invariant}, a hook used only by
-the proof (\cref{sec:parameters}).
+clears \m{re_sched}; \m{initiate_prev_pid} returns to the previous pid.
 
 Rule 2 is the source of the leak of \cref{fig:leak}, as \cref{sec:leak} shows step by step.
 
@@ -240,10 +216,11 @@ Rule 2 is the source of the leak of \cref{fig:leak}, as \cref{sec:leak} shows st
 
 Together, these parts form the generic model, the pool inside the global state:
 \begin{lstlisting}
-model runtime init_policy service_policy
-      restore_invariant p_pub p_priv p_sched =
+model runtime init_policy
+      observe_policy advance_policy
+      p_pub p_priv p_sched =
   reactive_system init_policy
-    (state_step service_policy restore_invariant)
+    (state_step observe_policy advance_policy)
     no_output
     (pool runtime p_pub p_priv p_sched)
     pool_input
@@ -276,21 +253,19 @@ default \m{no_output}, the all-\code{None} tuple, only makes it total: every out
 is tagged \code{inr}.
 
 Apart from the processes and the handler length, everything in
-\cref{sec:pool,sec:interface,sec:global-state,sec:state} is fixed, except two
-parts, marked by the suffix \code{_policy}:
+\cref{sec:pool,sec:interface,sec:global-state,sec:state} is fixed, except
+\changed{three} parts, marked by the suffix \code{_policy}:
 \begin{itemize}
 \item \code{init_policy}, the initial state, a value of the type of
   \cref{sec:global-state}. Its masks decide which interrupts can be serviced before
   anything has happened.
-\item \code{service_policy}, the open stage of \cref{sec:state}. It is the stage
-  that reopens masks, and so decides when the next handler becomes eligible.
+\item \changed{\code{observe_policy} and \code{advance_policy}, the service policy of
+  \cref{sec:state}. Between them they reopen the masks, and so decide} when the next
+  handler becomes eligible.
 \end{itemize}
 Together they decide \emph{when a handler may run}, and we call them the
-\emph{interrupt policy}. The remaining argument, \m{restore_invariant}, is not part
-of it. It writes into the state an invariant that the policy already maintains,
-for the benefit of the proof (\cref{sec:restore}); it never changes a state the
-model reaches (\cref{thm:noop}), and it is the identity where the proof needs no
-help. \Cref{sec:designs} fills the two parts of the interrupt policy twice.
+\emph{interrupt policy}. \Cref{sec:designs} fills the \changed{three} parts of the
+interrupt policy twice.
 
 The model is parametric in more than the policy. The scheduler, the two user
 processes and their output types are arguments, as is the handler length; the sliced
@@ -298,7 +273,8 @@ policy adds the number of handler runs per slice. \Cref{thm:main} holds for all 
 them, provided each slot process is non-interfering at its own classification: the
 mechanism cannot make a leaking process secure, only add no leak of its own. The
 handler length and slice size need no condition, because a slice is defined as
-$\mathit{runs}\cdot\mathit{runtime}$ steps and so ends on a handler boundary. This
+\changed{$\mathit{runs}$ handler runs of $\mathit{runtime}$ steps each}, and so ends
+on a handler boundary. This
 generality rests on one property of the state update: it reads only \emph{whether} a
 user slot emitted, never what, so no user behaviour reaches the schedule. What is
 fixed is the mechanism under study: the three handlers, and the six slots in the

@@ -512,31 +512,36 @@ Definition initiate_next (Opub Opriv : Ty)
 (* The state transition.  An arriving interrupt only records itself; everything
    it eventually causes happens in the output summand, where the input is no
    longer the thing being varied.  That split is forced by f_EP, which under
-   eqsum_L constrains the input summand alone. *)
-Definition state_step (Opub Opriv : Ty) (service_policy : [T_out Opub Opriv] -> [state_type] -> [state_type]) : [Sum T_in (T_out Opub Opriv)] -> [state_type] -> [state_type] :=
+   eqsum_L constrains the input summand alone.  On an output the policy has two
+   stages: [observe_policy] reads the output, and [advance_policy] reads only the
+   state, as its type says. *)
+Definition state_step (Opub Opriv : Ty)
+  (observe_policy : [T_out Opub Opriv] -> [state_type] -> [state_type])
+  (advance_policy : [state_type] -> [state_type]) : [Sum T_in (T_out Opub Opriv)] -> [state_type] -> [state_type] :=
   step_sum set_pending
-           (fun o => initiate_next o \o service_policy o).
+           (fun o => initiate_next o \o (advance_policy \o observe_policy o)).
 
 
 (* === 7. The generic model ===
 
    Everything above is shared.  A model is the process pool run inside the
-   stateful wrapper, and the only freedom left is the pair
+   stateful wrapper, and the only freedom left is the triple
 
-     (init_policy, service_policy)
+     (init_policy, observe_policy, advance_policy)
 
    that section 8 fixes in two different ways.  Together they decide when a
    handler may run and form the *interrupt policy*; the [_policy] suffix marks
    them.  Note [runs] is not a parameter here: the slice size reaches the model
-   only through [service_policy], already applied. *)
+   only through [observe_policy], already applied. *)
 Definition model (runtime : nat) (Opub Opriv : Ty)
   (init_policy : [state_type])
-  (service_policy : [T_out Opub Opriv] -> [state_type] -> [state_type])
+  (observe_policy : [T_out Opub Opriv] -> [state_type] -> [state_type])
+  (advance_policy : [state_type] -> [state_type])
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
   @reactive_system cur_pid state_type init_policy T_in (T_out Opub Opriv) T_intermediate
-    (state_step service_policy) (no_output Opub Opriv)
+    (state_step observe_policy advance_policy) (no_output Opub Opriv)
     (pool runtime p_pub p_priv p_sched) (@pool_input Opub Opriv).
 
 (* The user view of a model: [parse_output] on every output, keeping the two
@@ -555,7 +560,7 @@ Definition out_equiv_userview (Opub Opriv : Ty) : cEquiv [T_out_userview Opub Op
 
 (* === 8. model_immediate and model_sliced, side by side ===
 
-   The two policies are the same [model] at two different pairs, and that
+   The two policies are the same [model] at two different triples, and that
    difference is the whole security story:
 
      parameter            model_immediate            model_sliced
@@ -563,14 +568,17 @@ Definition out_equiv_userview (Opub Opriv : Ty) : cEquiv [T_out_userview Opub Op
      init_policy          immediate_init             sliced_init
                           no slice, no masks set     no slice, every
                                                      mask but the timer's set
-     service_policy       observe_handler_output     sliced_service runtime runs
+     observe_policy       observe_handler_output     observe_timer_output runtime runs
                           a finished handler         a finished timer handler opens
                           unmasks everything, so     a slice and requests a
-                          a pending interrupt is     reschedule; each handler
-                          serviced at once           boundary inside it reopens the
-                                                     masks and queues a NOP run; the
-                                                     slice is counted down and
-                                                     closed on a handler boundary
+                          a pending interrupt is     reschedule
+                          serviced at once
+     advance_policy       id                         tick_slice runtime
+                          nothing                    each handler boundary inside a
+                                                     slice reopens the masks and
+                                                     queues a NOP run; the slice is
+                                                     counted down and closed on a
+                                                     handler boundary
 
    In [model_immediate] a secret interrupt is therefore serviced the moment it
    arrives, displacing whatever was running; in [model_sliced] it can only be
@@ -590,12 +598,12 @@ Definition observe_handler_output (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v 
   if is_ir_out_done o is Some ir then let v := unset_masks v in if ir is timer_irq then update_re_sched v true else v else v.
 
 (* model_immediate p_pub p_priv p_sched =
-     model immediate_init observe_handler_output p_pub p_priv p_sched *)
+     model immediate_init observe_handler_output id p_pub p_priv p_sched *)
 Definition model_immediate (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
-  model runtime immediate_init (@observe_handler_output Opub Opriv)
+  model runtime immediate_init (@observe_handler_output Opub Opriv) id
     p_pub p_priv p_sched.
 
 (* -- model_sliced -- *)
@@ -642,15 +650,17 @@ Definition tick_slice (runtime : nat) (v : [state_type]) : [state_type] :=
       if slice_at_boundary runtime n.+1 then queue_secret_run v else v
   end.
 
+(* The two stages together, the composite the proofs reason about. *)
 Definition sliced_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [state_type] -> [state_type] := tick_slice runtime \o observe_timer_output runtime runs o.
 
 (* model_sliced p_pub p_priv p_sched =
-     model sliced_init (sliced_service runtime runs) p_pub p_priv p_sched *)
+     model sliced_init (observe_timer_output runtime runs) (tick_slice runtime)
+       p_pub p_priv p_sched *)
 Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc THandlerOutput Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
-  model runtime sliced_init (@sliced_service runtime runs Opub Opriv)
+  model runtime sliced_init (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime)
     p_pub p_priv p_sched.
 
 
@@ -659,7 +669,7 @@ Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
    The sliced policy keeps the secret handlers gated by the slice: outside a
    slice they are masked, inside one a handler is running, and the NOP and disk
    masks agree ([secret_gated]).  Every reachable state satisfies it
-   (sliced_run_gated).  The security proof uses it through [sta_NI_inv], which
+   (sliced_run_gated).  The security proof uses it through [sta_NI_pred], which
    asks for the relational obligations only on states that satisfy it.
 
    Where [initiate_next] chooses, a slice may also be at a handler boundary, in
@@ -831,7 +841,7 @@ Proof. by []. Qed.
 (* Every step preserves [secret_gated]. *)
 Lemma state_step_gated (e : [Sum T_in (T_out Opub Opriv)]) v :
   secret_gated v ->
-  secret_gated (state_step (@sliced_service runtime runs Opub Opriv) e v).
+  secret_gated (state_step (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime) e v).
 Proof.
 case: e => [i|o] Hv; first exact: set_pending_gated.
 by apply: initiate_next_gated; apply: sliced_service_gated.
@@ -839,7 +849,7 @@ Qed.
 
 (* The state after any sequence of events, starting from [sliced_init]. *)
 Definition sliced_run (es : seq [Sum T_in (T_out Opub Opriv)]) :=
-  foldl (fun v e => state_step (@sliced_service runtime runs Opub Opriv) e v)
+  foldl (fun v e => state_step (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime) e v)
         sliced_init es.
 
 Theorem sliced_run_gated es : secret_gated (sliced_run es).
@@ -1004,7 +1014,7 @@ Ltac reduce_tac2 :=
 
 Ltac sta_state_reduce :=
   match goal with
-  | |- context [(@sta (Sum T_in T_outC) (Sum T_in T_outC) state_type (state_step _) _ ?state _)] =>let reduced := eval cbv in state in
+  | |- context [(@sta (Sum T_in T_outC) (Sum T_in T_outC) state_type (state_step _ _) _ ?state _)] =>let reduced := eval cbv in state in
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.
 
@@ -1040,12 +1050,14 @@ Proof. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 13 trace_step. trace_last. Qed.
    [model_sliced] the counter and the masks agree; the runs differ only in the
    private pending bits, and from the second run of the slice on not at all. *)
 Definition run_states (init : [state_type])
-  (service : [T_outC] -> [state_type] -> [state_type]) (es : seqtype') :=
-  scanl (fun v e => state_step service e v) init es.
+  (observe : [T_outC] -> [state_type] -> [state_type])
+  (advance : [state_type] -> [state_type]) (es : seqtype') :=
+  scanl (fun v e => state_step observe advance e v) init es.
 Definition immediate_states :=
-  run_states immediate_init (@observe_handler_output TPublicOutput TTypeSyscall).
+  run_states immediate_init (@observe_handler_output TPublicOutput TTypeSyscall) id.
 Definition sliced_states :=
-  run_states sliced_init (@sliced_service handler_runtime slice_runs TPublicOutput TTypeSyscall).
+  run_states sliced_init (@observe_timer_output handler_runtime slice_runs TPublicOutput TTypeSyscall)
+             (tick_slice handler_runtime).
 Definition state_row (v : [state_type]) :=
   (get_slice_count v, get_ir_mask v timer_irq, get_ir_mask v disk_irq,
    get_ir_pending v disk_irq, get_ir_pending v nop_irq).

@@ -1346,7 +1346,7 @@ Definition f_EP_on (I V : Ty) (P : [V] -> Prop) (IRel : cEquiv [I]) (VRel : cEqu
   (f : [I] -> [V] -> [V]) :=
   forall l i, dis IRel l i -> forall v, P v -> rel VRel l (f i v) v.
 
-Section StaInvariant.
+Section StaPred.
 
 Variables (I O V : Ty) (P : [V] -> Prop) (VRel : cEquiv [V]) (IRel : cEquiv [I])
           (ORel : cEquiv [O]) (f : [I] -> [V] -> [V]) (g : [O] -> [V] -> [V]).
@@ -1484,7 +1484,7 @@ Qed.
 
 (* sta_NI under the invariant P: the obligations on f and g are needed only for
    states in P, provided the initial state is in P and f and g preserve P. *)
-Lemma sta_NI_inv : forall (p : Proc (Times V I) O) v,
+Lemma sta_NI_pred : forall (p : Proc (Times V I) O) v,
     fv_NI_on P ORel VRel g -> fv_NI_on P IRel VRel f -> f_EP_on P IRel VRel f -> P v ->
     NI (eqpair_R VRel IRel) ORel p ->
     NI IRel (eqpair VRel ORel) (sta f g v p).
@@ -1528,4 +1528,4 @@ Proof.
     simpl. apply Hdi.
 Qed.
 
-End StaInvariant.
+End StaPred.

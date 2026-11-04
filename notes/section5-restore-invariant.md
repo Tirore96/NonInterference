@@ -209,7 +209,7 @@ only places that unfold `restore_invariant`.
     removes less than it first seems, but it pushes an essential part of the proof
     into the metatheory, which is interesting in itself.
   - New theorems go at the bottom of theorems.v (prior work above stays untouched).
-  - **Done (2026-11-03): `sta_NI_inv`** at the bottom of theorems.v, section
+  - **Done (2026-11-03): `sta_NI_pred`** at the bottom of theorems.v, section
     `StaInvariant`, axiom-free (only `d`, `L`). Statement: if `P` is preserved by
     `f` and `g` (`pres_on`), the initial state satisfies `P`, `g` and `f` satisfy
     `fv_NI_on P` (fv_NI for related states that both satisfy `P`), `f` satisfies
@@ -255,7 +255,7 @@ much from `restore_invariant`; an invariant used this way should correspond to
    `step_R (inr o) v = next_R (pre o v) = next (pre o v) = step (inr o) v` by 3
    and 2.
 
-So `step` and `step_R` agree on the set `sliced_inv`. `sta_NI_inv` with
+So `step` and `step_R` agree on the set `sliced_inv`. `sta_NI_pred` with
 `P := sliced_inv` asks for `fv_NI` only between related states that both satisfy
 `sliced_inv`, and on those states `step` can be rewritten to `step_R`, whose
 `fv_NI` over *all* related states is already proved. No new relational reasoning
@@ -312,7 +312,7 @@ runtime = 1 remark must then describe.
    `fv_NI (eqsum_L in_equiv out_equiv) state_type_equiv state_type_equiv step_R`
    (the long script inside `model_sliced_NI`) into a standalone lemma
    `step_R_fv_NI`, and likewise `step_R_f_EP`.
-5. **noninterference.v, `model_sliced_NI` via `sta_NI_inv`** with
+5. **noninterference.v, `model_sliced_NI` via `sta_NI_pred`** with
    `P := sliced_inv`, `f := step`, `g := (fun _ v => v)`:
    - `pres_on P f`: `sliced_inv_step` (step 2);
    - `pres_on P g`: trivial;
@@ -379,7 +379,7 @@ deleted.
 
 ### What the result says, for the paper later
 
-- Theorem 4 is proved with `sta_NI_inv` and `P := sliced_inv`; the model has no
+- Theorem 4 is proved with `sta_NI_pred` and `P := sliced_inv`; the model has no
   proof hook.
 - The invariant theorem (`sliced_run_inv`, from `sliced_inv_step`) replaces
   Theorem 5 and is now used: it discharges `pres_on`.
@@ -405,13 +405,13 @@ Restructure V-B around `sta`:
 The function-vs-predicate decision (§5) changes how steps 3–5 are told; draft with
 the function, or settle the predicate first.
 
-## 7. Draft: the invariant chain with `sta_NI_inv` (2026-11-03)
+## 7. Draft: the invariant chain with `sta_NI_pred` (2026-11-03)
 
 Replaces `restore_invariant` in the model. The invariant is not about the image of
 a function; it says directly when the secret handlers may run. The proof must
 cover unreachable related pairs (`sta_NI` quantifies over all of them), and the
 policy's guarantee holds only inductively (true initially, preserved by every
-step), so `sta_NI_inv` carries it along the run.
+step), so `sta_NI_pred` carries it along the run.
 
 ### Definitions
 
@@ -494,6 +494,6 @@ Relational (one step keeps related states related):
 13. 8, 12: `⦃≐V ∧ secret_gated²⦄ step ⦃≐V⦄`
 
 Conclusion:
-14. `sta_NI_inv` with `P := secret_gated`: initial (1), preservation (5),
+14. `sta_NI_pred` with `P := secret_gated`: initial (1), preservation (5),
     `fv_NI_on P` (13), `f_EP_on P` (PE of 8). Theorem 4 follows, with no
     `restore_invariant` in the model.

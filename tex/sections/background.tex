@@ -6,6 +6,9 @@ that non-interference is stated over finite traces; \cref{sec:departures} proves
 it equivalent to the original. We also add sum types, which the original
 lacks, and write optional values and the model's interrupts as sums; their
 equivalences are proved equal to the mechanised ones (\cref{sec:agreement}).
+\changed{And we add a variant of the composition theorem for state cells that
+needs its side conditions only on states satisfying an invariant
+(\cref{thm:sta-pred}).}
 
 \subsection{Processes, traces and time}
 
@@ -254,6 +257,24 @@ Two of these carry substantial side conditions: the state update of \code{sta} m
 be non-interfering and equivalence-preserving, and \code{swi} requires every observer
 to be aware of the gate or oblivious to the gated process. These are the two
 obligations the proof of \cref{sec:proof} has to discharge for the model.
+
+\changed{\comp{it:sta} asks for its side conditions on every pair of related states,
+reachable or not. We add a variant that asks for them only on the states that satisfy
+a predicate $P$ preserved by the state updates; the original theorems are unchanged.
+Write $\NI_P$ and $\mathsf{PE}_P$ for the predicates above with $v$ and $v'$
+restricted to states satisfying $P$, and say that $f$ \emph{preserves} $P$ if
+$P\,v \Rightarrow P\,(f\,i\,v)$ for all $i$ and $v$.}
+
+\begin{theorem}[\m{sta_NI_pred}]\label{thm:sta-pred}
+\changed{If $P\,v$ holds, $f$ and $g$ preserve $P$,
+$p \in \NI(\eqo{V} \times_R \eqo{I},\eqv{O})$,
+$f \in \NI_P(\eqv{I},\eqv{V},\eqv{V}) \cap \mathsf{PE}_P(\eqv{I},\eqv{V})$ and
+$g \in \NI_P(\eqv{O},\eqv{V},\eqv{V})$, then
+$\mathsf{sta}\;f\;g\;v\;p \in \NI(\eqv{I},\eqo{V} \times \eqo{O})$.}
+\end{theorem}
+
+\changed{The proof is that of \comp{it:sta} with $P$ carried along: every state it
+passes to $f$ or $g$ is reached from $v$ by $f$ and $g$, so it satisfies $P$.}
 
 % one float per column top from here on, so paired figures sit side by side
 \setcounter{topnumber}{1}

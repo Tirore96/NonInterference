@@ -370,14 +370,15 @@ Proof.
 Qed.
 
 (* === The composition-breakdown technique.  state_step is
-   step_sum set_pending (fun o => initiate_next o \o service_policy o).
+   step_sum set_pending
+     (fun o => initiate_next o \o (advance_policy \o observe_policy o)).
    fv_NI_step_sum splits a goal into the two summands, and fv_NI_comp
    discharges fv_NI of a pipeline from fv_NI of its stages.  The event
    equivalence is eqsum_L: an input may be unobservable, an output never is,
    which is why f_EP_step_sum reduces to a condition on set_pending alone.
    initiate_next is non-interfering only on states the sliced policy reaches,
    so for the sliced model the output summand is proved under the slice
-   invariant (fv_NI_step_sum_on, and sta_NI_inv in theorems.v). === *)
+   invariant (fv_NI_step_sum_on, and sta_NI_pred in theorems.v). === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
@@ -987,8 +988,8 @@ Proof.
   case/rel_eqpair: H;eauto.
   instantiate (1:= state_type_equiv).
 
-  (*state update, under the slice invariant (sta_NI_inv with secret_gated)*)
-  apply: (@sta_NI_inv _ _ _ secret_gated).
+  (*state update, under the slice invariant (sta_NI_pred with secret_gated)*)
+  apply: (@sta_NI_pred _ _ _ secret_gated).
   - move=> e v; exact: state_step_gated.
   - by [].
   - by move=> l i i' _ v v' _ _ Hv.

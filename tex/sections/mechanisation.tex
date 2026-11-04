@@ -19,7 +19,7 @@ file & lines & contents \\
 \midrule
 \mechfile{theories/definitions.v}{definitions.v} & \mechlines{definitions.v} & the calculus, traces, $\NI$, the equivalences \\
 \mechfile{theories/theorems.v}{theorems.v} & \mechlines{theorems.v} & the composition theorems \\
-\mechfile{theories/models.v}{models.v} & \mechlines{models.v} & the generic model, both policies, \cref{thm:noop}, example traces \\
+\mechfile{theories/models.v}{models.v} & \mechlines{models.v} & the generic model, both policies, \changed{the slice invariant (\cref{lem:gated})}, example traces \\
 \mechfile{theories/noninterference.v}{noninterference.v} & \mechlines{noninterference.v} & the model's equivalences, \cref{thm:leak,thm:leak-userview,thm:main} \\
 \mechfile{theories/adequacy.v}{adequacy.v} & \mechlines{adequacy.v} & the original definitions, the equivalences with ours, \cref{thm:leak,thm:main} in the original's terms \\
 \bottomrule
@@ -55,10 +55,10 @@ apart from all others, so the proofs split on $\ell = \Lo$ against $\ell \neq \L
 and the second case covers every other level at once; $\Hi$ in
 $\priveq$ and $1^\Hi$ stands for all levels but $\Lo$.
 
-\paragraph{Proof devices} A hook that only the proof needs, such as
-\m{restore_invariant}, can hide behaviour. An earlier version of our model relied on
-it to queue the NOP filler and to return control to the scheduler after a slice;
-proving \cref{thm:noop} forced both into the interrupt policy, where they now are.
+\paragraph{Invariants} \changed{\Cref{thm:sta-pred} is our addition to the calculus,
+like sum types; the original composition theorems are mechanised unchanged. Its proof
+is that of \comp{it:sta}, with the predicate threaded through the lemmas that relate
+a trace of \code{sta} to a trace of its inner process.}
 
 \subsection{Non-interference over finite traces}\label{sec:departures}
 

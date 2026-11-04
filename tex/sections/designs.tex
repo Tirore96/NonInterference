@@ -22,25 +22,25 @@ S, and \cref{fig:run-ordinary,fig:run-sliced} run them on the same inputs.
 (\cref{fig:policy-ordinary}). A pending timer interrupt takes the system from U to T,
 and a pending disk interrupt takes it to S, from U or from T, at whatever step it
 arrives. Each completion unmasks everything and moves on to the next pending handler,
-or back to U. The two bold arrows into S are the leak: the secret decides when S is
-entered.
+or back to U. The bold arrows into S are the leak: the secret decides when S is
+entered \changed{and how long it lasts}.
 
 The initial state
 \begin{lstlisting}
 immediate_init :=
   ((inr 3, None),       (* public user *)
-   (false, (None,        (* slice counter *)
+   (false, (0,           (* slice counter *)
     ((false,false),      (* NOP *)
      ((false,false),     (* disk *)
       (false,false)))))) (* timer *)
 \end{lstlisting}
 
-starts in the public user with the slice counter disabled (fields as in
+starts in the public user \changed{outside any slice} (fields as in
 \cref{sec:global-state}). The interrupt controller holds one (pending, mask) pair
-per handler, and all six bits start clear. The service policy is a single stage,
-which reacts to any handler finishing:
+per handler, and all six bits start clear. \changed{The second stage of the service
+policy is the identity, and the first} reacts to any handler finishing:
 \begin{lstlisting}
-immediate_service o v :=
+observe_handler_output o v :=
   if is_ir_out_done o is Some ir then
     let v := unset_masks v in
     if ir is timer_irq then update_re_sched v true
@@ -50,7 +50,8 @@ immediate_service o v :=
 \m{is_ir_out_done} names the handler, if any, that emits \code{Notify} in the output
 \code{o}. The service policy then unmasks everything, and after the timer handler
 also requests a reschedule. It thus reads the output of whichever handler completes,
-the disk handler's included. \m{restore_invariant} is the identity.
+the disk handler's included\changed{, which is what its name records: the two
+policies differ in which handler output they observe}.
 
 The run with the disk interrupt in \cref{fig:run-ordinary} shows the policy at work.
 The pid of each step is computed at the output of the step before (\cref{sec:state}).
@@ -110,78 +111,68 @@ a run that no disk interrupt claims is taken by the NOP handler, so a slice is t
 same whether or not a disk interrupt is waiting. Each part of the policy below
 removes an arrow of \cref{fig:policy-ordinary} or fixes how long S lasts.
 
-The slice counter tracks the slice. Outside it, in U and T, the counter is
-\code{None}. In S, \code{Some n} counts the $n$ steps left, and \code{Some 0} marks the
-last step, at whose output the slice closes. Closing must happen once. With a plain
-number, \code{0} could not tell a closing slice from a closed one, and closing on
-every step outside a slice would unmask the timer while its own handler runs.
+\changed{The slice counter tracks the slice: it counts the output steps until the slice
+closes. Outside a slice, in U and T, it is \code{0}. The $\mathit{runs}$ handler runs
+of a slice take $\mathit{runs}\cdot\mathit{runtime}$ steps, and one more step closes
+it, so the counter starts at $\mathit{runs}\cdot\mathit{runtime}+1$ and the slice
+closes at the output of the step at which it reads \code{1}. Closing thus happens
+exactly once: at \code{0} there is nothing to close, so the timer is never unmasked
+while its own handler runs.}
 
 The initial state masks the disk and NOP handlers, so no disk interrupt can take the
 system from U to S, and leaves the timer unmasked:
 \begin{lstlisting}
 sliced_init :=
   ((inr 3, None),       (* public user *)
-   (false, (Some 0,      (* slice counter *)
+   (false, (0,           (* slice counter *)
     ((false,true),       (* NOP *)
      ((false,true),      (* disk *)
       (false,false)))))) (* timer *)
 \end{lstlisting}
-Its counter, \code{Some 0}, is an empty slice that closes at the first output and
-changes nothing else.
 
-The service policy fills the open stage of \cref{sec:state} with three stages,
-\m{sliced_service}, which run on each output in this order:
-\begin{center}
-\begin{tikzpicture}[font=\scriptsize, >=stealth,
-  stg/.style={draw, rounded corners=2pt, minimum height=0.4cm, inner sep=2pt,
-    font=\ttfamily\tiny}]
-\node[stg, anchor=west] (a) at (0,0) {initiate\_ir};
-\node[stg, anchor=west] (b) at ($(a.east)+(0.45,0)$) {check\_handler\_completed};
-\node[stg, anchor=west] (c) at ($(b.east)+(0.45,0)$) {check\_slice\_count};
-\draw[->] (a) -- (b);
-\draw[->] (b) -- (c);
-\draw[dashed, rounded corners=2pt] ($(a.north west)+(-0.12,0.12)$) rectangle ($(c.south east)+(0.12,-0.12)$);
-\draw[->] ($(a.west)+(-0.55,0)$) -- ($(a.west)+(-0.12,0)$);
-\draw[->] ($(c.east)+(0.12,0)$) -- ++(0.4,0);
-\end{tikzpicture}
-\end{center}
-The first stage is the ordinary policy's single stage restricted to the timer
-handler, whose output is public. It keeps the reschedule and, instead of unmasking,
-opens the slice, the only way from T to S:
+The service policy \changed{uses both stages of \cref{sec:state}, \m{observe_timer_output}
+and then \m{tick_slice}; \m{sliced_service} is their composite.} The first stage is the
+ordinary policy's \changed{observation} restricted to the timer handler, whose output
+is public\changed{; hence its name}. It keeps the
+reschedule and, instead of unmasking, opens the slice, the only way from T to S:
 \begin{lstlisting}
-initiate_ir runtime runs o v :=
+observe_timer_output runtime runs o v :=
   if tI_out o is Some Notify then
     update_re_sched
       (update_slice_count v
-         (Some (runs * runtime)))
+         (runs * runtime).+1)
       true
   else v
 \end{lstlisting}
 When the timer handler emits \code{Notify}, it loads the counter with
-$\mathit{runs}\cdot\mathit{runtime}$, the number of steps that $\mathit{runs}$ handler
-runs take, and requests a reschedule, which returns control to U, through the
-scheduler, once the slice is over. The second stage acts at the boundaries between
-runs:
+\changed{$\mathit{runs}\cdot\mathit{runtime}+1$}, and requests a reschedule, which
+returns control to U, through the scheduler, once the slice is over. The second stage
+\changed{advances an open slice by one step}:
 \begin{lstlisting}
-check_handler_completed runtime v :=
-  if handler_completed runtime
-       (get_slice_count v) then
-    update_ir_pending (set_tI (unset_masks v))
-      nop_irq true
-  else v
+tick_slice runtime v :=
+  match get_slice_count v with
+  | 0    => v
+  | 1    => close_slice v
+  | n.+2 =>
+    let v := update_slice_count v n.+1 in
+    if slice_at_boundary runtime n.+1
+    then queue_secret_run v else v
+  end
+
+queue_secret_run v :=
+  update_ir_pending (set_tI (unset_masks v))
+    nop_irq true
 \end{lstlisting}
-\m{handler_completed} holds when the counter is a nonzero multiple of
-$\mathit{runtime}$: when the slice opens and after each completed run inside it.
-Unmasking has moved here from the first stage: it happens at boundaries computed from
-the public counter, not on completion signals. Since every run takes
+\changed{At \code{n+2}, $n+1$ steps of handler runs are left, and
+\m{slice_at_boundary}, which tests $\mathit{runtime} \mid n+1$, holds when they are a
+whole number of runs:} when the slice opens and after each
+completed run inside it. Unmasking has moved here from the first stage: it happens at
+boundaries computed from the public counter, not on completion signals. Since every run takes
 $\mathit{runtime}$ steps, the two fall on the same steps; only the reason has
 changed. There the masks reopen, but the timer is masked again, so it cannot leave S early,
 and the NOP handler becomes pending. That last step is the \emph{filler}: a handler
 is always ready at a boundary, so S is entered and every run of the slice takes place
 whether or not a disk interrupt is waiting. A pending disk handler takes priority;
-which of the two runs is all the secret decides. The third stage, \m{check_slice_count},
-ticks the counter, and at \code{Some 0} closes the slice: it masks the disk and NOP
-handlers, so U cannot lead to S, unmasks the timer and disables the
-counter.\footnote{With one-step handlers the last run of each slice is lost
-(\cref{sec:restore}); non-interference is unaffected.} \m{restore_invariant} only
-matters to the proof (\cref{sec:restore}).
+which of the two runs is all the secret decides. \changed{At \code{1}, \m{close_slice}
+closes the slice}: it masks the disk and NOP handlers, so U cannot lead to S, unmasks
+the timer and sets the counter to \changed{\code{0}}.

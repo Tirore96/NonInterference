@@ -2,30 +2,27 @@
 % so the two figures pair at the top of the next page
 \begin{figure}[t]
 \centering
-\providecommand{\stagefont}{\ttfamily\tiny}
-% the sliced policy over the states of fig:policy-ordinary; steps and counter
-% values from models.v lemmas sliced_states_no_dI / _with_dI
+% the sliced policy over the states of fig:policy-ordinary, arrows as there; counter
+% values agree with models.v lemmas sliced_states_no_dI / _with_dI
 \begin{tikzpicture}[font=\scriptsize, >=stealth,
-  ph/.style={draw, rounded corners, align=center, minimum width=1.6cm,
-    minimum height=1.1cm, inner sep=3.5pt},
-  note/.style={align=center, font=\scriptsize},
-  secret/.style={->, line width=1.2pt},
-  stage/.style={font=\stagefont}]
-\node[ph] (u) at (0,0)   {\textbf{U}: users\\T unmasked\\D, N masked\\\texttt{None}\\steps 1--4, 11--12};
-\node[ph] (t) at (3.22,0) {\textbf{T}: timer\\all masked\\\texttt{None}\\steps 5--6};
-\node[ph] (s) at (6.44,0) {\textbf{S}: disk or NOP\\T masked\\\texttt{Some} $n$, \ldots, \texttt{0}\\steps 7--10};
-\draw[->] (u) -- node[above, note]{timer\\pending} (t);
-\draw[->] (t) -- node[above, note]{completes:\\slice opens} node[below, stage]{initiate\_ir} (s);
-\draw[->] (s) to[loop above, looseness=5] node[above, note]{boundary: filler pending\\[-1pt]{\stagefont check\_handler\_completed}} (s);
-\draw[->] (s.south) to[bend left=22] node[below, note]{counter at \texttt{0}: slice closes\\[-1pt]{\stagefont check\_slice\_count}} (u.south);
+  ph/.style={draw, rounded corners, minimum size=0.75cm, font=\small\bfseries}]
+\node[ph] (u) at (0,0)   {U};
+\node[ph] (t) at (2.0,0) {T};
+\node[ph] (s) at (6.0,0) {S};
+\draw[intr] (u) -- node[above]{T} (t);
+\draw[->] ([yshift=5pt]t.east) -- node[above]{$n := \mathit{runs}\cdot\mathit{runtime}$} ([yshift=5pt]s.west);
+\draw[intr] ([yshift=-5pt]s.west) -- node[below]{T,\; $n = 1$: $n := 0$} ([yshift=-5pt]t.east);
+\draw[->] (s.north west) .. controls +(-0.3,0.65) and +(0.3,0.65) .. node[above]{$n > 1$: $n := n - 1$} (s.north east);
+\draw[->] (s.south) to[bend left=20] node[below]{$n = 1$: $n := 0$} (u.south);
 \end{tikzpicture}
-\caption{The sliced policy over the states of \cref{fig:policy-ordinary}, with the slice
-  counter in each state. No arrow is bold: S is entered only when the timer handler
-  completes, and left only when the counter, loaded with
-  $\mathit{runs}\cdot\mathit{runtime}$, reaches zero. Inside S the disk handler, if
-  pending, takes a run the NOP handler would otherwise fill; that choice is all the
-  secret decides. Each arrow is labelled with the stage of the service policy that
-  takes it. Steps are those of both runs in \cref{fig:run-sliced}.}
+\caption{The sliced policy, drawn as \cref{fig:policy-ordinary}; each arrow from T or S
+  gives the guard on the slice
+  counter $n$, which is \texttt{0} in U and T, and the update of its step. No arrow is
+  bold, and none is labelled D: S is entered only when the timer handler completes, and
+  left only when $n$ reaches its closing value, \texttt{1}. The output at which the slice opens
+  both loads the counter, with $\mathit{runs}\cdot\mathit{runtime}+1$, and ticks it. Inside S the disk
+  handler, if pending, takes a run the NOP handler would otherwise fill; that choice is
+  all the secret decides.}
 \label{fig:phases}
 \end{figure}
 \begin{figure}[t]
@@ -48,7 +45,7 @@
 \draw[irq] (1.575,-0.19) -- (1.575,-0.65);
 \node[anchor=west] at (5.67,-0.42) {\texttt{Idle}};
 \node[anchor=east] at (0.15,-0.82) {slice counter};
-\foreach \c [count=\i] in {0,{--},{--},{--},{--},{--},3,2,1,0,{--},{--}} \node[pub] at (0.45*\i,-0.82) {\c};
+\foreach \c [count=\i] in {0,0,0,0,0,0,4,3,2,1,0,0} \node[pub] at (0.45*\i,-0.82) {\c};
 \node[anchor=east] at (0.15,-1.22) {timer mask};
 \foreach \c [count=\i] in {{},{},{},{},{$\bullet$},{$\bullet$},{$\bullet$},{$\bullet$},{$\bullet$},{$\bullet$},{},{}} \node[pub] at (0.45*\i,-1.22) {\c};
 \node[anchor=east] at (0.15,-1.62) {disk pending};
@@ -64,7 +61,7 @@
 \draw[dsk] (0.675,-2.86) -- (0.675,-3.32);
 \node[anchor=west] at (5.67,-3.09) {\texttt{Sys}};
 \node[anchor=east] at (0.15,-3.49) {slice counter};
-\foreach \c [count=\i] in {0,{--},{--},{--},{--},{--},3,2,1,0,{--},{--}} \node[pub] at (0.45*\i,-3.49) {\c};
+\foreach \c [count=\i] in {0,0,0,0,0,0,4,3,2,1,0,0} \node[pub] at (0.45*\i,-3.49) {\c};
 \node[anchor=east] at (0.15,-3.89) {timer mask};
 \foreach \c [count=\i] in {{},{},{},{},{$\bullet$},{$\bullet$},{$\bullet$},{$\bullet$},{$\bullet$},{$\bullet$},{},{}} \node[pub] at (0.45*\i,-3.89) {\c};
 \node[anchor=east] at (0.15,-4.29) {disk pending};

@@ -19,15 +19,15 @@ and user processes that are themselves non-interfering.
 | Rocq | Paper | Axioms |
 |---|---|---|
 | `out_NI`, `map_NI`, `sta_NI`, `swi_NI`, `par_NI`, `loop_NI`, `maybe_NI` ([`theorems.v`](theories/theorems.v)) | Theorem 1 (composition) | none |
-| `model_immediate_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 2 (the leak) | none |
-| `model_immediate_userview_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (the leak in the user view) | none |
-| `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (no leak) | none |
+| `sta_NI_pred` ([`theorems.v`](theories/theorems.v)) | Theorem 2 (composition of a state cell under an invariant; our addition) | none |
+| `model_immediate_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (the leak) | none |
+| `model_immediate_userview_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (the leak in the user view) | none |
+| `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 5 (no leak) | none |
 | `model_sliced_userview_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 1 | none |
-| `sta_NI_inv` ([`theorems.v`](theories/theorems.v)) | composition of a stateful process under a state invariant (our addition) | none |
-| `sliced_run_gated` ([`models.v`](theories/models.v)) | the slice invariant holds of every reachable state (replaces Theorem 5; paper not yet updated) | none |
+| `sliced_run_gated` ([`models.v`](theories/models.v)) | Lemma 1 (the slice invariant holds of every reachable state) | none |
 | `eqmaybe_sum_rel`, `eqsum_sum_rel`, `eqsum_L_sum_rel`, `eqvisible_public_rel` and their `_dis` siblings ([`definitions.v`](theories/definitions.v)) | §VI-B: the paper's sum notation equals the mechanised equivalences | none |
-| `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VII-A: our definitions equal the original's | none |
-| `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 2 and 4 in the original's terms | none |
+| `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VI-A: our definitions equal the original's | none |
+| `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 3 and 5 in the original's terms | none |
 
 Every result depends only on the two parameters `d` and `L` that fix the security
 lattice: no classical logic and no uniqueness of identity proofs. Reductions are
