@@ -12,20 +12,21 @@ Require Import Coq.Classes.DecidableClass.
 Import Order.TTheory.
 Open Scope order_scope.
 
-Require Export NonInterference.theories.models.
+Require Export NonInterference.theories.model_immediate.
+Require Export NonInterference.theories.model_sliced.
 
 (* ===================================================================
    NonInterference: the concrete security equivalences and the results.
 
    Paper: Sections IV and V.  Structure:
-     4. The model's equivalences : in_equiv, out_equiv (out_equiv_userview is in models.v)
+     4. The model's equivalences : in_equiv, out_equiv (out_equiv_userview is in generic_model.v)
      5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI),
         nor is its user view                          (model_immediate_userview_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
      7. The state equivalence (state_type_equiv) and the fv_NI obligation
    =================================================================== *)
 
-(* --- Section 4: the input equivalence.  An interrupt is a sum (models.v,
+(* --- Section 4: the input equivalence.  An interrupt is a sum (generic_model.v,
    T_in), classified like the current pid: the disk interrupt (inl) is secret,
    unobservable at bot only; the timer interrupt (inr) is public.  (Paper,
    Section V.) --- *)
@@ -109,6 +110,7 @@ Qed.
 
 Lemma helper_trace' : Trace (public_equiv _) \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
+    rewrite /model_immediate_concrete /model_immediate.
     rewr;simpl;rewr;simpl;rewr;simpl;rewr.
     (first [econ;[idtac | econ | idtac] | econ];
      reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans).
@@ -145,7 +147,7 @@ Qed.
 
 
 (*Opaque otherwise the inversion tactic take forever*)
-Opaque state_step pool_input immediate_init no_output f_proj.
+Opaque input_update output_update pool_input immediate_init no_output f_proj.
 
 (* === Section 5: model_immediate_concrete is not non-interfering.  Witness: a short
    bot-trace of two public requests; insert a disk interrupt at the front
@@ -362,67 +364,25 @@ Proof.
 Qed.
 
 
-Transparent state_step pool_input immediate_init no_output f_proj.
+Transparent input_update output_update pool_input immediate_init no_output f_proj.
 
 Lemma in_equiv_eq i i0 l : rel in_equiv l i i0 -> i = i0.
 Proof.
   destruct i as [[]|[]], i0 as [[]|[]]; simpl; intuition.
 Qed.
 
-(* === The composition-breakdown technique.  state_step is
-   step_sum set_pending
-     (fun o => initiate_next o \o (advance_policy \o observe_policy o)).
-   fv_NI_step_sum splits a goal into the two summands, and fv_NI_comp
-   discharges fv_NI of a pipeline from fv_NI of its stages.  The event
-   equivalence is eqsum_L: an input may be unobservable, an output never is,
-   which is why f_EP_step_sum reduces to a condition on set_pending alone.
-   initiate_next is non-interfering only on states the sliced policy reaches,
-   so for the sliced model the output summand is proved under the slice
-   invariant (fv_NI_step_sum_on, and sta_NI_pred in theorems.v). === *)
+(* === The composition-breakdown technique.  output_update is
+     fun o => initiate_next o \o (advance_policy \o observe_policy o),
+   and fv_NI_comp discharges fv_NI of a pipeline from fv_NI of its stages.  The
+   input event equivalence is eqsum_L: an input may be unobservable, an output
+   never is, which is why input_update_EP reduces to a condition on set_pending
+   alone.  initiate_next is non-interfering only on states the sliced policy
+   reaches, so for the sliced model output_update is proved under the slice
+   invariant (sta_NI_pred in theorems.v). === *)
 Lemma fv_NI_comp : forall (I V: Ty) (IRel : cEquiv [I]) (VRel : cEquiv [V]) (f f' : [I]  -> [V] ->  [V]),
     fv_NI IRel VRel VRel f -> fv_NI IRel VRel VRel f' -> fv_NI IRel VRel VRel (fun i => (f' i) \o (f i)).
 Proof.
 intros. move: H H0. rewrite /fv_NI. ssa.
-Qed.
-
-(* An event equivalence never relates an inl to an inr, so a goal about [step_sum f
-   g] splits: on the left both events are inputs and only f runs, on the right
-   both are outputs and only g runs. *)
-Lemma fv_NI_step_sum : forall f g,
-    fv_NI in_equiv state_type_equiv state_type_equiv f ->
-    fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv g ->
-    fv_NI (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv state_type_equiv (@step_sum Opub Opriv f g).
-Proof.
-  ssa. move: H H0. mrw. intros.
-  apply eqsum_L_llrr in H1 as H1'. destruct H1'. destruct H3. destruct i. destruct i'.
-  rewrite /step_sum. eauto. done. done.
-  destruct H3. destruct i. done. destruct i'. done.
-  rewrite /step_sum. eauto.
-Qed.
-
-(* As fv_NI_step_sum, with the output summand needed only on states in P. *)
-Lemma fv_NI_step_sum_on : forall (P : [state_type] -> Prop) f g,
-    fv_NI in_equiv state_type_equiv state_type_equiv f ->
-    fv_NI_on P (out_equiv Opub Opriv) state_type_equiv g ->
-    fv_NI_on P (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv (@step_sum Opub Opriv f g).
-Proof.
-  move=> P f g Hf Hg l e e' He v v' Pv Pv' Hv.
-  case: e e' He => [i|o] [i'|o'] He; rewrite /step_sum.
-  - apply: Hf Hv; exact: rel_eqsum_L' He.
-  - by case/eqsum_L_llrr: He => -[].
-  - by case/eqsum_L_llrr: He => -[].
-  - apply: Hg Pv Pv' Hv; exact: rel_eqsum_L2' He.
-Qed.
-
-(* Under eqsum_L only an inl is ever unobservable, so f_EP of a step_sum is a
-   condition on its input summand alone. *)
-Lemma f_EP_step_sum : forall f g,
-    f_EP in_equiv state_type_equiv f ->
-    f_EP (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv (@step_sum Opub Opriv f g).
-Proof.
-  ssa. move: H. mrw. intros. destruct i.
-  rewrite /step_sum. eauto.
-  ssa.
 Qed.
 
 Definition ready_aux (v : [state_type]) := ir_ready v timer_irq /\ first_ready v = Some timer_irq \/ ~ ir_ready v timer_irq /\ ir_ready v disk_irq /\ first_ready v = Some disk_irq \/  ~ ir_ready v timer_irq /\ ~ ir_ready v disk_irq /\ ir_ready v nop_irq /\ first_ready v = Some nop_irq \/ ~ ir_ready v timer_irq /\ ~ ir_ready v disk_irq /\ ~ ir_ready v nop_irq /\ first_ready v = None.
@@ -960,7 +920,7 @@ Qed.
    it needs (secret_gated_at_boundary_ready). *)
 Lemma sliced_output_NI_on :
   fv_NI_on secret_gated (out_equiv Opub Opriv) state_type_equiv
-    (fun o => initiate_next o \o @sliced_service runtime runs Opub Opriv o).
+    (output_update (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime)).
 Proof.
 move=> l o o' Ho v v' Pv Pv' Hv /=.
 apply: initiate_next_NI_on; first exact: Ho.
@@ -968,6 +928,25 @@ apply: initiate_next_NI_on; first exact: Ho.
 - exact/secret_gated_at_boundary_ready/sliced_service_gated.
 - exact/secret_gated_at_boundary_ready/sliced_service_gated.
 Qed.
+
+(* The input update.  An event equivalence never relates an inl to an inr, and an
+   output fed back leaves the state alone. *)
+Lemma input_update_NI :
+  fv_NI (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv state_type_equiv
+    (@input_update Opub Opriv).
+Proof.
+move=> l e e' He v v' Hv.
+case: e e' He => [i|o] [i'|o'] He /=.
+- apply: set_pending_NI Hv; exact: rel_eqsum_L' He.
+- by case/eqsum_L_llrr: He => -[].
+- by case/eqsum_L_llrr: He => -[].
+- exact: Hv.
+Qed.
+
+(* Under eqsum_L only an inl is ever unobservable. *)
+Lemma input_update_EP :
+  f_EP (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv (@input_update Opub Opriv).
+Proof. by move=> l [i|o] Hi v //; apply: set_pending_EP. Qed.
 
 
 Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
@@ -984,17 +963,18 @@ Proof.
 
   eapply map_NI.
   eauto. eauto.
+  instantiate (1:= eqpair state_type_equiv (out_equiv Opub Opriv)).
   mrw. intros.
+  apply: rel_eqsum_L2.
   case/rel_eqpair: H;eauto.
-  instantiate (1:= state_type_equiv).
 
   (*state update, under the slice invariant (sta_NI_pred with secret_gated)*)
   apply: (@sta_NI_pred _ _ _ secret_gated).
-  - move=> e v; exact: state_step_gated.
-  - by [].
-  - by move=> l i i' _ v v' _ _ Hv.
-  - apply fv_NI_step_sum_on; [exact: set_pending_NI | exact: sliced_output_NI_on].
-  - move=> l i Hi v _; move: l i Hi v; apply: f_EP_step_sum; exact: set_pending_EP.
+  - move=> e v; exact: input_update_gated.
+  - move=> o v; exact: output_update_gated.
+  - exact: sliced_output_NI_on.
+  - move=> l e e' He v v' _ _ Hv; exact: (input_update_NI He Hv).
+  - move=> l e He v _; exact: (input_update_EP He).
   - exact: sliced_init_gated.
 
 
@@ -1040,9 +1020,8 @@ Proof.
   mrw. intros. destruct i. apply dis_eqpair_R in H. destruct i0;last ssa.
   rewrite !pair_rewr. done.
 
-  mrw. intros. 
-  apply rel_eqsum_L2. eapply H.  
-  
+  by [].
+
   eapply maybe_NI.
   eapply par_NI.
   eapply map_NI.

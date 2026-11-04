@@ -1,4 +1,4 @@
-% Figs. 3 and 4 belong to Section III-A; background.tex inputs this file at its end,
+% Figs. 3 and 4 belong to Section III; background.tex inputs this file at its end,
 % so the two figures pair at the top of the page where Section III starts
 \begin{figure}[t]
 \centering
@@ -47,15 +47,15 @@
 \caption{The model. An interrupt only updates the global state. The state's pid
   selects one slot, which takes a step and emits \texttt{Some o}; every other slot
   emits \texttt{None}. Because the slots are composed with \texttt{par}, their
-  outputs form a product, a six-tuple, which is emitted and fed back to update the
-  state. The input is a sum of the two interrupts. Each position of the output, and
+  outputs form a product, a six-tuple, which \changed{updates the state, is emitted, and
+  is fed back so that the pool receives the new pid}. The input is a sum of the two interrupts. Each position of the output, and
   each alternative of the input, is shaded by which of its values the attacker can
   tell apart (key below).}
 \label{fig:system}
 \end{figure}
 \begin{figure}[t]
 \centering
-% the global state of fig:system, field by field (models.v, state_type);
+% the global state of fig:system, field by field (generic_model.v, state_type);
 % shading: public (dark) or private (white) to the attacker under the state
 % equivalence of sec:state-equiv
 % laid out like the columns of fig:system: a framed column with its operator in the
@@ -86,7 +86,7 @@
   as there (\cref{sec:state-equiv}). The current pid is a sum: its \texttt{inl}
   side holds a secret handler (an S step), a \texttt{Bool} saying which one, and
   its \texttt{inr} side the number of any other process (U or T). Its
-  equivalence is $\privvis + \pubeq$ (\cref{def:visible}), so
+  equivalence is $\privvis + \pubeq$ (\cref{def:formers}), so
   the tag is public: whether a secret handler runs is public; which one runs is private.
   So are the pending bits of the NOP and disk handlers. Every other field,
   \texttt{None} included, is public.}

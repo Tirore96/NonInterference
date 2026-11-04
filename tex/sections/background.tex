@@ -177,6 +177,8 @@ values it hides.
 \item \emph{Unit} (\m{unit_equiv}). For a set $S$ of levels, closed upwards, $1^S$
   relates the unit's element $\star$ to itself and hides it at the levels outside
   $S$. We write $1^\ell$ for $1^S$ with $S$ the levels at or above $\ell$.
+\item \emph{Visible} (\m{eqvisible}). \changed{$\eqo{X}^\circ$ relates $x$ and $x'$ when
+  $x \eqv{X}_\ell x'$, and hides nothing.}
 \end{itemize}
 \end{definition}
 
@@ -184,7 +186,10 @@ $\times$ is the output equivalence of \code{par}; $\times_R$ and $\times_{LR}$
 appear where a constructor pairs an input with a state or a gate bit. Sums are our
 addition, and a conservative one: every constructor and theorem is parametric in
 its types, and none changes. An \code{inl} and an \code{inr} are related exactly
-when both are hidden; otherwise the tag is visible.
+when both are hidden; otherwise the tag is visible. \changed{$^\circ$ keeps the tag
+visible on a side that would hide it. We write $\privvis$ for $(\priveq)^\circ$: at
+$\Lo$ all its values are related, yet none is hidden, so under a sum the attacker
+learns which side a value is on and nothing more.}
 
 A process that does not run emits \code{None}, and under ${\doteq} + \one^S$ the levels
 in $S$ see that it did not run; \code{Some v} and \code{None} are related at $\ell$
@@ -211,7 +216,7 @@ f \in \NI(\eqv{I},\eqv{V},\eqv{V}) &\iff \forall \ell, i, i', v, v'.\;
 f \in \mathsf{PE}(\eqv{I},\eqv{V}) &\iff \forall \ell, i, v.\;
   i \eqv{I}_\ell \unobs \Rightarrow f\,i\,v \eqv{V}_\ell v \\
 \ell \in \Aw(v,\doteq) &\iff \forall \hat v.\; v \doteq_\ell \hat v \Rightarrow v = \hat v \\
-\ell \in \Ob(p,\doteq) &\iff \text{every output of $p$ at $\ell$ is}
+\ell \in \Ob(p,\doteq) &\iff \text{every output of $p$ is }
   \doteq_\ell \unobs
 \end{align*}
 A function is non-interfering if it maps related values to related values

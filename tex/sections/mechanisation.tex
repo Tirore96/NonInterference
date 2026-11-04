@@ -19,7 +19,10 @@ file & lines & contents \\
 \midrule
 \mechfile{theories/definitions.v}{definitions.v} & \mechlines{definitions.v} & the calculus, traces, $\NI$, the equivalences \\
 \mechfile{theories/theorems.v}{theorems.v} & \mechlines{theorems.v} & the composition theorems \\
-\mechfile{theories/models.v}{models.v} & \mechlines{models.v} & the generic model, both policies, \changed{the slice invariant (\cref{lem:gated})}, example traces \\
+\mechfile{theories/generic_model.v}{generic_model.v} & \mechlines{generic_model.v} & \leavevmode\changed{the generic model} \\
+\mechfile{theories/concrete_system.v}{concrete_system.v} & \mechlines{concrete_system.v} & \leavevmode\changed{a concrete system, the state along a run} \\
+\mechfile{theories/model_immediate.v}{model_immediate.v} & \mechlines{model_immediate.v} & \leavevmode\changed{the ordinary policy and its traces} \\
+\mechfile{theories/model_sliced.v}{model_sliced.v} & \mechlines{model_sliced.v} & \leavevmode\changed{the sliced policy, the slice invariant (\cref{lem:gated}), its traces} \\
 \mechfile{theories/noninterference.v}{noninterference.v} & \mechlines{noninterference.v} & the model's equivalences, \cref{thm:leak,thm:leak-userview,thm:main} \\
 \mechfile{theories/adequacy.v}{adequacy.v} & \mechlines{adequacy.v} & the original definitions, the equivalences with ours, \cref{thm:leak,thm:main} in the original's terms \\
 \bottomrule
@@ -28,9 +31,10 @@ file & lines & contents \\
 
 \paragraph{Figures} The runs drawn in \cref{fig:leak,fig:run-ordinary,fig:run-sliced}
 are proved traces of the models, and the state rows of
-\cref{fig:run-ordinary,fig:run-sliced} are computed by the model's own transition and
+\cref{fig:run-ordinary,fig:run-sliced} are computed by \changed{\m{state_step}} and
 stated as lemmas (\m{immediate_states_with_dI}, \m{sliced_states_with_dI} and their
-siblings), from which the figures are generated.
+siblings), from which the figures are generated. \changed{\m{run_states_model} shows
+that these are the states the model holds along those runs.}
 
 \paragraph{Types} Input and output types range over an inductive universe \m{Ty} of
 codes, interpreted into \code{Set}, rather than over \code{Set} directly. This makes

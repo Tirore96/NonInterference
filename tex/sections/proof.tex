@@ -18,10 +18,10 @@ equivalences), list its side conditions, and say why each holds. Several steps
 below give only the gist and leave the instance implicit.}
 
 At the attacker's level $\Lo$ the conclusion reads as follows. A
-disk interrupt is unobservable at $\Lo$ (\cref{sec:interface}), so two input streams
+disk interrupt is unobservable at $\Lo$ (\changed{\cref{def:io}}), so two input streams
 that differ only in disk interrupts must give outputs that $\Eout$ relates.
 
-The result carries over to the user view (\cref{sec:interface}):
+The result carries over to the user view (\changed{\cref{sec:userview}}):
 
 \begin{corollary}[\m{model_sliced_userview_NI}]\label{cor:userview}
 Under the same hypotheses, the user view of the sliced model,
@@ -50,7 +50,7 @@ and the public value; if neither user slot emitted, $g\,o$ and $g\,o'$ are both
 \code{None}.
 
 \todo{``from the outside in'' is not explained. Say what it means: model\_sliced
-is a term (the reactive\_system listing of Section III-E); the proof applies one
+is a term (the reactive\_system listing of Section III-F); the proof applies one
 item of Theorem 1 per constructor, starting at the outermost and moving to its
 argument; each application turns the goal for the term into goals for its
 argument, at equivalences the item dictates, plus side conditions on its
@@ -63,33 +63,32 @@ chooses those inside, $\eqv{V}$ on the state (\cref{fig:state}) and $\eqv{B}$ on
 each gate bit (\cref{sec:gating}).
 
 \todo{``five layers'' is informal and the grouping is ours, not the term's: the
-term has four maps (the outer inl map, map id snd, the pool's input map, the gate
+term has four maps (the outer inl map, the map inside the loop, the pool's input map, the gate
 maps) and the bullets do not say which map each refers to. Use the constructor
 order of the listing, and name each map.}
 The term has five layers. For each, from the outside in, we name its constructors,
 the items of \cref{thm:composition} that apply, and what they require:
 \begin{itemize}
 \item \emph{Feedback} (\code{map}, \code{loop}; \comp{it:map}, \comp{it:loop}). The
-  outer map tags each interrupt \code{inl}, and the loop feeds each output back
-  tagged \code{inr}, so the state receives one sum of events. \comp{it:loop} asks
+  outer map tags each interrupt \code{inl}, \changed{the map inside the loop tags each
+  output \code{inr}, and the loop feeds it back,} so the state receives one sum of events. \comp{it:loop} asks
   for the process inside the loop to be in $\NI(\eqv{E},\eqv{E})$, where we write
   $\eqv{E}$ for $\Ein + \Eout$, the two equivalences of
   \cref{fig:system} side by side. No output is unobservable, so it never
   relates an interrupt to an output, and a disk interrupt is unobservable at $\Lo$.
-  \todo{Inaccurate: the loop does not tag outputs inr, the inner map
-  (map pool\_input inr) does. The side conditions of map\_NI for the outer map
+  \todo{The side conditions of map\_NI for the outer map
   ($\mathsf{inl} \in \NI \cap \mathsf{PU}$, inr\_or\_def $\in \NI$) and for
-  map id snd are not stated.}
+  the map inside the loop are not stated.}
 \item \emph{The state} (\code{sta}; \changed{\cref{thm:sta-pred}, with $P$ the slice
-  invariant \m{secret_gated} of \cref{sec:invariant}}). The state update $f$ must
-  \changed{preserve $P$ and} satisfy $f \in \changed{\NI_P}(\eqv{E},\eqv{V},\eqv{V})
-  \cap \changed{\mathsf{PE}_P}(\eqv{E},\eqv{V})$\changed{, and $P$ must hold of the
-  initial state}. It decides whether a secret handler runs, and it is the hard
+  invariant \m{secret_gated} of \cref{sec:invariant}}). \changed{The input update $f$
+  must preserve $P$ and satisfy $f \in \NI_P(\eqv{E},\eqv{V},\eqv{V})
+  \cap \mathsf{PE}_P(\eqv{E},\eqv{V})$, the output update $g$ must preserve $P$ and
+  satisfy $g \in \NI_P(\Eout,\eqv{V},\eqv{V})$, and $P$ must hold of the initial
+  state. $g$ decides} whether a secret handler runs, and it is the hard
   obligation (\cref{sec:state-equiv,sec:update,sec:invariant}).
-  \todo{$f$ here is sta's state update, but $f$ was map's input function one
-  bullet up and in the corollary. sta\_NI\_inv also requires the output update
-  ($g$, the identity here) to be in $\NI(\eqv{O},\eqv{V},\eqv{V})$, and gives the
-  inner process inputs at $\eqv{V} \times_R \eqv{E}$; neither is mentioned.}
+  \todo{$f$ here is sta's input update, but $f$ was map's input function one
+  bullet up and in the corollary. sta\_NI\_pred also gives the
+  inner process inputs at $\eqv{V} \times_R \eqv{E}$, which is not mentioned.}
 \item \emph{The pool} (\code{map}, \code{maybe}, \code{par}; \comp{it:map},
   \comp{it:maybe}, \comp{it:par}). The pool idles on interrupts (\cref{sec:state}):
   its input map sends each to \code{None}, on which \code{maybe} idles
@@ -97,7 +96,7 @@ the items of \cref{thm:composition} that apply, and what they require:
   the pool's input the equivalence $\cdot + \one^\emptyset$, under which no
   level sees \code{None}, so the map is in $\mathsf{PU}$. \code{par} splits the output
   equivalence into one component per slot.
-  \todo{Name the map (map pool\_input inr) and the equivalence: ``$\cdot +
+  \todo{Name the map (map pool\_input id) and the equivalence: ``$\cdot +
   1^\emptyset$'' leaves the payload (pid $\times$ disk output) unnamed. State
   pool\_input's side conditions exactly ($\NI$ and $\mathsf{PU}$ from
   $\eqv{V} \times_R \eqv{E}$). ``par splits'' reads backwards: par\_NI composes
@@ -108,7 +107,7 @@ the items of \cref{thm:composition} that apply, and what they require:
   handler runs (\cref{sec:gating}).
 \item \emph{The slot processes.} $p_{sched}$, $p_{pub}$ and $p_{priv}$ are in $\NI$ by
   the hypotheses of \cref{thm:main}. Each handler is in $\NI$ by its definition
-  (\cref{sec:pool}): $\mathsf{out}\;\mathtt{tt}$ by \comp{it:out}; the \code{sta}
+  (\changed{\cref{sec:processes}}): $\mathsf{out}\;\mathtt{tt}$ by \comp{it:out}; the \code{sta}
   around it by \comp{it:sta}, with a public count whose input update is the identity,
   so it is in $\mathsf{PE}$; and the \code{map} by \comp{it:map}.
 \end{itemize}
@@ -122,7 +121,7 @@ fields, the second for public ones'' is vague: say that PE is easier to meet the
 more fields are private, NI the more are public.}
 For the state, \comp{it:sta} asks for $f \in \mathsf{PE}(\eqv{E},\eqv{V})$, so an
 unobservable event leaves the state related to itself, and $f \in
-\NI(\eqv{E},\eqv{V},\eqv{V})$, so related events take related states to related
+\NI(\eqv{E},\eqv{V},\eqv{V})$ \changed{and $g \in \NI(\Eout,\eqv{V},\eqv{V})$}, so related events take related states to related
 states (\cref{sec:composition}). The first condition asks for private fields, the
 second for public ones. We make a field private only
 where a condition forces it, which gives $\eqv{V}$, the shading of \cref{fig:state}
@@ -130,7 +129,7 @@ where a condition forces it, which gives $\eqv{V}$, the shading of \cref{fig:sta
 \begin{itemize}
 \item \emph{Pending bits are private.} A disk interrupt is unobservable at $\Lo$ and
   sets the disk pending bit, so $f \in \mathsf{PE}(\eqv{E},\eqv{V})$ makes that bit
-  private. The NOP pending bit is private by $f \in \NI(\eqv{E},\eqv{V},\eqv{V})$:
+  private. The NOP pending bit is private by \changed{$g \in \NI(\Eout,\eqv{V},\eqv{V})$}:
   when a slice opens, the disk handler takes the
   run the NOP handler was queued for, so after that run the NOP handler is pending
   in one state and not in the other.
@@ -161,11 +160,11 @@ step.
 \input{sections/fig-lane}
 \changed{$f \in \mathsf{PE}_P(\eqv{E},\eqv{V})$ concerns unobservable events only,
 that is, disk interrupts, which \m{set_pending} turns into one private bit; it holds
-on every state. The hard obligation is $f \in \NI_P(\eqv{E},\eqv{V},\eqv{V})$. It
-splits along the two lanes of \m{state_step} (\cref{sec:state}), since $\eqv{E}$
-never relates an interrupt to an output (\m{fv_NI_step_sum_on}). The input lane,
-\m{set_pending}, is in $\NI(\Ein,\eqv{V},\eqv{V})$ on every pair of states, because
-it writes a private bit (\m{set_pending_NI}). The output lane on output $o$ is the
+on every state (\m{input_update_EP}). $f \in \NI_P(\eqv{E},\eqv{V},\eqv{V})$ also holds
+on every pair of states (\m{input_update_NI}): $\eqv{E}$ never relates an interrupt to
+an output, an interrupt writes a private bit (\m{set_pending_NI}), and a fed-back
+output leaves the state alone. The hard obligation is
+$g \in \NI_P(\Eout,\eqv{V},\eqv{V})$. On output $o$, $g$ is the
 composite $\mathsf{initiate\_next}\;o \circ \mathsf{sliced\_service}\;o$, and the
 proof takes its stages one at a time (\m{fv_NI_comp}). \Cref{fig:lane} gives each
 stage's obligation.
@@ -209,10 +208,10 @@ property, and two related states that are not reachable may violate it. Two
 unreachable states outside a slice with the disk and NOP handlers unmasked, the disk
 handler pending in one only, are related, and \m{initiate_next} starts a secret
 handler in one and not in the other. So \comp{it:sta}, which asks for
-$f \in \NI(\eqv{E},\eqv{V},\eqv{V})$ on every pair of related states, fails, and $\eqv{V}$ cannot be restricted instead, because a characterised
+$g \in \NI(\Eout,\eqv{V},\eqv{V})$ on every pair of related states, fails, and $\eqv{V}$ cannot be restricted instead, because a characterised
 equivalence relates every value to itself. \Cref{thm:sta-pred} asks for the
 obligations only on the states that satisfy a predicate $P$, provided $P$ holds
-initially and the state update preserves it. For $P$ we take the invariant the sliced
+initially and $f$ and $g$ preserve it. For $P$ we take the invariant the sliced
 policy maintains between steps.}
 
 \begin{definition}[slice invariant]\label{def:gated}
@@ -233,7 +232,7 @@ A state satisfies \m{secret_gated} if it is gated by the false predicate, and
 handler is running inside one. Where \m{initiate_next} chooses, a slice may also be at
 a handler boundary, in exactly the shape \m{queue_secret_run} leaves; that is the
 disjunct $A$, and it follows the \code{if} of \m{tick_slice}. The invariant passes
-through the output lane as Hoare triples (\cref{fig:lane}):
+through the output update as Hoare triples (\cref{fig:lane}):
 \begin{align*}
 &\{\mathsf{secret\_gated}\}\;\mathsf{sliced\_service}\;o \\
 &\qquad\{\mathsf{secret\_gated\_at\_boundary}\}, \\
@@ -255,10 +254,9 @@ its initial state satisfies \m{secret_gated}.}
 
 \changed{The events are arbitrary, so this holds whatever the pool emits. The
 obligations of \cref{thm:sta-pred}, with $P$ the invariant \m{secret_gated}, now
-follow. $P$ holds initially; $f$ preserves it by the triples, and the output update
-$g$, the identity, trivially. $f \in \mathsf{PE}_P$ holds on every state. For
-$f \in \NI_P(\eqv{E},\eqv{V},\eqv{V})$, the input lane holds on every pair, and on
-the output lane two related states satisfying $P$ are taken by the service policy
+follow. $P$ holds initially; $f$ and $g$ preserve it by the triples. The conditions
+on $f$ hold on every state. For $g \in \NI_P(\Eout,\eqv{V},\eqv{V})$, two related
+states satisfying $P$ are taken by the service policy
 to related states satisfying \cref{def:ready}, on which \m{initiate_next} is
 non-interfering (\m{sliced_output_NI_on}). The model contains nothing that only the
 proof needs: the invariant is a predicate on its states.}

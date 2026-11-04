@@ -8,7 +8,7 @@ user process emits \code{Syscall} (\code{Sys}) when the disk handler has notifie
 and \code{Idle} otherwise. The scheduler alternates between the two user processes.
 Handlers take $\mathit{runtime} = 2$ steps.
 
-Recall the three kinds of step (\cref{sec:interface}): U, a user process or the
+Recall the three kinds of step (\changed{\cref{sec:processes}}): U, a user process or the
 scheduler; T, the timer handler; S, a secret handler. The attacker sees when U and T
 steps happen, and of an S step only that it happened, never which secret handler
 ran. It thus learns when the system enters S and how long it stays there, so for the attacker to

@@ -13,7 +13,7 @@ Import Order.TTheory.
 Open Scope order_scope.
 
 Require Export NonInterference.theories.definitions.
-Require Import NonInterference.theories.models NonInterference.theories.noninterference.
+Require Import NonInterference.theories.model_immediate NonInterference.theories.model_sliced NonInterference.theories.noninterference.
 
 (* The paper's presentations, and the results that say departing from them costs
    nothing: L-equivalences (section 1), streams (section 2), obliviousness over

@@ -24,9 +24,9 @@ and user processes that are themselves non-interfering.
 | `model_immediate_userview_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (the leak in the user view) | none |
 | `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 5 (no leak) | none |
 | `model_sliced_userview_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 1 | none |
-| `sliced_run_gated` ([`models.v`](theories/models.v)) | Lemma 1 (the slice invariant holds of every reachable state) | none |
-| `eqmaybe_sum_rel`, `eqsum_sum_rel`, `eqsum_L_sum_rel`, `eqvisible_public_rel` and their `_dis` siblings ([`definitions.v`](theories/definitions.v)) | §VI-B: the paper's sum notation equals the mechanised equivalences | none |
-| `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VI-A: our definitions equal the original's | none |
+| `sliced_run_gated` ([`model_sliced.v`](theories/model_sliced.v)) | Lemma 1 (the slice invariant holds of every reachable state) | none |
+| `eqmaybe_sum_rel`, `eqsum_sum_rel`, `eqsum_L_sum_rel`, `eqvisible_public_rel` and their `_dis` siblings ([`definitions.v`](theories/definitions.v)) | §VII-B: the paper's sum notation equals the mechanised equivalences | none |
+| `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VII-A: our definitions equal the original's | none |
 | `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 3 and 5 in the original's terms | none |
 
 Every result depends only on the two parameters `d` and `L` that fix the security
@@ -40,7 +40,10 @@ inverted through determinism of reduction (`inv_*` lemmas in
 |---|---|
 | [`theories/definitions.v`](theories/definitions.v) | the calculus, traces, `NI`, the equivalences |
 | [`theories/theorems.v`](theories/theorems.v) | the composition theorems of Rafnsson et al. |
-| [`theories/models.v`](theories/models.v) | the generic model, both interrupt policies, a concrete system and its traces |
+| [`theories/generic_model.v`](theories/generic_model.v) | the generic model |
+| [`theories/concrete_system.v`](theories/concrete_system.v) | a concrete system, trace tactics, the state along a run (`run_states_model`) |
+| [`theories/model_immediate.v`](theories/model_immediate.v) | the immediate policy, its concrete instance, traces and state rows |
+| [`theories/model_sliced.v`](theories/model_sliced.v) | the sliced policy, the slice invariant, the user view, its concrete instance, traces and state rows |
 | [`theories/noninterference.v`](theories/noninterference.v) | the model's equivalences and Theorems 2–4 |
 | [`theories/adequacy.v`](theories/adequacy.v) | the original definitions, their equivalence with ours, the main results in the original's terms |
 

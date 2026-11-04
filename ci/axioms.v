@@ -1,7 +1,7 @@
 (* The assumptions of the paper's results.  CI fails if any of them depends on
    anything beyond the two parameters that fix the security lattice,
    definitions.d and definitions.L. *)
-From NonInterference.theories Require Import theorems models noninterference adequacy.
+From NonInterference.theories Require Import theorems concrete_system model_immediate model_sliced noninterference adequacy.
 
 Print Assumptions out_NI.
 Print Assumptions map_NI.
@@ -15,6 +15,7 @@ Print Assumptions model_immediate_not_NI.
 Print Assumptions model_sliced_NI.
 Print Assumptions model_sliced_userview_NI.
 Print Assumptions sliced_run_gated.
+Print Assumptions run_states_model.
 Print Assumptions NI_paper.
 Print Assumptions ObliviousDis_iff.
 Print Assumptions NI_lEquiv.

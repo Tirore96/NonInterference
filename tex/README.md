@@ -8,7 +8,7 @@ off OneDrive.
 
 Write a Rocq name as `\m{name}`, for example `\m{restore_invariant_noop}`. It is
 typeset like `\code{name}` and links to the line of `theories/*.v` that defines it.
-`\mechfile{theories/models.v}{models.v}` links a whole file, and `\url{\repobase}`
+`\mechfile{theories/model_sliced.v}{model_sliced.v}` links a whole file, and `\url{\repobase}`
 is the repository root.
 
 Line numbers are never written by hand. `mechlinks.py` scans `../theories/*.v` for

@@ -1,9 +1,9 @@
-% Figs. 7 and 8 belong to Section IV; model.tex inputs this file at the end of III-C,
+% The two sliced figures belong to Section V; model.tex inputs this file in III-D,
 % so the two figures pair at the top of the next page
 \begin{figure}[t]
 \centering
 % the sliced policy over the states of fig:policy-ordinary, arrows as there; counter
-% values agree with models.v lemmas sliced_states_no_dI / _with_dI
+% values agree with model_sliced.v lemmas sliced_states_no_dI / _with_dI
 \begin{tikzpicture}[font=\scriptsize, >=stealth,
   ph/.style={draw, rounded corners, minimum size=0.75cm, font=\small\bfseries}]
 \node[ph] (u) at (0,0)   {U};
@@ -27,7 +27,7 @@
 \end{figure}
 \begin{figure}[t]
 \centering
-% runs: models.v Section 11 traces; state rows: lemmas sliced_states_no_dI/_with_dI
+% runs: model_sliced.v traces; state rows: lemmas sliced_states_no_dI/_with_dI
 \begin{tikzpicture}[font=\scriptsize,
   cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
   pub/.style={cell, fill=black!28}, priv/.style={cell, fill=white},

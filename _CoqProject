@@ -4,6 +4,9 @@
 
 theories/definitions.v
 theories/theorems.v
-theories/models.v
+theories/generic_model.v
+theories/concrete_system.v
+theories/model_immediate.v
+theories/model_sliced.v
 theories/noninterference.v
 theories/adequacy.v
