@@ -1,5 +1,5 @@
-% The two ordinary-policy figures belong to Section V-A; model.tex inputs
-% this file at the end of III-B, so the two figures pair at the top of the next page
+% The two ordinary-policy figures belong to Section IV-A; designs.tex inputs
+% this file just before it, so the two figures pair at the top of the next page
 \begin{figure}[t]
 \centering
 % the ordinary policy over the three kinds of step: wavy arrows are taken because the
@@ -63,6 +63,6 @@
 \foreach \c [count=\i] in {{},{$\bullet$},{},{},{},{},{},{},{},{},{},{}} \node[priv] at (0.45*\i,-3.09) {\c};
 \foreach \i in {2} \node[diff] at (0.45*\i,-3.09) {};
 \end{tikzpicture}
-\caption{The ordinary policy on the concrete system of \cref{sec:designs}, without and with a disk interrupt: who runs at each step (G: public user, P: private user, S: scheduler, T, D: timer and disk handler), and the state in which the step takes place ($\bullet$: set). Shading as in \cref{fig:system}: public cells shaded. A solid bar marks the timer interrupt, a hollow bar the disk interrupt; framed cells differ between the two runs. The disk handler takes steps 3 and 4 from the public user and holds the masks set meanwhile, so the runs differ in public cells. Both runs are proved traces (\protect\mechfile{theories/model_immediate.v}{model_immediate.v}), and the states are those the model holds along them (\m{run_states_model}).}
+\caption{The ordinary policy on the concrete system of \cref{sec:designs}, without and with a disk interrupt: who runs at each step (G: public user, P: private user, S: scheduler, T, D: timer and disk handler), and the state in which the step takes place ($\bullet$: set). Shading as in \changed{\cref{fig:io}}: public cells shaded. A solid bar marks the timer interrupt, a hollow bar the disk interrupt; framed cells differ between the two runs. The disk handler takes steps 3 and 4 from the public user and holds the masks set meanwhile, so the runs differ in public cells. Both runs are proved traces (\protect\mechfile{theories/model_immediate.v}{model_immediate.v}), and the states are those the model holds along them (\m{run_states_model}).}
 \label{fig:run-ordinary}
 \end{figure}

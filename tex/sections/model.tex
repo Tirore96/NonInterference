@@ -56,8 +56,6 @@ modulo \code{runtime}. So a handler run takes exactly \code{runtime} steps, and 
 its last step the handler emits \code{Notify} to announce completion, and
 \code{Nothing} on the others.
 
-\input{sections/fig-ordinary}
-
 \subsection{The pool}\label{sec:pool}
 
 The six processes run side by side in a \emph{pool} (\cref{fig:system}), and only
@@ -81,16 +79,14 @@ records not only what was computed but also \emph{who ran}: the schedule is part
 what the system emits.
 
 \changed{Around the whole pool sits a second \code{maybe}, so that an interrupt, which
-reaches the pool as \code{None}, leaves it unchanged. This layer is there for the
-proof: by \comp{it:maybe} no observer sees that \code{None}, so a disk interrupt is
-sent to a hidden input (\cref{sec:proof}).}
+reaches the pool as \code{None}, leaves it unchanged.}
 
 \subsection{The state}\label{sec:global-state}\label{sec:state}
 
 \leavevmode\changed{Around the pool sits a state cell, a \code{sta} whose value and two update
 functions together model the interrupt controller of \cref{sec:interrupts}, along with
 the remaining bookkeeping.}
-The global state (\m{state_type}, \cref{fig:state}) is the box of \cref{fig:system}
+The global state (\m{state_type}) is the box of \cref{fig:system}
 opened up: a nest of pairs holding two pids, two flags and the interrupt controller.
 
 \begin{itemize}
@@ -99,8 +95,9 @@ opened up: a nest of pairs holding two pids, two flags and the interrupt control
   \code{inl false} for the NOP handler, and every other process on the \code{inr}
   side, numbered from 0: timer handler, scheduler, private user, public user. The
   system starts in the public user (\m{initial_pid}).
-\item The \emph{previous pid} is the user process a handler interrupted.
-\item The \emph{reschedule flag} is \m{re_sched}.
+\item The \emph{previous pid}, a number or \code{None}, is the user process a handler
+  interrupted.
+\item The \emph{reschedule flag} is the boolean \m{re_sched}.
 \item The \emph{slice counter} \m{slice_count} \changed{counts the output steps until
   the current time slice closes, and is \code{0} outside a slice}; the ordinary
   policy leaves it \changed{\code{0}}.
@@ -131,8 +128,6 @@ open here. \code{observe_policy} reacts to what the output says, and
 \code{advance_policy} reads only the state. The third stage,
 \m{initiate_next}, computes the next pid.}
 
-\input{sections/fig-sliced}
-
 \changed{If several handlers can start, the timer goes first, then the disk, then NOP.}
 \changed{\m{initiate_next} first adopts the pid the scheduler
 proposed, if the scheduler ran (\m{apply_scheduler_choice}), and then} chooses by
@@ -150,8 +145,6 @@ secret handler, points the current pid at the handler, sets all masks and clears
 the handler's pending bit. \m{initiate_scheduler} hands control to the scheduler and
 clears \m{re_sched}; \m{initiate_prev_pid} returns to the previous pid.
 
-Rule 2 is the source of the leak of \cref{fig:leak}, as \cref{sec:leak} shows step by step.
-
 \subsection{The loop}\label{sec:loop}
 
 \leavevmode\changed{So far the state computes a next pid, but the pool has no way to learn it. A
@@ -164,7 +157,7 @@ and so does the loop's two jobs.}
 \changed{The first job is to deliver the pid: without it, no switch would reopen after
 the first step. The second is to give the private user the disk handler's output. The
 private user is the legitimate consumer of the disk event, and this input is what makes
-the effect of the disk handler's run visible in user space (\cref{sec:userview}).}
+the effect of the disk handler's run visible in user space (\cref{sec:leak}).}
 
 \changed{\code{loop} needs equal input and output types, while the system takes
 interrupts and emits tuples. So inside the loop an event is a sum, \code{T_in + T_out},
@@ -230,10 +223,3 @@ Apart from the processes and the handler length, everything in
 Together they decide \emph{when a handler may run}, and we call them the
 \emph{interrupt policy}. \Cref{sec:designs} fills the \changed{three} parts of the
 interrupt policy twice.
-
-\changed{The model is also parametric in the scheduler, the two user processes and their
-output types, and the handler length, and the sliced policy adds the number of handler
-runs per slice. \Cref{thm:main} holds for all of them, provided each slot process is
-non-interfering at its own classification. This rests on one property of the state
-update: it reads only \emph{whether} a user slot emitted, never what, so no user
-behaviour reaches the schedule.}

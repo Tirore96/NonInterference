@@ -1,37 +1,15 @@
 \section{The Security Proof}\label{sec:proof}
-This section proves that the sliced policy is non-interfering, with $\Ein$ and
-$\Eout$ of \cref{def:io}:
-
-\begin{theorem}[\m{model_sliced_NI}]\label{thm:main}
-If the scheduler and the public user process are non-interfering at
-$\pubeq$ on input and output, and the private user process is
-non-interfering at $\priveq$ on input and output, then
-\[
-\mathsf{model\_sliced}\;\mathit{runtime}\;\mathit{runs}\;p_{pub}\;p_{priv}\;p_{sched}
-  \in \NI(\Ein,\, \Eout).
-\]
-\end{theorem}
+\changed{This section proves \cref{thm:main,cor:userview}.}
 
 \todo{Section-wide: write every step the way the corollary's proof now reads:
 name the process term, the item of Theorem 1 with its instance ($p$, $f$, $g$, the
 equivalences), list its side conditions, and say why each holds. Several steps
 below give only the gist and leave the instance implicit.}
 
-At the attacker's level $\Lo$ the conclusion reads as follows. A
-disk interrupt is unobservable at $\Lo$ (\changed{\cref{def:io}}), so two input streams
-that differ only in disk interrupts must give outputs that $\Eout$ relates.
-
-The result carries over to the user view (\changed{\cref{sec:userview}}):
-
-\begin{corollary}[\m{model_sliced_userview_NI}]\label{cor:userview}
-Under the same hypotheses, the user view of the sliced model,
-\m{model_sliced_userview}, is in $\NI(\Ein, \Euser)$.
-\end{corollary}
-
 \todo{``adds one layer outside the model'' mixes the term (a map around
 model\_sliced) with the proof (one more use of map\_NI). Say it as a proof: put
 this in a proof environment, starting ``The user view is the process \dots''.}
-Its proof adds one layer outside the model. The user view is the process
+\changed{The proof of \cref{cor:userview}} adds one layer outside the model. The user view is the process
 \[
 \mathsf{map}\;\mathsf{id}\;\mathsf{parse\_output}\;\mathsf{model\_sliced},
 \]
@@ -58,7 +36,7 @@ functions. Consider displaying the unfolded term once here, so that each bullet
 below can point at its constructor.}
 The proof applies \cref{thm:composition} to \m{model_sliced}
 (\cref{fig:system}) from the outside in. The theorem gives the outermost
-equivalences, $\Ein$ and $\Eout$, shaded in \cref{fig:system}; the proof
+equivalences, $\Ein$ and $\Eout$, shaded in \changed{\cref{fig:io}}; the proof
 chooses those inside, $\eqv{V}$ on the state (\cref{fig:state}) and $\eqv{B}$ on
 each gate bit (\cref{sec:gating}).
 
@@ -74,7 +52,7 @@ the items of \cref{thm:composition} that apply, and what they require:
   output \code{inr}, and the loop feeds it back,} so the state receives one sum of events. \comp{it:loop} asks
   for the process inside the loop to be in $\NI(\eqv{E},\eqv{E})$, where we write
   $\eqv{E}$ for $\Ein + \Eout$, the two equivalences of
-  \cref{fig:system} side by side. No output is unobservable, so it never
+  \changed{\cref{fig:io}} side by side. No output is unobservable, so it never
   relates an interrupt to an output, and a disk interrupt is unobservable at $\Lo$.
   \todo{The side conditions of map\_NI for the outer map
   ($\mathsf{inl} \in \NI \cap \mathsf{PU}$, inr\_or\_def $\in \NI$) and for
@@ -114,7 +92,8 @@ the items of \cref{thm:composition} that apply, and what they require:
 
 \subsection{The state equivalence}\label{sec:state-equiv}
 
-\todo{$\eqv{V}$ is given only by the shading of Fig.~4 and the bullets below.
+\input{sections/fig-state}
+\todo{$\eqv{V}$ is given only by the shading of \cref{fig:state} and the bullets below.
 Give it a definition like Definition 3 ($\eqv{V} \triangleq \dots$, one factor
 per field), then justify each factor. ``The first condition asks for private
 fields, the second for public ones'' is vague: say that PE is easier to meet the
@@ -288,14 +267,14 @@ pids are related, and the slots fall into two groups (\cref{fig:equivs}).
 \begin{wrapfigure}{r}{3.3cm}
 \centering
 % the gate equivalences the proof of model_sliced_NI chooses (noninterference.v:
-% false_equiv / private_equiv), laid out like fig:system: one framed column per
-% equivalence, its operator in the title; slots in the order of fig:system
+% false_equiv / private_equiv), laid out like fig:io: one framed column per
+% equivalence, its operator in the title; slots in the order of fig:io
 \begin{tikzpicture}[font=\scriptsize]
-\foreach \y/\c in {0/T, -0.36/D, -0.72/N, -1.08/S, -1.44/P, -1.80/G}
+\foreach \y/\c in {0/G, -0.36/P, -0.72/S, -1.08/N, -1.44/D, -1.80/T}
   \node[anchor=east] at (-0.07,\y) {\c};
-\foreach \y in {0, -1.08, -1.44, -1.80}
+\foreach \y in {0, -0.36, -0.72, -1.80}
   {\draw (0,\y-0.18) rectangle (0.6,\y+0.18); \node[font=\tiny] at (0.3,\y) {$\eqv{F}$};}
-\foreach \y in {-0.36, -0.72} \draw[fill=white] (0,\y-0.18) rectangle (0.6,\y+0.18);
+\foreach \y in {-1.08, -1.44} \draw[fill=white] (0,\y-0.18) rectangle (0.6,\y+0.18);
 \draw[rounded corners=2pt] (-0.07,-2.05) rectangle (0.67,0.25);
 \node[anchor=south] at (0.3,0.25) {$\eqv{B}$};
 % the gate equivalence of the shown slots: a bit read as a sum
@@ -305,7 +284,7 @@ pids are related, and the slots fall into two groups (\cref{fig:equivs}).
 \draw[rounded corners=2pt] (1.53,-0.61) rectangle (2.27,0.25);
 \node[anchor=south] at (1.9,0.25) {$\eqv{F}$: $+$};
 \end{tikzpicture}
-\caption{Gate bits: $\eqv{B}$ per slot, shaded as in \cref{fig:system}.}
+\caption{Gate bits: $\eqv{B}$ per slot, shaded as in \changed{\cref{fig:io}}.}
 \label{fig:equivs}
 \end{wrapfigure}
 \emph{Every other slot shows whether.} Both secret pids map to \code{false}, so

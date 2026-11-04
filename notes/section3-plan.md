@@ -3,10 +3,13 @@
 Written 2026-11-04, updated the same day: the output update is now in `g` (the user
 chose to keep it). Approved and carried out 2026-11-04 in `tex/sections/model.tex`,
 uncommitted at the time of writing. The state-update figure was then cut at the user's
-request, so the figure numbers after Fig. 4 moved down by one. The section was then
-trimmed and split: Definition 3 and the user view are now Section IV,
-`tex/sections/attacker.tex`, and the visible equivalence is a former in Definition 2.
-The listings of `sta`, `loop`, `pool_input`, the slot and `initiate_next` were cut.
+request. The section was then trimmed, and the visible equivalence became a former in
+Definition 2. The listings of `sta`, `loop`, `pool_input`, the slot and `initiate_next`
+were cut. A separate attacker section was tried and folded into the policies. Section IV
+is "Two Interrupt Policies" and introduces the equivalences where they are needed: A has
+the ordinary policy, Definition 3, Theorem 3, the user view and Corollary 1; B has the
+sliced policy, Theorem 4 and Corollary 2. Section V only proves. Fig. 3 is unshaded, `fig-io.tex` holds the shading of inputs and outputs, and the state
+figure moved to the state equivalence in the proof, as `fig-state.tex`.
 
 ## The state updates, as the code now has them
 
