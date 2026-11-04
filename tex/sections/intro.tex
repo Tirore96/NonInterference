@@ -113,12 +113,13 @@ implement it in an operating system is carried out in separate work
   interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one
   generic theorem per constructor of the model, which leaves two side conditions
   specific to interrupt handling, one of them hard (\cref{sec:state-equiv}).
-\item Requirements, read off the proof's obligations, on any implementation of
-  interrupt handling that is to be non-interfering (\cref{sec:requirements}). The
-  arrival of a secret interrupt may only record that it is pending. When secret
-  handlers run, and for how long, must be fixed by public events, so the time
-  reserved for them must be fixed in advance and always used up. And the interrupt
-  controller must be split by secrecy: which interrupts are pending is secret, while
+\item Requirements, read off the proof's obligations, \changed{that suffice for an
+  implementation of interrupt handling to be non-interfering
+  (\cref{sec:state-equiv,sec:update,sec:invariant}). The
+  arrival of a secret interrupt only records that it is pending. When secret
+  handlers run, and for how long, is fixed by public events, so the time
+  reserved for them is fixed in advance and always used up. And the interrupt
+  controller is split by secrecy}: which interrupts are pending is secret, while
   the masks that decide what runs next are public. The implementation in
   \todo{cite X} follows these requirements.
 \item A mechanisation of the calculus and its composition theorems. Our
