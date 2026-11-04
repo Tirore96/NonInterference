@@ -3,35 +3,35 @@
 an observer at each level sees, and one composition theorem per constructor. We now
 use the calculus to write an operating system with interrupt handling as a single
 process, following the example of \cref{fig:leak}: the secret is whether a disk
-interrupt occurred. \changed{After describing the interrupt mechanism without the
+interrupt occurred. After describing the interrupt mechanism without the
 calculus (\cref{sec:interrupts}), we build the process from the inside out, each
-layer wrapping the last; \cref{sec:parameters} gives the whole term.}
+layer wrapping the last; \cref{sec:parameters} gives the whole term.
 
 \subsection{Interrupt handling}\label{sec:interrupts}
 
-\leavevmode\changed{The machine runs one process at a time. A device signals an interrupt by
+The machine runs one process at a time. A device signals an interrupt by
 setting its \emph{pending} bit in the \emph{interrupt controller}, and at that moment
 nothing else happens. An \emph{interrupt handler} is a process the system starts on
 the device's behalf. It can start when its pending bit is set and its \emph{mask} bit
-is clear, and starting it clears the pending bit.}
+is clear, and starting it clears the pending bit.
 
-\changed{Starting a handler also sets all the masks, so handlers are non-preemptive:
+Starting a handler also sets all the masks, so handlers are non-preemptive:
 a running handler is never interrupted, and an interrupt that arrives meanwhile stays
 pending until the masks reopen. When the masks reopen is what the two policies of
 \cref{sec:designs} disagree on. Once a handler has finished, control goes to the next
 handler that can start. If there is none, it returns to the user process that was
-interrupted, or goes to the scheduler if the \emph{reschedule flag} is set.}
+interrupted, or goes to the scheduler if the \emph{reschedule flag} is set.
 
-\changed{There are two devices. The timer drives scheduling: when its handler
+There are two devices. The timer drives scheduling: when its handler
 finishes it sets the reschedule flag, which is how control reaches the scheduler. Its
 interrupt is public. The disk interrupt is the secret. A third handler, NOP, belongs
 to no device: no interrupt raises it, and it computes nothing. The sliced policy
-uses it as filler.}
+uses it as filler.
 
 \subsection{The processes}\label{sec:processes}
 
 The system runs six processes: three interrupt handlers, a scheduler, and two user
-processes. \changed{We group them by} the three kinds of step, which the rest of the
+processes. We group them by the three kinds of step, which the rest of the
 paper keeps apart:
 \begin{itemize}
 \item \emph{U}, a user process or the scheduler. The public user process issues
@@ -62,30 +62,30 @@ The six processes run side by side in a \emph{pool} (\cref{fig:system}), and onl
 one of them takes a step at a time. Each sits behind a switch, controlled by the
 current process identifier (pid): a pid names one slot, whose process takes one
 step, while every other slot emits \code{None} without moving. Each slot
-\changed{(\m{process_pool})} is a
+(\m{process_pool}) is a
 \code{swi} whose input bit says whether the pid names it, which opens its switch;
 the slot tags each output with \code{true}, which closes the switch again, so a
 selected process takes exactly one step (\cref{fig:semantics}).
-\changed{Inside the switch a \code{maybe} makes the process's own input optional:
+Inside the switch a \code{maybe} makes the process's own input optional:
 \m{f_proj} gives the private user the disk handler's output, and every other process,
-whose input type is empty, \code{None}.}
+whose input type is empty, \code{None}.
 
 By the rule for \code{par} (\cref{fig:semantics}), the pool emits the
-outputs of all its slots together. So the \changed{pool} emits a six-tuple
+outputs of all its slots together. So the pool emits a six-tuple
 whose positions have types $A + 1$, with \code{Some} where the slot ran and
 \code{None} elsewhere, the output type \code{T_out}, with exactly one \code{Some} on
 each step. The output therefore
 records not only what was computed but also \emph{who ran}: the schedule is part of
 what the system emits.
 
-\changed{Around the whole pool sits a second \code{maybe}, so that an interrupt, which
-reaches the pool as \code{None}, leaves it unchanged.}
+Around the whole pool sits a second \code{maybe}, so that an interrupt, which
+reaches the pool as \code{None}, leaves it unchanged.
 
 \subsection{The state}\label{sec:global-state}\label{sec:state}
 
-\leavevmode\changed{Around the pool sits a state cell, a \code{sta} whose value and two update
+Around the pool sits a state cell, a \code{sta} whose value and two update
 functions together model the interrupt controller of \cref{sec:interrupts}, along with
-the remaining bookkeeping.}
+the remaining bookkeeping.
 The global state (\m{state_type}) is the box of \cref{fig:system}
 opened up: a nest of pairs holding two pids, two flags and the interrupt controller.
 
@@ -98,39 +98,39 @@ opened up: a nest of pairs holding two pids, two flags and the interrupt control
 \item The \emph{previous pid}, a number or \code{None}, is the user process a handler
   interrupted.
 \item The \emph{reschedule flag} is the boolean \m{re_sched}.
-\item The \emph{slice counter} \m{slice_count} \changed{counts the output steps until
-  the current time slice closes, and is \code{0} outside a slice}; the ordinary
-  policy leaves it \changed{\code{0}}.
-\item The \emph{interrupt controller} \m{ic} holds \changed{the two bits of
-  \cref{sec:interrupts}} for each handler. Its entries are indexed by \m{irq}, of type
+\item The \emph{slice counter} \m{slice_count} counts the output steps until
+  the current time slice closes, and is \code{0} outside a slice; the ordinary
+  policy leaves it \code{0}.
+\item The \emph{interrupt controller} \m{ic} holds the two bits of
+  \cref{sec:interrupts} for each handler. Its entries are indexed by \m{irq}, of type
   $\mathit{Interrupt} + 1$:
   \code{timer_irq} and \code{disk_irq} for the two interrupts, and
   \code{nop_irq}, which is \code{None}, for the NOP handler.
 \end{itemize}
 
-\changed{The two update functions correspond to the two kinds of step of
+The two update functions correspond to the two kinds of step of
 \cref{sec:background}. The input update $f$ records an interrupt
-and decides nothing:}
+and decides nothing:
 \begin{lstlisting}
 input_update e v :=
   if e is inl i then set_pending i v else v
 \end{lstlisting}
-\changed{\m{set_pending} sets the arriving interrupt's pending bit. Its argument is a
+\m{set_pending} sets the arriving interrupt's pending bit. Its argument is a
 sum because of the loop, and \cref{sec:loop} explains the \code{inr} case. The output
-update $g$ runs on each output of the pool, and is where the interrupt policy acts:}
+update $g$ runs on each output of the pool, and is where the interrupt policy acts:
 \begin{lstlisting}
 output_update observe_policy advance_policy o :=
   initiate_next o \o
     (advance_policy \o observe_policy o)
 \end{lstlisting}
-\changed{Its first two stages together are the \emph{service policy}, and are left
+Its first two stages together are the \emph{service policy}, and are left
 open here. \code{observe_policy} reacts to what the output says, and
 \code{advance_policy} reads only the state. The third stage,
-\m{initiate_next}, computes the next pid.}
+\m{initiate_next}, computes the next pid.
 
-\changed{If several handlers can start, the timer goes first, then the disk, then NOP.}
-\changed{\m{initiate_next} first adopts the pid the scheduler
-proposed, if the scheduler ran (\m{apply_scheduler_choice}), and then} chooses by
+If several handlers can start, the timer goes first, then the disk, then NOP.
+\m{initiate_next} first adopts the pid the scheduler
+proposed, if the scheduler ran (\m{apply_scheduler_choice}), and then chooses by
 four rules, tried in order:
 \begin{enumerate}
 \item if a handler is running (all masks are set), it continues;
@@ -139,6 +139,7 @@ four rules, tried in order:
   process it interrupted, or to the scheduler if a reschedule was requested;
 \item otherwise, the current process continues.
 \end{enumerate}
+\todo{page budget: the next sentences name helpers no later section needs, apart from what \cref{sec:proof} says about \code{initiate_next}. Check each, and cut those only the Rocq reader wants.}
 \m{first_ready} picks the first handler that can be started, in the order above.
 \m{initiate_handler} saves the current pid as the previous pid, unless it is a
 secret handler, points the current pid at the handler, sets all masks and clears
@@ -147,32 +148,32 @@ clears \m{re_sched}; \m{initiate_prev_pid} returns to the previous pid.
 
 \subsection{The loop}\label{sec:loop}
 
-\leavevmode\changed{So far the state computes a next pid, but the pool has no way to learn it. A
+So far the state computes a next pid, but the pool has no way to learn it. A
 switch opens only on an input (\cref{fig:semantics}), so after an output the next pid
 must reach the pool as an input, and only \code{loop} supplies one: it feeds each
 output back as an input, within the same step. \m{pool_input} turns a fed-back output
 \code{o} into the input \code{Some (pid, dI_out o)}, with the current pid of the state,
-and so does the loop's two jobs.}
+and so does the loop's two jobs.
 
-\changed{The first job is to deliver the pid: without it, no switch would reopen after
+The first job is to deliver the pid: without it, no switch would reopen after
 the first step. The second is to give the private user the disk handler's output. The
 private user is the legitimate consumer of the disk event, and this input is what makes
-the effect of the disk handler's run visible in user space (\cref{sec:leak}).}
+the effect of the disk handler's run visible in user space (\cref{sec:leak}).
 
-\changed{\code{loop} needs equal input and output types, while the system takes
+\code{loop} needs equal input and output types, while the system takes
 interrupts and emits tuples. So inside the loop an event is a sum, \code{T_in + T_out},
 with interrupts as \code{inl} and outputs as \code{inr}. The map inside the loop tags
 each output \code{inr} and drops the state that \code{sta} emits with it. When an
 output comes back, $g$ has already updated the state, so \m{input_update} leaves the
 state alone on \code{inr}, and \m{pool_input} reads the new pid from it. An interrupt
 is \code{inl}, which \m{pool_input} sends to \code{None}. The feedback is part of the
-output step, so no interrupt can arrive between the update and the feedback.}
+output step, so no interrupt can arrive between the update and the feedback.
 
 \subsection{The generic model}\label{sec:parameters}
 
-\leavevmode\changed{A last map gives the loop the system's own input and output types: the wrapper
+A last map gives the loop the system's own input and output types: the wrapper
 \m{reactive_system} is the loop of \cref{fig:system}, built from the constructors of
-\cref{fig:semantics}.}
+\cref{fig:semantics}.
 
 \noindent\begin{minipage}{\linewidth}
 \begin{lstlisting}
@@ -184,12 +185,12 @@ reactive_system state input_update
         (map pool_input id (maybe p)))))
 \end{lstlisting}
 \end{minipage}
-\changed{The outer \code{map} tags an arriving interrupt \code{inl}, and} \m{inr_or_def}
-strips the \code{inr} tag \changed{from each output}. Its
+The outer \code{map} tags an arriving interrupt \code{inl}, and \m{inr_or_def}
+strips the \code{inr} tag from each output. Its
 default \m{no_output}, the all-\code{None} tuple, only makes it total: every output
 is tagged \code{inr}.
 
-Together, these parts form the generic model, the pool inside the global state:
+Together, these parts form the generic model, the pool inside the global state:\todo{page budget: two listings for one term, and \cref{sec:proof} prints it a third time. Show \code{model} with the \code{reactive_system} body inlined, once.}
 
 \noindent\begin{minipage}{\linewidth}
 \begin{lstlisting}
@@ -210,16 +211,16 @@ the user processes and the scheduler; the user processes' output types, also
 arguments, are left implicit.
 
 Apart from the processes and the handler length, everything in
-\changed{\cref{sec:processes,sec:pool,sec:global-state,sec:loop}} is fixed, except
-\changed{three} parts, marked by the suffix \code{_policy}:
+\cref{sec:processes,sec:pool,sec:global-state,sec:loop} is fixed, except
+three parts, marked by the suffix \code{_policy}:
 \begin{itemize}
 \item \code{init_policy}, the initial state, a value of the type of
   \cref{sec:global-state}. Its masks decide which interrupts can be serviced before
   anything has happened.
-\item \changed{\code{observe_policy} and \code{advance_policy}, the service policy of
-  \cref{sec:state}. Between them they reopen the masks, and so decide} when the next
+\item \code{observe_policy} and \code{advance_policy}, the service policy of
+  \cref{sec:state}. Between them they reopen the masks, and so decide when the next
   handler becomes eligible.
 \end{itemize}
 Together they decide \emph{when a handler may run}, and we call them the
-\emph{interrupt policy}. \Cref{sec:designs} fills the \changed{three} parts of the
+\emph{interrupt policy}. \Cref{sec:designs} fills the three parts of the
 interrupt policy twice.

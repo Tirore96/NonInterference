@@ -91,6 +91,7 @@ state: it sets a pending bit, decides which handler fills a run, and changes wha
 the private user process does next. The proof must show that none of this ever
 decides whether, or for how long, a secret handler runs (\cref{sec:proof}).
 
+\todo{page budget: this paragraph and the previous one restate the abstract and are stated again in the contributions; the introduction runs to two pages. Tighten to one statement of the policy and one of the result.}
 We prove this policy non-interfering (\m{model_sliced_NI}), even to an attacker who
 sees at every step which process ran, except which of the two secret handlers.
 The user view is a projection of this output, so the result carries over
@@ -112,14 +113,14 @@ implement it in an operating system is carried out in separate work
   (\cref{sec:designs,sec:proof}), and a mechanised counterexample for ordinary
   interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one
   generic theorem per constructor of the model, which leaves two side conditions
-  specific to interrupt handling, one of them hard (\cref{sec:state-equiv}).
-\item Requirements, read off the proof's obligations, \changed{that suffice for an
+  specific to interrupt handling, one of them hard (\cref{sec:state-equiv}).\todo{inconsistent: \cref{sec:proof} now calls both steps hard. Align, and point to the two lemmas once they exist.}
+\item Requirements, read off the proof's obligations, that suffice for an
   implementation of interrupt handling to be non-interfering
   (\cref{sec:state-equiv,sec:update,sec:invariant}). The
   arrival of a secret interrupt only records that it is pending. When secret
   handlers run, and for how long, is fixed by public events, so the time
   reserved for them is fixed in advance and always used up. And the interrupt
-  controller is split by secrecy}: which interrupts are pending is secret, while
+  controller is split by secrecy: which interrupts are pending is secret, while
   the masks that decide what runs next are public. The implementation in
   \todo{cite X} follows these requirements.
 \item A mechanisation of the calculus and its composition theorems. Our
@@ -128,13 +129,13 @@ implement it in an operating system is carried out in separate work
   definition equivalent to the original coinductive one, so our main results also
   hold in the original's terms (\cref{sec:mechanisation}). We also add sum
   types, which the original lacks, and present its optional values and parts of
-  the model as sums, proved equal to the mechanised definitions\changed{, and a
+  the model as sums, proved equal to the mechanised definitions, and a
   composition theorem for state cells under an invariant, which lets the proof use
-  what the policy maintains on the states it reaches}.
+  what the policy maintains on the states it reaches.\todo{the departures are told three times: here, in the opening of \cref{sec:background} and in \cref{sec:departures}. Keep one line here and one there.}
 \end{itemize}
 
 \Cref{sec:background} recalls the calculus and the definition of non-interference.
-\Cref{sec:model} presents the generic model and \cref{sec:designs} \changed{what the attacker sees of it and} the two interrupt policies.
+\Cref{sec:model} presents the generic model and \cref{sec:designs} what the attacker sees of it and the two interrupt policies.
 \Cref{sec:proof} gives the proof, and \cref{sec:mechanisation} describes the
 mechanisation.
-\Cref{sec:related,sec:conclusion} discuss related work and limitations.
+\Cref{sec:related,sec:conclusion} discuss related work and limitations.\todo{update when the scope paragraph lands in \cref{sec:mechanisation}.}

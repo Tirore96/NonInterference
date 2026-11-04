@@ -19,22 +19,24 @@ file & lines & contents \\
 \midrule
 \mechfile{theories/definitions.v}{definitions.v} & \mechlines{definitions.v} & the calculus, traces, $\NI$, the equivalences \\
 \mechfile{theories/theorems.v}{theorems.v} & \mechlines{theorems.v} & the composition theorems \\
-\mechfile{theories/generic_model.v}{generic_model.v} & \mechlines{generic_model.v} & \leavevmode\changed{the generic model} \\
-\mechfile{theories/concrete_system.v}{concrete_system.v} & \mechlines{concrete_system.v} & \leavevmode\changed{a concrete system, the state along a run} \\
-\mechfile{theories/model_immediate.v}{model_immediate.v} & \mechlines{model_immediate.v} & \leavevmode\changed{the ordinary policy and its traces} \\
-\mechfile{theories/model_sliced.v}{model_sliced.v} & \mechlines{model_sliced.v} & \leavevmode\changed{the sliced policy, the slice invariant (\cref{lem:gated}), its traces} \\
+\mechfile{theories/generic_model.v}{generic_model.v} & \mechlines{generic_model.v} & the generic model \\
+\mechfile{theories/concrete_system.v}{concrete_system.v} & \mechlines{concrete_system.v} & a concrete system, the state along a run \\
+\mechfile{theories/model_immediate.v}{model_immediate.v} & \mechlines{model_immediate.v} & the ordinary policy and its traces \\
+\mechfile{theories/model_sliced.v}{model_sliced.v} & \mechlines{model_sliced.v} & the sliced policy, the slice invariant (\cref{lem:gated}), its traces \\
 \mechfile{theories/noninterference.v}{noninterference.v} & \mechlines{noninterference.v} & the model's equivalences, \cref{thm:leak,thm:main,cor:leak-userview,cor:userview} \\
 \mechfile{theories/adequacy.v}{adequacy.v} & \mechlines{adequacy.v} & the original definitions, the equivalences with ours, \cref{thm:leak,thm:main} in the original's terms \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
+\todo{\cref{tab:files} lists files but not where the hard results live. Once the lemmas exist, name their files, and add the size of the proof of \cref{thm:main} if a number is honest to give. Also consider putting Figures last among these paragraphs; it is the least important.}
+
 \paragraph{Figures} The runs drawn in \cref{fig:leak,fig:run-ordinary,fig:run-sliced}
 are proved traces of the models, and the state rows of
-\cref{fig:run-ordinary,fig:run-sliced} are computed by \changed{\m{state_step}} and
+\cref{fig:run-ordinary,fig:run-sliced} are computed by \m{state_step} and
 stated as lemmas (\m{immediate_states_with_dI}, \m{sliced_states_with_dI} and their
-siblings), from which the figures are generated. \changed{\m{run_states_model} shows
-that these are the states the model holds along those runs.}
+siblings), from which the figures are generated.\todo{generated in an earlier session, and the script is not in the repository, so reword to ``the figures show these rows''. Compare the rows against the lemmas once.} \m{run_states_model} shows
+that these are the states the model holds along those runs.
 
 \paragraph{Types} Input and output types range over an inductive universe \m{Ty} of
 codes, interpreted into \code{Set}, rather than over \code{Set} directly. This makes
@@ -46,6 +48,8 @@ parameters: no classical logic, and no uniqueness of identity
 proofs. The latter is what dependent elimination on the type-indexed reduction
 relations would need; we invert reductions through determinism of reduction
 instead, one lemma per rule (\m{inv_mapO} and its siblings).
+
+\todo{change 3: add a short \emph{Scope} paragraph on what the theorems do and do not cover. From our own development: \cref{thm:leak} is for the concrete system only, while \cref{thm:main} is parametric; the pool shape and slot count are fixed; \cref{cor:leak-userview,cor:userview} are not restated in the original's terms; the listings are typed by hand, not extracted from Rocq. Sections VI-A and VI-B already cover the departures, so do not repeat them. How the model compares with a real system stays in \cref{sec:conclusion}.}
 
 \paragraph{Levels} For presentation, this paper reads levels as the two-point
 lattice. The mechanisation works over any partial order with a least
@@ -59,17 +63,17 @@ apart from all others, so the proofs split on $\ell = \Lo$ against $\ell \neq \L
 and the second case covers every other level at once; $\Hi$ in
 $\priveq$ and $1^\Hi$ stands for all levels but $\Lo$.
 
-\paragraph{Invariants} \changed{\Cref{thm:sta-pred} is our addition to the calculus,
+\paragraph{Invariants}\todo{mostly repeats the end of \cref{sec:composition}; cut, or keep only what is specific to the Rocq proof.} \Cref{thm:sta-pred} is our addition to the calculus,
 like sum types; the original composition theorems are mechanised unchanged. Its proof
 is that of \comp{it:sta}, with the predicate threaded through the lemmas that relate
-a trace of \code{sta} to a trace of its inner process.}
+a trace of \code{sta} to a trace of its inner process.
 
 \subsection{Non-interference over finite traces}\label{sec:departures}
 
 Our definitions follow Rafnsson et al., with one essential departure. The original
 defines non-interference as a coinductive simulation over infinite streams of
 labels, whose clauses apply at the head of a stream. We quantify over finite traces
-instead, with closure clauses that apply at an arbitrary position (Definition 1).
+instead, with closure clauses that apply at an arbitrary position (Definition 1).\todo{use a cross-reference to the new label \code{def:ni}.}
 This makes every proof in the development an induction on a trace.
 
 The original definition is written out in \mechfile{theories/adequacy.v}{adequacy.v},
@@ -110,6 +114,7 @@ $\eqo{X} + {\eqv{Y}^\circ}$ (\m{eqsum_L_sum_rel}), and $(\pubeq)^\circ$ is
 $\pubeq$ (\m{eqvisible_public_rel}). No proof depends on the presentation, and
 the calculus is the original's, with sums added.
 
+\todo{page budget: this paragraph is the history of the development, and a reader needs only the agreement lemmas. Reduce it to one sentence.}
 Interrupts are the same technique applied the other way round: there the
 mechanisation was changed to match the presentation. The input type is the sum
 $\mathit{Unit} + \mathit{Unit}$, with the disk interrupt on the \code{inl} side, and

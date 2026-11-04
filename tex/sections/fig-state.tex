@@ -26,8 +26,8 @@
 \draw[rounded corners=2pt] (-0.07,-3.22) rectangle (3.07,0.28);
 \node[anchor=south] at (1.5,0.28) {global state: $\times$};
 \end{tikzpicture}
-\caption{The global state \changed{of \cref{sec:global-state}}, field by field,
-  \changed{shaded as in \cref{fig:io} by the state equivalence (\cref{def:state})}. The current pid is a sum: its \texttt{inl}
+\caption{The global state of \cref{sec:global-state}, field by field,
+  shaded as in \cref{fig:io} by the state equivalence (\cref{def:state}). The current pid is a sum: its \texttt{inl}
   side holds a secret handler (an S step), a \texttt{Bool} saying which one, and
   its \texttt{inr} side the number of any other process (U or T). Its
   equivalence is $\privvis + \pubeq$ (\cref{def:formers}), so

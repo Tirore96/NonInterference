@@ -36,8 +36,8 @@
 \caption{The model. An interrupt only updates the global state. The state's pid
   selects one slot, which takes a step and emits \texttt{Some o}; every other slot
   emits \texttt{None}. Because the slots are composed with \texttt{par}, their
-  outputs form a product, a six-tuple, which \changed{updates the state, is emitted, and
-  is fed back so that the pool receives the new pid}. The input is a sum of the two
+  outputs form a product, a six-tuple, which updates the state, is emitted, and
+  is fed back so that the pool receives the new pid. The input is a sum of the two
   interrupts.}
 \label{fig:system}
 \end{figure}
