@@ -15,6 +15,7 @@ Print Assumptions model_immediate_not_NI.
 Print Assumptions model_policy_NI.
 Print Assumptions model_sliced_NI.
 Print Assumptions model_timer_unmasked_NI.
+Print Assumptions trace_timer_in_slice'.
 Print Assumptions model_sliced_userview_NI.
 Print Assumptions sliced_run_gated.
 Print Assumptions run_states_model.

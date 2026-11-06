@@ -100,3 +100,91 @@ case E1: (get_slice_count v1) => [|[|n]].
 Qed.
 
 End TimerUnmaskedInvariant.
+
+
+(* The concrete instance, with the slice of model_sliced.v. *)
+Definition model_timer_unmasked_concrete :=
+  model_timer_unmasked handler_runtime slice_runs p_pub_concrete p_priv_concrete scheduler.
+
+(* With no timer interrupt inside a slice the runs are those of [model_sliced]. *)
+Lemma trace_timer_unmasked_no_dI' l : Trace (public_equiv _) l sliced_no_dI' model_timer_unmasked_concrete.
+Proof. rewrite /model_timer_unmasked_concrete /model_timer_unmasked. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 12 trace_step. trace_last. Qed.
+
+Lemma trace_timer_unmasked_with_dI' l : Trace (public_equiv _) l sliced_with_dI' model_timer_unmasked_concrete.
+Proof. rewrite /model_timer_unmasked_concrete /model_timer_unmasked. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 13 trace_step. trace_last. Qed.
+
+(* A timer interrupt arrives during the first NOP run.  At the next boundary the
+   timer handler runs, inside the slice, and its completion reloads the counter:
+   the slice lasts eight output steps where [sliced_no_dI'] has four. *)
+Definition timer_in_slice' : seqtype' := [::out_get';out_get';out_get';tI';out_get';tmr_step';tmr_done';nop_step';tI';nop_done';tmr_step';tmr_done';nop_step';nop_done';nop_step';nop_done';sched_priv';out_nop'].
+
+Lemma trace_timer_in_slice' l : Trace (public_equiv _) l timer_in_slice' model_timer_unmasked_concrete.
+Proof. rewrite /model_timer_unmasked_concrete /model_timer_unmasked. rewr;simpl;rewr;simpl;rewr;simpl;rewr. do 17 trace_step. trace_last. Qed.
+
+
+Definition timer_unmasked_states :=
+  run_states sliced_init (@observe_timer_output handler_runtime slice_runs TPublicOutput TTypeSyscall)
+             (tick_unmasked handler_runtime).
+
+Lemma timer_unmasked_states_no_dI : seq.map state_row (timer_unmasked_states sliced_no_dI') =
+  [:: (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, true, true, false, false);
+      (0, true, true, false, false);
+      (4, true, true, false, false);
+      (3, true, true, false, false);
+      (2, true, true, false, false);
+      (1, true, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false)].
+Proof. by vm_compute. Qed.
+
+Lemma timer_unmasked_states_with_dI : seq.map state_row (timer_unmasked_states sliced_with_dI') =
+  [:: (0, false, true, false, false);
+      (0, false, true, true, false);
+      (0, false, true, true, false);
+      (0, false, true, true, false);
+      (0, false, true, true, false);
+      (0, true, true, true, false);
+      (0, true, true, true, false);
+      (4, true, true, false, true);
+      (3, true, true, false, true);
+      (2, true, true, false, false);
+      (1, true, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false)].
+Proof. by vm_compute. Qed.
+
+Lemma timer_unmasked_states_in_slice : seq.map state_row (timer_unmasked_states timer_in_slice') =
+  [:: (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, true, true, false, false);
+      (0, true, true, false, false);
+      (4, true, true, false, false);
+      (3, true, true, false, false);
+      (3, true, true, false, false);
+      (2, true, true, false, true);
+      (1, true, true, false, true);
+      (4, true, true, false, false);
+      (3, true, true, false, false);
+      (2, true, true, false, false);
+      (1, true, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false);
+      (0, false, true, false, false)].
+Proof. by vm_compute. Qed.
+
+
+Corollary timer_unmasked_states_model l (es : seqtype') n :
+  Trace (public_equiv _) l es model_timer_unmasked_concrete -> n < size es ->
+  exists q', Steps (take n.+1 es) model_timer_unmasked_concrete
+    (system (@observe_timer_output handler_runtime slice_runs TPublicOutput TTypeSyscall)
+            (tick_unmasked handler_runtime)
+            (nth sliced_init (timer_unmasked_states es) n) q').
+Proof. exact: run_states_model. Qed.

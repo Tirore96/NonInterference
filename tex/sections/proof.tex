@@ -239,7 +239,7 @@ $\mathsf{masked}_S$, \m{queue_secret_run} makes $\mathsf{ready}_N$ hold, and eve
 step leaves the masks alone. \Cref{sec:update} gave the third. Masking the timer at a
 boundary is no obligation: the same policy with the timer left unmasked is also secure
 (\m{model_timer_unmasked_NI}), though its handler can then run inside a slice and
-extend it.
+extend it (\m{timer_unmasked_states_in_slice}).
 
 \begin{lemma}[State cell, \m{policy_state_cell_NI}]\label{lem:state-cell}
 Under the obligations of \cref{thm:policy}, if

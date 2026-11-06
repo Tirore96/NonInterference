@@ -15,8 +15,8 @@ Open Scope order_scope.
 Require Export NonInterference.theories.generic_model.
 
 (* =================================================================
-   One concrete system, shared by the instances in model_immediate.v and
-   model_sliced.v, and the machinery for running a model on it: named events,
+   One concrete system, shared by the instances in model_immediate.v,
+   model_sliced.v and model_timer_unmasked.v, and the machinery for running a model on it: named events,
    trace tactics and the state along a run.
    ================================================================= *)
 

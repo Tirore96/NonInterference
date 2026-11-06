@@ -46,7 +46,7 @@ inverted through determinism of reduction (`inv_*` lemmas in
 | [`theories/concrete_system.v`](theories/concrete_system.v) | a concrete system, trace tactics, the state along a run (`run_states_model`) |
 | [`theories/model_immediate.v`](theories/model_immediate.v) | the immediate policy, its concrete instance, traces and state rows |
 | [`theories/model_sliced.v`](theories/model_sliced.v) | the sliced policy, the slice invariant, the user view, its concrete instance, traces and state rows |
-| [`theories/model_timer_unmasked.v`](theories/model_timer_unmasked.v) | the sliced policy with the timer left unmasked at boundaries |
+| [`theories/model_timer_unmasked.v`](theories/model_timer_unmasked.v) | the sliced policy with the timer left unmasked at boundaries, its concrete instance, traces and state rows |
 | [`theories/noninterference.v`](theories/noninterference.v) | the model's equivalences, Theorems 3, 4 and 5, Corollaries 1 and 2 |
 | [`theories/adequacy.v`](theories/adequacy.v) | the original definitions, their equivalence with ours, the main results in the original's terms |
 
