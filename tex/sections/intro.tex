@@ -22,7 +22,7 @@ process's own output, as the user-view rows of \cref{fig:leak} show.
 Timing leaks through interrupt handling of this kind arise in several operating
 systems \todo{examples, with citations}.
 
-This is the example we follow throughout the paper. The secret is \emph{whether a
+We follow this example throughout the paper: the secret is \emph{whether a
 disk interrupt occurred}, and a private process, the legitimate consumer of the disk
 event, reacts to it. \Cref{sec:model,sec:designs,sec:proof}
 model this system, exhibit the leak, and remove it.
@@ -34,29 +34,28 @@ model this system, exhibit the leak, and remove it.
   cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
   cG/.style={cell, fill=black!28}, cT/.style={cell, fill=black!28},
   cS/.style={cell, fill=black!28}, cP/.style={cell, fill=black!10},
-  cD/.style={cell, fill=white},
-  irq/.style={line width=1.6pt},
-  dsk/.style={double, double distance=1.1pt, line width=0.55pt}]
-\foreach \i in {1,...,8} \node at (0.45*\i, 0.4) {\i};
+  cD/.style={cell, fill=white}]
+\foreach \i in {1,...,8} \node at (0.45*\i, 0.8) {\i};
 \node[anchor=east] at (0.15,0) {no disk interrupt};
+\irqarrow{1.575}{0.42}{T}
 \foreach \c [count=\i] in {G,G,G,G,T,T,S,P} \node[c\c] at (0.45*\i,0) {\c};
 % user view: parse_output keeps the two user slots, every other step is None
 \node[anchor=east] at (0.15,-0.42) {user view};
 \foreach \s/\c [count=\i] in {cG/G,cG/G,cG/G,cG/G,cD/{},cD/{},cD/{},cP/P}
   \node[\s] at (0.45*\i,-0.42) {\c};
-\node[anchor=east] at (0.15,-0.95) {disk interrupt};
-\foreach \c [count=\i] in {G,G,D,D,T,T,S,P} \node[c\c] at (0.45*\i,-0.95) {\c};
-\node[anchor=east] at (0.15,-1.37) {user view};
+\node[anchor=east] at (0.15,-1.3) {disk interrupt};
+\irqarrow{0.675}{-0.88}{D}
+\irqarrow{1.575}{-0.88}{T}
+\foreach \c [count=\i] in {G,G,D,D,T,T,S,P} \node[c\c] at (0.45*\i,-1.3) {\c};
+\node[anchor=east] at (0.15,-1.72) {user view};
 \foreach \s/\c [count=\i] in {cG/G,cG/G,cD/{},cD/{},cD/{},cD/{},cD/{},cP/P}
-  \node[\s] at (0.45*\i,-1.37) {\c};
-\foreach \y in {0,-0.95} \draw[irq] (1.575,\y+0.23) -- (1.575,\y-0.23);
-\draw[dsk] (0.675,-0.72) -- (0.675,-1.18);
+  \node[\s] at (0.45*\i,-1.72) {\c};
 \end{tikzpicture}
 \caption{Who runs at each step under ordinary interrupt handling, with and without a
   disk interrupt. G: public process, P: private process, S: scheduler, T, D: timer
   and disk handler. Shading is what the attacker sees: the step and its value (dark),
-  only that it happened (light), or nothing (white). A solid bar marks the timer
-  interrupt, a hollow bar the disk interrupt. The disk handler takes steps 3 and 4
+  only that it happened (light), or nothing (white). A wavy arrow marks an
+  interrupt arriving between two steps. The disk handler takes steps 3 and 4
   from the public process, a gap the attacker sees. Under each run, its
   user view: only the two user processes, every other step blank. Here the gap can also be seen.}
 \label{fig:leak}
@@ -70,8 +69,8 @@ output appears~\cite{agat2000}.
 
 We use the process calculus of Rafnsson, Jia and Bauer~\cite{rafnsson2017}, whose
 non-interference is timing-sensitive and whose theorems compose: if the parts of a
-process are non-interfering at suitable equivalences, so is the whole. We model an
-operating system with interrupt handling as one closed process in this calculus
+process are non-interfering at suitable equivalences, so is the whole. We model
+interrupt handling and process scheduling as one closed process in this calculus
 (\cref{fig:system}): the user processes, the scheduler and the handlers run in a pool,
 and a global state decides at each step which of them runs. We prove in Rocq that
 ordinary interrupt handling is interfering (\m{model_immediate_not_NI}): the leak
@@ -109,9 +108,9 @@ implement it in an operating system is carried out in separate work
   interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one
   generic theorem per constructor of the model, which leaves two hard steps
   specific to interrupt handling (\cref{lem:state-cell,lem:slot}).
-\item Requirements, read off the proof's obligations, that suffice for an
-  implementation of interrupt handling to be non-interfering
-  (\cref{sec:state-equiv,sec:update,sec:invariant}). The
+\item Requirements that suffice for an implementation of interrupt handling to be
+  non-interfering, stated as a theorem over interrupt policies with our policy as one
+  instance (\cref{thm:policy}). The
   arrival of a secret interrupt only records that it is pending. When secret
   handlers run, and for how long, is fixed by public events, so the time
   reserved for them is fixed in advance and always used up. And the interrupt

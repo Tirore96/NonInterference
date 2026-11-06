@@ -1,12 +1,12 @@
 \section{The Security Proof}\label{sec:proof}
-This section proves \cref{thm:main}. Most steps of the proof are routine, and the two
+This section proves \cref{thm:main} as an instance of a theorem about any interrupt
+policy (\cref{thm:policy}). Most steps of the proof are routine, and the two
 that are not, \cref{lem:state-cell,lem:slot}, take up the rest of the section.
 
-\emph{Proof outline.} The proof unfolds \m{model_sliced} and
+\emph{Proof outline.} The proof unfolds \m{model} and
 applies \cref{thm:composition} one constructor at a time, from the outermost inwards,
 with \cref{thm:sta-pred} for the state cell. The term is the listing of
-\cref{sec:parameters}, with \code{sliced_init} as initial state and
-\code{par slot_1 (... slot_6)} as the pool, where
+\cref{sec:parameters}, with \code{par slot_1 (... slot_6)} as the pool, where
 \begin{lstlisting}
 slot_n :=
  map gamma_n id
@@ -31,11 +31,11 @@ The loop asks the same of its argument, a map that drops the state and tags the 
 Writing $f$ and $g$ for \m{input_update} and \m{output_update}, and $\Ev$ for the state
 equivalence (\cref{def:state}), this reduces to
 \[
-\mathsf{sta}\;f\;g\;\mathsf{sliced\_init}\;p
+\mathsf{sta}\;f\;g\;\mathsf{init\_policy}\;p
   \in \NI(\Ein + \Eout,\, \Ev \times \Eout)
 \]
 This is the first hard step, \cref{lem:state-cell}. \Cref{thm:sta-pred}, with $P$ the slice invariant
-\m{secret_gated}, needs $P$ to hold of \m{sliced_init}, $f$ and $g$ to preserve $P$,
+$\Gated$ (\cref{def:gated}), needs $P$ to hold of \code{init_policy}, $f$ and $g$ to preserve $P$,
 $f \in \NI_P(\Ein + \Eout,\Ev,\Ev) \cap \mathsf{PE}_P(\Ein + \Eout,\Ev)$ and
 $g \in \NI_P(\Eout,\Ev,\Ev)$. It is $g$ that decides whether a secret handler runs
 (\cref{sec:state-equiv,sec:update,sec:invariant}). What remains is the argument of the
@@ -64,7 +64,7 @@ output equivalences of the process, where $\Eout_n$ has the form $\Ey_n + \one^S
 
 \subsection{The state equivalence}\label{sec:state-equiv}
 
-The proof chooses the following equivalence on the state.
+The proof's main choice is what the attacker may see of the state.
 
 \begin{definition}[State equivalence]\label{def:state}
 The state equivalence $\Ev$ (\m{state_type_equiv}) is
@@ -103,8 +103,8 @@ where a condition forces it:
   two states that disagreed on a mask, or on whether a slice is
   open, could enter S in one and not in the other.
 \end{itemize}
-Conversely, at $\Lo$ two states are related exactly when their public fields
-agree (\m{state_rel_bot}), and above $\Lo$ exactly when they are equal. So a stage
+The shape of $\Ev$ makes most stages easy. At $\Lo$ two states are related exactly when
+their public fields agree (\m{state_rel_bot}), and above $\Lo$ exactly when they are equal. So a stage
 whose result has public fields computed from public fields alone, of the state and
 of the output, is non-interfering; we call such a stage \emph{routine}.
 
@@ -122,29 +122,27 @@ The conditions on $f$ hold on every state (\m{input_update_EP},
 private bit (\m{set_pending_NI}), $\Ein + \Eout$ never relates an interrupt to an
 output, and a fed-back output leaves the state alone. The hard obligation is
 $g \in \NI_P(\Eout,\Ev,\Ev)$. On output $o$, $g$ is the
-composite $\mathsf{initiate\_next}\;o \circ \mathsf{sliced\_service}\;o$, and the
+composite $\mathsf{initiate\_next}\;o \circ \mathsf{service}\;o$, where
+$\mathsf{service}\;o$ is the service policy,
+$\mathsf{advance\_policy} \circ \mathsf{observe\_policy}\;o$, and the
 proof takes its stages one at a time (\m{fv_NI_comp}, \cref{fig:lane}).
 
-The service policy is routine (\cref{sec:state-equiv}): both its stages read only the
-counter and the timer handler's output, which are public, so it is non-interfering on
-every pair of related states (\m{sliced_service_NI}).
-\m{initiate_next} is different: it reads the private pending bits. Its
+The service policy must be non-interfering on every pair of related states, which is an
+obligation on the policy (\cref{thm:policy}). For the sliced policy this is routine
+(\cref{sec:state-equiv}): both its stages read only the
+counter and the timer handler's output, which are public (\m{sliced_service_NI}).
+\m{initiate_next} is the same for every policy, and it reads the private pending bits. Its
 first step, the scheduler's choice, is routine. Then the timer's
 readiness is public, so both states agree on it. Otherwise, in each state the
 secret handler ready to start is the disk handler, the NOP handler, or none. Disk in
 one state and NOP in the other is harmless: both start an \code{inl} pid, whose
 value is private. A secret handler in one state and none in the other is fatal: one
 state enters S and the other continues a user process. So the stage needs
-one fact of each of the two states it receives:
+one fact of each of the two states it receives: unless all masks are set, a slice is
+open exactly when a secret handler is ready (\cref{def:ready}).
 
-\begin{definition}[Ready iff open,\newline \m{secret_ready_iff_slice}]\label{def:ready}
-A state $w$ satisfies \m{secret_ready_iff_slice} if, unless all masks are
-set in $w$, a secret handler is ready in $w$ exactly when a slice is open in $w$,
-that is, when its counter is not \code{0}.
-\end{definition}
-
-Whether a slice is open is public. So two related states that satisfy
-\cref{def:ready} agree on whether a secret handler is ready, and
+Whether a slice is open is public. So two related states with this fact agree on
+whether a secret handler is ready, and
 \m{initiate_next} takes them to related states (\m{initiate_next_NI_on}).
 The ordinary policy fails here and in the service policy.
 \m{observe_handler_output} unmasks when any handler completes, the disk
@@ -154,8 +152,8 @@ taken in one run only, which is the counterexample of \cref{thm:leak}.
 
 \subsection{The slice invariant}\label{sec:invariant}
 
-In the states the sliced policy reaches, \cref{def:ready} holds whenever
-\m{initiate_next} chooses: while a slice is open the NOP handler is ready, and
+In the states the sliced policy reaches, this fact holds whenever
+\m{initiate_next} chooses: while a slice is open a secret handler is ready, and
 otherwise neither secret handler is. This is an inductive property, which unreachable
 states may violate. Two unreachable states outside a slice with the disk and NOP handlers unmasked, the disk
 handler pending in one only, are related, and \m{initiate_next} starts a secret
@@ -164,58 +162,131 @@ $g \in \NI(\Eout,\Ev,\Ev)$ on every pair of related states, fails, and $\Ev$ can
 equivalence relates every value to itself. So we use \cref{thm:sta-pred}, with $P$ the
 invariant the sliced policy maintains between steps.
 
-\begin{definition}[Slice invariant]\label{def:gated}
-Let \m{slice_open} hold of a state whose counter is not \code{0}, and
-\m{handler_boundary} of a state in which the NOP handler is pending, the timer masked
-and the disk and NOP handlers unmasked. For a predicate $A$ on states, $v$ is
-\emph{gated by} $A$ (\m{gated}) if
-\begin{itemize}
-\item inside a slice, $A\,v$ holds or all masks are set, and outside a slice the
-  disk mask is set; and
-\item the NOP mask equals the disk mask.
-\end{itemize}
-A state satisfies \m{secret_gated} if it is gated by the false predicate, and
-\m{secret_gated_at_boundary} if it is gated by \m{handler_boundary}.
+\begin{definition}[Slice invariant, \m{secret_gated},\newline \m{secret_gated_at_boundary}]\label{def:gated}
+For a state $v$, write $\mathsf{masked}\,v$ when all three handlers are masked,
+$\mathsf{masked}_S\,v$ when the secret handlers $S = \{D,N\}$ are,
+$\mathsf{ready}_h\,v$ when handler $h$ is pending and unmasked, and
+$\mathsf{open}\,v$ when the counter is not \code{0}. Then
+\begin{align*}
+\Gated\,v \triangleq{}& (\mathsf{open}\,v \Rightarrow \mathsf{masked}\,v) \\
+&\wedge (\neg\mathsf{open}\,v \Rightarrow \mathsf{masked}_S\,v), \\
+\GatedB\,v \triangleq{}& (\mathsf{open}\,v \Rightarrow \mathsf{masked}\,v \vee
+  \mathsf{ready}_D\,v \vee \mathsf{ready}_N\,v) \\
+&\wedge (\neg\mathsf{open}\,v \Rightarrow \mathsf{masked}_S\,v).
+\end{align*}
 \end{definition}
 
 Between steps, then, the secret handlers are masked outside a slice, and a
 handler is running inside one. Where \m{initiate_next} chooses, a slice may also be at
-a handler boundary, in exactly the shape \m{queue_secret_run} leaves; that is the
-disjunct $A$, and it follows the \code{if} of \m{tick_slice}. The invariant passes
-through the output update as in \cref{fig:lane}, by Hoare triples
-(\m{sliced_service_gated}, \m{initiate_next_gated}), and \m{set_pending} preserves
-\m{secret_gated} (\m{set_pending_gated}). The middle state gives \m{initiate_next} its
-fact: every state that satisfies
-\m{secret_gated_at_boundary} satisfies \cref{def:ready}
-(\m{secret_gated_at_boundary_ready}). At a boundary the NOP handler is ready;
-outside a slice both secret handlers are masked. With \m{sliced_init_gated}, by
-induction on the events:
+a handler boundary, where a secret handler must be ready: otherwise control would
+return to user space with the slice still open. This disjunct, which follows the
+\code{if} of \m{tick_slice}, is what keeps the slice going. It is the requirement on an
+implementation, and the NOP handler is how our policy meets it: \m{queue_secret_run}
+makes $\mathsf{ready}_N$ hold at every boundary. $\GatedB$ gives \m{initiate_next} its
+fact:
 
-\begin{lemma}[Invariance, \m{sliced_run_gated}]\label{lem:gated}
-For every sequence of events, the state that \m{model_sliced} reaches from
-its initial state satisfies \m{secret_gated}.
+\begin{definition}[Open iff ready, \m{open_iff_ready}]\label{def:ready}
+\begin{align*}
+\RIO\,v \triangleq{}& \neg\mathsf{masked}\,v \Rightarrow \\
+&(\mathsf{open}\,v \iff \mathsf{ready}_D\,v \vee \mathsf{ready}_N\,v).
+\end{align*}
+\end{definition}
+
+\begin{lemma}[Ready at a choice,\newline \m{secret_gated_at_boundary_ready}]\label{lem:ready}
+If $\GatedB\,v$ then $\RIO\,v$.
 \end{lemma}
 
-The events are arbitrary, so this holds whatever the pool emits. The model contains
-nothing that only the proof needs: the invariant is a predicate on its states.
+\begin{proof}
+Suppose not all masks are set. If a slice is open then a secret handler is ready.
+If none is open then the disk and NOP masks are set, so neither secret
+handler is ready.
+\end{proof}
 
-\begin{lemma}[State cell, \m{sliced_state_cell_NI}]\label{lem:state-cell}
-If $p \in \NI(\Ev \times_R (\Ein + \Eout),\Eout)$, then
+The invariant says nothing about the timer or disk masks at a boundary.
+\m{queue_secret_run} masks the timer so that its handler cannot run inside a slice and
+extend it, and unmasks the disk so that it can claim a run; the proof uses neither.
+
+The invariant passes through the output update as the triple
+$\{\Gated\}\;\mathsf{service}\;o\;\{\GatedB\}$, an obligation on the policy, and then
+$\{\GatedB\}\;\mathsf{initiate\_next}\;o\;\{\Gated\}$ (\cref{fig:lane}). The latter and
+$\{\Gated\}\;\mathsf{set\_pending}\;i\;\{\Gated\}$ hold for every policy
+(\m{initiate_next_gated}, \m{set_pending_gated}). The model contains nothing that only
+the proof needs: the invariant is a predicate on its states, which holds whatever the
+pool emits (\m{sliced_run_gated}).
+
+The rest of the proof uses three facts about the policy, so the result holds for any
+policy that has them:
+
+\begin{theorem}[Policy security, \m{model_policy_NI}]\label{thm:policy}
+Under the hypotheses of \cref{thm:main} on the processes, if
+\begin{enumerate}
+\item\label{it:po-init} $\Gated\,\mathsf{init\_policy}$,
+\item\label{it:po-inv} $\{\Gated\}\;\mathsf{service}\;o\;\{\GatedB\}$ for every output $o$, and
+\item\label{it:po-ni} $\mathsf{service} \in \NI(\Eout,\Ev,\Ev)$,
+\end{enumerate}
+then \m{model} at this policy and these processes is in $\NI(\Ein,\Eout)$.
+\end{theorem}
+
+The theorem concerns security alone: a policy that keeps the secret handlers masked
+forever meets all three obligations. The ordinary policy meets none of them. Its initial
+state leaves the secret handlers unmasked, and its service policy unmasks them when
+any handler completes, which reads a private output.
+
+The sliced policy meets all three, which gives \cref{thm:main}. \m{sliced_init} has the
+counter at \code{0} and the secret handlers masked (\m{sliced_init_gated}). In
+\m{sliced_service} (\m{sliced_service_gated}), \m{close_slice} sets
+$\mathsf{masked}_S$, \m{queue_secret_run} makes $\mathsf{ready}_N$ hold, and every other
+step leaves the masks alone. \Cref{sec:update} gave the third. Masking the timer at a
+boundary is no obligation: the same policy with the timer left unmasked is also secure
+(\m{model_timer_unmasked_NI}), though its handler can then run inside a slice and
+extend it.
+
+\begin{lemma}[State cell, \m{policy_state_cell_NI}]\label{lem:state-cell}
+Under the obligations of \cref{thm:policy}, if
+$p \in \NI(\Ev \times_R (\Ein + \Eout),\Eout)$, then
 \[
-\mathsf{sta}\;f\;g\;\mathsf{sliced\_init}\;p
+\mathsf{sta}\;f\;g\;\mathsf{init\_policy}\;p
   \in \NI(\Ein + \Eout,\, \Ev \times \Eout).
 \]
 \end{lemma}
 
 \begin{proof}
-By \cref{thm:sta-pred}, with $P$ the invariant \m{secret_gated}. $P$ holds initially;
-$f$ and $g$ preserve it, as just shown. The conditions on $f$ hold on every state. For
-$g \in \NI_P(\Eout,\Ev,\Ev)$, two related states satisfying $P$ are taken by the
-service policy to related states satisfying \cref{def:ready}, on which \m{initiate_next}
-is non-interfering (\m{sliced_output_NI_on}).
+By \cref{thm:sta-pred}, with $P$ the invariant $\Gated$. $P$ holds initially
+(obligation~\ref{it:po-init}), and
+$f$ and $g$ preserve it by the triples above. The conditions on $f$ hold on every state. For
+$g \in \NI_P(\Eout,\Ev,\Ev)$, the service policy takes two related states satisfying
+$P$ to related states (obligation~\ref{it:po-ni}) satisfying $\GatedB$
+(obligation~\ref{it:po-inv}), and so $\RIO$ by
+\cref{lem:ready}, on which \m{initiate_next} is non-interfering (\m{policy_output_NI_on}).
 \end{proof}
 
 \subsection{Gating a slot}\label{sec:gating}
+
+The second hard step is the switch around each process.
+
+\begin{figure}[t]
+\centering
+% the gate equivalences the proof of model_sliced_NI chooses (noninterference.v:
+% false_equiv / private_equiv), one framed row per equivalence, its operator in the
+% title; slots in the order of fig:io
+\begin{tikzpicture}[font=\scriptsize]
+\foreach \x/\c in {0/G, 0.6/P, 1.2/S, 1.8/N, 2.4/D, 3.0/T}
+  \node[anchor=south] at (\x+0.3,0.18) {\c};
+\foreach \x in {0, 0.6, 1.2, 3.0}
+  {\draw (\x,-0.18) rectangle (\x+0.6,0.18); \node[font=\tiny] at (\x+0.3,0) {$\Ef$};}
+\foreach \x in {1.8, 2.4} \draw[fill=white] (\x,-0.18) rectangle (\x+0.6,0.18);
+\draw[rounded corners=2pt] (-0.07,-0.25) rectangle (3.67,0.55);
+\node[anchor=south] at (1.8,0.55) {$\Eb$};
+% the gate equivalence of the visible slots: a bit read as a sum
+\foreach \x/\l in {4.4/false, 5.2/true} \node[anchor=south] at (\x+0.4,0.18) {\l};
+\draw[fill=white] (4.4,-0.18) rectangle (5.2,0.18);
+\draw[fill=black!28] (5.2,-0.18) rectangle (6.0,0.18);
+\draw[rounded corners=2pt] (4.33,-0.25) rectangle (6.07,0.55);
+\node[anchor=south] at (5.2,0.55) {$\Ef$: $+$};
+\end{tikzpicture}
+\caption{Gate bits: $\Eb$ per slot, shaded as in \cref{fig:io}.}
+\label{fig:equivs}
+\end{figure}
 
 \begin{lemma}[Slot, \m{slot_visible_NI}, \m{slot_hidden_NI}]\label{lem:slot}
 If $p_n \in \NI(\Ein_n,\Ey_n)$, then $\mathsf{slot}_n \in \NI(\Eq,\Eout_n)$,
@@ -223,8 +294,8 @@ with $\Eout_n$ being $\Ey_n + \one^\Lo$ for a slot that no secret pid selects, a
 $\priveq + \one^\Hi$ for the disk and NOP slots, whose $\Ey_n$ is $\priveq$.
 \end{lemma}
 
-% written out, since wrapfig (fig:equivs) cannot sit inside a proof environment
-\noindent\emph{Proof.} A slot is a map around a switch. The proof chooses an equivalence $\Eb$ on its gate
+\begin{proof}
+A slot is a map around a switch. The proof chooses an equivalence $\Eb$ on its gate
 bit, such that $\Ey_n + \one^{\Aw(\mathsf{true},\Eb)}$ is $\Eout_n$. The map
 \[
 \mathsf{map}\;\gamma_n\;\mathsf{id}\;p \in \NI(\Eq,\Eout_n)
@@ -249,29 +320,6 @@ $p_n \in \NI(\Ein_n,\Ey_n)$, because \code{true} is related to itself.
 At $\Lo$ the two
 secret pids are related, and the slots fall into two groups (\cref{fig:equivs}).
 
-\begin{wrapfigure}{r}{3.3cm}
-\centering
-% the gate equivalences the proof of model_sliced_NI chooses (noninterference.v:
-% false_equiv / private_equiv), laid out like fig:io: one framed column per
-% equivalence, its operator in the title; slots in the order of fig:io
-\begin{tikzpicture}[font=\scriptsize]
-\foreach \y/\c in {0/G, -0.36/P, -0.72/S, -1.08/N, -1.44/D, -1.80/T}
-  \node[anchor=east] at (-0.07,\y) {\c};
-\foreach \y in {0, -0.36, -0.72, -1.80}
-  {\draw (0,\y-0.18) rectangle (0.6,\y+0.18); \node[font=\tiny] at (0.3,\y) {$\Ef$};}
-\foreach \y in {-1.08, -1.44} \draw[fill=white] (0,\y-0.18) rectangle (0.6,\y+0.18);
-\draw[rounded corners=2pt] (-0.07,-2.05) rectangle (0.67,0.25);
-\node[anchor=south] at (0.3,0.25) {$\Eb$};
-% the gate equivalence of the shown slots: a bit read as a sum
-\foreach \y/\l in {0/false, -0.36/true} \node[anchor=east] at (1.53,\y) {\l};
-\draw[fill=white] (1.6,-0.18) rectangle (2.2,0.18);
-\draw[fill=black!28] (1.6,-0.54) rectangle (2.2,-0.18);
-\draw[rounded corners=2pt] (1.53,-0.61) rectangle (2.27,0.25);
-\node[anchor=south] at (1.9,0.25) {$\Ef$: $+$};
-\end{tikzpicture}
-\caption{Gate bits: $\Eb$ per slot, shaded as in \cref{fig:io}.}
-\label{fig:equivs}
-\end{wrapfigure}
 \emph{Every other slot shows whether.} Both secret pids map to \code{false}, so
 related pids go to equal bits, and we take for $\Eb$ the equivalence $\Ef$
 of \cref{fig:equivs} (\m{false_equiv}): $\priveq + \pubeq$ on a bit read as a sum,
@@ -293,9 +341,10 @@ and the output equivalence $\priveq + \one^\Hi$, under which every output, \code
 is unobservable at $\Lo$. This is needed, because when a slice opens the disk slot
 emits \code{Some o} in one run and \code{None} in the other, and the NOP slot the
 reverse. The attacker learns nothing from these two slots, and learns that the
-system is in S only from the others.\hfill\qedsymbol
+system is in S only from the others.
+\end{proof}
 
-\begin{proof}[Proof of \cref{thm:main}]
+\begin{proof}[Proof of \cref{thm:policy}]
 Follow the outline from the outermost constructor inwards. Down to the state cell the
 steps are routine, and \cref{lem:state-cell} handles the cell. Below it, \code{map},
 \code{maybe} and \code{par} leave one obligation per slot, which \cref{lem:slot} reduces

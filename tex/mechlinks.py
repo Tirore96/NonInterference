@@ -14,7 +14,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 THEORIES = os.path.join(HERE, '..', 'theories')
 FILES = ['definitions.v', 'theorems.v', 'generic_model.v', 'concrete_system.v',
-         'model_immediate.v', 'model_sliced.v', 'noninterference.v', 'adequacy.v']
+         'model_immediate.v', 'model_sliced.v', 'model_timer_unmasked.v',
+         'noninterference.v', 'adequacy.v']
 KEYWORDS = ('Lemma', 'Theorem', 'Corollary', 'Definition', 'Fixpoint',
             'CoFixpoint', 'Inductive', 'CoInductive', 'Variant', 'Record',
             'Class', 'Instance')

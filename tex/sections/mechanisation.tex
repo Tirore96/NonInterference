@@ -3,39 +3,21 @@
 The development is about 6{,}000 lines of Rocq 9.0.1, available at
 \url{\repobase}, using Mathematical Components~2.5.0~\cite{mathcomp} with
 Hierarchy Builder~1.10.1, deriving~0.2.2 and, for the coinductive definitions of
-the original paper, paco~4.2.3~\cite{paco} (\cref{sec:development}). Continuous
+the original paper, paco~4.2.3~\cite{paco}. Continuous
 integration rebuilds it on every change and checks that the paper's results
 assume nothing beyond the two parameters that fix the security lattice. Identifiers
 in typewriter font in this paper link to their definitions.
 
-\paragraph{Types} Input and output types range over an inductive universe \m{Ty} of
-codes, interpreted into \code{Set}, rather than over \code{Set} directly. This makes
-reductions invertible, which the negative result needs: refuting non-interference
-means showing that a trace is \emph{not} admitted.
-
-\paragraph{Axioms} The development assumes neither classical logic nor uniqueness of
-identity proofs, which dependent elimination on the type-indexed reductions would
-need; we invert reductions through their determinism, one lemma per rule (\m{inv_mapO}
-and its siblings).
-
 \paragraph{Departures} Our definitions follow Rafnsson et al., with one essential
 departure: the original defines non-interference coinductively over infinite streams,
-and we quantify over finite traces (\cref{def:ni}), which makes every proof in the
-development an induction on a trace. \m{NI_paper} proves the two equivalent, so
-\cref{thm:leak,thm:main} also hold as the original reads them, hypotheses included
-(\m{model_immediate_not_NI_paper}, \m{model_sliced_NI_paper};
-\cref{sec:departures}). The corollaries are stated only in our terms. The paper's sum
-notation is proved to agree with the mechanised forms (\cref{sec:agreement}).
+and we quantify over finite traces (\cref{def:ni}), which makes every proof an
+induction on a trace. \m{NI_paper} proves the two equivalent, so
+\cref{thm:leak,thm:main} also hold as the original reads them. \Appx{} gives the
+details, and the files of the development.
 
-\paragraph{Scope} \Cref{thm:leak} is a counterexample on the concrete system. The
-development fixes the shape of the pool: six slots, with one scheduler, two user
-processes and three handlers, and the two interrupts. The listings in this paper are
-typed by hand from the Rocq sources, to which their identifiers link.
-
-\paragraph{Figures} The runs drawn in \cref{fig:leak,fig:run-ordinary,fig:run-sliced}
-are proved traces of the models, and the state rows of
-\cref{fig:run-ordinary,fig:run-sliced} are computed by \m{state_step} and
-stated as lemmas (\m{immediate_states_with_dI}, \m{sliced_states_with_dI} and their
-siblings), which the figures show. \m{run_states_model} shows
-that these are the states the model holds along those runs.
+\paragraph{Scope} The development fixes the shape of the pool: six slots, with one
+scheduler, two user processes and three handlers, and the two interrupts.
+\Cref{thm:leak} is a counterexample on the concrete system. The listings in this paper are
+typed by hand from the Rocq sources, to which their identifiers link, and the runs in
+the figures are proved traces of the models (\appx).
 

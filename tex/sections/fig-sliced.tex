@@ -19,7 +19,7 @@
   gives the guard on the slice
   counter $n$, which is \texttt{0} in U and T, and the update of its step. No arrow is
   bold, and none is labelled D: S is entered only when the timer handler completes, and
-  left only when $n$ reaches its closing value, \texttt{1}. The output at which the slice opens
+  left only on the slice's last step, where $n$ is \texttt{1}. The output at which the slice opens
   both loads the counter, with $\mathit{runs}\cdot\mathit{runtime}+1$, and ticks it. Inside S the disk
   handler, if pending, takes a run the NOP handler would otherwise fill; that choice is
   all the secret decides.}
@@ -34,15 +34,13 @@
   cG/.style={pub}, cT/.style={pub}, cS/.style={pub}, cP/.style={cell, fill=black!10},
   cD/.style={priv}, cN/.style={priv},
   head/.style={anchor=west, font=\scriptsize\itshape},
-  diff/.style={draw, line width=1.3pt, minimum width=0.45cm, minimum height=0.4cm},
-  irq/.style={line width=1.6pt},
-  dsk/.style={double, double distance=1.1pt, line width=0.55pt}]
+  diff/.style={draw, line width=1.3pt, minimum width=0.45cm, minimum height=0.4cm}]
 \foreach \i in {1,...,12} \node at (0.45*\i, 0.4) {\i};
 % without the disk interrupt
-\node[head] at (-1.75,0.00) {without the disk interrupt};
+\node[head, anchor=east] at (0.15,0.00) {no disk interrupt};
+\irqarrow{1.575}{0.00}{T}
 \node[anchor=east] at (0.15,-0.42) {runs};
 \foreach \c [count=\i] in {G,G,G,G,T,T,N,N,N,N,S,P} \node[c\c] at (0.45*\i,-0.42) {\c};
-\draw[irq] (1.575,-0.19) -- (1.575,-0.65);
 \node[anchor=west] at (5.67,-0.42) {\texttt{Idle}};
 \node[anchor=east] at (0.15,-0.82) {slice counter};
 \foreach \c [count=\i] in {0,0,0,0,0,0,4,3,2,1,0,0} \node[pub] at (0.45*\i,-0.82) {\c};
@@ -53,12 +51,12 @@
 \node[anchor=east] at (0.15,-2.02) {NOP pending};
 \foreach \c [count=\i] in {{},{},{},{},{},{},{},{},{},{},{},{}} \node[priv] at (0.45*\i,-2.02) {\c};
 % with the disk interrupt
-\node[head] at (-1.75,-2.67) {with the disk interrupt};
+\node[head, anchor=east] at (0.15,-2.67) {disk interrupt};
+\irqarrow{0.675}{-2.67}{D}
+\irqarrow{1.575}{-2.67}{T}
 \node[anchor=east] at (0.15,-3.09) {runs};
 \foreach \c [count=\i] in {G,G,G,G,T,T,D,D,N,N,S,P} \node[c\c] at (0.45*\i,-3.09) {\c};
 \foreach \i in {7,8} \node[diff] at (0.45*\i,-3.09) {};
-\draw[irq] (1.575,-2.86) -- (1.575,-3.32);
-\draw[dsk] (0.675,-2.86) -- (0.675,-3.32);
 \node[anchor=west] at (5.67,-3.09) {\texttt{Sys}};
 \node[anchor=east] at (0.15,-3.49) {slice counter};
 \foreach \c [count=\i] in {0,0,0,0,0,0,4,3,2,1,0,0} \node[pub] at (0.45*\i,-3.49) {\c};
@@ -70,11 +68,9 @@
 \node[anchor=east] at (0.15,-4.69) {NOP pending};
 \foreach \c [count=\i] in {{},{},{},{},{},{},{$\bullet$},{$\bullet$},{},{},{},{}} \node[priv] at (0.45*\i,-4.69) {\c};
 \foreach \i in {7,8} \node[diff] at (0.45*\i,-4.69) {};
-\draw (2.925,-5.17) -- (2.925,-5.27) -- (4.255,-5.27) -- (4.255,-5.17);
-\node[anchor=north, text height=1.5ex, text depth=.25ex] at (3.600,-5.27) {open};
-\draw (4.305,-5.17) -- (4.305,-5.27) -- (4.725,-5.27) -- (4.725,-5.17);
-\node[anchor=north, text height=1.5ex, text depth=.25ex] at (4.520,-5.27) {closing};
+\draw (2.925,-5.17) -- (2.925,-5.27) -- (4.725,-5.27) -- (4.725,-5.17);
+\node[anchor=north, text height=1.5ex, text depth=.25ex] at (3.825,-5.27) {slice};
 \end{tikzpicture}
-\caption{The sliced policy on the same inputs, laid out as \cref{fig:run-ordinary}; N: NOP handler. The disk and NOP masks are set between all steps and are not shown. The framed cells, where the runs differ, are all private: the disk pending bit until the slice opens, then which handler fills the first run and the NOP pending bit. On the right, the private user's output at step 12; the braces mark the slice, its last step being the closing one (\cref{fig:phases}).}
+\caption{The sliced policy on the same inputs, laid out as \cref{fig:run-ordinary}; N: NOP handler. The disk and NOP masks are set between all steps and are not shown. The framed cells, where the runs differ, are all private: the disk pending bit until the slice opens, then which handler fills the first run and the NOP pending bit. On the right, the private user's output at step 12; the bracket marks the slice.}
 \label{fig:run-sliced}
 \end{figure}

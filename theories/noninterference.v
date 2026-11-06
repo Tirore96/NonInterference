@@ -14,6 +14,7 @@ Open Scope order_scope.
 
 Require Export NonInterference.theories.model_immediate.
 Require Export NonInterference.theories.model_sliced.
+Require Export NonInterference.theories.model_timer_unmasked.
 
 (* ===================================================================
    NonInterference: the concrete security equivalences and the results.
@@ -714,7 +715,7 @@ Qed.
    show that two related states take the same branch, up to which secret
    handler they start.  Whether a handler is running and whether the timer
    handler is ready are public.  Whether a secret handler is ready is not, and
-   this is where the slice invariant enters: by [secret_ready_iff_slice] it
+   this is where the slice invariant enters: by [open_iff_ready] it
    agrees with whether a slice is open, which is public. *)
 Definition pub_view (v : [state_type]) :=
   (if get_cur_pid v is inr n then Some n else None, get_prev_pid v, get_re_sched v,
@@ -768,20 +769,20 @@ rewrite /first_ready /=.
 by case: (ir_ready u timer_irq); case: (ir_ready u disk_irq); case: (ir_ready u nop_irq).
 Qed.
 
-(* ⦃≐ ∧ secret_ready_iff_slice on both sides⦄ initiate_next ⦃≐⦄ *)
+(* ⦃≐ ∧ open_iff_ready on both sides⦄ initiate_next ⦃≐⦄ *)
 Lemma initiate_next_NI_on l (o o' : [T_out Opub Opriv]) v v' :
   rel (out_equiv Opub Opriv) l o o' -> rel state_type_equiv l v v' ->
-  secret_ready_iff_slice v -> secret_ready_iff_slice v' ->
+  open_iff_ready v -> open_iff_ready v' ->
   rel state_type_equiv l (initiate_next o v) (initiate_next o' v').
 Proof.
 move=> Ho Hv Sv Sv'.
 have Hs := apply_scheduler_choice_NI Ho Hv.
 case: (apply_scheduler_choice_gated o v) => Mv _ _ Rv Ov.
 case: (apply_scheduler_choice_gated o' v') => Mv' _ _ Rv' Ov'.
-have {Sv Mv Rv Ov} Sw : secret_ready_iff_slice (apply_scheduler_choice o v)
-  by rewrite /secret_ready_iff_slice Mv Rv Ov.
-have {Sv' Mv' Rv' Ov'} Sw' : secret_ready_iff_slice (apply_scheduler_choice o' v')
-  by rewrite /secret_ready_iff_slice Mv' Rv' Ov'.
+have {Sv Mv Rv Ov} Sw : open_iff_ready (apply_scheduler_choice o v)
+  by rewrite /open_iff_ready Mv Rv Ov.
+have {Sv' Mv' Rv' Ov'} Sw' : open_iff_ready (apply_scheduler_choice o' v')
+  by rewrite /open_iff_ready Mv' Rv' Ov'.
 rewrite /initiate_next; cbv zeta.
 move: (apply_scheduler_choice o v) (apply_scheduler_choice o' v') Hs Sw Sw' => w w' Hw Sw Sw'.
 clear Ho Hv.
@@ -794,8 +795,8 @@ have := Hw; rewrite /pub_view => -[_ _ _ Hc Ht Hd Hn Hp].
 rewrite !masks_setE Ht Hd Hn.
 case Ms: [&& _, _ & _]; first by apply/state_rel_bot.
 (* otherwise both states agree on whether a secret handler is ready *)
-move: Sw Sw'; rewrite /secret_ready_iff_slice !masks_setE Ht Hd Hn Ms => Sw Sw'.
-have Hsr : secret_ready w = secret_ready w' by rewrite Sw // Sw' // /slice_open Hc.
+move: Sw Sw'; rewrite /open_iff_ready !masks_setE Ht Hd Hn Ms => Sw Sw'.
+have Hsr : secret_ready w = secret_ready w' by rewrite -Sw // -Sw' // /slice_open Hc.
 have Hrt : ir_ready w timer_irq = ir_ready w' timer_irq by rewrite /ir_ready Hp Ht.
 apply/state_rel_bot.
 move: Hsr; rewrite /secret_ready !first_readyE Hrt.
@@ -856,13 +857,9 @@ Qed.
 
 (* service_policy: observe_timer_output, then tick_slice.  Both read only public
    fields, so they need no invariant. *)
-Lemma sliced_service_NI :
-  fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv (@sliced_service runtime runs Opub Opriv).
+Lemma observe_timer_output_NI :
+  fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv (@observe_timer_output runtime runs Opub Opriv).
 Proof.
-  rewrite /sliced_service.
-  apply fv_NI_comp.
-
-
   mrw. intros.
   rewrite /observe_timer_output.
 
@@ -888,7 +885,13 @@ Proof.
   destruct ((tI_out i')). destruct h. done.
   apply update_re_sched_rel.
   apply/rel_eqpair2. con;ssa. done.
+Qed.
 
+Lemma sliced_service_NI :
+  fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv (@sliced_service runtime runs Opub Opriv).
+Proof.
+  rewrite /sliced_service.
+  apply fv_NI_comp; first exact: observe_timer_output_NI.
 
   (*tick_slice: reads only the counter, which is public, so both states take
     the same branch, and each branch writes the same values into both*)
@@ -914,19 +917,36 @@ Proof.
     + by apply update_slice_count_rel.
 Qed.
 
+(* === Any interrupt policy that meets three obligations is non-interfering:
+   its initial state satisfies the slice invariant, its service policy takes the
+   invariant to the fact at the choice point, and its service policy is
+   non-interfering on related states.  The rest of the proof does not depend on
+   the policy. === *)
+Section Policy.
+
+Variable init_policy : [state_type].
+Variable observe_policy : [T_out Opub Opriv] -> [state_type] -> [state_type].
+Variable advance_policy : [state_type] -> [state_type].
+
+Hypothesis init_inv : secret_gated init_policy.
+Hypothesis service_gated : forall o v, secret_gated v ->
+  secret_gated_at_boundary (advance_policy (observe_policy o v)).
+Hypothesis service_NI : fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv
+  (fun o => advance_policy \o observe_policy o).
+
 (* The output summand, on states satisfying the slice invariant: the service
-   policy keeps states related (sliced_service_NI) and leaves them at a handler
-   boundary at most (sliced_service_gated), which gives initiate_next the fact
-   it needs (secret_gated_at_boundary_ready). *)
-Lemma sliced_output_NI_on :
+   policy keeps states related (service_NI) and establishes the fact at the
+   choice point (service_gated), which gives initiate_next what it needs
+   (secret_gated_at_boundary_ready). *)
+Lemma policy_output_NI_on :
   fv_NI_on secret_gated (out_equiv Opub Opriv) state_type_equiv
-    (output_update (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime)).
+    (output_update observe_policy advance_policy).
 Proof.
 move=> l o o' Ho v v' Pv Pv' Hv /=.
 apply: initiate_next_NI_on; first exact: Ho.
-- exact: (sliced_service_NI Ho Hv).
-- exact/secret_gated_at_boundary_ready/sliced_service_gated.
-- exact/secret_gated_at_boundary_ready/sliced_service_gated.
+- exact: (service_NI Ho Hv).
+- exact/secret_gated_at_boundary_ready/service_gated.
+- exact/secret_gated_at_boundary_ready/service_gated.
 Qed.
 
 (* The input update.  An event equivalence never relates an inl to an inr, and an
@@ -948,26 +968,25 @@ Lemma input_update_EP :
   f_EP (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv (@input_update Opub Opriv).
 Proof. by move=> l [i|o] Hi v //; apply: set_pending_EP. Qed.
 
-(* The state cell: the first hard step of the proof of model_sliced_NI.  For any
+(* The state cell: the first hard step of the proof of model_policy_NI.  For any
    inner process, the obligations of sta_NI_pred hold with the slice invariant.
    (Paper, Section V-C.) *)
-Lemma sliced_state_cell_NI p :
+Lemma policy_state_cell_NI p :
   NI (eqpair_R state_type_equiv (eqsum_L in_equiv (out_equiv Opub Opriv)))
      (out_equiv Opub Opriv) p ->
   NI (eqsum_L in_equiv (out_equiv Opub Opriv))
      (eqpair state_type_equiv (out_equiv Opub Opriv))
      (sta (@input_update Opub Opriv)
-        (output_update (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime))
-        sliced_init p).
+        (output_update observe_policy advance_policy) init_policy p).
 Proof.
 move=> Hp.
 apply: (@sta_NI_pred _ _ _ secret_gated) Hp.
 - move=> e v; exact: input_update_gated.
-- move=> o v; exact: output_update_gated.
-- exact: sliced_output_NI_on.
+- move=> o v Hv; exact/initiate_next_gated/service_gated.
+- exact: policy_output_NI_on.
 - move=> l e e' He v v' _ _ Hv; exact: (input_update_NI He Hv).
 - move=> l e He v _; exact: (input_update_EP He).
-- exact: sliced_init_gated.
+- exact: init_inv.
 Qed.
 
 (* One slot of the pool, as process_pool builds it.  [proj] is the slot's part of
@@ -1101,7 +1120,8 @@ Lemma slot_no_input (A : Ty) (IRel : cEquiv [A]) :
        (fun _ => None).
 Proof. by mrw. Qed.
 
-Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
+Theorem model_policy_NI : NI in_equiv (out_equiv Opub Opriv)
+  (model runtime init_policy observe_policy advance_policy p_pub p_priv p_sched).
 Proof.
   rewr;simpl;rewr;simpl.
   eapply map_NI.
@@ -1121,7 +1141,7 @@ Proof.
   case/rel_eqpair: H;eauto.
 
   (*state update, under the slice invariant*)
-  apply: sliced_state_cell_NI.
+  apply: policy_state_cell_NI.
 
 
   (*map*)
@@ -1181,6 +1201,64 @@ Proof.
   apply par_NI.
   exact: (@slot_hidden_NI Empty THandlerOutput 1 _ _ (public_equiv _) (private_equiv _) _ (slot_no_input _) ir_handler_private_NI).
   exact: (@slot_visible_NI Empty THandlerOutput 0 _ _ (public_equiv _) _ _ erefl erefl (slot_no_input _) ir_handler_public_NI).
+Qed.
+
+End Policy.
+
+(* The sliced policy meets the three obligations. *)
+Lemma model_sliced_NI : NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
+Proof.
+apply: model_policy_NI.
+- exact: sliced_init_gated.
+- move=> o v; exact: sliced_service_gated.
+- exact: sliced_service_NI.
+Qed.
+
+(* The timer-unmasked policy meets them too.  As for tick_slice, tick_unmasked
+   reads only the counter. *)
+Lemma queue_unmasked_rel l v v' :
+  rel state_type_equiv l v v' ->
+  rel state_type_equiv l (queue_unmasked v) (queue_unmasked v').
+Proof.
+  move=> H; rewrite /queue_unmasked.
+  apply update_pending_rel; exact: unset_masks_rel.
+Qed.
+
+Lemma unmasked_service_NI :
+  fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv (@unmasked_service runtime runs Opub Opriv).
+Proof.
+  rewrite /unmasked_service.
+  apply fv_NI_comp; first exact: observe_timer_output_NI.
+
+  mrw. intros.
+  rewrite /tick_unmasked.
+
+  have: get_slice_count v = get_slice_count v'.
+
+  move: v H0=> [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
+  move: v'=> [[cur' prev']] [re_sched'] [slice_count'] [[def_pending' def_mask']] [[disk_pending' disk_mask']] [timer_pending' timer_mask'].
+
+  move/rel_eqpair=>[H0] /rel_eqpair[H1] /rel_eqpair[] H2 /rel_eqpair[]/rel_eqpair[H3 H4] /rel_eqpair[] H5 H6.
+  rewrite !pair_rewr in H0 H1 H2 H3 H4 H5 H6.
+
+  move: H2=>/public_equiv_eq->//.
+  move=>->.
+
+  case: (get_slice_count v') => [|[|n]].
+  - done.
+  - by apply close_slice_rel.
+  - case: (slice_at_boundary _ _).
+    + by apply queue_unmasked_rel; apply update_slice_count_rel.
+    + by apply update_slice_count_rel.
+Qed.
+
+Theorem model_timer_unmasked_NI : NI in_equiv (out_equiv Opub Opriv)
+  (model_timer_unmasked runtime runs p_pub p_priv p_sched).
+Proof.
+apply: model_policy_NI.
+- exact: sliced_init_gated.
+- move=> o v; exact: unmasked_service_gated.
+- exact: unmasked_service_NI.
 Qed.
 
 

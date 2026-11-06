@@ -23,10 +23,12 @@ and user processes that are themselves non-interfering.
 | `model_immediate_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (the leak) | none |
 | `model_immediate_userview_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 1 (the leak in the user view) | none |
 | `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (no leak) | none |
+| `model_policy_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 5 (any policy meeting three obligations is non-interfering) | none |
+| `model_timer_unmasked_NI` ([`noninterference.v`](theories/noninterference.v)) | a second instance of Theorem 5, the timer left unmasked at boundaries | none |
 | `model_sliced_userview_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 2 | none |
-| `sliced_run_gated` ([`model_sliced.v`](theories/model_sliced.v)) | Lemma 1 (the slice invariant holds of every reachable state) | none |
-| `eqmaybe_sum_rel`, `eqsum_sum_rel`, `eqsum_L_sum_rel`, `eqvisible_public_rel` and their `_dis` siblings ([`definitions.v`](theories/definitions.v)) | §VI-B: the paper's sum notation equals the mechanised equivalences | none |
-| `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | §VI-A: our definitions equal the original's | none |
+| `sliced_run_gated` ([`model_sliced.v`](theories/model_sliced.v)) | §V-C: the slice invariant holds of every reachable state | none |
+| `eqmaybe_sum_rel`, `eqsum_sum_rel`, `eqsum_L_sum_rel`, `eqvisible_public_rel` and their `_dis` siblings ([`definitions.v`](theories/definitions.v)) | Appendix: the paper's sum notation equals the mechanised equivalences | none |
+| `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | Appendix: our definitions equal the original's | none |
 | `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 3 and 4 in the original's terms | none |
 
 Every result depends only on the two parameters `d` and `L` that fix the security
@@ -44,7 +46,8 @@ inverted through determinism of reduction (`inv_*` lemmas in
 | [`theories/concrete_system.v`](theories/concrete_system.v) | a concrete system, trace tactics, the state along a run (`run_states_model`) |
 | [`theories/model_immediate.v`](theories/model_immediate.v) | the immediate policy, its concrete instance, traces and state rows |
 | [`theories/model_sliced.v`](theories/model_sliced.v) | the sliced policy, the slice invariant, the user view, its concrete instance, traces and state rows |
-| [`theories/noninterference.v`](theories/noninterference.v) | the model's equivalences, Theorems 3 and 4, Corollaries 1 and 2 |
+| [`theories/model_timer_unmasked.v`](theories/model_timer_unmasked.v) | the sliced policy with the timer left unmasked at boundaries |
+| [`theories/noninterference.v`](theories/noninterference.v) | the model's equivalences, Theorems 3, 4 and 5, Corollaries 1 and 2 |
 | [`theories/adequacy.v`](theories/adequacy.v) | the original definitions, their equivalence with ours, the main results in the original's terms |
 
 ## Building

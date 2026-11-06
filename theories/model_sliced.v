@@ -28,8 +28,8 @@ Definition slice_at_boundary (runtime m : nat) := dvdn runtime m.
 
 (* The timer handler's completion opens a slice and, as in [model_immediate],
    requests a reschedule for when control next leaves the handlers.  The slice
-   is a whole number [runs] of handler runs, [runs * runtime] steps, followed by
-   the closing step.  Expressing it this way rather than as an independent
+   is a whole number [runs] of handler runs, [runs * runtime] steps; the load is
+   one higher because this output also ticks it.  Expressing it this way rather than as an independent
    constant is what makes "the slice ends on a handler boundary" structural
    instead of a side condition: [slice_at_boundary] can then *compute* the
    boundaries as the multiples of [runtime]. *)
@@ -49,7 +49,7 @@ Definition close_slice (v : [state_type]) : [state_type] :=
   update_slice_count (unset_tI (set_masks v)) 0.
 
 (* Advance an open slice by one step: count down, queue a secret run at each
-   boundary, and close the slice at its closing step [1].  With the counter at
+   boundary, and close the slice at its last step [1].  With the counter at
    [n.+2], [n.+1] steps of handler runs are left, and the boundary test is on
    those. *)
 Definition tick_slice (runtime : nat) (v : [state_type]) : [state_type] :=
@@ -78,16 +78,18 @@ Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
 (* -- The slice invariant --
 
    The sliced policy keeps the secret handlers gated by the slice: outside a
-   slice they are masked, inside one a handler is running, and the NOP and disk
-   masks agree ([secret_gated]).  Every reachable state satisfies it
-   (sliced_run_gated).  The security proof uses it through [sta_NI_pred], which
-   asks for the relational obligations only on states that satisfy it.
+   slice they are masked, and inside one a handler is running ([secret_gated]).
+   Every reachable state satisfies it (sliced_run_gated).  The security proof
+   uses it through [sta_NI_pred], which asks for the relational obligations only
+   on states that satisfy it.
 
-   Where [initiate_next] chooses, a slice may also be at a handler boundary, in
-   the shape [queue_secret_run] leaves ([secret_gated_at_boundary]).  What the
-   security argument consumes is the consequence [secret_ready_iff_slice]: when
-   no handler is running, a secret handler is ready exactly when a slice is
-   open.  Whether a slice is open is public, so two related states agree on
+   Where [initiate_next] chooses, a slice may also be at a handler boundary, with
+   a secret handler ready ([secret_gated_at_boundary]).  This is what an
+   implementation must provide, and the NOP handler is how this policy provides
+   it: [queue_secret_run] makes it ready at every boundary.  What the security
+   argument consumes is the consequence [open_iff_ready]: when no handler
+   is running, a slice is open exactly when a secret handler is
+   ready.  Whether a slice is open is public, so two related states agree on
    whether a secret handler runs next.
 
    The statements quantify over arbitrary event sequences, not only those a
@@ -95,27 +97,21 @@ Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
 
 Definition slice_open (v : [state_type]) : bool := get_slice_count v != 0.
 
-(* The shape [queue_secret_run] leaves: the NOP handler pending, the timer
-   masked, the disk and NOP handlers unmasked. *)
-Definition handler_boundary (w : [state_type]) : bool :=
-  [&& get_ir_pending w nop_irq, get_ir_mask w timer_irq,
-      ~~ get_ir_mask w disk_irq & ~~ get_ir_mask w nop_irq].
-
-(* Inside a slice: [also] holds or a handler is running; outside: the disk
-   handler is masked; always: the NOP and disk masks agree.  The disjunction
-   follows the [if] in [tick_slice]. *)
+(* Inside a slice: [also] holds or a handler is running; outside: the disk and
+   NOP handlers are masked.  The disjunction follows the [if] in [tick_slice]. *)
 Definition gated (also : [state_type] -> bool) (v : [state_type]) : bool :=
-  (if slice_open v then also v || masks_set v else get_ir_mask v disk_irq) &&
-  (get_ir_mask v nop_irq == get_ir_mask v disk_irq).
+  if slice_open v then also v || masks_set v
+  else get_ir_mask v disk_irq && get_ir_mask v nop_irq.
 
 Definition secret_gated := gated (fun _ => false).
-Definition secret_gated_at_boundary := gated handler_boundary.
 
 Definition secret_ready (w : [state_type]) : bool :=
   ir_ready w disk_irq || ir_ready w nop_irq.
 
-Definition secret_ready_iff_slice (w : [state_type]) : Prop :=
-  ~~ masks_set w -> secret_ready w = slice_open w.
+Definition secret_gated_at_boundary := gated secret_ready.
+
+Definition open_iff_ready (w : [state_type]) : Prop :=
+  ~~ masks_set w -> slice_open w = secret_ready w.
 
 Section SlicedInvariant.
 Variables (runtime runs : nat) (Opub Opriv : Ty).
@@ -183,38 +179,37 @@ set v1 := observe_timer_output runtime runs o v.
 have M1 : forall ir, get_ir_mask v1 ir = get_ir_mask v ir by move=> ir; rewrite observe_timer_output_mask.
 have C1 : get_slice_count v1 = if tI_out o is Some Notify then (runs * runtime).+1 else get_slice_count v
   by rewrite observe_timer_output_count.
-rewrite /secret_gated /secret_gated_at_boundary /gated /slice_open => /andP [Hl /eqP Hdk].
+rewrite /secret_gated /secret_gated_at_boundary /gated /slice_open => Hl.
 case E1: (get_slice_count v1) => [|[|n]].
 - (* no slice before, none after *)
-  rewrite (tick_slice_none E1) E1 !M1 Hdk /= eqxx andbT.
+  rewrite (tick_slice_none E1) E1 !M1 /=.
   move: C1 Hl; rewrite E1.
   by case: (tI_out o) => [[|]|] // <-.
 - (* closing: disk and NOP masked, no slice *)
   by case: (tick_slice_close E1) => -> -> ->.
 - case HC: (slice_at_boundary runtime n.+1).
-  + (* a boundary: the shape queue_secret_run leaves *)
-    case: (tick_slice_boundary E1 HC) => -> Bd Bk Bt Bp.
-    by rewrite /handler_boundary Bd Bk Bt Bp.
+  + (* a boundary: queue_secret_run has made the NOP handler ready *)
+    case: (tick_slice_boundary E1 HC) => -> Bd _ _ Bp.
+    by rewrite /secret_ready /ir_ready Bd Bp orbT.
   + (* a plain tick inside a slice that was already open: masks unchanged *)
     case: (tick_slice_dec E1 (negbT HC)) => -> Tm Tp.
-    rewrite masks_setE !Tm !M1 Hdk /= eqxx andbT orbC /=.
+    rewrite masks_setE !Tm !M1 /= orbC /=.
     move: C1 Hl; rewrite E1.
     case: (tI_out o) => [[|]|].
-    * by move<-; rewrite /= masks_setE Hdk => ->.
+    * by move<-; rewrite /= masks_setE => ->.
     * (* a slice just opened lands on a boundary *)
       by case=> Hs; move: HC; rewrite Hs slice_at_boundary_start.
-    * by move<-; rewrite /= masks_setE Hdk => ->.
+    * by move<-; rewrite /= masks_setE => ->.
 Qed.
 
 (* At the choice point the gating gives the fact the security proof uses. *)
 Lemma secret_gated_at_boundary_ready w :
-  secret_gated_at_boundary w -> secret_ready_iff_slice w.
+  secret_gated_at_boundary w -> open_iff_ready w.
 Proof.
-rewrite /secret_gated_at_boundary /gated /secret_ready_iff_slice /secret_ready /ir_ready.
-case: (slice_open w) => /andP [H /eqP Hnd] Ms.
-- move: H; rewrite (negbTE Ms) orbF => /and4P [-> _ _ ->].
-  by rewrite orbT.
-- by rewrite Hnd H !andbF.
+rewrite /secret_gated_at_boundary /gated /open_iff_ready /secret_ready /ir_ready.
+case: (slice_open w) => H Ms; apply: esym.
+- by move: H; rewrite (negbTE Ms) orbF.
+- by case/andP: H => -> ->; rewrite !andbF.
 Qed.
 
 (* {secret_gated_at_boundary} initiate_next o {secret_gated} *)
@@ -232,10 +227,9 @@ case Ms: (masks_set w).
     by case: ir => [[]|]; case: cur => [b|m]; case: c.
   + have NS : ~~ slice_open w.
       apply/negP => S; move: Hw.
-      rewrite /secret_gated_at_boundary /gated S Ms orbF => /andP [/and4P [Hp _ _ Hnm] _].
-      have Rd : ir_ready w nop_irq by rewrite /ir_ready Hp Hnm.
+      rewrite /secret_gated_at_boundary /gated S Ms orbF /secret_ready.
       move: FR; rewrite /first_ready /=.
-      by case: (ir_ready w timer_irq); case: (ir_ready w disk_irq); rewrite ?Rd.
+      by case: (ir_ready w timer_irq); case: (ir_ready w disk_irq); case: (ir_ready w nop_irq).
     have Hg : secret_gated w by move: Hw; rewrite /secret_gated_at_boundary /secret_gated /gated (negbTE NS).
     move: w Hg {Hw Ms FR NS} => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] Hg.
     by case: (is_handler_pid _); first case: (get_re_sched _).

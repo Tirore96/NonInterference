@@ -8,5 +8,6 @@ theories/generic_model.v
 theories/concrete_system.v
 theories/model_immediate.v
 theories/model_sliced.v
+theories/model_timer_unmasked.v
 theories/noninterference.v
 theories/adequacy.v

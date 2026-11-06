@@ -1,9 +1,9 @@
 \section{Background: Composable Timing-Sensitive Non-Interference}\label{sec:background}
 
 This section recalls the calculus and definitions of Rafnsson et
-al.~\cite{rafnsson2017}, in the form we mechanise (\cref{sec:departures}). We add sum
-types, in which we also write optional values and the model's interrupts
-(\cref{sec:agreement}), and a composition theorem for state cells under an invariant
+al.~\cite{rafnsson2017}, in the form we mechanise (\appx). We add sum
+types, in which we also write optional values and the model's interrupts,
+and a composition theorem for state cells under an invariant
 (\cref{thm:sta-pred}).
 
 \subsection{Processes, traces and time}
@@ -11,10 +11,10 @@ types, in which we also write optional values and the model's interrupts
 A process $p : \Proc{I}{O}$ has an input type $I$ and an output type $O$. It moves
 in one of two ways, by receiving an input, $\stepI{p}{i}{p'}$, or by emitting an
 output, $\stepO{p}{o}{p'}$, in any order. Processes are built from seven
-constructors, whose reduction rules are in \cref{sec:rules}. The
-operating system of \cref{sec:model} is a single closed term over them.
+constructors, whose reduction rules are in \appx. The
+model of \cref{sec:model} is a single closed term over them.
 
-\code{out o} ignores its input and always emits \code{o}. \code{map f g p} translates
+The simplest constructor, \code{out o}, ignores its input and always emits \code{o}. \code{map f g p} translates
 inputs by \code{f} on the way into \code{p} and outputs by \code{g} on the way out.
 \code{sta f g v p} keeps a state cell \code{v}: an input \code{i} updates it to
 \code{f i v}, and \code{p} receives the new state together with \code{i}; an output
@@ -26,9 +26,8 @@ tag \code{c} and by the bit carried on each input. \code{par p1 p2} gives every 
 both parts and emits both outputs as a pair. \code{loop p} feeds each output of
 \code{p} back to it as an input. \code{maybe p} makes the input optional: \code{None}
 leaves \code{p} unchanged. We write $A + 1$ for the optional values of
-$A$, with \code{Some v} and \code{None} its two injections.
-
-Reduction is deterministic, and a process never blocks.
+$A$, with \code{Some v} and \code{None} its two injections. Reduction is deterministic,
+and a process never blocks.
 
 Time is counted in output steps: every output step is one tick of a clock the
 observer shares, and on every tick a process emits a value (in our models, a
@@ -42,7 +41,7 @@ Security is stated relative to a lattice of levels $\ell$. Everything in this pa
 can be read with the two-point lattice $\Lo \sqsubseteq \Hi$: the attacker $\Lo$,
 and $\Hi$, who sees everything; the mechanisation is over any partial order
 with a least element, in particular any bounded lattice
-(\cref{sec:development}). Each input and output type carries a \emph{characterised equivalence}
+(\appx). Each input and output type carries a \emph{characterised equivalence}
 (\m{cEquiv}) $\doteq$, which says, for each level $\ell$:
 \begin{itemize}
 \item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;
@@ -91,7 +90,8 @@ A composite process gets its equivalences from those of its parts
 (\cref{thm:composition}), so those of the model in \cref{sec:model} are terms over a
 few base equivalences, chiefly the two below.
 
-We say that $\doteq$ \emph{hides} $x$ at $\ell$ when $x \doteq_\ell \unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
+These two differ in what they hide, where $\doteq$ \emph{hides} $x$ at $\ell$ when
+$x \doteq_\ell \unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
 $x \doteq_\ell y$ iff $x = y$. The \emph{private}
 equivalence $\priveq$ (\m{private_equiv}) hides everything from the attacker: at $\Lo$ every
 value is unobservable, so all values are related, and at $\Hi$ it is the public one.
@@ -100,7 +100,7 @@ The model gives the timer handler's output the public equivalence and the disk
 handler's the private one: the attacker learns when the timer handler finishes, but
 not when the disk handler does.
 
-The other equivalences are built from these by the following
+Every other equivalence of the model is built from these two with the following
 formers.
 
 \begin{definition}[Equivalence formers]\label{def:formers}
@@ -125,8 +125,8 @@ values it hides.
 \end{itemize}
 \end{definition}
 
-$\times$ is the output equivalence of \code{par}; $\times_R$ and $\times_{LR}$
-appear where a constructor pairs an input with a state or a gate bit. An \code{inl} and an \code{inr} are related exactly
+The pair formers differ in where they appear: $\times$ is the output equivalence of
+\code{par}, and $\times_R$ and $\times_{LR}$ appear where a constructor pairs an input with a state or a gate bit. An \code{inl} and an \code{inr} are related exactly
 when both are hidden; otherwise the tag is visible. $^\circ$ keeps the tag
 visible on a side that would hide it. We write $\privvis$ for $(\priveq)^\circ$: at
 $\Lo$ all its values are related, yet none is hidden, so under a sum the attacker
@@ -200,7 +200,7 @@ to be aware of the gate or oblivious to the gated process. These are the two
 obligations the proof of \cref{sec:proof} has to discharge for the model
 (\cref{lem:state-cell,lem:slot}).
 
-\comp{it:sta} asks for its side conditions on every pair of related states,
+The side conditions of \comp{it:sta} must hold on every pair of related states,
 reachable or not. We add a variant that asks for them only on the states that satisfy
 a predicate $P$ preserved by the state updates; the original theorems are unchanged.
 Write $\NI_P$ and $\mathsf{PE}_P$ for the predicates above with $v$ and $v'$

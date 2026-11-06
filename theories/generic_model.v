@@ -262,7 +262,7 @@ Definition prev_pid := Option Nat.
 Definition pids := Times cur_pid prev_pid.
 (* ic_count bundles the interrupt-handler time slice with the interrupt controller.
    The slice counter is the number of output steps until the slice closes:
-   0 -> no slice; 1 -> the closing step; n.+2 -> n.+1 steps of handler runs left. *)
+   0 -> no slice; 1 -> the slice's last step; n.+2 -> n.+1 steps of handler runs left. *)
 Definition ic_count := Times slice_count ic.
 Definition bool_state := Times re_sched ic_count.
 (* The interrupt controller has one entry per external interrupt and one more,

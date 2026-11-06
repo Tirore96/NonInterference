@@ -2,10 +2,10 @@
 
 Status: all stages applied (uncommitted). The confirmed limit is 12 pages, not counting
 the AI acknowledgment, the bibliography and well-marked appendices. The body ends about
-three-quarters down the right column of p12, which leaves about 20 column lines for
+four-fifths down the right column of p12, which leaves about 18 column lines for
 your two conclusion paragraphs, counting the lines their todos take now. Stage 6 went
-with appendices (`tex/sections/appendix.tex`, after the bibliography): A reduction
-rules, B finite traces, C notation, D development table and levels. Your own open todos
+with one appendix (`tex/sections/appendix.tex`, after the bibliography): reduction
+rules, finite traces, notation, development table and levels. Your own open todos
 (citations, AI acknowledgment, Ge et al., unwritten conclusion paragraphs) stay.
 
 **Rule for the whole plan:** the other CSF papers inform only how we present things.

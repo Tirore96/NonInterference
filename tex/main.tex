@@ -11,7 +11,6 @@
 \usepackage{mathpartir}
 \usepackage{booktabs}
 \usepackage{tabularx}
-\usepackage{wrapfig}
 \newcolumntype{L}{>{\raggedright\arraybackslash}X}
 \usepackage{xcolor}
 \usepackage{tikz}
@@ -20,6 +19,11 @@
 % the input step \stepI
 \tikzset{intr/.style={->, decorate, decoration={snake, amplitude=0.6pt,
   segment length=4pt, post length=3pt}}}
+% an interrupt arriving before a cell of the run diagrams: \irqarrow{x}{y of the
+% heading row}{label}, ending on the top of the row of runs below it
+\newcommand{\irqarrow}[3]{%
+  \draw[intr] (#1,{#2+0.16}) -- (#1,{#2-0.22});
+  \node[anchor=west, inner sep=1pt] at ({#1+0.05},{#2+0.05}) {#3};}
 \usepackage{listings}
 \usepackage{hyperref}
 \hypersetup{colorlinks,linkcolor=black,citecolor=black,urlcolor=blue!50!black}
@@ -86,6 +90,10 @@
 \newcommand{\Ef}{\mathcal{F}}
 \newcommand{\Eb}{\mathcal{B}}
 \newcommand{\Ey}{\mathcal{Y}}
+% the predicates of the slice invariant (Definitions 6 and 7)
+\newcommand{\Gated}{\mathsf{Inv}}
+\newcommand{\GatedB}{\mathsf{AtChoice}}
+\newcommand{\RIO}{\mathsf{OpenIffReady}}
 % equivalences as operands of + and x.  \doteq is a relation symbol, and TeX turns a
 % binary operator after a relation into an ordinary symbol with no space, so an
 % equivalence used as an operand is braced, which makes it an ordinary symbol.
@@ -94,6 +102,9 @@
 \newcommand{\privvis}{{\doteq^{\Hi\circ}}}
 \newcommand{\eqo}[1]{{\eqv{#1}}}
 \newcommand{\one}{1}
+% the single, unnumbered appendix
+\newcommand{\appx}{\hyperref[sec:appendix]{the appendix}}
+\newcommand{\Appx}{\hyperref[sec:appendix]{The appendix}}
 
 % ---------------------------------------------------------------- mechanisation
 % Every link to the mechanisation goes through \mech, so the target is set here
@@ -163,7 +174,7 @@ attacker who watches a public process sees when a handler ran and for how long. 
 the interrupt is secret, so is that information. Such leaks arise in several
 operating systems \todo{examples, with citations}. We use the process calculus of
 Rafnsson et al., whose timing-sensitive non-interference theorems compose, to model
-an operating system with interrupt handling as a single process, and prove in Rocq
+interrupt handling and process scheduling as a single process, and prove in Rocq
 that ordinary interrupt handling leaks: a secret disk interrupt is observable
 through the schedule alone. A non-interfering policy must make \emph{when} secret
 handlers run, and for how long, depend only on public events, while \emph{which}
@@ -199,7 +210,7 @@ reviewed all AI-generated content and take full responsibility for it.
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 
-\appendices
+\appendix[The Calculus and the Mechanisation in Detail]\label{sec:appendix}
 \input{sections/appendix}
 
 \end{document}

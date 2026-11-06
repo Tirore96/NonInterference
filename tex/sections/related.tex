@@ -8,13 +8,10 @@ branches~\cite{agat2000}; the sliced policy applies the same idea to handler
 runs, with the NOP handler as padding.
 
 \paragraph{Concurrency and scheduling} How the scheduler affects the security of
-multi-threaded programs has been studied since Smith and Volpano~\cite{smith1998}.
-Sabelfeld and Sands give a probabilistic, timing-sensitive non-interference for
-multi-threaded programs~\cite{sabelfeld2000}, Mantel and Sudbrock a notion of
-security that holds for a whole class of schedulers~\cite{mantel2010}, and Stefan et
-al.\ address termination and timing channels in a concurrent information-flow
-system~\cite{stefan2012}. Vassena et al.\ mechanise non-interference for concurrent
-lazy programs, parametrically in a deterministic scheduler~\cite{vassena2017}. These works treat the scheduler as given and ask which
+multi-threaded programs has been studied since Smith and Volpano~\cite{smith1998},
+with probabilistic~\cite{sabelfeld2000}, scheduler-independent~\cite{mantel2010},
+concurrent information-flow~\cite{stefan2012} and mechanised~\cite{vassena2017}
+results. These works treat the scheduler as given and ask which
 programs are secure under it. We treat the interrupt mechanism, which decides when
 handlers preempt the scheduled process, as the object to be made secure.
 
@@ -25,21 +22,18 @@ requirement has the same shape: when secret handlers run, and for how long, must
 fixed by public events. The sliced policy meets it exactly, at the cost of reserving
 handler time whether or not it is used.
 
-\paragraph{Composable timing-sensitive non-interference} Rafnsson and Sabelfeld
-investigate how information-flow security composes in interactive
-systems~\cite{rafnsson2014}. Our proofs rest on the
+\paragraph{Composable timing-sensitive non-interference} Our proofs rest on the
 calculus of Rafnsson et al.~\cite{rafnsson2017}, which we mechanise and apply to a
-model of interrupt handling.
+model of interrupt handling. Rafnsson and Sabelfeld investigate how information-flow
+security composes in interactive systems~\cite{rafnsson2014}.
 
-\paragraph{Verified operating systems} Murray et al.\ formulate non-interference for
-operating system kernels~\cite{murray2012} and prove it for seL4~\cite{murray2013},
-whose proof leaves timing channels out of scope; Cock et al.\ measure the timing
-channels that remain in seL4 and their mitigation~\cite{cock2014}. Time
+\paragraph{Verified operating systems} Murray et al.\ prove non-interference for
+seL4~\cite{murray2012,murray2013}, leaving timing channels out of scope; Cock et al.\
+measure those that remain~\cite{cock2014}. Time
 protection~\cite{ge2019} argues that an operating system must partition time as well
 as space, and includes the partitioning of interrupts among its
 mechanisms\todo{check this characterisation against~\cite{ge2019}}; our sliced policy
-is an instance of that idea in a small model. What we add is a timing-sensitive,
-compositional, mechanised proof that the mechanism is secure, for any
-non-interfering scheduler and user processes. At the hardware interface, Zagieboylo et
+is an instance of that idea in a small model, with a timing-sensitive, compositional,
+mechanised proof. At the hardware interface, Zagieboylo et
 al.\ design an instruction set that controls timing channels and leave exceptions and
 asynchrony outside their formal proof~\cite{zagieboylo2019}.
