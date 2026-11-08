@@ -42,8 +42,8 @@ observe_handler_output o v :=
     else v
   else v
 \end{lstlisting}
-\m{is_ir_out_done} names the handler, if any, that emits \code{Notify} in the output
-\code{o}. The service policy then unmasks everything, and after the timer handler
+In the output \code{o}, \m{is_ir_out_done} names the handler, if any, that emits
+\code{Notify}. The service policy then unmasks everything, and after the timer handler
 also requests a reschedule. It thus reads the output of whichever handler completes,
 the disk handler's included.
 
@@ -59,10 +59,10 @@ disk interrupt the system never enters S.
 
 \input{sections/fig-io}
 To state the leak we classify what the system receives and emits. Its input
-type \code{T_in} is a sum, like the
+type \m{T_in} is a sum, like the
 current pid of \cref{sec:global-state}: \code{inl} is the disk interrupt and
 \code{inr} the timer interrupt. Its output type is the pool's six-tuple
-\code{T_out}.
+\m{T_out}.
 
 \medskip
 \noindent\begin{minipage}{\linewidth}
@@ -102,7 +102,7 @@ For the concrete system,
 
 \begin{proof}[Proof sketch]
 The counterexample is the shortest trace that shows the gap: the disk interrupt
-arrives before step 1, not after it as in \cref{fig:run-ordinary}. Let $p$ be the model and $o_G$ the output in which only the public slot is set, to
+arrives before step 1, one step earlier than in \cref{fig:run-ordinary}. Let $p$ be the model and $o_G$ the output in which only the public slot is set, to
 \code{Get}. The model performs $\perf{p}{!o_G.!o_G}{\Lo}$. The disk interrupt is
 unobservable at $\Lo$, so insertion demands $\perf{p}{?\mathsf{disk}.!o_G.!o_G}{\Lo}$.
 Reduction is deterministic (\cref{sec:background}): $p$ has exactly one input step on
@@ -116,9 +116,10 @@ next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
 \end{proof}
 
 We also state the result for what user space itself emits, without the scheduler and
-the timer handler. The \emph{user view}
-\code{map id parse_output m} keeps only the two user slots: \m{parse_output} maps an
-output to one value of type \code{(Opub + Opriv) + 1}, the public user's as
+the timer handler. The \emph{user view} of a model \code{m},
+\code{map id parse_output m}, keeps only the two user slots: \m{parse_output} maps an
+output to a value of type \code{(Opub + Opriv) + 1}, for the user processes' output
+types \code{Opub} and \code{Opriv}: the public user's as
 \code{Some (inl v)}, the private user's as \code{Some (inr v)}, and any other as
 \code{None}.
 
@@ -133,17 +134,10 @@ The user-view equivalence $\Euser$ (\m{out_equiv_userview}) is
 \]
 \end{definition}
 
-The user view erases only public information: the outputs of the scheduler and the
-timer handler, and, on a step where no user process ran, whether the step was theirs
-or an S step. The attacker still sees when the private user runs.
-
-The disk interrupt does affect this view, through the private user's input
-(\cref{sec:loop}): on the concrete system, the private
-user emits \code{Sys} in the run with a disk interrupt where it emits \code{Idle} in
-the run without one (\m{trace_with_dI}, \m{trace_no_dI}). So the interrupt reaches
-user space only through a value the attacker cannot see.
-
-The leak is visible in the user view as well:
+To the attacker, the user view loses only public information: the outputs of the
+scheduler and the timer handler, and, on a step where no user process ran, whether
+the step was theirs or an S step. The attacker still sees when the private user runs,
+and the leak is visible in the user view as well:
 
 \begin{corollary}[User-view leak,\newline \m{model_immediate_userview_not_NI}]\label{cor:leak-userview}
 For the concrete system,
@@ -176,8 +170,7 @@ closes. Outside a slice, in U and T, it is \code{0}. The output that opens a sli
 loads it with $\mathit{runs}\cdot\mathit{runtime}+1$ and also ticks it, so it reads
 $\mathit{runs}\cdot\mathit{runtime}$ on the first step of the slice and \code{1} on the
 last, and the $\mathit{runs}$ handler runs fill exactly these steps. The slice closes
-at the output of its last step. Closing thus happens exactly once: at \code{0} there is nothing to close, so the timer is never unmasked
-while its own handler runs.
+at the output of its last step.
 
 The initial state \m{sliced_init} is \m{immediate_init} with the disk and NOP masks
 set, so no disk interrupt can take the system from U to S, and the timer unmasked.
@@ -220,16 +213,17 @@ queue_secret_run v :=
 At \code{n+2}, $n+1$ steps of handler runs are left, and
 \m{slice_at_boundary}, which tests $\mathit{runtime} \mid n+1$, holds when they are a
 whole number of runs: when the slice opens and after each
-completed run inside it. Unmasking has moved here from the first stage: it happens at
-boundaries computed from the public counter, not on completion signals. Since every run takes
-$\mathit{runtime}$ steps, the two fall on the same steps; only the reason has
-changed. There the masks reopen, but the timer is masked again, so it cannot leave S early,
+completed run inside it. Unmasking has moved here from the first stage, to boundaries
+computed from the public counter. Since every run takes $\mathit{runtime}$ steps, these
+are the steps on which handlers complete; only the reason has changed. At a boundary
+the masks reopen, but the timer is masked again, so it cannot leave S early,
 and the NOP handler becomes pending. That last step is the \emph{filler}: a handler
 is always ready at a boundary, so S is entered and every run of the slice takes place
 whether or not a disk interrupt is waiting. A pending disk handler takes priority;
 which of the two runs is all the secret decides. At \code{1}, \m{close_slice}
 closes the slice: it masks the disk and NOP handlers, so U cannot lead to S, unmasks
-the timer and sets the counter to \code{0}.
+the timer and sets the counter to \code{0}. Since the \code{0} branch changes nothing,
+the timer is never unmasked while its own handler runs.
 
 The sliced policy is non-interfering:
 
@@ -268,3 +262,9 @@ so \comp{it:map} applies with \cref{thm:main}. The input function \code{id} is t
 $\mathsf{parse\_output} \in \NI(\Eout,\Euser)$ because outputs that $\Eout$ relates
 agree on which user slot, if any, emitted, and on the public user's value.
 \end{proof}
+
+Under the sliced policy the disk interrupt still affects this view, through the private
+user's input (\cref{sec:loop}): on the concrete system, the private user emits
+\code{Sys} in the run with a disk interrupt where it emits \code{Idle} in the run
+without one (\m{trace_with_dI}, \m{trace_no_dI}). So the interrupt reaches user space
+only through a value the attacker cannot see.
