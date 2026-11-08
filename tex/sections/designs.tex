@@ -182,8 +182,6 @@ when no disk interrupt is pending the NOP handler takes the run, so a slice is t
 same whether or not a disk interrupt is waiting. Each part of the policy below
 removes an arrow of \cref{fig:policy-ordinary} or fixes how long S lasts.
 
-\input{sections/fig-sliced}
-
 A slice is timed by the slice counter, which counts the output steps until the slice
 closes. Outside a slice, in U and T, it is \code{0}. The output that opens a slice
 loads it with $\mathit{runs}\cdot\mathit{runtime}+1$ and also ticks it, so it reads
@@ -193,6 +191,8 @@ at the output of its last step.
 
 The initial state \m{sliced_init} is \m{immediate_init} with the disk and NOP masks
 set, so no disk interrupt can take the system from U to S, and the timer unmasked.
+
+\input{sections/fig-sliced}
 
 The service policy uses both stages of \cref{sec:state}, \m{observe_timer_output}
 and then \m{tick_slice}; \m{sliced_service} is their composite. The first stage is the

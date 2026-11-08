@@ -160,9 +160,6 @@ state alone on \code{inr}, and \m{pool_input} reads the new pid from it. An inte
 is \code{inl}, which \m{pool_input} sends to \code{None}. The feedback is part of the
 output step, so no interrupt can arrive between the update and the feedback.
 
-% Figs. 3 and 4 of Section IV, here so that they share the next page's column tops
-\input{sections/fig-ordinary}
-
 \subsection{The generic model}\label{sec:parameters}
 
 A last map gives the loop the system's own input and output types. Together, these
@@ -187,6 +184,9 @@ The outer \code{map} tags an arriving interrupt \code{inl}, and \m{inr_or_def}
 strips the \code{inr} tag from each output. Its
 default \m{no_output}, the all-\code{None} tuple, only makes it total: every output
 is tagged \code{inr}.
+
+% Figs. 3 and 4 of Section IV, here so that they share the next page's column tops
+\input{sections/fig-ordinary}
 
 Apart from the processes and the handler length, everything in
 \cref{sec:processes,sec:pool,sec:global-state,sec:loop} is fixed, except three parts,
