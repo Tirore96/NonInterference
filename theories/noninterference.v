@@ -30,7 +30,7 @@ Require Export NonInterference.theories.model_timer_unmasked.
 (* --- Section 4: the input equivalence.  An interrupt is a sum (generic_model.v,
    T_in), classified like the current pid: the disk interrupt (inl) is secret,
    unobservable at bot only; the timer interrupt (inr) is public.  (Paper,
-   Section V.) --- *)
+   Section IV-A.) --- *)
 Definition in_equiv : cEquiv [T_in] := eqsum_L (private_equiv Unit) (public_equiv Unit).
 
 (* The earlier, hand-written definition on the two-constructor interrupt type,
@@ -309,7 +309,7 @@ Qed.
 (* false_equiv is private + public, like in_equiv: read a gate bit as a sum,
    false on the inl side (unobservable at bot) and true on the inr side
    (public).  It agrees with eqsum_L along bool_to_sum, on relatedness and on
-   unobservability, at every level.  (Paper, Fig. 9.) *)
+   unobservability, at every level.  (Paper, Fig. 10.) *)
 Definition bool_to_sum (b : bool) : [Sum Unit Unit] := if b then inr tt else inl tt.
 
 Lemma false_equiv_sum_rel l b b' :
@@ -340,7 +340,7 @@ Qed.
    pending bits secret via private_pending_equiv; cur_pid's inl/inr tag PUBLIC but the
    bool inside inl (which handler) secret;
    re_sched, slice_count (the slice), scheduler/user pid all public.
-   (Paper, Section V-D.) === *)
+   (Paper, Section V-A.) === *)
 Definition pids_equiv : cEquiv [pids] := eqpair (eqsum (private_equiv _) (public_equiv _)) (public_equiv _).
 Definition private_pending_equiv : cEquiv [ir_bits] := eqpair (private_equiv _) (public_equiv _).
 Definition public_bits_equiv : cEquiv [ir_bits] := eqpair (public_equiv _) (public_equiv _).
@@ -463,7 +463,7 @@ Qed.
    The pool's userspace and scheduler slots are discharged by these three
    facts and nothing else.  Stating them separately makes explicit what the
    assembled proof needs of each slot: an NI process at the classification
-   its slot declares.  (Paper, Section VI.) *)
+   its slot declares.  (Paper, Section V-D.) *)
 
 (* Slot 5, the public user process.  Its output slot is public, so it may
    emit anything as long as it emits it unconditionally. *)
@@ -531,7 +531,7 @@ Qed.
 (* === Section 6: model_sliced is non-interfering.  Assembled from the generic
    composition theorems (par_NI, sta_NI, swi_NI, map/output-weakening) applied
    to the pool; the only non-mechanical obligation is fv_NI of the state
-   transition (section 7).  (Paper, Section V-B.)
+   transition (section 7).  (Paper, Section V.)
 
    The result holds for *any* scheduler and any two user processes that are
    themselves non-interfering at the classification their slot declares.  That
@@ -1265,7 +1265,7 @@ Qed.
 (* === Section 6 (payoff): the top result.  model_sliced_userview = map id
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
    weakening through parse_output (out_equiv-related outputs map to
-   out_equiv_userview-related ones).  (Paper, Section V.) === *)
+   out_equiv_userview-related ones).  (Paper, Section IV-B.) === *)
 Lemma model_sliced_userview_NI : NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
   rewrite /model_sliced_userview /userview.

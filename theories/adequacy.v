@@ -19,7 +19,7 @@ Require Import NonInterference.theories.model_immediate NonInterference.theories
    nothing: L-equivalences (section 1), streams (section 2), obliviousness over
    reachable states (section 3), and the paper's own coinductive definition of
    non-interference (section 4).  Section 5 states the main results in the
-   paper's own terms.  Paper: Section VII-A. *)
+   paper's own terms.  Paper: the appendix. *)
 
 (* ----------------------------------------------------------------------- *)
 (** * 1. L-equivalences                                                     *)

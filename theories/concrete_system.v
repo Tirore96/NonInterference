@@ -158,7 +158,7 @@ Ltac trace_last := (first [econ;[idtac | econ | idtac] | econ];
   reduce_tac; econ; econ; reduce_tac; econ; econ; reduce_tac; econ;
   econ; reduce_tac; econ; econ; reduce_tac; econ.
 
-(* -- The state along the four runs (Paper, Figs. 5 and 6, lower rows) --
+(* -- The state along the four runs (Paper, Figs. 4 and 7, lower rows) --
 
    [run_states] gives the state after each event of a run, from the policy's
    initial state; [run_states_model] below shows these are the states the model
