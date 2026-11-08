@@ -207,7 +207,7 @@ handler is ready.
 
 The invariant says nothing about the timer or disk masks at a boundary.
 \m{queue_secret_run} masks the timer so that its handler cannot run inside a slice and
-extend it, and unmasks the disk so that it can claim a run; the proof uses neither. With
+extend it, and unmasks the disk so that its handler can take a run; the proof uses neither. With
 the timer left unmasked the policy is also secure (\m{model_timer_unmasked_NI}), and a
 timer handler run then extends the slice (\m{timer_unmasked_states_in_slice}).
 

@@ -1,31 +1,21 @@
 \section{Introduction}\label{sec:intro}
 
-An operating system owns the devices, decides which process runs and when, and
-stands between processes that must not learn about each other. Whatever it lets one
-process observe about another is a potential leak, and that includes \emph{when}
-things happen as well as what values are computed.
-
-Interrupts are how an operating system learns that something happened: a disk
-transfer completed, a packet arrived, a timer expired. Some of these events are
-secret. Whether a particular process just received data from the disk may reveal
-what it is doing, so an operating system that keeps such an event secret has to
-hide that it happened at all.
+Interrupts tell an operating system that something happened: a disk transfer
+completed, a packet arrived, a timer expired. Some of these events are secret:
+whether a process just received data from the disk may reveal what it is doing.
+Servicing an interrupt takes time from whichever process was scheduled, so an
+operating system that keeps such an event secret must also hide when its handler
+runs, and for how long.
 
 Ordinary interrupt handling does not hide it. As soon as the interrupt can be
-serviced, its handler runs, displacing whatever process was scheduled; the handler
-takes a few steps, and then the displaced process resumes. Suppose a public process keeps
-issuing requests whose results an attacker can see. While the handler runs, those
-requests stop, and the attacker sees a gap in the stream exactly as long as the
-handler (\cref{fig:leak}). The interrupt has leaked through the \emph{schedule}.
-The attacker needs no view of the schedule itself: the gap is in the public
-process's own output, as the user-view rows of \cref{fig:leak} show.
-Timing leaks through interrupt handling of this kind arise in several operating
+serviced, its handler runs for a few steps, displacing the scheduled process, which
+then resumes. Suppose a public process keeps issuing requests whose results an
+attacker can see. While the handler runs those requests stop, and the attacker sees
+a gap in the stream exactly as long as the handler (\cref{fig:leak}). The interrupt
+has leaked through the \emph{schedule}, although the attacker never sees the
+schedule itself: the gap is in the public process's own output. Timing leaks
+through interrupt handling of this kind arise in several operating
 systems \todo{examples, with citations}.
-
-We follow this example throughout the paper: the secret is \emph{whether a
-disk interrupt occurred}, and a private process, the legitimate consumer of the disk
-event, reacts to it. \Cref{sec:model,sec:designs,sec:proof}
-model this system, exhibit the leak, and remove it.
 
 \begin{figure}[t]
 \centering
@@ -61,56 +51,65 @@ model this system, exhibit the leak, and remove it.
 \label{fig:leak}
 \end{figure}
 
-Leaks of this kind are the subject of information flow
-control~\cite{sabelfeld2003}, where the absence of a leak is stated as
-non-interference~\cite{goguen1982}: varying what the attacker may not see must not
-change what it does see. For timing leaks, ``what it sees'' must include when each
-output appears~\cite{agat2000}.
+Leaks like this are timing channels, which operating-systems work measures and
+mitigates~\cite{cock2014,ge2019}. We take the view of information-flow
+control~\cite{sabelfeld2003}, where Goguen and Meseguer's
+non-interference~\cite{goguen1982} states the absence of a leak: varying what the
+attacker may not see must not change what it does see. For timing
+leaks, what the attacker sees includes when each output appears~\cite{agat2000}. Our
+attacker sees the outputs of the public processes and when they appear, and the
+public part of the schedule.
 
-We use the process calculus of Rafnsson, Jia and Bauer~\cite{rafnsson2017}, whose
-non-interference is timing-sensitive and whose theorems compose: if the parts of a
-process are non-interfering at suitable equivalences, so is the whole. We model
-interrupt handling and process scheduling as one closed process in this calculus
-(\cref{fig:system}): the user processes, the scheduler and the handlers run in a pool,
-and a global state decides at each step which of them runs. We prove in Rocq that
-ordinary interrupt handling is interfering (\m{model_immediate_not_NI}): the leak
-of \cref{fig:leak} is a counterexample, in the user view as well
-(\m{model_immediate_userview_not_NI}).
+Existing results leave this problem open. Non-interference proofs for verified
+kernels such as seL4 exclude timing channels~\cite{murray2012,murray2013}, which
+remain measurable~\cite{cock2014}. Language-based
+work closes timing channels in programs~\cite{agat2000,askarov2010} and asks which
+programs are secure under a given scheduler~\cite{smith1998,mantel2010}, but leaves out
+the interrupt mechanism, which decides when handlers preempt the scheduled process.
+To our knowledge, no proof shows an interrupt policy timing-sensitive
+non-interfering\todo{confirm}.
 
-What the attacker learns is \emph{when} a secret handler runs and \emph{for how
-long}. A non-interfering policy must therefore fix both by public events; only
-\emph{which} secret handler runs may depend on the secret. We model a policy that
-does so. Secret handlers run only inside time slices, each opened when the handler
-of the public timer completes and each holding a fixed number of handler runs; a
-run that no real interrupt claims is filled by a dummy handler, the NOP handler. A
-secret handler run then replaces a NOP run instead of displacing a user process.
-That this is safe is intuitive; proving it is not. The secret still changes the
-state: it sets a pending bit, decides which handler fills a run, and changes what
-the private user process does next. The proof must show that none of this ever
-decides whether, or for how long, a secret handler runs (\cref{sec:proof}).
+We build such a proof in the process calculus of Rafnsson, Jia and
+Bauer~\cite{rafnsson2017}, whose non-interference is timing-sensitive and whose
+theorems compose: if the parts of a process are non-interfering, so is the whole. We model interrupt handling and process scheduling as
+one closed process (\cref{fig:system}): the user processes, the scheduler and the
+handlers run in a pool, and a global state decides at each step which of them runs.
+The model is generic in its \emph{interrupt policy}, the part that decides when
+handlers may run. With the ordinary policy, which services each interrupt as soon as
+it can, the model is interfering, with \cref{fig:leak} as the counterexample. Our
+policy fixes when secret handlers run, and for how long, by public events. Secret
+handlers run only in time slices, as in time protection~\cite{ge2019}\todo{more
+citations for time slices?}: each slice opens when the public timer's handler
+completes and holds a fixed number of handler runs, and when no secret interrupt is
+pending, a dummy handler runs instead. Only \emph{which} secret handler runs
+depends on the secret.
 
-We prove this policy non-interfering (\m{model_sliced_NI}), even to an attacker who
-sees at every step which process ran, except which of the two secret handlers, and
-the result carries over to the user view (\m{model_sliced_userview_NI}).
-Both policies are instances of a single generic model and differ only in their
-\emph{interrupt policy}: the part that decides when handlers may run. The result
-holds for every non-interfering scheduler and pair of user processes, every handler
-length and every number of handler runs per time slice.
+That this policy is secure is intuitive; proving it is not. The secret still changes
+the state: it sets a pending bit, decides which handler takes a run, and changes what
+the private user process does next. The proof must show that none of this ever decides
+whether, or for how long, a secret handler runs. Composition reduces it to the parts
+of the model, and an invariant on the states the policy reaches does the rest.
 
 \paragraph{Contributions}
 \begin{itemize}
-\item A mechanised, timing-sensitive non-interference proof for interrupt handling
-  (\cref{sec:designs,sec:proof}), and a mechanised counterexample for ordinary
-  interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one
-  generic theorem per constructor of the model, which leaves two hard steps
-  specific to interrupt handling (\cref{lem:state-cell,lem:slot}).
-\item Obligations on an interrupt policy that are sufficient for non-interference in
-  our model, stated as one theorem over interrupt policies with our policy as an
-  instance (\cref{thm:policy}). A model with more components would likely add
-  obligations.
-\item A mechanisation of the calculus and its composition theorems, with
-  non-interference over finite traces, which makes every proof an induction, proved
-  equivalent to the original coinductive definition (\cref{sec:mechanisation}). We
-  add sum types and a composition theorem for state cells under an invariant, which
-  lets the proof use what the policy maintains on the states it reaches.
+\item A mechanised counterexample: ordinary interrupt handling is interfering
+  (\m{model_immediate_not_NI}), also in the view of user space alone
+  (\cref{sec:leak}).
+\item A mechanised, timing-sensitive non-interference proof for the sliced policy
+  (\m{model_sliced_NI}), for every non-interfering scheduler and pair of user
+  processes, every handler length and every slice size
+  (\cref{sec:designs,sec:proof}). The proof is compositional: one generic theorem per
+  constructor of the model leaves two steps specific to interrupt handling
+  (\cref{lem:state-cell,lem:slot}).
+\item Three obligations on an interrupt policy that suffice for non-interference in
+  our model, with the sliced policy as one instance (\cref{thm:policy}).
+\item A mechanisation in Rocq of the calculus and its composition theorems
+  (\cref{sec:mechanisation}), over finite traces and proved equivalent to the
+  original coinductive definition, extended with sum types and a composition theorem
+  for state cells under an invariant.
 \end{itemize}
+
+\Cref{sec:background} recalls the calculus, \cref{sec:model} builds the model,
+\cref{sec:designs} gives the two policies and the leak, and \cref{sec:proof} proves
+the sliced policy secure. \Cref{sec:mechanisation,sec:related,sec:conclusion} cover
+the mechanisation, related work and conclusions.

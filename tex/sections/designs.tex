@@ -159,7 +159,7 @@ The sliced policy removes the bold arrows. It runs the secret handlers only in
 \emph{time slices}: S is entered only when the timer handler completes, and the
 system stays there for a fixed number of steps (\cref{fig:phases}). A slice holds
 exactly $\mathit{runs}$ handler runs ($\mathit{runs} = 2$ in the concrete system), and
-a run that no disk interrupt claims is taken by the NOP handler, so a slice is the
+when no disk interrupt is pending the NOP handler takes the run, so a slice is the
 same whether or not a disk interrupt is waiting. Each part of the policy below
 removes an arrow of \cref{fig:policy-ordinary} or fixes how long S lasts.
 

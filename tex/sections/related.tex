@@ -32,8 +32,8 @@ seL4~\cite{murray2012,murray2013}, leaving timing channels out of scope; Cock et
 measure those that remain~\cite{cock2014}. Time
 protection~\cite{ge2019} argues that an operating system must partition time as well
 as space, and includes the partitioning of interrupts among its
-mechanisms\todo{check this characterisation against~\cite{ge2019}}; our sliced policy
-is an instance of that idea in a small model, with a timing-sensitive, compositional,
+mechanisms\todo{check this characterisation against~\cite{ge2019}}; our time slices
+apply that idea to handler runs, in a small model, with a timing-sensitive, compositional,
 mechanised proof. At the hardware interface, Zagieboylo et
 al.\ design an instruction set that controls timing channels and leave exceptions and
 asynchrony outside their formal proof~\cite{zagieboylo2019}.
