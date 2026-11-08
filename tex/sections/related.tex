@@ -4,22 +4,22 @@
 Meseguer~\cite{goguen1982}; Sabelfeld and Myers survey language-based
 approaches~\cite{sabelfeld2003}. Timing channels in programs have been closed by
 padding transformations that equalise the running time of secret-dependent
-branches~\cite{agat2000}; the sliced policy applies the same idea to handler
-runs, with the NOP handler as padding.
+branches~\cite{agat2000}; the sliced policy pads handler runs likewise, with the
+NOP handler.
 
 \paragraph{Concurrency and scheduling} How the scheduler affects the security of
 multi-threaded programs has been studied since Smith and Volpano~\cite{smith1998},
 with probabilistic~\cite{sabelfeld2000}, scheduler-independent~\cite{mantel2010},
 concurrent information-flow~\cite{stefan2012} and mechanised~\cite{vassena2017}
 results. These works treat the scheduler as given and ask which
-programs are secure under it. We treat the interrupt mechanism, which decides when
-handlers preempt the scheduled process, as the object to be made secure.
+programs are secure under it. We instead secure the interrupt mechanism, which
+decides when handlers preempt the scheduled process.
 
 \paragraph{Timing-channel mitigation} Predictive mitigation delays outputs to a
 schedule predicted from public information, bounding what their timing
 leaks~\cite{askarov2010}, also in a language-based setting~\cite{zhang2012}. Our
-requirement has the same shape: when secret handlers run, and for how long, must be
-fixed by public events. The sliced policy meets it exactly, at the cost of reserving
+requirement has the same shape: when secret interrupts are handled, and for how
+long, must be fixed by public events. The sliced policy meets it exactly, at the cost of reserving
 handler time whether or not it is used.
 
 \paragraph{Composable timing-sensitive non-interference} Our proofs rest on the
@@ -33,7 +33,7 @@ measure those that remain~\cite{cock2014}. Time
 protection~\cite{ge2019} argues that an operating system must partition time as well
 as space, and includes the partitioning of interrupts among its
 mechanisms\todo{check this characterisation against~\cite{ge2019}}; our time slices
-apply that idea to handler runs, in a small model, with a timing-sensitive, compositional,
+apply it to handler runs in a small model, with a timing-sensitive, compositional,
 mechanised proof. At the hardware interface, Zagieboylo et
 al.\ design an instruction set that controls timing channels and leave exceptions and
 asynchrony outside their formal proof~\cite{zagieboylo2019}.
