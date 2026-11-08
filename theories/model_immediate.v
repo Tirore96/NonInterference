@@ -40,6 +40,7 @@ Definition model_immediate (runtime : nat) (Opub Opriv : Ty)
 
 Definition model_immediate_concrete := model_immediate handler_runtime p_pub_concrete p_priv_concrete scheduler.
 Definition model_immediate_userview_concrete := userview model_immediate_concrete.
+Definition model_immediate_publicview_concrete := publicview model_immediate_concrete.
 
 Definition immediate_no_dI' : seqtype' := [::out_get';out_get';out_get';tI';out_get';tmr_step';tmr_done';sched_priv';out_nop';out_nop';out_nop';out_nop';out_nop'].
 Definition immediate_with_dI' : seqtype' := [::out_get';dI';out_get';dsk_step';tI';dsk_done';tmr_step';tmr_done';sched_priv';out_syscall';out_nop';out_nop';out_nop';out_nop'].

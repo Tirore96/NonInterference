@@ -524,6 +524,16 @@ Definition userview (Opub Opriv : Ty) (p : Proc T_in (T_out Opub Opriv))
 
 Definition out_equiv_userview (Opub Opriv : Ty) : cEquiv [T_out_userview Opub Opriv] := eqmaybe_nobody (eqsum (public_equiv Opub) (private_equiv Opriv)).
 
+(* The public view of a model: only the public user's output.  This is all an
+   attacker needs to see the leak of [model_immediate]. *)
+Definition public_output (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [Option Opub] := o.1.
+
+Definition publicview (Opub Opriv : Ty) (p : Proc T_in (T_out Opub Opriv))
+  : Proc T_in (Option Opub) :=
+  map id (@public_output Opub Opriv) p.
+
+Definition out_equiv_publicview (Opub : Ty) : cEquiv [Option Opub] := eqmaybe_nobody (public_equiv Opub).
+
 (* === 8. The two policies, side by side ===
 
    The two policies, defined in model_immediate.v and model_sliced.v, are the

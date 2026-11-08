@@ -22,7 +22,8 @@ Require Export NonInterference.theories.model_timer_unmasked.
    Paper: Sections IV and V.  Structure:
      4. The model's equivalences : in_equiv, out_equiv (out_equiv_userview is in generic_model.v)
      5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI),
-        nor is its user view                          (model_immediate_userview_not_NI)
+        nor is its user view                          (model_immediate_userview_not_NI),
+        nor even its public view                      (model_immediate_publicview_not_NI)
      6. model_sliced / wrapped are non-interfering (model_sliced_NI, model_sliced_userview_NI)
      7. The state equivalence (state_type_equiv) and the fv_NI obligation
    =================================================================== *)
@@ -146,6 +147,23 @@ Proof.
   intros. simpl in H. subst. auto.
 Qed.
 
+(* The same two public requests, seen through the public view. *)
+Definition two_gets_public : seq ([T_in] + [Option TPublicOutput]) :=
+  [:: inr (Some GetRequest); inr (Some GetRequest)].
+
+Lemma helper_trace_publicview' : Trace (public_equiv _) \bot two_gets_public model_immediate_publicview_concrete.
+Proof.
+  have <-: map_tr (@public_output TPublicOutput TTypeSyscall) [::out_get';out_get'] = two_gets_public by [].
+  eapply Trace_map. 2:eapply helper_trace'.
+  mrw. ssa. subst. done.
+Qed.
+
+Lemma helper_trace_publicview : Trace (out_equiv_publicview TPublicOutput) \bot two_gets_public model_immediate_publicview_concrete.
+Proof.
+  eapply Trace_imp. 2:eapply helper_trace_publicview'.
+  intros. simpl in H. subst. auto.
+Qed.
+
 
 (*Opaque otherwise the inversion tactic take forever*)
 Opaque input_update output_update pool_input immediate_init no_output f_proj.
@@ -178,6 +196,24 @@ Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
   move: helper_trace_userview. rewrite /two_gets.
+  move/a. move/(_ (inl tt) 0). simpl.
+  have: dis in_equiv \bot (inl tt). ssa.
+  move=>aa. move/(_ aa).
+  move=>Htr. clear a aa.
+  inv Htr; clear Htr; match_dd_out_first.
+  do 2 (match goal with Ht : Trace _ _ (_ :: _) _ |- _ => inv Ht; clear Ht end;
+        match_dd_out_first).
+  match goal with Hr : rel _ _ _ _ |- _ => solve [move: Hr; clear; simpl; ssa] end.
+Qed.
+
+(* The leak needs only the public user's output: the missing public request is
+   all the attacker sees, and it suffices.  Same witness, same proof. *)
+Lemma model_immediate_publicview_not_NI :
+  ~ NI in_equiv (out_equiv_publicview TPublicOutput) model_immediate_publicview_concrete.
+Proof.
+  intro. rewrite /NI in H. move: (H \bot). clear H.
+  rewrite /NI_l. case=>_ [] + _. intros.
+  move: helper_trace_publicview. rewrite /two_gets_public.
   move/a. move/(_ (inl tt) 0). simpl.
   have: dis in_equiv \bot (inl tt). ssa.
   move=>aa. move/(_ aa).

@@ -57,8 +57,7 @@ control~\cite{sabelfeld2003}, where Goguen and Meseguer's
 non-interference~\cite{goguen1982} states the absence of a leak: varying what the
 attacker may not see must not change what it does see. For timing
 leaks, what the attacker sees includes when each output appears~\cite{agat2000}. Our
-attacker sees the outputs of the public processes and when they appear, and the
-public part of the schedule.
+attacker watches the output of the public process, and when it appears.
 
 Existing results leave this problem open. Non-interference proofs for verified
 kernels such as seL4 exclude timing channels~\cite{murray2012,murray2013}, which
@@ -76,24 +75,24 @@ one closed process (\cref{fig:system}): the user processes, the scheduler and th
 handlers run in a pool, and a global state decides at each step which of them runs.
 The model is generic in its \emph{interrupt policy}, the part that decides when
 handlers may run. With the immediate policy the model is interfering, with \cref{fig:leak} as the counterexample. Our
-policy fixes when secret handlers run, and for how long, by public events. Secret
-handlers run only in time slices, as in time protection~\cite{ge2019}\todo{more
-citations for time slices?}: each slice opens when the public timer's handler
-completes and holds a fixed number of handler runs, and when no secret interrupt is
-pending, a dummy handler runs instead. Only \emph{which} secret handler runs
+policy fixes when secret interrupts are handled, and for how long, by public events.
+In our model the timer interrupt is public, and when its handler completes, the
+policy allocates a time slice in which secret interrupts may be handled, as in time
+protection~\cite{ge2019}\todo{more citations for time slices?}; a dummy handler
+fills whatever time they leave unused. Only \emph{which} secret interrupt is handled
 depends on the secret.
 
 That this policy is secure is intuitive; proving it is not. The secret still changes
 the state: it sets a pending bit, decides which handler takes a run, and changes what
 the private user process does next. The proof must show that none of this ever decides
-whether, or for how long, a secret handler runs. Composition reduces it to the parts
+whether, or for how long, secret interrupts are handled. Composition reduces it to the parts
 of the model, and an invariant on the states the policy reaches does the rest.
 
 \paragraph{Contributions}
 \begin{itemize}
 \item A mechanised counterexample: immediate interrupt handling is interfering
-  (\m{model_immediate_not_NI}), also in the view of user space alone
-  (\cref{sec:leak}).
+  (\m{model_immediate_not_NI}), and the leak needs only the output of the public
+  process (\m{model_immediate_publicview_not_NI}) (\cref{sec:leak}).
 \item A mechanised, timing-sensitive non-interference proof for the sliced policy
   (\m{model_sliced_NI}), for every non-interfering scheduler and pair of user
   processes, every handler length and every slice size

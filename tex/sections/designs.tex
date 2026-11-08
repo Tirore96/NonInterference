@@ -86,7 +86,8 @@ white slots of \cref{fig:io}, only whether it ran on the light slot, and nothing
 on the dark ones.
 So the attacker sees when the U and T steps happen. On an S step it sees that those
 slots are all empty, which shows that a secret handler ran and leaves open
-which. \Cref{sec:gating} shows that the proof forces this shape.
+which. This is the view the proof works with (\cref{sec:proof}), and
+\cref{sec:gating} shows that the proof forces this shape.
 
 The step into S and the time spent there are thus visible. For the attacker to learn
 nothing, both must be fixed by public events; what runs inside S may depend on
@@ -115,8 +116,26 @@ next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
 \code{None} in the public slot, and $o_2 \not\Eout_\Lo o_G$.
 \end{proof}
 
-We also state the result for what user space itself emits, without the scheduler and
-the timer handler. The \emph{user view} of a model \code{m},
+The counterexample turns on the public slot alone, so the leak needs nothing beyond
+the public user's output. The \emph{public view} of a model \code{m},
+\code{map id public_output m}, keeps only that slot, as a value of type
+\code{Opub + 1}, at the equivalence $\pubeq + \one^\emptyset$
+(\m{out_equiv_publicview}):
+
+\begin{corollary}[Public-view leak,\newline \m{model_immediate_publicview_not_NI}]\label{cor:leak-publicview}
+For the concrete system,
+\[
+\mathsf{publicview}\;\mathsf{model\_immediate\_concrete}
+  \notin \NI(\Ein,\, \pubeq + \one^\emptyset).
+\]
+\end{corollary}
+
+\begin{proof}
+The counterexample of \cref{thm:leak}: $o_2$ and $o_G$ differ in the public slot.
+\end{proof}
+
+To present results at the level of user space, we abstract from interrupts and
+scheduling to what the user processes emit. The \emph{user view} of a model \code{m},
 \code{map id parse_output m}, keeps only the two user slots: \m{parse_output} maps an
 output to a value of type \code{(Opub + Opriv) + 1}, for the user processes' output
 types \code{Opub} and \code{Opriv}: the public user's as

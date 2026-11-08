@@ -170,22 +170,19 @@ dati@itu.dk}}
 \maketitle
 \begin{abstract}
 Interrupt handling is a key part of an operating system, and a source of timing
-leaks. Servicing an interrupt takes time from whichever process was scheduled, so an
-attacker who watches a public process sees when a handler ran and for how long. If
-the interrupt is secret, so is that information. Such leaks arise in several
-operating systems \todo{examples, with citations}. We use the process calculus of
-Rafnsson et al., whose timing-sensitive non-interference theorems compose, to model
-interrupt handling and process scheduling as a single process, and prove in Rocq
-that immediate interrupt handling, which services an interrupt as soon as it can,
-leaks: a secret disk interrupt is observable
-through the schedule alone. Since the attacker sees the public part of the schedule, a
-non-interfering policy must make \emph{when} secret
-handlers run, and for how long, depend only on public events, while \emph{which}
-secret handler runs may stay hidden. We model a policy that does so: secret handlers
-run only in time slices of fixed length, opened by the public timer handler, and
-a dummy handler runs when no secret interrupt is pending. We prove it timing-sensitive
-non-interfering for any scheduler and user processes that are themselves
-non-interfering.
+leaks. Servicing an interrupt suspends the running process, so an attacker who
+watches a public process can infer when an interrupt was handled, and for how long.
+If the interrupt is meant to be secret, this leaks it. We use the process calculus of
+Rafnsson et al.\ to model interrupt handling and process scheduling, and prove in
+Rocq that immediate interrupt handling, which services an interrupt as soon as
+possible, leaks: a secret disk interrupt is observable in the output of the public
+process alone. A non-interfering policy must therefore make \emph{when} secret
+interrupts are handled, and for how long, depend only on public events, while
+\emph{which} of them is handled may stay hidden. We model a policy that does so. In
+our model the timer interrupt is public, and when its handler completes, the policy
+allocates a time slice in which secret interrupts may be handled; a dummy handler
+fills whatever time they leave unused. We prove it timing-sensitive non-interfering
+for any scheduler and user processes that are themselves non-interfering.
 \end{abstract}
 
 \begin{IEEEkeywords}
