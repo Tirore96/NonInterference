@@ -33,12 +33,12 @@ model this system, exhibit the leak, and remove it.
 \begin{tikzpicture}[font=\scriptsize,
   cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
   cG/.style={cell, fill=black!28}, cT/.style={cell, fill=black!28},
-  cS/.style={cell, fill=black!28}, cP/.style={cell, fill=black!10},
+  cR/.style={cell, fill=black!28}, cP/.style={cell, fill=black!10},
   cD/.style={cell, fill=white}]
 \foreach \i in {1,...,8} \node at (0.45*\i, 0.8) {\i};
 \node[anchor=east] at (0.15,0) {no disk interrupt};
 \irqarrow{1.575}{0.42}{T}
-\foreach \c [count=\i] in {G,G,G,G,T,T,S,P} \node[c\c] at (0.45*\i,0) {\c};
+\foreach \c [count=\i] in {G,G,G,G,T,T,R,P} \node[c\c] at (0.45*\i,0) {\c};
 % user view: parse_output keeps the two user slots, every other step is None
 \node[anchor=east] at (0.15,-0.42) {user view};
 \foreach \s/\c [count=\i] in {cG/G,cG/G,cG/G,cG/G,cD/{},cD/{},cD/{},cP/P}
@@ -46,13 +46,13 @@ model this system, exhibit the leak, and remove it.
 \node[anchor=east] at (0.15,-1.3) {disk interrupt};
 \irqarrow{0.675}{-0.88}{D}
 \irqarrow{1.575}{-0.88}{T}
-\foreach \c [count=\i] in {G,G,D,D,T,T,S,P} \node[c\c] at (0.45*\i,-1.3) {\c};
+\foreach \c [count=\i] in {G,G,D,D,T,T,R,P} \node[c\c] at (0.45*\i,-1.3) {\c};
 \node[anchor=east] at (0.15,-1.72) {user view};
 \foreach \s/\c [count=\i] in {cG/G,cG/G,cD/{},cD/{},cD/{},cD/{},cD/{},cP/P}
   \node[\s] at (0.45*\i,-1.72) {\c};
 \end{tikzpicture}
 \caption{Who runs at each step under ordinary interrupt handling, with and without a
-  disk interrupt. G: public user, P: private user, S: scheduler, T, D: timer
+  disk interrupt. G: public user, P: private user, R: scheduler, T, D: timer
   and disk handler. Shading is what the attacker sees: the step and its value (dark),
   only that it happened (light), or nothing (white). A wavy arrow marks an
   interrupt arriving between two steps. The disk handler takes steps 3 and 4

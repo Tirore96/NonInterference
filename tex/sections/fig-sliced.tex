@@ -31,7 +31,7 @@
 \begin{tikzpicture}[font=\scriptsize,
   cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
   pub/.style={cell, fill=black!28}, priv/.style={cell, fill=white},
-  cG/.style={pub}, cT/.style={pub}, cS/.style={pub}, cP/.style={cell, fill=black!10},
+  cG/.style={pub}, cT/.style={pub}, cR/.style={pub}, cP/.style={cell, fill=black!10},
   cD/.style={priv}, cN/.style={priv},
   head/.style={anchor=west, font=\scriptsize\itshape},
   diff/.style={draw, line width=1.3pt, minimum width=0.45cm, minimum height=0.4cm}]
@@ -40,7 +40,7 @@
 \node[head, anchor=east] at (0.15,0.00) {no disk interrupt};
 \irqarrow{1.575}{0.00}{T}
 \node[anchor=east] at (0.15,-0.42) {runs};
-\foreach \c [count=\i] in {G,G,G,G,T,T,N,N,N,N,S,P} \node[c\c] at (0.45*\i,-0.42) {\c};
+\foreach \c [count=\i] in {G,G,G,G,T,T,N,N,N,N,R,P} \node[c\c] at (0.45*\i,-0.42) {\c};
 \node[anchor=west] at (5.67,-0.42) {\texttt{Idle}};
 \node[anchor=east] at (0.15,-0.82) {slice counter};
 \foreach \c [count=\i] in {0,0,0,0,0,0,4,3,2,1,0,0} \node[pub] at (0.45*\i,-0.82) {\c};
@@ -55,7 +55,7 @@
 \irqarrow{0.675}{-2.67}{D}
 \irqarrow{1.575}{-2.67}{T}
 \node[anchor=east] at (0.15,-3.09) {runs};
-\foreach \c [count=\i] in {G,G,G,G,T,T,D,D,N,N,S,P} \node[c\c] at (0.45*\i,-3.09) {\c};
+\foreach \c [count=\i] in {G,G,G,G,T,T,D,D,N,N,R,P} \node[c\c] at (0.45*\i,-3.09) {\c};
 \foreach \i in {7,8} \node[diff] at (0.45*\i,-3.09) {};
 \node[anchor=west] at (5.67,-3.09) {\texttt{Sys}};
 \node[anchor=east] at (0.15,-3.49) {slice counter};
