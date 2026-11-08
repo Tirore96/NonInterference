@@ -352,7 +352,7 @@ Follow the outline from the outermost constructor inwards. Down to the state cel
 steps are routine, and \cref{lem:state-cell} handles the cell. Below it, \code{map},
 \code{maybe} and \code{par} leave one obligation per slot, which \cref{lem:slot} reduces
 to $p_n \in \NI(\Ex_n,\Ey_n)$. For the scheduler and the user processes these are
-the hypotheses of the theorem. The handlers are non-interfering at their output
-equivalences, public for the timer handler and private for the others, with the step
-count classified like the output (\m{ir_handler_public_NI}, \m{ir_handler_private_NI}).
+the hypotheses of the theorem. Each handler is non-interfering at its output's
+equivalence, public or private, with its step count classified alike
+(\m{ir_handler_public_NI}, \m{ir_handler_private_NI}).
 \end{proof}

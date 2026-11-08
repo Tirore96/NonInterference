@@ -1,12 +1,12 @@
 \section{Mechanisation}\label{sec:mechanisation}
 
-The development is about 6{,}000 lines of Rocq 9.0.1, available at
+The development is about 6{,}400 lines of Rocq 9.0.1, available at
 \url{\repobase}, using Mathematical Components~2.5.0~\cite{mathcomp} with
 Hierarchy Builder~1.10.1, deriving~0.2.2 and, for the coinductive definitions of
 the original paper, paco~4.2.3~\cite{paco}. Continuous
 integration rebuilds it on every change and checks that the paper's results
-assume nothing beyond the two parameters that fix the security lattice. Identifiers
-in typewriter font in this paper link to their definitions.
+assume nothing beyond the two parameters that fix the security lattice. Names of
+definitions and theorems in typewriter font in the running text link to the sources.
 
 \paragraph{Departures} Our definitions follow Rafnsson et al., with one essential
 departure: the original defines non-interference coinductively over infinite streams,
@@ -18,6 +18,6 @@ details, and the files of the development.
 \paragraph{Scope} The development fixes the shape of the pool: six slots, with one
 scheduler, two user processes and three handlers, and the two interrupts.
 \Cref{thm:leak} is a counterexample on the concrete system. The listings in this paper are
-typed by hand from the Rocq sources, to which their identifiers link, and the runs in
-the figures are proved traces of the models (\appx).
+typed by hand from the Rocq sources, to which the text links, and the runs in
+the figures are proved traces (\appx).
 
