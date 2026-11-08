@@ -1,6 +1,5 @@
 \section{Interrupt Handling and Scheduling as One Process}\label{sec:model}
-We now write interrupt handling and process scheduling as a single process, following
-the example of \cref{fig:leak}. The mechanism we model is that of
+The mechanism we model is that of
 Linux~\cite{love2010}\note{check Love: page reference, second source for current
 kernels}. A device raises an \emph{interrupt request} (IRQ) at the
 \emph{interrupt controller}, where it stays \emph{pending} while it is \emph{masked}.
@@ -60,7 +59,7 @@ its last step the handler emits \code{Notify} to announce completion, and
 The six processes run side by side in a \emph{pool} (\cref{fig:system}), and only
 one of them takes a step at a time. Each sits behind a switch, controlled by the
 current process identifier (pid): a pid names one slot, whose process takes one
-step, while every other slot emits \code{None} without moving. Each slot
+step, while every other slot emits \code{None} and takes no output step. Each slot
 (\m{process_pool}) is a
 \code{swi} whose input bit says whether the pid names it, which opens its switch;
 the slot tags each output with \code{true}, which closes the switch again, so a
@@ -72,9 +71,9 @@ lets an interrupt, which reaches the pool as \code{None}, leave it unchanged.
 
 The pool's output records \emph{who ran} as well as what was computed, so the schedule
 is part of what the system emits. Since \code{par} emits both outputs as a pair, the
-output is a six-tuple whose positions have types $A + 1$, with \code{Some} where the
-slot ran and \code{None} elsewhere, the output type \code{T_out}, with exactly one
-\code{Some} on each step.
+output is a six-tuple, the type \m{T_out}, whose positions have types $A + 1$:
+\code{Some} where the slot ran and \code{None} elsewhere, so at most one \code{Some}
+on each step.
 
 \subsection{The state}\label{sec:global-state}\label{sec:state}
 
@@ -82,7 +81,8 @@ Around the pool sits a state cell, a \code{sta} whose value and two update
 functions together model the interrupt controller, along with
 the remaining bookkeeping.
 The global state (\m{state_type}) is the box of \cref{fig:system}
-opened up: a nest of pairs holding two pids, two flags and the interrupt controller.
+opened up: a nest of pairs holding two pids, a flag, a counter and the interrupt
+controller.
 
 \begin{itemize}
 \item The \emph{current pid} names the slot that runs next. The two secret
@@ -90,8 +90,8 @@ opened up: a nest of pairs holding two pids, two flags and the interrupt control
   \code{inl false} for the NOP handler, and every other process on the \code{inr}
   side, numbered from 0: timer handler, scheduler, private user, public user. The
   system starts in the public user (\m{initial_pid}).
-\item The \emph{previous pid}, a number or \code{None}, is the user process a handler
-  interrupted.
+\item The \emph{previous pid}, a number or \code{None}, is the pid a handler
+  displaced, which control returns to.
 \item The \emph{reschedule flag} is the boolean \m{re_sched}.
 \item The \emph{slice counter} \m{slice_count} counts the output steps until
   the current time slice closes, and is \code{0} outside a slice; the ordinary
@@ -109,8 +109,8 @@ and decides nothing:
 input_update e v :=
   if e is inl i then set_pending i v else v
 \end{lstlisting}
-\m{set_pending} sets the arriving interrupt's pending bit. Its argument is a
-sum because of the loop, and \cref{sec:loop} explains the \code{inr} case. The output
+An \code{inl} event sets the arriving interrupt's pending bit (\m{set_pending}). The
+event \code{e} is a sum because of the loop, and \cref{sec:loop} explains the \code{inr} case. The output
 update $g$ runs on each output of the pool, and is where the interrupt policy acts:
 \begin{lstlisting}
 output_update observe_policy advance_policy o :=
@@ -139,7 +139,7 @@ pending bit (\m{initiate_handler}).
 
 \subsection{The loop}\label{sec:loop}
 
-So far the state computes a next pid, but the pool has no way to learn it. A
+The state now computes a next pid, but the pool has no way to learn it. A
 switch opens only on an input, so after an output the next pid
 must reach the pool as an input, and only \code{loop} supplies one: it feeds each
 output back as an input, within the same step. \m{pool_input} turns a fed-back output
@@ -149,7 +149,7 @@ and so does the loop's two jobs.
 The first job is to deliver the pid: without it, no switch would reopen after
 the first step. The second is to give the private user the disk handler's output. The
 private user is the legitimate consumer of the disk event, and this input is what makes
-the effect of the disk handler's run visible in user space (\cref{sec:leak}).
+the effect of the disk handler's run visible in user space (\cref{sec:sliced}).
 
 A \code{loop} needs equal input and output types, while the system takes
 interrupts and emits tuples. So inside the loop an event is a sum, \code{T_in + T_out},
@@ -173,7 +173,7 @@ global state, written here with the wrapper \m{reactive_system} unfolded:
 \begin{lstlisting}
 model runtime init_policy
       observe_policy advance_policy
-      p_pub p_priv p_sched : Proc T_in T_out =
+      p_pub p_priv p_sched : Proc T_in T_out :=
   map inl (inr_or_def no_output)
    (loop (map id (fun x => inr x.2)
     (sta input_update
