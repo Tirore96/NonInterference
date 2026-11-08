@@ -176,14 +176,14 @@ operating systems \todo{examples, with citations}. We use the process calculus o
 Rafnsson et al., whose timing-sensitive non-interference theorems compose, to model
 interrupt handling and process scheduling as a single process, and prove in Rocq
 that ordinary interrupt handling leaks: a secret disk interrupt is observable
-through the schedule alone. A non-interfering policy must make \emph{when} secret
+through the schedule alone. Since the attacker sees the schedule, a
+non-interfering policy must make \emph{when} secret
 handlers run, and for how long, depend only on public events, while \emph{which}
 secret handler runs may stay hidden. We model a policy that does so: secret handlers
 run only in time slices of fixed length, opened by the public timer handler, and
 runs no interrupt claims are filled by a dummy handler. We prove it timing-sensitive
 non-interfering for any scheduler and user processes that are themselves
-non-interfering. The implementation of this policy is carried out in separate work
-\todo{cite X}.
+non-interfering.
 \end{abstract}
 
 \begin{IEEEkeywords}

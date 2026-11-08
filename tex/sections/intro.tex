@@ -3,7 +3,7 @@
 An operating system owns the devices, decides which process runs and when, and
 stands between processes that must not learn about each other. Whatever it lets one
 process observe about another is a potential leak, and that includes \emph{when}
-things happen, not only what values are computed.
+things happen as well as what values are computed.
 
 Interrupts are how an operating system learns that something happened: a disk
 transfer completed, a packet arrived, a timer expired. Some of these events are
@@ -52,11 +52,11 @@ model this system, exhibit the leak, and remove it.
   \node[\s] at (0.45*\i,-1.72) {\c};
 \end{tikzpicture}
 \caption{Who runs at each step under ordinary interrupt handling, with and without a
-  disk interrupt. G: public process, P: private process, S: scheduler, T, D: timer
+  disk interrupt. G: public user, P: private user, S: scheduler, T, D: timer
   and disk handler. Shading is what the attacker sees: the step and its value (dark),
   only that it happened (light), or nothing (white). A wavy arrow marks an
   interrupt arriving between two steps. The disk handler takes steps 3 and 4
-  from the public process, a gap the attacker sees. Under each run, its
+  from the public user, a gap the attacker sees. Under each run, its
   user view: only the two user processes, every other step blank. Here the gap can also be seen.}
 \label{fig:leak}
 \end{figure}
@@ -97,10 +97,6 @@ Both policies are instances of a single generic model and differ only in their
 holds for every non-interfering scheduler and pair of user processes, every handler
 length and every number of handler runs per time slice.
 
-The model fixes \emph{what} the modified interrupt processing must do; how to
-implement it in an operating system is carried out in separate work
-\todo{cite X}.
-
 \paragraph{Contributions}
 \begin{itemize}
 \item A mechanised, timing-sensitive non-interference proof for interrupt handling
@@ -108,15 +104,10 @@ implement it in an operating system is carried out in separate work
   interrupt handling (\cref{sec:leak}). The proof is compositional: it applies one
   generic theorem per constructor of the model, which leaves two hard steps
   specific to interrupt handling (\cref{lem:state-cell,lem:slot}).
-\item Requirements that suffice for an implementation of interrupt handling to be
-  non-interfering, stated as a theorem over interrupt policies with our policy as one
-  instance (\cref{thm:policy}). The
-  arrival of a secret interrupt only records that it is pending. When secret
-  handlers run, and for how long, is fixed by public events, so the time
-  reserved for them is fixed in advance and always used up. And the interrupt
-  controller is split by secrecy: which interrupts are pending is secret, while
-  the masks that decide what runs next are public. The implementation in
-  \todo{cite X} follows these requirements.
+\item Obligations on an interrupt policy that are sufficient for non-interference in
+  our model, stated as one theorem over interrupt policies with our policy as an
+  instance (\cref{thm:policy}). A model with more components would likely add
+  obligations.
 \item A mechanisation of the calculus and its composition theorems, with
   non-interference over finite traces, which makes every proof an induction, proved
   equivalent to the original coinductive definition (\cref{sec:mechanisation}). We
