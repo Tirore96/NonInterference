@@ -1,54 +1,51 @@
 \section{Background: Composable Timing-Sensitive Non-Interference}\label{sec:background}
 
-The calculus and definitions here are those of Rafnsson et
-al.~\cite{rafnsson2017}, in the form we mechanise (\appx), with sum types and a composition theorem for state cells under an
-invariant (\cref{thm:sta-pred}) added.
+The calculus and definitions are those of Rafnsson et al.~\cite{rafnsson2017} as we
+mechanise them (\appx), plus sum types and composition under an invariant
+(\cref{thm:sta-pred}).
 
 \subsection{Processes, traces and time}
 
-A process $p : \Proc{I}{O}$ has an input type $I$ and an output type $O$. It moves
-in one of two ways, by receiving an input, $\stepI{p}{i}{p'}$, or by emitting an
-output, $\stepO{p}{o}{p'}$, in any order. Processes are built from seven
-constructors, whose reduction rules are in \appx. The
-model of \cref{sec:model} is a single closed term over them.
+A process $p : \Proc{I}{O}$ has input type $I$ and output type $O$. It moves by
+receiving an input, $\stepI{p}{i}{p'}$, or by emitting an output,
+$\stepO{p}{o}{p'}$, in any order. Processes are built from seven constructors, whose
+reduction rules are in \appx; the model of \cref{sec:model} is one closed term over them.
 
 The simplest constructor, \code{out o}, ignores its input and always emits \code{o}. \code{map f g p} translates
 inputs by \code{f} on the way into \code{p} and outputs by \code{g} on the way out.
 \code{sta f g v p} keeps a state cell \code{v}: an input \code{i} updates it to
-\code{f i v}, and \code{p} receives the new state together with \code{i}; an output
-\code{o} of \code{p} updates it to \code{g o v}, and the new state is emitted together
-with \code{o}. \code{swi b p} switches \code{p} on and off. While the phase \code{b} is
+\code{f i v}, which \code{p} receives together with \code{i}; an output \code{o} of
+\code{p} updates it to \code{g o v}, which is emitted together with \code{o}.
+\code{swi b p} switches \code{p} on and off. While the phase \code{b} is
 \code{false} it emits \code{None} and \code{p} takes no output step; while it is
-\code{true} it emits \code{Some o} for an output \code{(c,o)} of \code{p}. The phase is
-toggled by the tag \code{c} and by the bit carried on each input; the phase, the tag and
+\code{true} it emits \code{Some o} for an output \code{(c,o)} of \code{p}. The tag
+\code{c} and the bit carried on each input toggle the phase; the phase, the tag and
 that bit are the \emph{gate bits}. \code{par p1 p2} gives every input to
 both parts and emits both outputs as a pair. \code{loop p} feeds each output of
 \code{p} back to it as an input. \code{maybe p} makes the input optional: \code{None}
 leaves \code{p} unchanged. We write $A + 1$ for the optional values of
-$A$, with \code{Some v} and \code{None} its two injections. Reduction is deterministic,
+$A$, with \code{Some v} and \code{None} its injections. Reduction is deterministic,
 and a process never blocks.
 
-Time is counted in output steps: every output step is one tick of a clock the
-observer shares, and on every tick a process emits a value (in our models, a
-component that did not run emits \code{None}). Input steps take no time. This makes
-the setting timing-sensitive: a process that emits \code{o} one step late emits
-something else, say \code{None}, at the original step, so a delay is observed as a
-change of value.
+Time is counted in output steps: each is one tick of a clock the observer shares,
+and on every tick a process emits a value (in our models, a component that did not
+run emits \code{None}); input steps take no time. This makes the setting
+timing-sensitive: a process that emits \code{o} one step late emits something else,
+say \code{None}, at the original step, so a delay changes the observed value.
 
 \subsection{Characterised equivalences and non-interference}
-Security is stated relative to a lattice of levels $\ell$. Everything in this paper
-can be read with the two-point lattice $\Lo \sqsubseteq \Hi$: the attacker $\Lo$,
-and $\Hi$, who sees everything; the mechanisation is over any partial order
-with a least element, in particular any bounded lattice
-(\appx). Each input and output type carries a \emph{characterised equivalence}
+Security is relative to a lattice of levels $\ell$. This paper reads it as the
+two-point lattice $\Lo \sqsubseteq \Hi$: the attacker $\Lo$, and $\Hi$, who sees
+everything; the mechanisation allows any partial order with a least element,
+including any bounded lattice (\appx). Each input and output type carries a \emph{characterised equivalence}
 (\m{cEquiv}) $\doteq$, which says, for each level $\ell$:
 \begin{itemize}
 \item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;
 \item $x \doteq_\ell \unobs$: an observer at $\ell$ does not see $x$ at all.
 \end{itemize}
 Rafnsson et al.\ instead make $\unobs$ a value of every type; the two give the same
-non-interference (\m{NI_lEquiv}). $\doteq_\ell$ is an equivalence, so at each level
-the type is partitioned into classes the observer cannot tell apart. One of them, the
+non-interference (\m{NI_lEquiv}). As an equivalence, $\doteq_\ell$ partitions the
+type into classes the observer cannot tell apart. One of them, the
 \emph{distinguished class}, holds the values related to $\unobs$, which the observer
 does not see; it is empty when the level hides nothing. We write
 $\eqv{I}$ and $\eqv{O}$ for the equivalences on inputs and outputs.
@@ -76,70 +73,67 @@ i \eqv{I}_\ell \unobs &\;\Rightarrow\; \bigl(\perf{p}{t.t'}{\ell} \Leftrightarro
 \end{align*}
 \end{definition}
 
-The first clause (substitution) says that related inputs are interchangeable. The
-second says that an input in the distinguished class may be inserted into a trace
-(insertion, $\Rightarrow$) or deleted from it (deletion, $\Leftarrow$) without the
-observer noticing. The set of traces visible at $\ell$ is thus unchanged by anything
-the observer at $\ell$ may not see.
+The first clause (substitution) makes related inputs interchangeable. The second
+lets an input in the distinguished class be inserted into a trace (insertion,
+$\Rightarrow$) or deleted from it (deletion, $\Leftarrow$) without the observer
+noticing.
 
 \subsection{Equivalences}
 
-A composite process gets its equivalences from those of its parts
-(\cref{thm:composition}), so those of the model in \cref{sec:model} are terms over a
-few base equivalences, chiefly two that differ in what they hide, where $\doteq$
-\emph{hides} $x$ at $\ell$ when $x$ is in the distinguished class, $x \doteq_\ell
-\unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
+A composite process gets its equivalences from its parts (\cref{thm:composition}),
+so those of the model in \cref{sec:model} are terms over a few base equivalences,
+chiefly two that differ in what they hide; $\doteq$ \emph{hides} $x$ at $\ell$ when
+$x$ is in the distinguished class, $x \doteq_\ell \unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
 $x \doteq_\ell y$ iff $x = y$. The \emph{private}
 equivalence $\priveq$ (\m{private_equiv}) hides everything from the attacker: at $\Lo$ every
 value is unobservable, so all values are related, and at $\Hi$ it is the public one.
 The superscript is the lowest level that sees the values.
 The model gives the timer handler's output the public equivalence and the disk
-handler's the private one: the attacker may see when the timer handler finishes, and
-must not see when the disk handler does.
-
-Every other equivalence of the model is built from these two with the following
-formers.
+handler's the private one: the attacker may see when the timer handler finishes, but
+not when the disk handler does. The other equivalences of the model combine these
+two with the formers below.
 
 \begin{definition}[Equivalence formers]\label{def:formers}
-Let $\eqv{X}$ and $\eqv{Y}$ be equivalences on $X$ and $Y$. At each level $\ell$,
-each former below relates and hides values as stated, and also relates any two
-values it hides.
+Let $\eqv{X}$ and $\eqv{Y}$ be equivalences on $X$ and $Y$. Each former below
+relates and hides values at each level $\ell$ as stated, and relates any two values
+it hides.
 \begin{itemize}
 \item \emph{Pairs} (\m{eqpair}, \m{eqpair_R}, \m{eqpair_LR}). $\eqo{X} \times
   \eqo{Y}$, $\eqo{X} \times_R \eqo{Y}$ and $\eqo{X} \times_{LR} \eqo{Y}$ relate
   $(x,y)$ and $(x',y')$ when $x \eqv{X}_\ell x'$ and $y \eqv{Y}_\ell y'$. The first
   hides no pair, the second hides $(x,y)$ when $\eqv{Y}$ hides $y$, and the third
-  when $\eqv{X}$ hides $x$ and $\eqv{Y}$ hides $y$.
+  when $\eqv{X}$ also hides $x$.
 \item \emph{Sums} (\m{eqsum_LR}). $\eqo{X} + \eqo{Y}$ relates $\mathsf{inl}\;x$ and
   $\mathsf{inl}\;x'$ when $x \eqv{X}_\ell x'$, and $\mathsf{inr}\;y$ and
   $\mathsf{inr}\;y'$ when $y \eqv{Y}_\ell y'$. It hides $\mathsf{inl}\;x$ when
   $\eqv{X}$ hides $x$, and $\mathsf{inr}\;y$ when $\eqv{Y}$ hides $y$.
-\item \emph{Unit} (\m{unit_equiv}). For a set $S$ of levels, closed upwards, $1^S$
-  relates the unit's element $\star$ to itself and hides it at the levels outside
-  $S$. We write $1^\ell$ for $1^S$ with $S$ the levels at or above $\ell$.
-\item \emph{Visible} (\m{eqvisible}). $\eqo{X}^\circ$ relates $x$ and $x'$ when
-  $x \eqv{X}_\ell x'$, and hides nothing.
+\item \emph{Unit} (\m{unit_equiv}). For an upward-closed set $S$ of levels, $1^S$
+  relates the unit $\star$ to itself and hides it outside $S$. We write $1^\ell$ for
+  $1^S$ with $S$ the levels at or above $\ell$.
+\item \emph{Visible} (\m{eqvisible}). $\eqo{X}^\circ$ relates as $\eqv{X}$ does and
+  hides nothing.
 \end{itemize}
 \end{definition}
 
 The pair formers differ in where they appear: $\times$ is the output equivalence of
-\code{par}, and $\times_R$ and $\times_{LR}$ appear where a constructor pairs a value with a state or a gate bit. An \code{inl} and an \code{inr} are related exactly
+\code{par}, and $\times_R$ and $\times_{LR}$ appear where a constructor pairs a value
+with a state or gate bit. An \code{inl} and an \code{inr} are related exactly
 when both are hidden; otherwise the tag is visible. $^\circ$ keeps the tag
 visible on a side that would hide it. We write $\privvis$ for $(\priveq)^\circ$: at
 $\Lo$ all its values are related, yet none is hidden, so under a sum the attacker
-learns which side a value is on and nothing more.
+learns only which side a value is on.
 
-A process that does not run emits \code{None}, and under ${\doteq} + \one^S$ the levels
+A process that does not run emits \code{None}, and under ${\doteq} + \one^S$ levels
 in $S$ see that it did not run; \code{Some v} and \code{None} are related at $\ell$
-exactly when both are hidden. So $1^\Lo$ lets every observer see \code{None},
-$1^\Hi$ hides it from the attacker, and $1^\emptyset$ hides it from everyone.
+exactly when both are hidden: $1^\Lo$ lets every observer see \code{None},
+$1^\Hi$ hides it from the attacker, and $1^\emptyset$ from everyone.
 
 \subsection{Compositional theorems}\label{sec:composition}
 
-The calculus comes with one non-interference theorem per constructor. We write
+The calculus has one non-interference theorem per constructor. We write
 $\eqv{V}$ for an equivalence on the state of a \code{sta} and $\eqv{B}$ for one on the
-gate bit of a \code{swi}; \cref{sec:proof} instantiates them for the model. The side
-conditions are stated with the following predicates on functions and levels:
+gate bit of a \code{swi}; \cref{sec:proof} instantiates both for the model. The side
+conditions use these predicates on functions and levels:
 \begin{align*}
 f \in \NI(\eqv{I},\eqv{O}) &\iff \forall \ell, i, i'.\;
   i \eqv{I}_\ell i' \Rightarrow f\,i \eqv{O}_\ell f\,i' \\
@@ -155,14 +149,14 @@ f \in \mathsf{PE}(\eqv{I},\eqv{V}) &\iff \forall \ell, i, v.\;
 \ell \in \Ob(p,\doteq) &\iff \text{every output of $p$ is }
   \doteq_\ell \unobs
 \end{align*}
-A function is non-interfering if it maps related values to related values
+A function is non-interfering if it maps related values to related ones
 (\m{f_NI}, \m{fv_NI}), unobservable-preserving if it maps unobservable values to
 unobservable ones (\m{f_PU}), and equivalence-preserving if an unobservable input
 does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $v$
 (\m{aware}) if it can tell $v$ from every other value and sees it, and \emph{oblivious} to $p$
-(\m{oblivious}) if it sees none of $p$'s outputs. For example, every level is aware
-of \code{true} under the public equivalence on booleans, but $\Lo$ is not under the
-private one, where \code{true} and \code{false} are related.
+(\m{oblivious}) if it sees none of $p$'s outputs. Under $\pubeq$ on booleans every
+level is aware of \code{true}; under $\priveq$, which relates \code{true} and
+\code{false}, $\Lo$ is not.
 
 \begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
 For all processes, functions and equivalences of matching types:
@@ -194,15 +188,14 @@ For all processes, functions and equivalences of matching types:
 
 Two of these carry substantial side conditions: the state update of \code{sta} must
 be non-interfering and equivalence-preserving, and \code{swi} requires every observer
-to be aware of the gate or oblivious to the gated process. These are the two
-obligations the proof of \cref{sec:proof} has to discharge for the model
-(\cref{lem:state-cell,lem:slot}).
+to be aware of the gate or oblivious to the gated process. \Cref{sec:proof}
+discharges both for the model (\cref{lem:state-cell,lem:slot}).
 
 The side conditions of \comp{it:sta} must hold on every pair of related states,
-reachable or not. We add a variant that asks for them only on the states that satisfy
+reachable or not. We add a variant that asks for them only on states satisfying
 a predicate $P$ preserved by the state updates; the original theorems are unchanged.
 Write $\NI_P$ and $\mathsf{PE}_P$ for the predicates above with $v$ and $v'$
-restricted to states satisfying $P$, and say that $f$ \emph{preserves} $P$ if
+restricted to $P$; $f$ \emph{preserves} $P$ if
 $P\,v \Rightarrow P\,(f\,i\,v)$ for all $i$ and $v$.
 
 \begin{theorem}[Composition under an invariant, \m{sta_NI_pred}]\label{thm:sta-pred}
@@ -213,8 +206,8 @@ $g \in \NI_P(\eqv{O},\eqv{V},\eqv{V})$, then
 $\mathsf{sta}\;f\;g\;v\;p \in \NI(\eqv{I},\eqo{V} \times \eqo{O})$.
 \end{theorem}
 
-The proof is that of \comp{it:sta} with $P$ carried along: every state it
-passes to $f$ or $g$ is reached from $v$ by $f$ and $g$, so it satisfies $P$.
+The proof is that of \comp{it:sta}, carrying $P$ along: every state passed to $f$
+or $g$ is reached from $v$ by them, so it satisfies $P$.
 
 % one float per column top from here on, so paired figures sit side by side
 \setcounter{topnumber}{1}
