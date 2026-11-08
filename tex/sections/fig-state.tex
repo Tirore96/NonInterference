@@ -1,12 +1,12 @@
 % The global state, field by field (generic_model.v, state_type), shaded by the state
-% equivalence: public (dark) or private (white) to the attacker.  Laid out like the
+% equivalence: public (white) or private (dark) to the attacker.  Laid out like the
 % columns of fig:io: a framed column with its operator in the title, a nested sum or
 % product side by side within a row.  proof.tex inputs this file in the state equivalence.
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[font=\scriptsize,
   c/.style={draw, minimum height=0.42cm, inner sep=0pt, font=\ttfamily\scriptsize},
-  pub/.style={c, fill=black!28}, priv/.style={c, fill=white}]
+  pub/.style={c, fill=white}, priv/.style={c, fill=black!28}]
 % fields, one row each, cells spanning x = 0 .. 3.0
 \node[anchor=east] at (-0.1,0) {current pid: $+$};
 \node[priv, minimum width=1.5cm] at (0.75,0) {S: Bool};

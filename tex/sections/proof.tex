@@ -277,17 +277,17 @@ handler runs.
   \node[anchor=south] at (\x+0.3,0.18) {\c};
 \foreach \x in {0, 0.6, 1.2, 3.0}
   {\draw (\x,-0.18) rectangle (\x+0.6,0.18); \node[font=\tiny] at (\x+0.3,0) {$\Ef$};}
-\foreach \x in {1.8, 2.4} \draw[fill=white] (\x,-0.18) rectangle (\x+0.6,0.18);
+\foreach \x in {1.8, 2.4} \draw[fill=black!28] (\x,-0.18) rectangle (\x+0.6,0.18);
 \draw[rounded corners=2pt] (-0.07,-0.25) rectangle (3.67,0.55);
 \node[anchor=south] at (1.8,0.55) {$\Eb$};
 % the gate equivalence of the visible slots: a bit read as a sum
 \foreach \x/\l in {4.4/false, 5.2/true} \node[anchor=south] at (\x+0.4,0.18) {\l};
-\draw[fill=white] (4.4,-0.18) rectangle (5.2,0.18);
-\draw[fill=black!28] (5.2,-0.18) rectangle (6.0,0.18);
+\draw[fill=black!28] (4.4,-0.18) rectangle (5.2,0.18);
+\draw[fill=white] (5.2,-0.18) rectangle (6.0,0.18);
 \draw[rounded corners=2pt] (4.33,-0.25) rectangle (6.07,0.55);
 \node[anchor=south] at (5.2,0.55) {$\Ef$: $+$};
 \end{tikzpicture}
-\caption{Gate bits: $\Eb$ per slot, $\Ef$ where marked and $\priveq$ on the blank N and
+\caption{Gate bits: $\Eb$ per slot, $\Ef$ where marked and $\priveq$ on the dark N and
   D cells; on the right, $\Ef$ read as a sum, shaded as in \cref{fig:io}.}
 \label{fig:equivs}
 \end{figure}

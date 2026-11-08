@@ -32,9 +32,9 @@ model this system, exhibit the leak, and remove it.
 % the first eight steps of the two ordinary runs of fig:run-ordinary
 \begin{tikzpicture}[font=\scriptsize,
   cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
-  cG/.style={cell, fill=black!28}, cT/.style={cell, fill=black!28},
-  cR/.style={cell, fill=black!28}, cP/.style={cell, fill=black!10},
-  cD/.style={cell, fill=white}]
+  cG/.style={cell, fill=white}, cT/.style={cell, fill=white},
+  cR/.style={cell, fill=white}, cP/.style={cell, fill=black!10},
+  cD/.style={cell, fill=black!28}]
 \foreach \i in {1,...,8} \node at (0.45*\i, 0.8) {\i};
 \node[anchor=east] at (0.15,0) {no disk interrupt};
 \irqarrow{1.575}{0.42}{T}
@@ -53,8 +53,8 @@ model this system, exhibit the leak, and remove it.
 \end{tikzpicture}
 \caption{Who runs at each step under ordinary interrupt handling, with and without a
   disk interrupt. G: public user, P: private user, R: scheduler, T, D: timer
-  and disk handler. Shading is what the attacker sees: the step and its value (dark),
-  only that it happened (light), or nothing (white). A wavy arrow marks an
+  and disk handler. Shading is what the attacker sees: the step and its value (white),
+  only that it happened (light), or nothing (dark). A wavy arrow marks an
   interrupt arriving between two steps. The disk handler takes steps 3 and 4
   from the public user, a gap the attacker sees. Under each run, its
   user view: only the two user processes, every other step blank. Here the gap can also be seen.}
