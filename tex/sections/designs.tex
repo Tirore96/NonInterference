@@ -2,9 +2,9 @@
 
 Two interrupt policies instantiate the model: \m{model_immediate}, which
 leaks (\cref{sec:leak}), and \m{model_sliced}, which does not (\cref{sec:sliced}).
-Both are exercised on the same concrete system. Its public user process emits
-\code{Get} whenever it runs, its private user process emits \code{Sys} when the disk
-handler has notified it and \code{Idle} otherwise, and the scheduler alternates between
+Both run on one concrete system. Its public user process emits
+\code{Get} whenever it runs, its private user process emits \code{Sys} when notified by
+the disk handler and \code{Idle} otherwise, and the scheduler alternates between
 them. Handlers take $\mathit{runtime} = 2$ steps.
 \Cref{fig:policy-ordinary,fig:phases} draw the two policies over the three
 kinds of step of \cref{sec:processes}, and \cref{fig:run-ordinary,fig:run-sliced} run
@@ -14,11 +14,10 @@ them on the same inputs.
 
 The immediate policy \m{model_immediate} services an interrupt as soon as no handler is running
 (\cref{fig:policy-ordinary}). A pending timer interrupt takes the system from U to T,
-and a pending disk interrupt takes it to S, from U or from T, at whatever step it
-arrives. Each completion unmasks everything and moves on to the next pending handler,
-or back to U. The bold arrows into S are the leak: they are rule 2 of
-\cref{sec:state} at work, and the secret decides when S is
-entered and how long it lasts.
+and a pending disk interrupt takes it to S from U or T, whenever it arrives. Each
+completion unmasks everything and moves on to the next pending handler, or back to U.
+The bold arrows into S are the leak: through rule 2 of \cref{sec:state}, the secret
+decides when S is entered and how long it lasts.
 
 The initial state starts in the public user, outside any slice, with all bits of the
 interrupt controller clear (fields as in \cref{sec:global-state}, with one (pending,
@@ -43,16 +42,15 @@ observe_handler_output o v :=
   else v
 \end{lstlisting}
 In the output \code{o}, \m{is_ir_out_done} names the handler, if any, that emits
-\code{Notify}. The service policy then unmasks everything, and after the timer handler
-also requests a reschedule. It thus reads the output of whichever handler completes,
-the disk handler's included.
+\code{Notify}, so the policy reads the output of whichever handler completes, the
+disk handler's included.
 
 In the run with the disk interrupt (\cref{fig:run-ordinary}), the disk handler takes
 steps 3 and 4 from the public user. The pid of each step is computed at the output of the step before (\cref{sec:state}).
 The disk interrupt arrives after step 1 and only sets the disk pending bit, so step 2
 still belongs to the public user. At the output of step 2, \m{initiate_next} finds
-the disk handler pending and unmasked and starts it, setting all masks: U to S. The
-timer interrupt that arrives meanwhile stays pending until the disk handler emits
+the disk handler pending and unmasked and starts it, setting all masks: U to S. A
+timer interrupt arriving meanwhile stays pending until the disk handler emits
 \code{Notify} at step 4: S to T. The timer handler's completion at step 6 requests a
 reschedule: T to U, where the scheduler hands step 8 to the private user. Without the
 disk interrupt the system never enters S.
@@ -74,8 +72,8 @@ The input equivalence $\Ein$ (\m{in_equiv}) and the output equivalence $\Eout$
 \Eout &\triangleq (\pubeq + \one^\Lo) \times (\priveq + \one^\Lo) \times (\pubeq + \one^\Lo) \\
 &\quad{} \times (\priveq + \one^\Hi) \times (\priveq + \one^\Hi) \times (\pubeq + \one^\Lo),
 \end{align*}
-one factor per slot of \cref{fig:io}, with $\times$ associating to the right, as the
-output nests.
+one factor per slot of \cref{fig:io}, with $\times$ right-associative as the output
+nests.
 \end{definition}
 \end{minipage}
 \medskip
@@ -84,14 +82,13 @@ Under these equivalences the disk interrupt is hidden from the attacker and the 
 interrupt is public. Of each output the attacker sees whether the slot ran and its value on the
 white slots of \cref{fig:io}, only whether it ran on the light slot, and nothing
 on the dark ones.
-So the attacker sees when the U and T steps happen. On an S step it sees that those
-slots are all empty, which shows that a secret handler ran and leaves open
-which. This is the view the proof works with (\cref{sec:proof}), and
-\cref{sec:gating} shows that the proof forces this shape.
+It thus sees when U and T steps happen. On an S step it sees those slots all empty: a
+secret handler ran, but which is hidden. This is the view the proof works with
+(\cref{sec:proof}), and \cref{sec:gating} shows the proof forces this shape.
 
-The step into S and the time spent there are thus visible. For the attacker to learn
-nothing, both must be fixed by public events; what runs inside S may depend on
-the secret. The immediate policy fails this:
+For the attacker to learn nothing, the step into S and the time spent there, both
+visible, must be fixed by public events; what runs inside S may depend on the secret.
+The immediate policy fails this:
 
 \begin{theorem}[Leak, \m{model_immediate_not_NI}]\label{thm:leak}
 For the concrete system,
@@ -116,11 +113,10 @@ next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
 \code{None} in the public slot, and $o_2 \not\Eout_\Lo o_G$.
 \end{proof}
 
-The counterexample turns on the public slot alone, so the leak needs nothing beyond
-the public user's output. The \emph{public view} of a model \code{m},
+The counterexample turns on the public slot alone, so the leak needs only the public
+user's output. The \emph{public view} of a model \code{m},
 \code{map id public_output m}, keeps only that slot, as a value of type
-\code{Opub + 1}, at the equivalence $\pubeq + \one^\emptyset$
-(\m{out_equiv_publicview}):
+\code{Opub + 1} at $\pubeq + \one^\emptyset$ (\m{out_equiv_publicview}):
 
 \begin{corollary}[Public-view leak,\newline \m{model_immediate_publicview_not_NI}]\label{cor:leak-publicview}
 For the concrete system,
@@ -134,17 +130,17 @@ For the concrete system,
 The counterexample of \cref{thm:leak}: $o_2$ and $o_G$ differ in the public slot.
 \end{proof}
 
-To present results at the level of user space, we abstract from interrupts and
+To present results in user space, we abstract from interrupts and
 scheduling to what the user processes emit. The \emph{user view} of a model \code{m},
 \code{map id parse_output m}, keeps only the two user slots: \m{parse_output} maps an
-output to a value of type \code{(Opub + Opriv) + 1}, for the user processes' output
+output into \code{(Opub + Opriv) + 1}, for the user processes' output
 types \code{Opub} and \code{Opriv}: the public user's as
 \code{Some (inl v)}, the private user's as \code{Some (inr v)}, and any other as
 \code{None}.
 
 The user view needs its own equivalence. At $\Lo$ a private-user output and \code{None}
-are both hidden, so a plain sum would relate them and hide whether the private user
-ran, and we use $\privvis$ for the private user instead.
+are both hidden, so a plain sum would relate them, hiding whether the private user
+ran; we use $\privvis$ instead.
 
 \begin{definition}[User-view equivalence]\label{def:userview}
 The user-view equivalence $\Euser$ (\m{out_equiv_userview}) is
@@ -156,7 +152,7 @@ The user-view equivalence $\Euser$ (\m{out_equiv_userview}) is
 To the attacker, the user view loses only public information: the outputs of the
 scheduler and the timer handler, and, on a step where no user process ran, whether
 the step was theirs or an S step. The attacker still sees when the private user runs,
-and the leak is visible in the user view as well:
+and the leak shows here too:
 
 \begin{corollary}[User-view leak,\newline \m{model_immediate_userview_not_NI}]\label{cor:leak-userview}
 For the concrete system,
@@ -174,25 +170,23 @@ every output passed through \m{parse_output}.
 
 \subsection{Sliced interrupt handling}\label{sec:sliced}
 
-The sliced policy removes the bold arrows. It runs the secret handlers only in
+The sliced policy removes the bold arrows by running the secret handlers only in
 \emph{time slices}: S is entered only when the timer handler completes, and the
 system stays there for a fixed number of steps (\cref{fig:phases}). A slice holds
-exactly $\mathit{runs}$ handler runs ($\mathit{runs} = 2$ in the concrete system), and
-when no disk interrupt is pending the NOP handler takes the run, so a slice is the
-same whether or not a disk interrupt is waiting. Each part of the policy below
+exactly $\mathit{runs}$ handler runs (2 in the concrete system), and when no disk
+interrupt is pending the NOP handler takes the run, so a slice is the same whether or
+not a disk interrupt is waiting. Each part below
 removes an arrow of \cref{fig:policy-ordinary} or fixes how long S lasts.
 
-A slice is timed by the slice counter, which counts the output steps until the slice
-closes. Outside a slice, in U and T, it is \code{0}. The output that opens a slice
-loads it with $\mathit{runs}\cdot\mathit{runtime}+1$ and also ticks it, so it reads
+The slice counter times a slice: it counts the output steps until the slice closes,
+and is \code{0} outside a slice, in U and T. The output that opens a slice
+loads it with $\mathit{runs}\cdot\mathit{runtime}+1$ and ticks it, so it reads
 $\mathit{runs}\cdot\mathit{runtime}$ on the first step of the slice and \code{1} on the
 last, and the $\mathit{runs}$ handler runs fill exactly these steps. The slice closes
 at the output of its last step.
 
 The initial state \m{sliced_init} is \m{immediate_init} with the disk and NOP masks
 set, so no disk interrupt can take the system from U to S, and the timer unmasked.
-
-\input{sections/fig-sliced}
 
 The service policy uses both stages of \cref{sec:state}, \m{observe_timer_output}
 and then \m{tick_slice}; \m{sliced_service} is their composite. The first stage is the
@@ -208,9 +202,9 @@ observe_timer_output runtime runs o v :=
       true
   else v
 \end{lstlisting}
-The reschedule returns control to U, through the scheduler, once the slice is over.
-The second stage
-advances an open slice by one step:
+\input{sections/fig-sliced}
+The reschedule returns control to U via the scheduler after the slice. The second
+stage advances an open slice by one step:
 
 \noindent\begin{minipage}{\linewidth}
 \begin{lstlisting}
@@ -241,8 +235,8 @@ is always ready at a boundary, so S is entered and every run of the slice takes 
 whether or not a disk interrupt is waiting. A pending disk handler takes priority;
 which of the two runs is all the secret decides. At \code{1}, \m{close_slice}
 closes the slice: it masks the disk and NOP handlers, so U cannot lead to S, unmasks
-the timer and sets the counter to \code{0}. Since the \code{0} branch changes nothing,
-the timer is never unmasked while its own handler runs.
+the timer and sets the counter to \code{0}. As the \code{0} branch changes nothing,
+the timer stays masked while its own handler runs.
 
 The sliced policy is non-interfering:
 
@@ -256,17 +250,17 @@ non-interfering at $\priveq$ on input and output, then
 \]
 \end{theorem}
 
-At the attacker's level $\Lo$ the conclusion says that disk interrupts do not show: a
+At the attacker's level $\Lo$ the theorem says that disk interrupts do not show: a
 disk interrupt is unobservable at $\Lo$ (\cref{def:io}), so two input streams
 that differ only in disk interrupts must give outputs that $\Eout$ relates.
-\Cref{sec:proof} proves the theorem, as an instance of one that holds for any interrupt
-policy meeting three obligations (\cref{thm:policy}).
+\Cref{sec:proof} proves it as an instance of a theorem for any interrupt policy
+meeting three obligations (\cref{thm:policy}).
 
 The theorem holds for every scheduler, pair of user processes and output
-types, handler length and number of handler runs per slice, provided each slot process
-is non-interfering at its own classification. This rests on one property of the state
-update: it reads only \emph{whether} a user slot emitted, never what, so no user
-behaviour reaches the schedule.
+types, handler length and slice size, provided each slot process
+is non-interfering at its own classification. This rests on the state update reading
+only \emph{whether} a user slot emitted, never what, so no user behaviour reaches the
+schedule.
 
 The result carries over to the user view:
 
@@ -282,7 +276,6 @@ $\mathsf{parse\_output} \in \NI(\Eout,\Euser)$ because outputs that $\Eout$ rela
 agree on which user slot, if any, emitted, and on the public user's value.
 \end{proof}
 
-Under the sliced policy the disk interrupt still affects this view, through the private
-user's input (\cref{sec:loop}): on the concrete system, the private user emits
+The disk interrupt still affects this view, through the private user's input (\cref{sec:loop}): on the concrete system, the private user emits
 \code{Sys} with a disk interrupt and \code{Idle} without (\m{trace_with_dI},
 \m{trace_no_dI}), a value the attacker cannot see.
