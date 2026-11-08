@@ -1,10 +1,8 @@
 \section{Background: Composable Timing-Sensitive Non-Interference}\label{sec:background}
 
 The calculus and definitions here are those of Rafnsson et
-al.~\cite{rafnsson2017}, in the form we mechanise (\appx). We add sum
-types, in which we also write optional values and the model's interrupts,
-and a composition theorem for state cells under an invariant
-(\cref{thm:sta-pred}).
+al.~\cite{rafnsson2017}, in the form we mechanise (\appx), with sum types and a composition theorem for state cells under an
+invariant (\cref{thm:sta-pred}) added.
 
 \subsection{Processes, traces and time}
 
@@ -48,13 +46,11 @@ with a least element, in particular any bounded lattice
 \item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;
 \item $x \doteq_\ell \unobs$: an observer at $\ell$ does not see $x$ at all.
 \end{itemize}
-This definition is an alternative to Rafnsson et al.'s, where $\unobs$ is an extra
-value of every type; the two give the same non-interference (\m{NI_lEquiv}). $\doteq_\ell$ is an equivalence, and the unobservable values form one
-of its classes: they are related to each other and to nothing else.
-So at each level the type is partitioned into classes the observer cannot tell
-apart, and one of them, the \emph{distinguished class} of the values related to
-$\unobs$, holds the values the observer does not see. It is empty when the level
-hides nothing. We write
+Rafnsson et al.\ instead make $\unobs$ a value of every type; the two give the same
+non-interference (\m{NI_lEquiv}). $\doteq_\ell$ is an equivalence, so at each level
+the type is partitioned into classes the observer cannot tell apart. One of them, the
+\emph{distinguished class}, holds the values related to $\unobs$, which the observer
+does not see; it is empty when the level hides nothing. We write
 $\eqv{I}$ and $\eqv{O}$ for the equivalences on inputs and outputs.
 
 A trace $t$ is a finite word of input effects $?i$ and output effects $!o$. We

@@ -153,8 +153,6 @@ keeps, so the counterexample and the proof are those of \cref{thm:leak}, with
 every output passed through \m{parse_output}.
 \end{proof}
 
-\input{sections/fig-sliced}
-
 \subsection{Sliced interrupt handling}\label{sec:sliced}
 
 The sliced policy removes the bold arrows. It runs the secret handlers only in
@@ -164,6 +162,8 @@ exactly $\mathit{runs}$ handler runs ($\mathit{runs} = 2$ in the concrete system
 a run that no disk interrupt claims is taken by the NOP handler, so a slice is the
 same whether or not a disk interrupt is waiting. Each part of the policy below
 removes an arrow of \cref{fig:policy-ordinary} or fixes how long S lasts.
+
+\input{sections/fig-sliced}
 
 A slice is timed by the slice counter, which counts the output steps until the slice
 closes. Outside a slice, in U and T, it is \code{0}. The output that opens a slice
@@ -265,6 +265,5 @@ agree on which user slot, if any, emitted, and on the public user's value.
 
 Under the sliced policy the disk interrupt still affects this view, through the private
 user's input (\cref{sec:loop}): on the concrete system, the private user emits
-\code{Sys} in the run with a disk interrupt where it emits \code{Idle} in the run
-without one (\m{trace_with_dI}, \m{trace_no_dI}). So the interrupt reaches user space
-only through a value the attacker cannot see.
+\code{Sys} with a disk interrupt and \code{Idle} without (\m{trace_with_dI},
+\m{trace_no_dI}), a value the attacker cannot see.
