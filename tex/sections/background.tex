@@ -1,6 +1,6 @@
 \section{Background: Composable Timing-Sensitive Non-Interference}\label{sec:background}
 
-This section recalls the calculus and definitions of Rafnsson et
+The calculus and definitions here are those of Rafnsson et
 al.~\cite{rafnsson2017}, in the form we mechanise (\appx). We add sum
 types, in which we also write optional values and the model's interrupts,
 and a composition theorem for state cells under an invariant
@@ -20,9 +20,10 @@ inputs by \code{f} on the way into \code{p} and outputs by \code{g} on the way o
 \code{f i v}, and \code{p} receives the new state together with \code{i}; an output
 \code{o} of \code{p} updates it to \code{g o v}, and the new state is emitted together
 with \code{o}. \code{swi b p} switches \code{p} on and off. While the phase \code{b} is
-\code{false} it emits \code{None} and \code{p} does not move; while it is \code{true} it
-emits \code{Some o} for an output \code{(c,o)} of \code{p}. The phase is toggled by the
-tag \code{c} and by the bit carried on each input. \code{par p1 p2} gives every input to
+\code{false} it emits \code{None} and \code{p} takes no output step; while it is
+\code{true} it emits \code{Some o} for an output \code{(c,o)} of \code{p}. The phase is
+toggled by the tag \code{c} and by the bit carried on each input; the phase, the tag and
+that bit are the \emph{gate bits}. \code{par p1 p2} gives every input to
 both parts and emits both outputs as a pair. \code{loop p} feeds each output of
 \code{p} back to it as an input. \code{maybe p} makes the input optional: \code{None}
 leaves \code{p} unchanged. We write $A + 1$ for the optional values of
@@ -47,12 +48,13 @@ with a least element, in particular any bounded lattice
 \item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;
 \item $x \doteq_\ell \unobs$: an observer at $\ell$ does not see $x$ at all.
 \end{itemize}
-This definition is an alternative to Rafnsson et al.'s, which adjoin $\unobs$ as a
-value; the two give the same non-interference (\m{NI_lEquiv}). $\doteq_\ell$ is an equivalence, and the unobservable values form one
+This definition is an alternative to Rafnsson et al.'s, where $\unobs$ is an extra
+value of every type; the two give the same non-interference (\m{NI_lEquiv}). $\doteq_\ell$ is an equivalence, and the unobservable values form one
 of its classes: they are related to each other and to nothing else.
 So at each level the type is partitioned into classes the observer cannot tell
-apart, and one of them, the \emph{distinguished class}, holds the values the
-observer does not see. It is empty when the level hides nothing. We write
+apart, and one of them, the \emph{distinguished class} of the values related to
+$\unobs$, holds the values the observer does not see. It is empty when the level
+hides nothing. We write
 $\eqv{I}$ and $\eqv{O}$ for the equivalences on inputs and outputs.
 
 A trace $t$ is a finite word of input effects $?i$ and output effects $!o$. We
@@ -79,7 +81,7 @@ i \eqv{I}_\ell \unobs &\;\Rightarrow\; \bigl(\perf{p}{t.t'}{\ell} \Leftrightarro
 \end{definition}
 
 The first clause (substitution) says that related inputs are interchangeable. The
-second says that an input the observer does not see may be inserted into a trace
+second says that an input in the distinguished class may be inserted into a trace
 (insertion, $\Rightarrow$) or deleted from it (deletion, $\Leftarrow$) without the
 observer noticing. The set of traces visible at $\ell$ is thus unchanged by anything
 the observer at $\ell$ may not see.
@@ -88,17 +90,16 @@ the observer at $\ell$ may not see.
 
 A composite process gets its equivalences from those of its parts
 (\cref{thm:composition}), so those of the model in \cref{sec:model} are terms over a
-few base equivalences, chiefly the two below.
-
-These two differ in what they hide, where $\doteq$ \emph{hides} $x$ at $\ell$ when
-$x \doteq_\ell \unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
+few base equivalences, chiefly two that differ in what they hide, where $\doteq$
+\emph{hides} $x$ at $\ell$ when $x$ is in the distinguished class, $x \doteq_\ell
+\unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
 $x \doteq_\ell y$ iff $x = y$. The \emph{private}
 equivalence $\priveq$ (\m{private_equiv}) hides everything from the attacker: at $\Lo$ every
 value is unobservable, so all values are related, and at $\Hi$ it is the public one.
 The superscript is the lowest level that sees the values.
 The model gives the timer handler's output the public equivalence and the disk
-handler's the private one: the attacker learns when the timer handler finishes, but
-not when the disk handler does.
+handler's the private one: the attacker may see when the timer handler finishes, and
+must not see when the disk handler does.
 
 Every other equivalence of the model is built from these two with the following
 formers.
@@ -126,7 +127,7 @@ values it hides.
 \end{definition}
 
 The pair formers differ in where they appear: $\times$ is the output equivalence of
-\code{par}, and $\times_R$ and $\times_{LR}$ appear where a constructor pairs an input with a state or a gate bit. An \code{inl} and an \code{inr} are related exactly
+\code{par}, and $\times_R$ and $\times_{LR}$ appear where a constructor pairs a value with a state or a gate bit. An \code{inl} and an \code{inr} are related exactly
 when both are hidden; otherwise the tag is visible. $^\circ$ keeps the tag
 visible on a side that would hide it. We write $\privvis$ for $(\priveq)^\circ$: at
 $\Lo$ all its values are related, yet none is hidden, so under a sum the attacker
@@ -153,7 +154,8 @@ f \in \NI(\eqv{I},\eqv{V},\eqv{V}) &\iff \forall \ell, i, i', v, v'.\;
   &\hphantom{{}\iff{}} \Rightarrow f\,i\,v \eqv{V}_\ell f\,i'\,v' \\
 f \in \mathsf{PE}(\eqv{I},\eqv{V}) &\iff \forall \ell, i, v.\;
   i \eqv{I}_\ell \unobs \Rightarrow f\,i\,v \eqv{V}_\ell v \\
-\ell \in \Aw(v,\doteq) &\iff \forall \hat v.\; v \doteq_\ell \hat v \Rightarrow v = \hat v \\
+\ell \in \Aw(v,\doteq) &\iff \forall \hat v.\; v \doteq_\ell \hat v \Rightarrow v = \hat v
+  \wedge \neg(\hat v \doteq_\ell \unobs) \\
 \ell \in \Ob(p,\doteq) &\iff \text{every output of $p$ is }
   \doteq_\ell \unobs
 \end{align*}
@@ -161,7 +163,7 @@ A function is non-interfering if it maps related values to related values
 (\m{f_NI}, \m{fv_NI}), unobservable-preserving if it maps unobservable values to
 unobservable ones (\m{f_PU}), and equivalence-preserving if an unobservable input
 does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $v$
-(\m{aware}) if it can tell $v$ from every other value, and \emph{oblivious} to $p$
+(\m{aware}) if it can tell $v$ from every other value and sees it, and \emph{oblivious} to $p$
 (\m{oblivious}) if it sees none of $p$'s outputs. For example, every level is aware
 of \code{true} under the public equivalence on booleans, but $\Lo$ is not under the
 private one, where \code{true} and \code{false} are related.
