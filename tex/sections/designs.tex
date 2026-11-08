@@ -25,7 +25,7 @@ interrupt controller clear (fields as in \cref{sec:global-state}, with one (pend
 mask) pair per handler):
 \begin{lstlisting}
 immediate_init :=
-  ((inr 3, None),       (* public user *)
+  ((inr 3, 3),          (* public user *)
    (false, (0,           (* slice counter *)
     ((false,false),      (* NOP *)
      ((false,false),     (* disk *)

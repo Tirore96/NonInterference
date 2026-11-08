@@ -21,7 +21,7 @@ Require Export NonInterference.theories.concrete_system.
 
 Definition false_ir_bits : [ir_bits] := (false,false).
 Definition false_ic : [ic] := ((false,false),(false_ir_bits,false_ir_bits)).
-Definition immediate_init : [state_type] := ((initial_pid,None),(false,(0,false_ic))).
+Definition immediate_init : [state_type] := ((initial_pid,3),(false,(0,false_ic))).
 
 (* Observe every handler's output: a finished handler unmasks everything, and a
    finished timer handler also requests a reschedule.  The two policies differ

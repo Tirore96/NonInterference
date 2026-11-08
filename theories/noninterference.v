@@ -744,7 +744,7 @@ Proof.
 move: w w' => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] [[cur' prev'] [rs' [c' [[dp' dm'] [[kp' km'] [tp' tm']]]]]].
 rewrite /pub_view /get_cur_pid /get_prev_pid /get_pids /get_re_sched /get_bool_state /get_slice_count /get_ic_count /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ir_pending /get_pending' /=.
 case=> Hc -> -> -> -> -> -> ->.
-case: ir ir' => [[]|] [[]|] //= _; case: cur cur' Hc => [b|n] [b'|n'] //=; try case=> ->; by vm_compute.
+case: ir ir' => [[]|] [[]|] //= _; case: cur cur' Hc => [b|n] [b'|n'] //=; try case=> ->; try case: n' => [|n']; by vm_compute.
 Qed.
 
 (* The last branch of [initiate_next]: no handler ready. *)

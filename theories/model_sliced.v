@@ -21,7 +21,7 @@ Require Export NonInterference.theories.concrete_system.
 
 Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*mask set for everything but timer interrupt*)
 
-Definition sliced_init : [state_type] := ((initial_pid,None),(false,(0,mask_most))).
+Definition sliced_init : [state_type] := ((initial_pid,3),(false,(0,mask_most))).
 
 (* A handler boundary: the counter is a multiple of the handler length. *)
 Definition slice_at_boundary (runtime m : nat) := dvdn runtime m.
@@ -224,7 +224,7 @@ case Ms: (masks_set w).
   by case: (slice_open w).
 - case FR: (first_ready w) => [ir|].
   + move: w {Hw Ms FR} => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]].
-    by case: ir => [[]|]; case: cur => [b|m]; case: c.
+    by case: ir => [[]|]; case: cur => [b|[|m]]; case: c.
   + have NS : ~~ slice_open w.
       apply/negP => S; move: Hw.
       rewrite /secret_gated_at_boundary /gated S Ms orbF /secret_ready.

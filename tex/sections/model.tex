@@ -90,7 +90,7 @@ controller.
   \code{inl false} for the NOP handler, and every other process on the \code{inr}
   side, numbered from 0: timer handler, scheduler, private user, public user. The
   system starts in the public user (\m{initial_pid}).
-\item The \emph{previous pid}, a number or \code{None}, is the pid a handler
+\item The \emph{previous pid}, a number, is the pid a handler
   displaced, which control returns to.
 \item The \emph{reschedule flag} is the boolean \m{re_sched}.
 \item The \emph{slice counter} \m{slice_count} counts the output steps until
@@ -133,7 +133,7 @@ four rules, tried in order:
 \item otherwise, the current process continues.
 \end{enumerate}
 If several handlers can start, the timer goes first, then the disk, then NOP.
-Starting a handler saves the current pid as the previous pid, unless it is a secret
+Starting a handler saves the current pid as the previous pid, unless it is a
 handler, points the current pid at the handler, sets all masks and clears the handler's
 pending bit (\m{initiate_handler}).
 

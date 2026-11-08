@@ -258,7 +258,7 @@ Definition slice_count := Nat.
 Definition ic := Times ir_bits (Times ir_bits ir_bits).
 Definition count := Nat.
 Definition re_sched := Bool.
-Definition prev_pid := Option Nat.
+Definition prev_pid := Nat.
 Definition pids := Times cur_pid prev_pid.
 (* ic_count bundles the interrupt-handler time slice with the interrupt controller.
    The slice counter is the number of output steps until the slice closes:
@@ -427,10 +427,20 @@ Definition ir_handler_pid (ir : [irq]) : [cur_pid] :=
 Lemma slot_pid_ir_handler_pid : forall ir, slot_pid (ir_handler_pid ir) = index ir all_interrupts.
 Proof. by case=> [[]|]. Qed.
 
-(* before overriding cur_pid, save it to prev_pid if it is a user process *)
+Definition is_handler_pid (v : [state_type]) :=
+    match get_cur_pid v with
+    | inr 0 => true
+    | inr _ => false
+    | _ => true
+    end.
+
+(* before overriding cur_pid, save it to prev_pid unless it is a handler, so that
+   control returns to the scheduler or a user process.  Only the value saved by
+   the latest handler start from outside a handler is ever read back, so prev_pid
+   is never cleared. *)
 Definition save_cur_to_prev (v : [state_type]) : [state_type] :=
-  if get_cur_pid v is inr n
-  then update_prev_pid v (Some n)
+  if is_handler_pid v then v
+  else if get_cur_pid v is inr n then update_prev_pid v n
   else v.
 
 Definition initiate_handler (ir : [irq]) (v : [state_type]) :=
@@ -443,19 +453,11 @@ Definition ir_ready (v : [state_type]) (ir : [irq]) : bool :=
 Definition first_ready (v : [state_type]) : option [irq] :=
   ohead [seq ir <-  all_interrupts | (ir_ready v ir) ].
 
-Definition is_handler_pid (v : [state_type]) :=
-    match get_cur_pid v with
-    | inr 0 => true
-    | inr _ => false
-    | _ => true
-    end.
-
 Definition scheduler_pid : [cur_pid] := inr 1.
 
-Definition initiate_scheduler  (v : [state_type]) := update_re_sched (update_prev_pid (update_cur_pid v scheduler_pid) None) false.
+Definition initiate_scheduler  (v : [state_type]) := update_re_sched (update_cur_pid v scheduler_pid) false.
 
-Definition get_prev_pid_wrap (v : [state_type]) : [Option cur_pid] := if get_prev_pid v is Some n then Some (inr n) else None.
-Definition initiate_prev_pid  (v : [state_type]) := update_prev_pid (update_cur_pid v (odflt scheduler_pid (get_prev_pid_wrap v))) None.
+Definition initiate_prev_pid  (v : [state_type]) := update_cur_pid v (inr (get_prev_pid v)).
 
 (* Choose the next pid.  First install the scheduler's choice, if the scheduler
    has just run; then apply rules 1-4. *)
