@@ -10,9 +10,9 @@ them. Handlers take $\mathit{runtime} = 2$ steps.
 kinds of step of \cref{sec:processes}, and \cref{fig:run-ordinary,fig:run-sliced} run
 them on the same inputs.
 
-\subsection{Ordinary interrupt handling, and the leak}\label{sec:leak}
+\subsection{Immediate interrupt handling, and the leak}\label{sec:leak}
 
-The ordinary policy \m{model_immediate} services an interrupt as soon as no handler is running
+The immediate policy \m{model_immediate} services an interrupt as soon as no handler is running
 (\cref{fig:policy-ordinary}). A pending timer interrupt takes the system from U to T,
 and a pending disk interrupt takes it to S, from U or from T, at whatever step it
 arrives. Each completion unmasks everything and moves on to the next pending handler,
@@ -90,7 +90,7 @@ which. \Cref{sec:gating} shows that the proof forces this shape.
 
 The step into S and the time spent there are thus visible. For the attacker to learn
 nothing, both must be fixed by public events; what runs inside S may depend on
-the secret. The ordinary policy fails this:
+the secret. The immediate policy fails this:
 
 \begin{theorem}[Leak, \m{model_immediate_not_NI}]\label{thm:leak}
 For the concrete system,
@@ -177,7 +177,7 @@ set, so no disk interrupt can take the system from U to S, and the timer unmaske
 
 The service policy uses both stages of \cref{sec:state}, \m{observe_timer_output}
 and then \m{tick_slice}; \m{sliced_service} is their composite. The first stage is the
-ordinary policy's observation restricted to the timer handler, whose output
+immediate policy's observation restricted to the timer handler, whose output
 is public; hence its name. It keeps the
 reschedule and, instead of unmasking, opens the slice, the only way from T to S:
 \begin{lstlisting}

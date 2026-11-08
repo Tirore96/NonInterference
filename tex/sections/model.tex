@@ -94,7 +94,7 @@ controller.
   displaced, which control returns to.
 \item The \emph{reschedule flag} is the boolean \m{re_sched}.
 \item The \emph{slice counter} \m{slice_count} counts the output steps until
-  the current time slice closes, and is \code{0} outside a slice; the ordinary
+  the current time slice closes, and is \code{0} outside a slice; the immediate
   policy leaves it \code{0}.
 \item The \emph{interrupt controller} \m{ic} holds the two bits of each handler. Its entries are indexed by \m{irq}, of type
   $\mathit{Interrupt} + 1$:

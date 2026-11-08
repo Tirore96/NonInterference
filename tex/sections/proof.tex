@@ -147,7 +147,7 @@ open exactly when a secret handler is ready (\cref{def:ready}).
 Whether a slice is open is public. So two related states with this fact agree on
 whether a secret handler is ready, and
 \m{initiate_next} takes them to related states (\m{initiate_next_NI_on}).
-The ordinary policy fails here and in the service policy.
+The immediate policy fails here and in the service policy.
 \m{observe_handler_output} unmasks when any handler completes, the disk
 handler included, so it writes public masks from a private output. And
 \m{initiate_next} meets the fatal case: a bold arrow of \cref{fig:policy-ordinary}
@@ -233,7 +233,7 @@ then \m{model} at this policy and these processes is in $\NI(\Ein,\Eout)$.
 \end{theorem}
 
 The theorem concerns security alone: a policy that keeps the secret handlers masked
-forever meets all three obligations. The ordinary policy meets none of them: its initial
+forever meets all three obligations. The immediate policy meets none of them: its initial
 state leaves the secret handlers unmasked, and its service policy fails as
 \cref{sec:update} showed.
 

@@ -176,7 +176,8 @@ the interrupt is secret, so is that information. Such leaks arise in several
 operating systems \todo{examples, with citations}. We use the process calculus of
 Rafnsson et al., whose timing-sensitive non-interference theorems compose, to model
 interrupt handling and process scheduling as a single process, and prove in Rocq
-that ordinary interrupt handling leaks: a secret disk interrupt is observable
+that immediate interrupt handling, which services an interrupt as soon as it can,
+leaks: a secret disk interrupt is observable
 through the schedule alone. Since the attacker sees the public part of the schedule, a
 non-interfering policy must make \emph{when} secret
 handlers run, and for how long, depend only on public events, while \emph{which}

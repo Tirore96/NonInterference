@@ -7,9 +7,9 @@ Servicing an interrupt takes time from whichever process was scheduled, so an
 operating system that keeps such an event secret must also hide when its handler
 runs, and for how long.
 
-Ordinary interrupt handling does not hide it. As soon as the interrupt can be
-serviced, its handler runs for a few steps, displacing the scheduled process, which
-then resumes. Suppose a public process keeps issuing requests whose results an
+\emph{Immediate} interrupt handling, the usual kind, does not hide it: as soon as an
+interrupt can be serviced, its handler runs for a few steps, displacing the scheduled
+process, which then resumes. Suppose a public process keeps issuing requests whose results an
 attacker can see. While the handler runs those requests stop, and the attacker sees
 a gap in the stream exactly as long as the handler (\cref{fig:leak}). The interrupt
 has leaked through the \emph{schedule}, although the attacker never sees the
@@ -19,7 +19,7 @@ systems \todo{examples, with citations}.
 
 \begin{figure}[t]
 \centering
-% the first eight steps of the two ordinary runs of fig:run-ordinary
+% the first eight steps of the two immediate runs of fig:run-ordinary
 \begin{tikzpicture}[font=\scriptsize,
   cell/.style={draw, minimum width=0.45cm, minimum height=0.4cm, inner sep=0pt},
   cG/.style={cell, fill=white}, cT/.style={cell, fill=white},
@@ -41,7 +41,7 @@ systems \todo{examples, with citations}.
 \foreach \s/\c [count=\i] in {cG/G,cG/G,cD/{},cD/{},cD/{},cD/{},cD/{},cP/P}
   \node[\s] at (0.45*\i,-1.72) {\c};
 \end{tikzpicture}
-\caption{Who runs at each step under ordinary interrupt handling, with and without a
+\caption{Who runs at each step under immediate interrupt handling, with and without a
   disk interrupt. G: public user, P: private user, R: scheduler, T, D: timer
   and disk handler. Shading is what the attacker sees: the step and its value (white),
   only that it happened (light), or nothing (dark). A wavy arrow marks an
@@ -75,8 +75,7 @@ theorems compose: if the parts of a process are non-interfering, so is the whole
 one closed process (\cref{fig:system}): the user processes, the scheduler and the
 handlers run in a pool, and a global state decides at each step which of them runs.
 The model is generic in its \emph{interrupt policy}, the part that decides when
-handlers may run. With the ordinary policy, which services each interrupt as soon as
-it can, the model is interfering, with \cref{fig:leak} as the counterexample. Our
+handlers may run. With the immediate policy the model is interfering, with \cref{fig:leak} as the counterexample. Our
 policy fixes when secret handlers run, and for how long, by public events. Secret
 handlers run only in time slices, as in time protection~\cite{ge2019}\todo{more
 citations for time slices?}: each slice opens when the public timer's handler
@@ -92,7 +91,7 @@ of the model, and an invariant on the states the policy reaches does the rest.
 
 \paragraph{Contributions}
 \begin{itemize}
-\item A mechanised counterexample: ordinary interrupt handling is interfering
+\item A mechanised counterexample: immediate interrupt handling is interfering
   (\m{model_immediate_not_NI}), also in the view of user space alone
   (\cref{sec:leak}).
 \item A mechanised, timing-sensitive non-interference proof for the sliced policy

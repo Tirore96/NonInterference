@@ -9,7 +9,7 @@ An operating system with interrupt handling is modelled as one process in the
 calculus of Rafnsson et al., *Timing-Sensitive Noninterference through
 Composition*,
 [POST 2017](https://users.ece.cmu.edu/~lbauer/papers/2017/post2017-compose-time.pdf).
-Ordinary interrupt handling leaks whether a secret disk interrupt occurred, through
+Immediate interrupt handling, which services an interrupt as soon as it can, leaks whether a secret disk interrupt occurred, through
 the schedule alone. Servicing interrupts only inside publicly timed slices, with
 unused handler runs filled by a dummy handler, removes the leak, for any scheduler
 and user processes that are themselves non-interfering.
