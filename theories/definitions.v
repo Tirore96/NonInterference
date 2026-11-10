@@ -527,6 +527,39 @@ Definition false_equiv : cEquiv ([Bool]).
   intros. subst. ssa.
 Defined.
 
+Definition levelPred := level -> Prop.
+Definition presP (P:levelPred) := forall x0 x1, order x0 x1 -> P x0 -> P x1.
+
+(* The base equivalence (paper, Definition 3): the levels in the upward-closed set
+   S see the values exactly; every other level relates and hides them all.  The
+   public and private equivalences and the unit's are its instances. *)
+Definition base_equiv (S : levelPred) (HS : presP S) (A : Ty) : cEquiv ([A]).
+  refine (@CEquiv _ (fun l _ => ~ S l) (fun l x y => ~ S l \/ x = y) _ _ _ _).
+  - move=> l. con.
+    + by right.
+    + move=> x y [?|E]; [by left|right; by subst].
+    + move=> x y z [?|E1] [?|E2]; try (by left); right; by subst.
+  - move=> l0 l1 Hord x y [H|->]; [left|by right]. move=> H0. apply: H. exact: HS H0.
+  - move=> l0 l1 Hord x H H0. apply: H. exact: HS H0.
+  - move=> l x H y. split; [by left|by move=> _].
+Defined.
+
+Lemma presP_all : presP (fun _ => True).
+Proof. done. Qed.
+
+Lemma order_bot : forall (l : level), order l \bot -> l = \bot.
+Proof.
+intros.
+rewrite /order lex0 in H.
+by apply/eqP.
+Qed.
+
+Lemma presP_nonbot : presP (fun l => l <> \bot).
+Proof. move=> l0 l1 Hord H0 E. subst. apply: H0. exact: order_bot. Qed.
+
+(* Public: every level sees the values.  Like [eqpair], it is left concrete so
+   that goals about it stay plain equalities; [public_equiv_base] shows it is the
+   base equivalence with S the set of all levels. *)
 Definition public_equiv (A : Ty) : cEquiv ([A]).
   refine (@CEquiv _
             (fun l b => False)
@@ -542,13 +575,6 @@ eauto.
 intros. done.
 Defined.
 
-Lemma order_bot : forall (l : level), order l \bot -> l = \bot.
-Proof.
-intros.
-rewrite /order lex0 in H.
-by apply/eqP.
-Qed.
-
 
 Lemma not_booleq : forall (A : eqType) (a : A), a != a -> False.
 Proof.
@@ -558,6 +584,9 @@ done.
 Qed.
 Hint Resolve not_booleq.
 
+(* Private: every level but the bottom sees the values.  Left concrete like
+   [public_equiv]; [private_equiv_base] shows it is the base equivalence with S
+   the levels above the bottom. *)
 Definition private_equiv (A : Ty) : cEquiv ([A]).
   refine (@CEquiv _
             (fun l b => l = \bot)
@@ -566,7 +595,7 @@ Definition private_equiv (A : Ty) : cEquiv ([A]).
             _
             _
             _).
-  - intros l. con. 
+  - intros l. con.
     + intro. destruct (eqVneq l \bot). auto.  left. split_and. intro. subst. rewrite eqxx in i. done.
     + intros x y. case. ssa. intros. subst. auto.
       intro. intros. destruct H. destruct H0. ssa. subst. auto. ssa. ssa.
@@ -576,6 +605,33 @@ Definition private_equiv (A : Ty) : cEquiv ([A]).
       intros. subst. apply order_bot in H. subst. done.
       intros. subst. con. auto. auto.
 Defined.
+
+(* The public and private equivalences are instances of [base_equiv], in what
+   they relate and in what they make unobservable. *)
+Lemma public_equiv_base (A : Ty) l x y :
+  rel (public_equiv A) l x y <-> rel (base_equiv presP_all A) l x y.
+Proof. split; [by right|by case=> // H; exfalso; apply: H]. Qed.
+
+Lemma public_equiv_base_dis (A : Ty) l x :
+  dis (public_equiv A) l x <-> dis (base_equiv presP_all A) l x.
+Proof. by split=> // H; apply: H. Qed.
+
+Lemma private_equiv_base (A : Ty) l x y :
+  rel (private_equiv A) l x y <-> rel (base_equiv presP_nonbot A) l x y.
+Proof.
+split.
+- case=> [[_ ->]|->]; [by right|left; move=> H; exact: H erefl].
+- case: (eqVneq l \bot) => [->|N]; first by right.
+  case=> [H|->]; first by exfalso; apply: H; apply/eqP.
+  left. split=> //. exact/eqP.
+Qed.
+
+Lemma private_equiv_base_dis (A : Ty) l x :
+  dis (private_equiv A) l x <-> dis (base_equiv presP_nonbot A) l x.
+Proof.
+split; first by move=> -> H; exact: H erefl.
+move=> H. case: (eqVneq l \bot) => // N. exfalso. apply: H. exact/eqP.
+Qed.
 
 
 Lemma dis_rel_dis : forall (I : Ty) (IRel : cEquiv [I]) l x y, dis IRel l x -> rel IRel l x y -> dis IRel l y.
@@ -595,9 +651,6 @@ Qed.
 
 Hint Resolve dis_rel_dis dis_rel_dis2 dis_dis_rel.
 
-
-Definition levelPred := level -> Prop.
-Definition presP (P:levelPred) := forall x0 x1, order x0 x1 -> P x0 -> P x1.
 
 Lemma rel_refl : forall (A : Ty) (ARel : cEquiv [A]) l x, rel ARel l x x.
 Proof.
@@ -843,15 +896,10 @@ Definition eqvisible {A : Set} (ARel : cEquiv A) : cEquiv A.
   - done.
 Defined.
 
-(* The unit, unobservable exactly at the levels outside P. *)
-Definition unit_equiv (P : levelPred) : presP P -> cEquiv ([Unit]).
-  move=> HP.
-  refine (@CEquiv _ (fun l _ => ~ P l) (fun _ _ _ => True) _ _ _ _).
-  - move=> l. con; done.
-  - done.
-  - move=> l0 l1 Hord _ H1 H0. apply: H1. exact: HP H0.
-  - by move=> l [] H [].
-Defined.
+(* The unit, unobservable exactly at the levels outside P: the base equivalence
+   on the unit type. *)
+Definition unit_equiv (P : levelPred) (HP : presP P) : cEquiv ([Unit]) :=
+  base_equiv HP Unit.
 
 Definition option_to_sum {V : Ty} (v : [Option V]) : [Sum V Unit] :=
   if v is Some v' then inl v' else inr tt.
