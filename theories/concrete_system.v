@@ -149,14 +149,18 @@ Ltac sta_state_reduce :=
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.
 
-Ltac trace_step := (first [econ;[idtac | econ | idtac] | econ];
+(* [econ], except that an output related at [public_equiv] (base_equiv: ~ S l \/
+   x = y) is closed by its equality side. *)
+Ltac tecon := first [right; reflexivity | econ].
+
+Ltac trace_step := (first [econ;[idtac | tecon | idtac] | econ];
   reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans;sta_state_reduce).
 (* the last element is proved by hand, to avoid evar holes in the proof *)
-Ltac trace_last := (first [econ;[idtac | econ | idtac] | econ];
+Ltac trace_last := (first [econ;[idtac | tecon | idtac] | econ];
   reduce_tac2;try solve [reflexivity| reduce_tac2;reduce_tac2];simpl;try swi_instans);
-  econ; reduce_tac2;reduce_tac2; econ; econ; reduce_tac; econ; econ;
-  reduce_tac; econ; econ; reduce_tac; econ; econ; reduce_tac; econ;
-  econ; reduce_tac; econ; econ; reduce_tac; econ.
+  econ; reduce_tac2;reduce_tac2; tecon; tecon; reduce_tac; tecon; tecon;
+  reduce_tac; tecon; tecon; reduce_tac; tecon; tecon; reduce_tac; tecon;
+  tecon; reduce_tac; tecon; tecon; reduce_tac; tecon.
 
 (* -- The state along the four runs (Paper, Figs. 4 and 7, lower rows) --
 
@@ -195,7 +199,7 @@ Proof.
 move=> H; elim: H n => [p0|p0 i p1 t Hr _ IH|p0 o' o p1 t Hr Ho _ IH] [|n] /=;
   try by exists p0; constructor.
 - by case: (IH n) => p' Hs; exists p'; econstructor; eauto.
-- by move: Ho => /= Ho; subst; case: (IH n) => p' Hs; exists p'; econstructor; eauto.
+- by move/public_equiv_eq: Ho => Ho; subst; case: (IH n) => p' Hs; exists p'; econstructor; eauto.
 Qed.
 
 Section ModelStates.

@@ -372,12 +372,12 @@ Lemma trace_no_dI : forall l, Trace (public_equiv _) l good_no_dI model_sliced_u
 Proof.
   intros. rewrite -good_no_dI_eq. eapply Trace_map.
   2:eapply trace_sliced_no_dI'.
-  mrw. ssa. subst. done.
+  by move=> ? ? ? /public_equiv_eq ->; right.
 Qed.
 
 Lemma trace_with_dI : forall l, Trace (public_equiv _) l good_with_dI model_sliced_userview_concrete.
 Proof.
   intros. rewrite -good_with_dI_eq. eapply Trace_map.
   2:eapply trace_sliced_with_dI'.
-  mrw. ssa. subst. done.
+  by move=> ? ? ? /public_equiv_eq ->; right.
 Qed.

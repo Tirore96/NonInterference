@@ -557,23 +557,11 @@ Qed.
 Lemma presP_nonbot : presP (fun l => l <> \bot).
 Proof. move=> l0 l1 Hord H0 E. subst. apply: H0. exact: order_bot. Qed.
 
-(* Public: every level sees the values.  Like [eqpair], it is left concrete so
-   that goals about it stay plain equalities; [public_equiv_base] shows it is the
-   base equivalence with S the set of all levels. *)
-Definition public_equiv (A : Ty) : cEquiv ([A]).
-  refine (@CEquiv _
-            (fun l b => False)
-            (fun l b1 b2 => b1 = b2)
-            _
-            _
-            _
-            _).
-intros.
-done.
-eauto.
-eauto.
-intros. done.
-Defined.
+(* Public: every level sees the values. *)
+Definition public_equiv (A : Ty) : cEquiv ([A]) := base_equiv presP_all A.
+
+Lemma public_equiv_eq : forall (A : Ty) l x y, rel (public_equiv A) l x y -> x = y.
+Proof. by move=> A l x y [H|//]; case: (H I). Qed.
 
 
 Lemma not_booleq : forall (A : eqType) (a : A), a != a -> False.
@@ -584,53 +572,37 @@ done.
 Qed.
 Hint Resolve not_booleq.
 
-(* Private: every level but the bottom sees the values.  Left concrete like
-   [public_equiv]; [private_equiv_base] shows it is the base equivalence with S
-   the levels above the bottom. *)
-Definition private_equiv (A : Ty) : cEquiv ([A]).
-  refine (@CEquiv _
-            (fun l b => l = \bot)
-            (fun l b1 b2 => l <> \bot /\ b1 = b2 \/ l = \bot)
-            _
-            _
-            _
-            _).
-  - intros l. con.
-    + intro. destruct (eqVneq l \bot). auto.  left. split_and. intro. subst. rewrite eqxx in i. done.
-    + intros x y. case. ssa. intros. subst. auto.
-      intro. intros. destruct H. destruct H0. ssa. subst. auto. ssa. ssa.
-      intros. de H0. subst.
-      destruct (eqVneq l0 \bot). auto. left. split_and. intro. subst. rewrite eqxx in i. done.
-      subst. apply order_bot in H. subst. auto.
-      intros. subst. apply order_bot in H. subst. done.
-      intros. subst. con. auto. auto.
-Defined.
+(* Private: every level but the bottom sees the values. *)
+Definition private_equiv (A : Ty) : cEquiv ([A]) := base_equiv presP_nonbot A.
 
-(* The public and private equivalences are instances of [base_equiv], in what
-   they relate and in what they make unobservable. *)
-Lemma public_equiv_base (A : Ty) l x y :
-  rel (public_equiv A) l x y <-> rel (base_equiv presP_all A) l x y.
-Proof. split; [by right|by case=> // H; exfalso; apply: H]. Qed.
+(* Views of the private equivalence: above the bottom it is equality, at the
+   bottom it relates and hides every value. *)
+Lemma private_not_bot (A : Ty) l (x y : [A]) : l <> \bot -> x = y -> rel (private_equiv _) l x y.
+Proof. by move=> _ ->; right. Qed.
 
-Lemma public_equiv_base_dis (A : Ty) l x :
-  dis (public_equiv A) l x <-> dis (base_equiv presP_all A) l x.
-Proof. by split=> // H; apply: H. Qed.
+Lemma private_not_bot' (A : Ty) l (x y : [A]) : l <> \bot -> rel (private_equiv _) l x y -> x = y.
+Proof. by move=> N [H|//]; case: (H N). Qed.
 
-Lemma private_equiv_base (A : Ty) l x y :
-  rel (private_equiv A) l x y <-> rel (base_equiv presP_nonbot A) l x y.
+Lemma private_bot (A : Ty) (x y : [A]) : rel (private_equiv _) \bot x y.
+Proof. by left. Qed.
+Hint Resolve private_bot.
+
+Lemma not_not_bot (l : level) : ~ l <> \bot <-> l = \bot.
 Proof.
-split.
-- case=> [[_ ->]|->]; [by right|left; move=> H; exact: H erefl].
-- case: (eqVneq l \bot) => [->|N]; first by right.
-  case=> [H|->]; first by exfalso; apply: H; apply/eqP.
-  left. split=> //. exact/eqP.
+split; last by move=> -> H; exact: H erefl.
+move=> H. case: (eqVneq l \bot) => // N. exfalso. apply: H. exact/eqP.
 Qed.
 
-Lemma private_equiv_base_dis (A : Ty) l x :
-  dis (private_equiv A) l x <-> dis (base_equiv presP_nonbot A) l x.
+Lemma private_dis (A : Ty) l (x : [A]) : dis (private_equiv _) l x <-> l = \bot.
+Proof. exact: not_not_bot. Qed.
+
+Lemma private_rel (A : Ty) l (x y : [A]) :
+  rel (private_equiv _) l x y <-> l <> \bot /\ x = y \/ l = \bot.
 Proof.
-split; first by move=> -> H; exact: H erefl.
-move=> H. case: (eqVneq l \bot) => // N. exfalso. apply: H. exact/eqP.
+split.
+- case: (eqVneq l \bot) => [->|/eqP N]; first by right.
+  by move/(private_not_bot' N) => ->; left.
+- by case=> [[N ->]|->]; [right|left].
 Qed.
 
 
@@ -938,7 +910,7 @@ Proof. done. Qed.
 
 Lemma eqvisible_public_dis (A : Ty) l x :
   dis (eqvisible (public_equiv A)) l x <-> dis (public_equiv A) l x.
-Proof. done. Qed.
+Proof. by split=> // H; apply: H. Qed.
 
 Lemma rel_eq : forall (I : Set) (IRel : cEquiv I) (x : I) l, rel IRel l x x.
 Proof.
@@ -1324,6 +1296,5 @@ Definition is_inr (A B : Set) (x : A + B) := if x is inr _ then true else false.
 
 
 Lemma aware_public : aware (public_equiv Bool) true \bot.
-Proof. rewrite /aware. ssa.
-Qed.
+Proof. move=> v' [H|<-]; [by case: H|by split=> // H; apply: H]. Qed.
 Hint Resolve aware_public.

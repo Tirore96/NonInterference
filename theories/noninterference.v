@@ -72,18 +72,17 @@ Lemma in_equiv_interrupt_rel l i i' :
 Proof.
 rewrite /in_equiv_interrupt /in_equiv /ir_dis /=.
 case: i; case: i' => /=.
-- split=> _; last by left.
-  by case: (eqVneq l \bot) => [->|/eqP ?]; [right | left].
+- by split=> _; [right | left].
 - by split=> //; case=> [|[_ []]].
 - by split=> //; case=> [|[[]]].
-- by split=> _ //; left.
+- by split=> _; [right | left].
 Qed.
 
 Lemma in_equiv_interrupt_dis l i :
   dis in_equiv_interrupt l i <-> dis in_equiv l (interrupt_to_sum i).
 Proof.
 rewrite /in_equiv_interrupt /in_equiv /ir_dis /=; case: i => /=.
-- by split; [case | move=> ->].
+- by rewrite not_not_bot; split; [case | move=> ->].
 - by split; [case | ].
 Qed.
 
@@ -114,21 +113,21 @@ Lemma helper_trace' : Trace (public_equiv _) \bot [::out_get';out_get'] model_im
 Proof.
     rewrite /model_immediate_concrete /model_immediate.
     rewr;simpl;rewr;simpl;rewr;simpl;rewr.
-    (first [econ;[idtac | econ | idtac] | econ];
+    (first [econ;[idtac | tecon | idtac] | econ];
      reduce_tac;try solve [reflexivity| reduce_tac;reduce_tac];simpl;try swi_instans).
     simpl.
 
-   (first [econ;[idtac | econ | idtac] | econ];
+   (first [econ;[idtac | tecon | idtac] | econ];
     reduce_tac2;try solve [reflexivity| reduce_tac2;reduce_tac2];simpl;try swi_instans).
-   econ. reduce_tac2;reduce_tac2. econ. econ. reduce_tac. econ. econ.
-   reduce_tac. econ. econ. reduce_tac. econ. econ. reduce_tac. econ.
-   econ. reduce_tac. econ. econ. reduce_tac. econ.
+   econ. reduce_tac2;reduce_tac2. tecon. tecon. reduce_tac. tecon. tecon.
+   reduce_tac. tecon. tecon. reduce_tac. tecon. tecon. reduce_tac. tecon.
+   tecon. reduce_tac. tecon. tecon. reduce_tac. tecon.
 Qed.   
 
 Lemma helper_trace : Trace out_equiv_concrete \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace'.
-  intros. simpl in H. subst. auto.
+  intros. move/public_equiv_eq: H => ->. auto.
 Qed.
 
 (* The same two public requests, seen through the user view. *)
@@ -138,13 +137,13 @@ Lemma helper_trace_userview' : Trace (public_equiv _) \bot two_gets model_immedi
 Proof.
   have <-: map_tr (@parse_output TPublicOutput TTypeSyscall) [::out_get';out_get'] = two_gets by [].
   eapply Trace_map. 2:eapply helper_trace'.
-  mrw. ssa. subst. done.
+  by move=> ? ? ? /public_equiv_eq ->; right.
 Qed.
 
 Lemma helper_trace_userview : Trace out_equiv_userviewC \bot two_gets model_immediate_userview_concrete.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace_userview'.
-  intros. simpl in H. subst. auto.
+  intros. move/public_equiv_eq: H => ->. auto.
 Qed.
 
 (* The same two public requests, seen through the public view. *)
@@ -155,13 +154,13 @@ Lemma helper_trace_publicview' : Trace (public_equiv _) \bot two_gets_public mod
 Proof.
   have <-: map_tr (@public_output TPublicOutput TTypeSyscall) [::out_get';out_get'] = two_gets_public by [].
   eapply Trace_map. 2:eapply helper_trace'.
-  mrw. ssa. subst. done.
+  by move=> ? ? ? /public_equiv_eq ->; right.
 Qed.
 
 Lemma helper_trace_publicview : Trace (out_equiv_publicview TPublicOutput) \bot two_gets_public model_immediate_publicview_concrete.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace_publicview'.
-  intros. simpl in H. subst. auto.
+  intros. move/public_equiv_eq: H => ->. auto.
 Qed.
 
 
@@ -274,29 +273,19 @@ Proof.
   right. exists i. exists i0. ssa.
 Qed.
 
-Lemma private_not_bot : forall (A : Ty) l (x y : [A]), l <> \bot -> x = y -> rel (private_equiv _) l x y.
-Proof.
-ssa.
-Qed.
-
-Lemma private_not_bot' : forall (A : Ty) l (x y : [A]), l <> \bot -> rel (private_equiv _) l x y -> x = y.
-Proof.
-ssa. de H0.
-Qed.
-
 Lemma eqmaybe_nonbot_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_all (private_equiv _)) l x y -> x = y.
 Proof.
-ssa. de x. de y. de H0. subst. done. de y.
+ssa; de x; de y; ssa. by move/(private_not_bot' H): H0 => ->.
 Qed.
 
 Lemma eqmaybe_all_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_all (public_equiv _)) l x y -> x = y.
 Proof.
-ssa. de x. de y. subst. done. de y.
+ssa; de x; de y; ssa. by move/public_equiv_eq: H0 => ->.
 Qed.
 
 Lemma eqmaybe_nonbot_not_bot : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_nonbot (private_equiv _)) l x y -> x = y.
 Proof.
-ssa. de x. de y. de H0. subst. done. de y.
+ssa; de x; de y; ssa. by move/(private_not_bot' H): H0 => ->.
 Qed.
 
 Lemma eqmaybe_nonbot_at_bot : forall (A : Ty) (x y : [Option A]), rel (eqmaybe_nonbot (private_equiv _)) \bot x y.
@@ -304,15 +293,6 @@ Proof.
   ssa. de x. de y. de y.
 Qed.
 
-Lemma private_bot : forall (A : Ty) (x y : [A]), rel ((private_equiv _)) \bot x y.
-Proof.
-  ssa.
-Qed.
-
-Hint Resolve private_bot.
-
-Lemma public_equiv_eq : forall (A : Ty) l x y, rel (public_equiv A) l x y -> x = y.
-Proof. ssa. Qed.
 
 Lemma out_equiv_not_bot : forall i i' l, l <> \bot -> rel (out_equiv Opub Opriv) l i i' -> i = i'.
 Proof.
@@ -354,11 +334,10 @@ Lemma false_equiv_sum_rel l b b' :
 Proof.
 rewrite /false_equiv /bool_to_sum /=.
 case: b; case: b' => /=.
-- by split=> _.
+- by split=> _; [right|].
 - by split.
 - by split.
-- split=> _ //.
-  by case: (eqVneq l \bot) => [->|/eqP ?]; [right | left].
+- by split=> _; [right|].
 Qed.
 
 Lemma false_equiv_sum_dis l b :
@@ -367,7 +346,7 @@ Lemma false_equiv_sum_dis l b :
 Proof.
 rewrite /false_equiv /bool_to_sum /=; case: b => /=.
 - by split; case.
-- by split; [case | move=> ->].
+- by rewrite not_not_bot; split; [case | move=> ->].
 Qed.
 
 
@@ -538,9 +517,9 @@ Proof.
   apply sta_NI.
   mrw. intros. eauto.
   mrw. intros.
-  destruct i. destruct i'. apply rel_eqsum_L' in H.
-  ssa. de H. de H0. subst. left. ssa.
-  ssa. destruct i'. ssa. apply rel_refl.
+  case: (eqVneq l \bot) => [->|/eqP N]; first exact: private_bot.
+  apply (private_not_bot N). move/(private_not_bot' N): H0 => ->.
+  by case/eqsum_L_split: H => [[o][o'][->][->] /(private_not_bot' N) ->|[p][p'][->][->] _].
   mrw. intros. destruct i. apply dis_eqsum_L2 in H. ssa. ssa.
   apply out_NI.
   Unshelve. all: exact (public_equiv _).
@@ -1105,12 +1084,10 @@ instantiate (1:= eqpair_LR (private_equiv _) (eqmaybe_nobody IRel)).
        unobservable there: the gate is hidden, so None is, and so is every
        payload. *)
     apply oblivious_all_dis. case=> [o|] /=; first done.
-    move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by (simpl; right).
+    move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by exact: private_bot.
     by move: (Ha _ Hr)=>[].
-    left. intro. intros.
-    move/private_not_bot' : H=>->//. ssa.
-    intro. subst. rewrite eqxx in i. done.
-    intro. subst. rewrite eqxx in i. done.
+    left. have N : l <> \bot by apply/eqP.
+    by move=> v' /(private_not_bot' N) <-; split=> // /private_dis.
   + apply maybe_NI. eapply map_NI; eauto.
     mrw. intros. apply rel_eqpair_LR2. con. auto. eauto.
 Qed.
@@ -1124,10 +1101,9 @@ Proof.
   mrw. intros.
   move:H. instantiate (1:=eqpair (private_equiv _) (public_equiv _)).
   move/rel_eqpair. case=>HH _.
-  simpl in HH. destruct HH. destruct H. rewrite H0.
-  case_if. auto. auto. subst. auto.
+  by case: HH => [?|->]; [left|right].
   eapply sta_NI.
-  mrw. intros. simpl in H0. destruct H0. ssa. subst. auto.
+  mrw. intros. by case: H0 => [?|->]; [left|right].
   mrw. intros. auto.
   mrw. intros. auto.
   apply out_NI.
@@ -1205,15 +1181,8 @@ Proof.
   case: x0=>a[]b[]c[]d[] e f.
   case: x1=>a'[]b'[] c'[] d'[] e' f'.
   rewrite !pair_rewr.
-  move/rel_eqmaybe_nonbot. case.
-  move=>[]x'[]y'[] ->[]->.
-  rewrite /dI_out. intro. move: b0. simpl. case.
-  case. intros. subst. auto. intros. auto.
-
-  case.
-  move=>[]x'[]y'[] ->[]->. intros. simpl. de e. case.
-  move=>[]y'[] ->[]->. case. intros. subst. ssa.
-  case. move=>->->. auto.
+  rewrite /dI_out /=.
+  case: e => [x|]; case: e' => [y|] //=; rewrite /eqmaybe_dis /=; by case=> ? _; split.
   case:H.
   destruct i0;last ssa.
   destruct i2;last ssa.
