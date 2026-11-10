@@ -34,8 +34,8 @@ With $\Ev$ the state equivalence (\cref{def:state}), this reduces to
 This is the first hard step, \cref{lem:state-cell}. \Cref{thm:sta-pred}, with $P$ the slice invariant
 $\Gated$ (\cref{def:gated}), needs $P$ to hold of \code{init_policy}, $f$ and $g$ to preserve $P$,
 $f \in \NI_P(\Ein + \Eout,\Ev,\Ev) \cap \mathsf{PE}_P(\Ein + \Eout,\Ev)$ and
-$g \in \NI_P(\Eout,\Ev,\Ev)$. Here $g$ decides whether a secret handler runs
-(\cref{sec:state-equiv,sec:update,sec:invariant}). What remains is the \code{sta}'s
+$g \in \NI_P(\Eout,\Ev,\Ev)$. Here $g$ decides whether a secret handler runs.
+What remains is the \code{sta}'s
 argument, which receives the state with each event:
 \[
 \mathsf{map}\;\mathsf{pool\_input}\;\mathsf{id}\;(\mathsf{maybe}\;p)
@@ -124,7 +124,7 @@ $\mathsf{advance\_policy} \circ \mathsf{observe\_policy}\;o$, and the
 proof takes its stages one at a time (\m{policy_output_NI_on}, \cref{fig:lane}).
 
 The service policy must be non-interfering on every pair of related states, an
-obligation on the policy (\cref{thm:policy}). For the sliced policy this is routine
+obligation on the policy. For the sliced policy this is routine
 (\cref{sec:state-equiv}): both its stages read only the counter and the timer
 handler's output, which are public, so each is non-interfering on every pair of
 related states and \m{fv_NI_comp} composes them

@@ -1,14 +1,11 @@
 \section{Two Interrupt Policies}\label{sec:designs}
 
 Two interrupt policies instantiate the model: \m{model_immediate}, which
-leaks (\cref{sec:leak}), and \m{model_sliced}, which does not (\cref{sec:sliced}).
+leaks, and \m{model_sliced}, which does not.
 Both run on one concrete system. Its public user process emits
 \code{Get} whenever it runs, its private user process emits \code{Sys} when notified by
 the disk handler and \code{Idle} otherwise, and the scheduler alternates between
 them. Handlers take $\mathit{runtime} = 2$ steps.
-\Cref{fig:policy-ordinary,fig:phases} draw the two policies over the three
-kinds of step of \cref{sec:processes}, and \cref{fig:run-ordinary,fig:run-sliced} run
-them on the same inputs.
 
 \subsection{Immediate interrupt handling, and the leak}\label{sec:leak}
 
@@ -83,8 +80,7 @@ interrupt is public. Of each output the attacker sees whether the slot ran and i
 white slots of \cref{fig:io}, only whether it ran on the light slot, and nothing
 on the dark ones.
 It thus sees when U and T steps happen. On an S step it sees those slots all empty: a
-secret handler ran, but which is hidden. This is the view the proof works with
-(\cref{sec:proof}), and \cref{sec:gating} shows the proof forces this shape.
+secret handler ran, but which is hidden. This is the view the proof works with.
 
 For the attacker to learn nothing, the step into S and the time spent there, both
 visible, must be fixed by public events; what runs inside S may depend on the secret.

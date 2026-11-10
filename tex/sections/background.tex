@@ -1,15 +1,16 @@
 \section{Background: Composable Timing-Sensitive Non-Interference}\label{sec:background}
 
-The calculus and definitions are those of Rafnsson et al.~\cite{rafnsson2017} as we
-mechanise them (\appx), plus sum types and composition under an invariant
-(\cref{thm:sta-pred}).
+We recall the calculus of Rafnsson et al.~\cite{rafnsson2017}, with one change and
+two additions. Non-interference is stated over finite traces, which the mechanisation
+proves equivalent to the original coinductive definition (\appx). We add sum types and
+a composition theorem for state cells under an invariant (\cref{thm:sta-pred}).
 
 \subsection{Processes, traces and time}
 
 A process $p : \Proc{I}{O}$ has input type $I$ and output type $O$. It moves by
 receiving an input, $\stepI{p}{i}{p'}$, or by emitting an output,
 $\stepO{p}{o}{p'}$, in any order. Processes are built from seven constructors, whose
-reduction rules are in \appx; the model of \cref{sec:model} is one closed term over them.
+reduction rules are in \appx; our model is one closed term over them.
 
 The simplest constructor, \code{out o}, ignores its input and always emits \code{o}. \code{map f g p} translates
 inputs by \code{f} on the way into \code{p} and outputs by \code{g} on the way out.
@@ -19,36 +20,46 @@ inputs by \code{f} on the way into \code{p} and outputs by \code{g} on the way o
 \code{swi b p} switches \code{p} on and off. While the phase \code{b} is
 \code{false} it emits \code{None} and \code{p} takes no output step; while it is
 \code{true} it emits \code{Some o} for an output \code{(c,o)} of \code{p}. The tag
-\code{c} and the bit carried on each input toggle the phase; the phase, the tag and
-that bit are the \emph{gate bits}. \code{par p1 p2} gives every input to
+\code{c} and the bit carried on each input toggle the phase. \code{par p1 p2} gives every input to
 both parts and emits both outputs as a pair. \code{loop p} feeds each output of
 \code{p} back to it as an input. \code{maybe p} makes the input optional: \code{None}
 leaves \code{p} unchanged. We write $A + 1$ for the optional values of
-$A$, with \code{Some v} and \code{None} its injections. Reduction is deterministic,
-and a process never blocks.
+$A$, with \code{Some v} and \code{None} its injections. Reduction is deterministic
+(\m{reduceI_det}, \m{reduceO_det}), every process is input-total, accepting every input (\m{Proc_has_input}), and a
+process never blocks on output (\m{Proc_has_output}).
 
-Time is counted in output steps: each is one tick of a clock the observer shares,
-and on every tick a process emits a value (in our models, a component that did not
-run emits \code{None}); input steps take no time. This makes the setting
-timing-sensitive: a process that emits \code{o} one step late emits something else,
-say \code{None}, at the original step, so a delay changes the observed value.
+Time is discrete, and transitions are conflated with time, as in prior
+work~\cite{focardi2003,askarov2010,devriese2010,kashyap2011,rafnsson2017}. What is
+timed is the work a process does, which is producing output, since inputs arrive
+asynchronously: each output step takes one unit of time, and input steps take none,
+arriving between outputs.
 
 \subsection{Characterised equivalences and non-interference}
-Security is relative to a lattice of levels $\ell$. This paper reads it as the
-two-point lattice $\Lo \sqsubseteq \Hi$: the attacker $\Lo$, and $\Hi$, who sees
-everything; the mechanisation allows any partial order with a least element,
-including any bounded lattice (\appx). Each input and output type carries a \emph{characterised equivalence}
-(\m{cEquiv}) $\doteq$, which says, for each level $\ell$:
-\begin{itemize}
-\item $x \doteq_\ell y$: an observer at $\ell$ cannot tell $x$ from $y$;
-\item $x \doteq_\ell \unobs$: an observer at $\ell$ does not see $x$ at all.
-\end{itemize}
-Rafnsson et al.\ instead make $\unobs$ a value of every type; the two give the same
-non-interference (\m{NI_lEquiv}). As an equivalence, $\doteq_\ell$ partitions the
-type into classes the observer cannot tell apart. One of them, the
-\emph{distinguished class}, holds the values related to $\unobs$, which the observer
-does not see; it is empty when the level hides nothing. We write
-$\eqv{I}$ and $\eqv{O}$ for the equivalences on inputs and outputs.
+Security is relative to levels $\ell$, partially ordered by $\sqsubseteq$ with a
+least element, which is all the mechanisation assumes; a lattice, as usual in
+the literature~\cite{denning1976}, is a special case. For our model the two-point lattice
+$\Lo \sqsubseteq \Hi$ suffices: $\Lo$ is the attacker's level, and an observer at
+$\Hi$ sees everything. What each level sees of a value is fixed by the
+characterised equivalence of its type.
+
+\begin{definition}[Characterised equivalence, \m{cEquiv}]\label{def:cequiv}
+A \emph{characterised equivalence} $\doteq$ on $A$ gives, for each level $\ell$, an
+equivalence $\doteq_\ell$ on $A$ (\code{rel}) and a predicate $\mathsf{dis}_\ell$ on
+$A$ (\code{dis}) such that, for all $\ell \sqsubseteq \ell'$ and $x, y \in A$,
+\begin{gather*}
+x \doteq_{\ell'} y \Rightarrow x \doteq_\ell y, \qquad
+\mathsf{dis}_{\ell'}\,x \Rightarrow \mathsf{dis}_\ell\,x, \\
+\mathsf{dis}_\ell\,x \Rightarrow (\mathsf{dis}_\ell\,y \iff x \doteq_\ell y).
+\end{gather*}
+\end{definition}
+
+An observer at $\ell$ cannot tell $x$ from $y$ if $x \doteq_\ell y$, and does not see
+$x$ at all if $\mathsf{dis}_\ell\,x$. Rafnsson et al.\ extend each type $A$ with a
+value $\unobs$, to $A_\unobs$, which lets them express the predicate as
+$x \doteq_\ell \unobs$. The predicate was more convenient to mechanise, but for
+presentation we follow them and write $x \doteq_\ell \unobs$ for
+$\mathsf{dis}_\ell\,x$; the two give the same non-interference (\m{NI_lEquiv}). We write
+$\eqv{I}$ and $\eqv{O}$ for the equivalences on the inputs and outputs of a process.
 
 A trace $t$ is a finite word of input effects $?i$ and output effects $!o$. We
 write $\epsilon$ for the empty trace and ``$.$'' for concatenation. A process $p$ \emph{performs} $t$ at
@@ -74,65 +85,62 @@ i \eqv{I}_\ell \unobs &\;\Rightarrow\; \bigl(\perf{p}{t.t'}{\ell} \Leftrightarro
 \end{definition}
 
 The first clause (substitution) makes related inputs interchangeable. The second
-lets an input in the distinguished class be inserted into a trace (insertion,
+lets an input $i \eqv{I}_\ell \unobs$ be inserted into a trace (insertion,
 $\Rightarrow$) or deleted from it (deletion, $\Leftarrow$) without the observer
 noticing.
 
 \subsection{Equivalences}
 
-A composite process gets its equivalences from its parts (\cref{thm:composition}),
-so those of the model in \cref{sec:model} are terms over a few base equivalences,
-chiefly two that differ in what they hide; $\doteq$ \emph{hides} $x$ at $\ell$ when
-$x$ is in the distinguished class, $x \doteq_\ell \unobs$. The \emph{public} equivalence $\pubeq$ (\m{public_equiv}) hides nothing: at every level,
-$x \doteq_\ell y$ iff $x = y$. The \emph{private}
-equivalence $\priveq$ (\m{private_equiv}) hides everything from the attacker: at $\Lo$ every
-value is unobservable, so all values are related, and at $\Hi$ it is the public one.
-The superscript is the lowest level that sees the values.
-The model gives the timer handler's output the public equivalence and the disk
-handler's the private one: the attacker may see when the timer handler finishes, but
-not when the disk handler does. The other equivalences of the model combine these
-two with the formers below.
+The equivalences of our model are built from base equivalences with formers. We say
+$\doteq$ \emph{hides} $x$ at $\ell$ when $x \doteq_\ell \unobs$.
 
-\begin{definition}[Equivalence formers]\label{def:formers}
-Let $\eqv{X}$ and $\eqv{Y}$ be equivalences on $X$ and $Y$. Each former below
-relates and hides values at each level $\ell$ as stated, and relates any two values
-it hides.
-\begin{itemize}
-\item \emph{Pairs} (\m{eqpair}, \m{eqpair_R}, \m{eqpair_LR}). $\eqo{X} \times
-  \eqo{Y}$, $\eqo{X} \times_R \eqo{Y}$ and $\eqo{X} \times_{LR} \eqo{Y}$ relate
-  $(x,y)$ and $(x',y')$ when $x \eqv{X}_\ell x'$ and $y \eqv{Y}_\ell y'$. The first
-  hides no pair, the second hides $(x,y)$ when $\eqv{Y}$ hides $y$, and the third
-  when $\eqv{X}$ also hides $x$.
-\item \emph{Sums} (\m{eqsum_LR}). $\eqo{X} + \eqo{Y}$ relates $\mathsf{inl}\;x$ and
-  $\mathsf{inl}\;x'$ when $x \eqv{X}_\ell x'$, and $\mathsf{inr}\;y$ and
-  $\mathsf{inr}\;y'$ when $y \eqv{Y}_\ell y'$. It hides $\mathsf{inl}\;x$ when
-  $\eqv{X}$ hides $x$, and $\mathsf{inr}\;y$ when $\eqv{Y}$ hides $y$.
-\item \emph{Unit} (\m{unit_equiv}). For an upward-closed set $S$ of levels, $1^S$
-  relates the unit $\star$ to itself and hides it outside $S$. We write $1^\ell$ for
-  $1^S$ with $S$ the levels at or above $\ell$.
-\item \emph{Visible} (\m{eqvisible}). $\eqo{X}^\circ$ relates as $\eqv{X}$ does and
-  hides nothing.
-\end{itemize}
+\begin{definition}[Base equivalence, \m{base_equiv}]\label{def:base}
+For a set $S$ of levels closed upwards ($\ell \in S \wedge \ell \sqsubseteq \ell'
+\Rightarrow \ell' \in S$), $\doteq^S$ on a type $A$ is given by, for all $\ell$ and
+$x, x' \in A$,
+\[
+x \doteq^S_\ell x' \iff \ell \notin S \vee x = x', \qquad
+x \doteq^S_\ell \unobs \iff \ell \notin S.
+\]
 \end{definition}
 
-The pair formers differ in where they appear: $\times$ is the output equivalence of
-\code{par}, and $\times_R$ and $\times_{LR}$ appear where a constructor pairs a value
-with a state or gate bit. An \code{inl} and an \code{inr} are related exactly
-when both are hidden; otherwise the tag is visible. $^\circ$ keeps the tag
-visible on a side that would hide it. We write $\privvis$ for $(\priveq)^\circ$: at
-$\Lo$ all its values are related, yet none is hidden, so under a sum the attacker
-learns only which side a value is on.
+Values are related if they are equal or hidden, and they are hidden at levels outside $S$. We write $\doteq^\ell$ for $\doteq^S$ with
+$S = \{\ell' \mid \ell \sqsubseteq \ell'\}$. The \emph{public} equivalence $\pubeq$ thus has $S = \{\Lo, \Hi\}$ and hides
+nothing (\m{public_equiv_base}). The \emph{private} equivalence $\priveq$ has
+$S = \{\Hi\}$ (\m{private_equiv_base}): at $\Lo$ it relates and hides all values,
+and at $\Hi$ it is equality.
 
-A process that does not run emits \code{None}, and under ${\doteq} + \one^S$ levels
-in $S$ see that it did not run; \code{Some v} and \code{None} are related at $\ell$
-exactly when both are hidden: $1^\Lo$ lets every observer see \code{None},
-$1^\Hi$ hides it from the attacker, and $1^\emptyset$ from everyone.
+\begin{definition}[Formers]\label{def:formers}
+For equivalences $\eqv{X}$ and $\eqv{Y}$ on $X$ and $Y$, the formers below
+(\m{eqpair}, \m{eqpair_R}, \m{eqpair_LR}, \m{eqsum_LR}, \m{eqvisible}) relate
+pairs componentwise, sums tag by tag ($\mathsf{inl}\,x$ and $\mathsf{inl}\,x'$ when
+$x \eqv{X} x'$, and likewise $\mathsf{inr}$), and $\eqo{X}^\circ$ as $\eqv{X}$ does;
+each also relates any two values it hides, which are
+\[
+\renewcommand{\arraystretch}{1.2}
+\begin{array}{@{}l@{\quad}l@{}}
+\eqo{X} \times \eqo{Y} & \text{none} \\
+\eqo{X} \times_R \eqo{Y} & (x,y) \text{ if } y \text{ is hidden} \\
+\eqo{X} \times_{LR} \eqo{Y} & (x,y) \text{ if } x \text{ and } y \text{ are hidden} \\
+\eqo{X} + \eqo{Y} & \mathsf{inl}\,x \text{ if } x \text{ is, } \mathsf{inr}\,y \text{ if } y \text{ is} \\
+\eqo{X}^\circ & \text{none}
+\end{array}
+\]
+\end{definition}
+
+Under a sum the tag is thus visible unless both sides are hidden; $^\circ$ keeps it
+visible on a side that would hide it. Thus $\privvis \triangleq (\priveq)^\circ$
+relates all values at $\Lo$ yet hides none, and under a sum the attacker learns only
+which side a value is on. An optional value is a sum with the unit, so under
+${\doteq} + \one^S$ levels in $S$ see whether a process emitted: $\one^\Lo$ shows
+\code{None} to everyone, $\one^\Hi$ hides it from the attacker, and $\one^\emptyset$
+from everyone.
 
 \subsection{Compositional theorems}\label{sec:composition}
 
 The calculus has one non-interference theorem per constructor. We write
 $\eqv{V}$ for an equivalence on the state of a \code{sta} and $\eqv{B}$ for one on the
-gate bit of a \code{swi}; \cref{sec:proof} instantiates both for the model. The side
+\emph{gate bits} of a \code{swi}, the tag and the input bit that toggle its phase. The side
 conditions use these predicates on functions and levels:
 \begin{align*}
 f \in \NI(\eqv{I},\eqv{O}) &\iff \forall \ell, i, i'.\;
@@ -188,8 +196,7 @@ For all processes, functions and equivalences of matching types:
 
 Two of these carry substantial side conditions: the state update of \code{sta} must
 be non-interfering and equivalence-preserving, and \code{swi} requires every observer
-to be aware of the gate or oblivious to the gated process. \Cref{sec:proof}
-discharges both for the model (\cref{lem:state-cell,lem:slot}).
+to be aware of the gate or oblivious to the gated process.
 
 The side conditions of \comp{it:sta} must hold on every pair of related states,
 reachable or not. We add a variant that asks for them only on states satisfying

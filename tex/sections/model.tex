@@ -19,8 +19,7 @@ can start when its pending bit is set and its mask is clear; starting it clears 
 pending bit and sets all the masks. Once a handler has finished, the next handler that
 can start runs. If there is none, control returns to the interrupted user process, or
 goes to the scheduler if the \emph{reschedule flag}, our \code{need_resched}, is set.
-We build the process from the inside out, each layer wrapping the last;
-\cref{sec:parameters} gives the whole term.
+We build the process from the inside out, each layer wrapping the last.
 
 \subsection{The processes}\label{sec:processes}
 
@@ -109,7 +108,7 @@ input_update e v :=
   if e is inl i then set_pending i v else v
 \end{lstlisting}
 An \code{inl} event sets the arriving interrupt's pending bit (\m{set_pending}). The
-event is a sum because of the loop (\cref{sec:loop} explains \code{inr}). The output
+event is a sum because of the loop. The output
 update $g$ runs on each output of the pool; the interrupt policy acts there:
 \begin{lstlisting}
 output_update observe_policy advance_policy o :=
@@ -147,7 +146,7 @@ jobs.
 The first job is to deliver the pid: without it, no switch would reopen after
 the first step. The second is to give the private user, the legitimate consumer of
 the disk event, the disk handler's output; this input makes the effect of the disk
-handler's run visible in user space (\cref{sec:sliced}).
+handler's run visible in user space.
 
 A \code{loop} needs equal input and output types, while the system takes
 interrupts and emits tuples. So inside the loop an event is a sum, \code{T_in + T_out},
@@ -189,7 +188,7 @@ decide which interrupts can be serviced before anything has happened.
 \code{observe_policy} and \code{advance_policy}, the service policy of
 \cref{sec:state}, reopen the masks, and so decide when the next handler becomes
 eligible. Together they decide \emph{when a handler may run}, and we call them the
-\emph{interrupt policy}. \Cref{sec:designs} fills them twice.
+\emph{interrupt policy}.
 
 % Figs. 3 and 4 of Section IV, here so that they share the next page's column tops
 \input{sections/fig-ordinary}

@@ -77,7 +77,7 @@ this paper uses the original notation throughout.
 and keeps the two forms equal by proof. The mechanisation classifies options by
 \m{eqmaybe}, as the original does, and sums by \m{eqsum} and \m{eqsum_L}; the paper
 uses one sum former, $\eqo{X} + \eqo{Y}$ (\m{eqsum_LR}), with
-$\doteq^\circ$ (\m{eqvisible}) and $1^S$ (\m{unit_equiv}). Agreement lemmas show
+$\doteq^\circ$ (\m{eqvisible}) and $\one^S$ (\m{unit_equiv}). Agreement lemmas show
 that, at every level, each mechanised form relates and hides
 exactly what its paper form does: $\mathsf{eqmaybe}(S,\doteq)$ is ${\doteq} + \one^S$
 along the map from options to sums (\m{eqmaybe_sum_rel}, \m{eqmaybe_sum_dis}),
@@ -128,14 +128,13 @@ stated as lemmas (\m{immediate_states_with_dI}, \m{sliced_states_with_dI} and th
 siblings), which the figures show. \m{run_states_model} shows
 that these are the states the model holds along those runs.
 
-\paragraph{Levels} For presentation, this paper reads levels as the two-point
-lattice. The mechanisation works over any partial order with a least
-element, and so over any bounded lattice, as the calculus of Rafnsson et al.\ does,
-for two reasons: it mechanises the existing theory as it
+\paragraph{Levels} The two-point lattice suffices for our model. The
+mechanisation works over any partial order with a least element, of which every
+bounded lattice, the setting of Rafnsson et al., is an instance, for two reasons: it mechanises the existing theory as it
 stands, and it lets other models, whose security claims need more levels, build on
 it. Over such an order, a characterised equivalence must also be monotone downwards: what
 a level relates stays related below it, and likewise for unobservability. Our models
 need nothing more. Every equivalence in them treats the bottom level, read as $\Lo$,
 apart from all others, so the proofs split on $\ell = \Lo$ against $\ell \neq \Lo$,
 and the second case covers every other level at once; $\Hi$ in
-$\priveq$ and $1^\Hi$ stands for all levels but $\Lo$.
+$\priveq$ and $\one^\Hi$ stands for all levels but $\Lo$.
