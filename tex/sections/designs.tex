@@ -142,9 +142,10 @@ are both hidden, so a plain sum would relate them, hiding whether the private us
 ran. We use $\privvis$ (\m{eqvisible}) instead, which relates as $\priveq$ and hides
 nothing: for all $\ell$ and $x, x'$,
 \[
-x \doteq^{\Hi\circ}_\ell x' \iff x \doteq^\Hi_\ell x', \qquad
-\neg\dis^{\Hi\circ}_\ell\,x.
+x \doteq^{\Hi_\bot}_\ell x' \iff x \doteq^{\Hi_\Lo}_\ell x', \qquad
+\neg\dis^{\Hi_\bot}_\ell\,x,
 \]
+where the subscript $\bot$ says it hides at no level.
 Under $\privvis + \pubeq$ the attacker thus learns only which side a value is on.
 
 \begin{definition}[User-view equivalence]\label{def:userview}

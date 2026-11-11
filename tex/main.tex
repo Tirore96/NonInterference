@@ -100,8 +100,9 @@
 % binary operator after a relation into an ordinary symbol with no space, so an
 % equivalence used as an operand is braced, which makes it an ordinary symbol.
 \newcommand{\pubeq}{{\doteq^{\Lo}}}
-\newcommand{\priveq}{{\doteq^{\Hi}}}
-\newcommand{\privvis}{{\doteq^{\Hi\circ}}}
+% the two private equivalences: the subscript names the levels at which they hide
+\newcommand{\priveq}{{\doteq^{\Hi_\Lo}}}
+\newcommand{\privvis}{{\doteq^{\Hi_\bot}}}
 \newcommand{\eqo}[1]{{\eqv{#1}}}
 % the base equivalence on the unit type: \one^S is 1 over =^S, the superscript
 % kept on the = so that it sits at its usual height

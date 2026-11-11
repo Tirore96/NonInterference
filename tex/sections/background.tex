@@ -77,9 +77,9 @@ x \doteq^S_\ell x' \iff x = x' \vee \ell \notin S, \qquad
 
 Values are related if they are equal or hidden, and they are hidden at levels outside $S$. We write $\doteq^\ell$ for $\doteq^S$ with
 $S = \{\ell' \mid \ell \sqsubseteq \ell'\}$. The \emph{public} equivalence $\pubeq$ thus has $S = \{\Lo, \Hi\}$ and hides
-nothing (\m{public_equiv}). The \emph{private} equivalence $\priveq$ has
-$S = \{\Hi\}$ (\m{private_equiv}): at $\Lo$ it relates and hides all values,
-and at $\Hi$ it is equality.
+nothing (\m{public_equiv}). The \emph{private} equivalence $\priveq$ is $\doteq^\Hi$,
+with $S = \{\Hi\}$ (\m{private_equiv}): at $\Lo$ it relates and hides all values,
+and at $\Hi$ it is equality. Its subscript names the level at which it hides.
 
 Equivalences on pairs and sums follow the type constructors: pairs are related
 componentwise and sums tag by tag, and related otherwise only when both are hidden.
