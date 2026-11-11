@@ -85,36 +85,9 @@ Record cEquiv (A : Set) :=
             _: forall l a0, dis l a0 -> forall a1, dis l a1 <-> rel l a0 a1
           }.
 
-Inductive Interrupt := DiskInterrupt | TimerInterrupt.
-Inductive HandlerOutput := Nothing | Notify.
-Inductive TypeSyscall := Syscall | Idle.
-Inductive PublicOutput := GetRequest | Public_NOP.
-
-Definition Interrupt_indDef := [indDef for Interrupt_rect].
-Canonical Interrupt_indType := IndType Interrupt Interrupt_indDef.
-Definition Interrupt_hasDecEq := [derive hasDecEq for Interrupt].
-HB.instance Definition _ := Interrupt_hasDecEq.
-
-Definition HandlerOutput_indDef := [indDef for HandlerOutput_rect].
-Canonical HandlerOutput_indType := IndType HandlerOutput HandlerOutput_indDef.
-Definition HandlerOutput_hasDecEq := [derive hasDecEq for HandlerOutput].
-HB.instance Definition _ := HandlerOutput_hasDecEq.
-
-Definition TypeSyscall_indDef := [indDef for TypeSyscall_rect].
-Canonical TypeSyscall_indType := IndType TypeSyscall TypeSyscall_indDef.
-Definition TypeSyscall_hasDecEq := [derive hasDecEq for TypeSyscall].
-HB.instance Definition _ := TypeSyscall_hasDecEq.
-
-Definition PublicOutput_indDef := [indDef for PublicOutput_rect].
-Canonical PublicOutput_indType := IndType PublicOutput PublicOutput_indDef.
-Definition PublicOutput_hasDecEq := [derive hasDecEq for PublicOutput].
-HB.instance Definition _ := PublicOutput_hasDecEq.
-
 Inductive Ty : Set := Nat | Times : Ty -> Ty -> Ty | Bool
                  | Option : Ty -> Ty | Sum : Ty -> Ty -> Ty
-                 | TTypeSyscall | Unit
-                 | TInterrupt | THandlerOutput |  TPublicOutput
-                 | Empty. 
+                 | Unit | Empty.
 
 (*Derive NoConfusion for Ty.
 Derive EqDec for Ty.*)
@@ -140,11 +113,7 @@ Fixpoint interp (t : Ty) : Set :=
   | Bool => bool
   | Option t' => option (interp t')
   | Sum t0 t1 => (interp t0) + (interp t1)            
-  | TTypeSyscall => TypeSyscall
-  | Unit => unit                     
-  | TInterrupt => Interrupt
-  | THandlerOutput => HandlerOutput
-  | TPublicOutput => PublicOutput
+  | Unit => unit
   | Empty => Empty_set
   end.
 Notation "[ i ]" := (interp i).

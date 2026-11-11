@@ -7,7 +7,10 @@ a composition theorem for state cells under an invariant (\cref{thm:sta-pred}).
 
 \subsection{Processes, traces and time}
 
-A process $p : \Proc{I}{O}$ has input type $I$ and output type $O$. It moves by
+A process $p : \Proc{I}{O}$ has input type $I$ and output type $O$. Types are
+built from the empty type, the unit type $1$, booleans and naturals by
+products $X \times Y$ and sums $X + Y$ (\m{Ty}); we write $A + 1$ for the optional
+values of $A$, with injections \code{Some} and \code{None}. A process moves by
 receiving an input, $\stepI{p}{i}{p'}$, or by emitting an output,
 $\stepO{p}{o}{p'}$, in any order. Processes are built from seven constructors, whose
 reduction rules are in \appx; our model is one closed term over them.
@@ -23,8 +26,7 @@ inputs by \code{f} on the way into \code{p} and outputs by \code{g} on the way o
 \code{c} and the bit carried on each input toggle the phase. \code{par p1 p2} gives every input to
 both parts and emits both outputs as a pair. \code{loop p} feeds each output of
 \code{p} back to it as an input. \code{maybe p} makes the input optional: \code{None}
-leaves \code{p} unchanged. We write $A + 1$ for the optional values of
-$A$, with \code{Some v} and \code{None} its injections. Reduction is deterministic
+leaves \code{p} unchanged. Reduction is deterministic
 (\m{reduceI_det}, \m{reduceO_det}), every process is input-total, accepting every input (\m{Proc_has_input}), and a
 process never blocks on output (\m{Proc_has_output}).
 
@@ -34,7 +36,7 @@ timed is the work a process does, which is producing output, since inputs arrive
 asynchronously: each output step takes one unit of time, and input steps take none,
 arriving between outputs.
 
-\subsection{Characterised equivalences and non-interference}
+\subsection{Characterised equivalences}
 Security is relative to levels $\ell$, partially ordered by $\sqsubseteq$ with a
 least element, which is all the mechanisation assumes; a lattice, as usual in
 the literature~\cite{denning1976}, is a special case. For our model the two-point lattice
@@ -43,28 +45,86 @@ $\Hi$ sees everything. What each level sees of a value is fixed by the
 characterised equivalence of its type.
 
 \begin{definition}[Characterised equivalence, \m{cEquiv}]\label{def:cequiv}
-A \emph{characterised equivalence} $\doteq$ on $A$ gives, for each level $\ell$, an
-equivalence $\doteq_\ell$ on $A$ (\code{rel}) and a predicate $\mathsf{dis}_\ell$ on
+A \emph{characterised equivalence} $\eqv{A}$ on $A$ gives, for each level $\ell$, an
+equivalence $\eqv{A}_\ell$ on $A$ (\code{rel}) and a predicate $\dis^A_\ell$ on
 $A$ (\code{dis}) such that, for all $\ell \sqsubseteq \ell'$ and $x, y \in A$,
 \begin{gather*}
-x \doteq_{\ell'} y \Rightarrow x \doteq_\ell y, \qquad
-\mathsf{dis}_{\ell'}\,x \Rightarrow \mathsf{dis}_\ell\,x, \\
-\mathsf{dis}_\ell\,x \Rightarrow (\mathsf{dis}_\ell\,y \iff x \doteq_\ell y).
+x \eqv{A}_{\ell'} y \Rightarrow x \eqv{A}_\ell y, \qquad
+\dis^A_{\ell'}\,x \Rightarrow \dis^A_\ell\,x, \\
+\dis^A_\ell\,x \Rightarrow (\dis^A_\ell\,y \iff x \eqv{A}_\ell y).
 \end{gather*}
 \end{definition}
 
-An observer at $\ell$ cannot tell $x$ from $y$ if $x \doteq_\ell y$, and does not see
-$x$ at all if $\mathsf{dis}_\ell\,x$. Rafnsson et al.\ extend each type $A$ with a
-value $\unobs$, to $A_\unobs$, which lets them express the predicate as
-$x \doteq_\ell \unobs$. The predicate was more convenient to mechanise, but for
-presentation we follow them and write $x \doteq_\ell \unobs$ for
-$\mathsf{dis}_\ell\,x$; the two give the same non-interference (\m{NI_lEquiv}). We write
-$\eqv{I}$ and $\eqv{O}$ for the equivalences on the inputs and outputs of a process.
+An observer at $\ell$ cannot tell $x$ from $y$ if $x \eqv{A}_\ell y$, and does not
+see $x$ at all if $\dis^A_\ell\,x$. Rafnsson et al.\ instead extend each type $A$
+with a value $\unobs$, to $A_\unobs$, and write $x \eqv{A}_\ell \unobs$ for
+$\dis^A_\ell\,x$. The predicate was more convenient to mechanise, and the two give
+the same non-interference (\m{NI_lEquiv}).
 
-A trace $t$ is a finite word of input effects $?i$ and output effects $!o$. We
-write $\epsilon$ for the empty trace and ``$.$'' for concatenation. A process $p$ \emph{performs} $t$ at
-$\ell$, written $\perf{p}{t}{\ell}$, if it has a run with the effects of $t$, outputs
-compared up to $\eqv{O}_\ell$ (\m{Trace}):
+The equivalences of our model are built from base equivalences with formers. We say
+$\eqv{A}$ \emph{hides} $x$ at $\ell$ when $\dis^A_\ell\,x$, and write the predicate
+of a built equivalence with the same superscript as its relation.
+
+\begin{definition}[Base equivalence, \m{base_equiv}]\label{def:base}
+For a set $S$ of levels closed upwards ($\ell \in S \wedge \ell \sqsubseteq \ell'
+\Rightarrow \ell' \in S$), $\doteq^S$ on a type $A$ is given by, for all $\ell$ and
+$x, x' \in A$,
+\[
+x \doteq^S_\ell x' \iff x = x' \vee \ell \notin S, \qquad
+\dis^S_\ell\,x \iff \ell \notin S.
+\]
+\end{definition}
+
+Values are related if they are equal or hidden, and they are hidden at levels outside $S$. We write $\doteq^\ell$ for $\doteq^S$ with
+$S = \{\ell' \mid \ell \sqsubseteq \ell'\}$. The \emph{public} equivalence $\pubeq$ thus has $S = \{\Lo, \Hi\}$ and hides
+nothing (\m{public_equiv}). The \emph{private} equivalence $\priveq$ has
+$S = \{\Hi\}$ (\m{private_equiv}): at $\Lo$ it relates and hides all values,
+and at $\Hi$ it is equality.
+
+Equivalences on pairs and sums follow the type constructors: pairs are related
+componentwise and sums tag by tag, and related otherwise only when both are hidden.
+The three pair formers differ only in when a pair is hidden.
+
+\begin{definition}[Products]\label{def:formers}
+Let $\eqv{X}$ and $\eqv{Y}$ be equivalences on $X$ and $Y$. For
+${\otimes} \in \{{\times}, {\times_R}, {\times_{LR}}\}$ (\m{eqpair}, \m{eqpair_R},
+\m{eqpair_LR}), $\eqo{X} \otimes \eqo{Y}$ on $X \times Y$ is given by
+\begin{gather*}
+(x,y) \mathrel{\eqo{X}_\ell \otimes \eqo{Y}_\ell} (x',y') \\
+\iff \\
+x \eqv{X}_\ell x' \wedge y \eqv{Y}_\ell y' \vee
+  \dis^{X \otimes Y}_\ell\,(x,y) \wedge \dis^{X \otimes Y}_\ell\,(x',y'),
+\end{gather*}
+where
+\begin{align*}
+\dis^{X \times Y}_\ell\,(x,y) &\iff \mathsf{false}, \\
+\dis^{X \times_R Y}_\ell\,(x,y) &\iff \dis^Y_\ell\,y, \\
+\dis^{X \times_{LR} Y}_\ell\,(x,y) &\iff \dis^X_\ell\,x \wedge \dis^Y_\ell\,y.
+\end{align*}
+\end{definition}
+
+\begin{definition}[Sums]\label{def:sum}
+For equivalences $\eqv{X}$ and $\eqv{Y}$ on $X$ and $Y$, the sum $\eqo{X} + \eqo{Y}$
+on $X + Y$ (\m{eqsum_LR}) is given by
+\begin{align*}
+\mathsf{inl}\,x \mathrel{\eqo{X}_\ell + \eqo{Y}_\ell} \mathsf{inl}\,x' &\iff x \eqv{X}_\ell x', \\
+\mathsf{inr}\,y \mathrel{\eqo{X}_\ell + \eqo{Y}_\ell} \mathsf{inr}\,y' &\iff y \eqv{Y}_\ell y', \\
+\mathsf{inl}\,x \mathrel{\eqo{X}_\ell + \eqo{Y}_\ell} \mathsf{inr}\,y &\iff
+  \dis^X_\ell\,x \wedge \dis^Y_\ell\,y, \\
+\dis^{X+Y}_\ell\,(\mathsf{inl}\,x) &\iff \dis^X_\ell\,x, \\
+\dis^{X+Y}_\ell\,(\mathsf{inr}\,y) &\iff \dis^Y_\ell\,y.
+\end{align*}
+\end{definition}
+
+\subsection{Non-interference}
+
+Non-interference is stated over the traces a process performs.
+
+\begin{definition}[Traces, \m{Trace}]\label{def:trace}
+A \emph{trace} $t$ over $I$ and $O$ is a finite word of input effects $?i$ with
+$i \in I$ and output effects $!o$ with $o \in O$; $\epsilon$ is the empty trace and
+``$.$'' concatenation. A process $p : \Proc{I}{O}$ \emph{performs} $t$ at $\ell$,
+written $\perf{p}{t}{\ell}$, as given by the rules
 \begin{mathpar}
 \inferrule{ }{\perf{p}{\epsilon}{\ell}}
 \and
@@ -73,98 +133,58 @@ compared up to $\eqv{O}_\ell$ (\m{Trace}):
 \inferrule{\stepO{p}{o'}{p'} \\ o' \eqv{O}_\ell o \\ \perf{p'}{t}{\ell}}
   {\perf{p}{!o.t}{\ell}}
 \end{mathpar}
+\end{definition}
+
+A process thus performs $t$ if it has a run with the effects of $t$, outputs
+compared up to $\eqv{O}_\ell$.
 
 \begin{definition}[Non-interference, \m{NI}]\label{def:ni}
 $p \in \NI(\eqv{I}, \eqv{O})$ iff for all $\ell$, $t$, $t'$, $i$ and $i'$:
 \begin{align*}
 i \eqv{I}_\ell i' &\;\Rightarrow\; \bigl(\perf{p}{t.?i.t'}{\ell} \Rightarrow
   \perf{p}{t.?i'.t'}{\ell}\bigr), \\
-i \eqv{I}_\ell \unobs &\;\Rightarrow\; \bigl(\perf{p}{t.t'}{\ell} \Leftrightarrow
+\dis^I_\ell\,i &\;\Rightarrow\; \bigl(\perf{p}{t.t'}{\ell} \Leftrightarrow
   \perf{p}{t.?i.t'}{\ell}\bigr).
 \end{align*}
 \end{definition}
 
 The first clause (substitution) makes related inputs interchangeable. The second
-lets an input $i \eqv{I}_\ell \unobs$ be inserted into a trace (insertion,
+lets an input $i$ with $\dis^I_\ell\,i$ be inserted into a trace (insertion,
 $\Rightarrow$) or deleted from it (deletion, $\Leftarrow$) without the observer
 noticing.
-
-\subsection{Equivalences}
-
-The equivalences of our model are built from base equivalences with formers. We say
-$\doteq$ \emph{hides} $x$ at $\ell$ when $x \doteq_\ell \unobs$.
-
-\begin{definition}[Base equivalence, \m{base_equiv}]\label{def:base}
-For a set $S$ of levels closed upwards ($\ell \in S \wedge \ell \sqsubseteq \ell'
-\Rightarrow \ell' \in S$), $\doteq^S$ on a type $A$ is given by, for all $\ell$ and
-$x, x' \in A$,
-\[
-x \doteq^S_\ell x' \iff \ell \notin S \vee x = x', \qquad
-x \doteq^S_\ell \unobs \iff \ell \notin S.
-\]
-\end{definition}
-
-Values are related if they are equal or hidden, and they are hidden at levels outside $S$. We write $\doteq^\ell$ for $\doteq^S$ with
-$S = \{\ell' \mid \ell \sqsubseteq \ell'\}$. The \emph{public} equivalence $\pubeq$ thus has $S = \{\Lo, \Hi\}$ and hides
-nothing (\m{public_equiv_base}). The \emph{private} equivalence $\priveq$ has
-$S = \{\Hi\}$ (\m{private_equiv_base}): at $\Lo$ it relates and hides all values,
-and at $\Hi$ it is equality.
-
-\begin{definition}[Formers]\label{def:formers}
-For equivalences $\eqv{X}$ and $\eqv{Y}$ on $X$ and $Y$, the formers below
-(\m{eqpair}, \m{eqpair_R}, \m{eqpair_LR}, \m{eqsum_LR}, \m{eqvisible}) relate
-pairs componentwise, sums tag by tag ($\mathsf{inl}\,x$ and $\mathsf{inl}\,x'$ when
-$x \eqv{X} x'$, and likewise $\mathsf{inr}$), and $\eqo{X}^\circ$ as $\eqv{X}$ does;
-each also relates any two values it hides, which are
-\[
-\renewcommand{\arraystretch}{1.2}
-\begin{array}{@{}l@{\quad}l@{}}
-\eqo{X} \times \eqo{Y} & \text{none} \\
-\eqo{X} \times_R \eqo{Y} & (x,y) \text{ if } y \text{ is hidden} \\
-\eqo{X} \times_{LR} \eqo{Y} & (x,y) \text{ if } x \text{ and } y \text{ are hidden} \\
-\eqo{X} + \eqo{Y} & \mathsf{inl}\,x \text{ if } x \text{ is, } \mathsf{inr}\,y \text{ if } y \text{ is} \\
-\eqo{X}^\circ & \text{none}
-\end{array}
-\]
-\end{definition}
-
-Under a sum the tag is thus visible unless both sides are hidden; $^\circ$ keeps it
-visible on a side that would hide it. Thus $\privvis \triangleq (\priveq)^\circ$
-relates all values at $\Lo$ yet hides none, and under a sum the attacker learns only
-which side a value is on. An optional value is a sum with the unit, so under
-${\doteq} + \one^S$ levels in $S$ see whether a process emitted: $\one^\Lo$ shows
-\code{None} to everyone, $\one^\Hi$ hides it from the attacker, and $\one^\emptyset$
-from everyone.
 
 \subsection{Compositional theorems}\label{sec:composition}
 
 The calculus has one non-interference theorem per constructor. We write
 $\eqv{V}$ for an equivalence on the state of a \code{sta} and $\eqv{B}$ for one on the
-\emph{gate bits} of a \code{swi}, the tag and the input bit that toggle its phase. The side
-conditions use these predicates on functions and levels:
-\begin{align*}
-f \in \NI(\eqv{I},\eqv{O}) &\iff \forall \ell, i, i'.\;
-  i \eqv{I}_\ell i' \Rightarrow f\,i \eqv{O}_\ell f\,i' \\
-f \in \mathsf{PU}(\eqv{I},\eqv{O}) &\iff \forall \ell, i.\;
-  i \eqv{I}_\ell \unobs \Rightarrow f\,i \eqv{O}_\ell \unobs \\
-f \in \NI(\eqv{I},\eqv{V},\eqv{V}) &\iff \forall \ell, i, i', v, v'.\;
-  i \eqv{I}_\ell i' \wedge v \eqv{V}_\ell v' \\
-  &\hphantom{{}\iff{}} \Rightarrow f\,i\,v \eqv{V}_\ell f\,i'\,v' \\
-f \in \mathsf{PE}(\eqv{I},\eqv{V}) &\iff \forall \ell, i, v.\;
-  i \eqv{I}_\ell \unobs \Rightarrow f\,i\,v \eqv{V}_\ell v \\
-\ell \in \Aw(v,\doteq) &\iff \forall \hat v.\; v \doteq_\ell \hat v \Rightarrow v = \hat v
-  \wedge \neg(\hat v \doteq_\ell \unobs) \\
-\ell \in \Ob(p,\doteq) &\iff \text{every output of $p$ is }
-  \doteq_\ell \unobs
-\end{align*}
+\emph{gate bits} of a \code{swi}, the tag and the input bit that toggle its phase.
+
+\begin{definition}[Side conditions]\label{def:side}
+For all equivalences $\eqv{X}$ and $\eqv{Y}$, functions $f$, values $x \in X$,
+processes $p$ with output type $Y$ and levels $\ell$, the side conditions of
+\code{map}, \code{sta} and \code{swi} are
+\begin{alignat*}{2}
+&\text{\small\code{map}}\; & f \in \NI(\eqv{X},\eqv{Y}) &\iff \forall \ell, x, x'.\;
+  x \eqv{X}_\ell x' \Rightarrow f\,x \eqv{Y}_\ell f\,x' \\
+&& f \in \mathsf{PU}(\eqv{X},\eqv{Y}) &\iff \forall \ell, x.\;
+  \dis^X_\ell\,x \Rightarrow \dis^Y_\ell\,(f\,x) \\[3pt]
+&\text{\small\code{sta}} & f \in \NI(\eqv{X},\eqv{V},\eqv{V}) &\iff \forall \ell, x, x', v, v'.\;
+  x \eqv{X}_\ell x' \wedge v \eqv{V}_\ell v' \\
+&&  &\hphantom{{}\iff{}} \Rightarrow f\,x\,v \eqv{V}_\ell f\,x'\,v' \\
+&& f \in \mathsf{PE}(\eqv{X},\eqv{V}) &\iff \forall \ell, x, v.\;
+  \dis^X_\ell\,x \Rightarrow f\,x\,v \eqv{V}_\ell v \\[3pt]
+&\text{\small\code{swi}} & \ell \in \Aw(x,\eqv{X}) &\iff \forall x'.\; x \eqv{X}_\ell x' \\
+&&  &\hphantom{{}\iff{}} \Rightarrow x = x' \wedge \neg\dis^X_\ell\,x' \\
+&& \ell \in \Ob(p,\eqv{Y}) &\iff \dis^Y_\ell\,y \text{ for every output $y$ of $p$}
+\end{alignat*}
+\end{definition}
+
 A function is non-interfering if it maps related values to related ones
 (\m{f_NI}, \m{fv_NI}), unobservable-preserving if it maps unobservable values to
 unobservable ones (\m{f_PU}), and equivalence-preserving if an unobservable input
-does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $v$
-(\m{aware}) if it can tell $v$ from every other value and sees it, and \emph{oblivious} to $p$
-(\m{oblivious}) if it sees none of $p$'s outputs. Under $\pubeq$ on booleans every
-level is aware of \code{true}; under $\priveq$, which relates \code{true} and
-\code{false}, $\Lo$ is not.
+does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $x$
+(\m{aware}) if it can tell $x$ from every other value and sees it, and \emph{oblivious} to $p$
+(\m{oblivious}) if it sees none of $p$'s outputs.
 
 \begin{theorem}[Composition~\cite{rafnsson2017}]\label{thm:composition}
 For all processes, functions and equivalences of matching types:
@@ -194,27 +214,36 @@ For all processes, functions and equivalences of matching types:
 \end{enumerate}
 \end{theorem}
 
+% Got to here.
 Two of these carry substantial side conditions: the state update of \code{sta} must
 be non-interfering and equivalence-preserving, and \code{swi} requires every observer
 to be aware of the gate or oblivious to the gated process.
 
-The side conditions of \comp{it:sta} must hold on every pair of related states,
-reachable or not. We add a variant that asks for them only on states satisfying
-a predicate $P$ preserved by the state updates; the original theorems are unchanged.
-Write $\NI_P$ and $\mathsf{PE}_P$ for the predicates above with $v$ and $v'$
-restricted to $P$; $f$ \emph{preserves} $P$ if
-$P\,v \Rightarrow P\,(f\,i\,v)$ for all $i$ and $v$.
+The side conditions of \code{sta} are too strict for our model: they must hold on
+every pair of related states, including states the process never reaches. We
+therefore add a variant of \comp{it:sta} that asks for them only on states
+satisfying an invariant $P$ that the state updates preserve.
 
-\begin{theorem}[Composition under an invariant, \m{sta_NI_pred}]\label{thm:sta-pred}
-If $P\,v$ holds, $f$ and $g$ preserve $P$,
-$p \in \NI(\eqo{V} \times_R \eqo{I},\eqv{O})$,
+\begin{definition}[Side conditions under an invariant, \m{fv_NI_on}, \m{f_EP_on}, \m{pres_on}]\label{def:side-pred}
+For all equivalences $\eqv{X}$ and $\eqv{V}$, predicates $P$ on $V$ and functions
+$f : X \to V \to V$,
+\begin{align*}
+f \in \NI_P(\eqv{X},\eqv{V},\eqv{V}) &\iff \forall \ell, x, x', v, v'.\;
+  x \eqv{X}_\ell x' \wedge v \eqv{V}_\ell v' \\
+  &\hphantom{{}\iff{}} \wedge P\,v \wedge P\,v' \Rightarrow f\,x\,v \eqv{V}_\ell f\,x'\,v' \\
+f \in \mathsf{PE}_P(\eqv{X},\eqv{V}) &\iff \forall \ell, x, v.\;
+  \dis^X_\ell\,x \wedge P\,v \Rightarrow f\,x\,v \eqv{V}_\ell v \\
+f \in \mathsf{Pres}(P) &\iff \forall x, v.\; P\,v \Rightarrow P\,(f\,x\,v)
+\end{align*}
+\end{definition}
+
+\begin{theorem}[Invariant composition, \m{sta_NI_pred}]\label{thm:sta-pred}
+For all processes, functions, equivalences and predicates $P$ of matching types: if
+$P\,v$, $f, g \in \mathsf{Pres}(P)$, $p \in \NI(\eqo{V} \times_R \eqo{I},\eqv{O})$,
 $f \in \NI_P(\eqv{I},\eqv{V},\eqv{V}) \cap \mathsf{PE}_P(\eqv{I},\eqv{V})$ and
 $g \in \NI_P(\eqv{O},\eqv{V},\eqv{V})$, then
 $\mathsf{sta}\;f\;g\;v\;p \in \NI(\eqv{I},\eqo{V} \times \eqo{O})$.
 \end{theorem}
-
-The proof is that of \comp{it:sta}, carrying $P$ along: every state passed to $f$
-or $g$ is reached from $v$ by them, so it satisfies $P$.
 
 % one float per column top from here on, so paired figures sit side by side
 \setcounter{topnumber}{1}

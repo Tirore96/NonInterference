@@ -39,7 +39,7 @@ Definition unmasked_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out O
 
 Definition model_timer_unmasked (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
-  (p_priv : Proc THandlerOutput Opriv)
+  (p_priv : Proc Bool Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
   model runtime sliced_init (@observe_timer_output runtime runs Opub Opriv) (tick_unmasked runtime)
     p_pub p_priv p_sched.
@@ -94,8 +94,8 @@ case E1: (get_slice_count v1) => [|[|n]].
     rewrite masks_setE !Tm !M1 /= orbC /=.
     move: C1 Hl; rewrite E1.
     case: (tI_out o) => [[|]|].
-    * by move<-; rewrite /= masks_setE => ->.
     * by case=> Hs; move: HC; rewrite Hs (slice_at_boundary_start runtime runs).
+    * by move<-; rewrite /= masks_setE => ->.
     * by move<-; rewrite /= masks_setE => ->.
 Qed.
 
@@ -123,7 +123,7 @@ Proof. rewrite /model_timer_unmasked_concrete /model_timer_unmasked. rewr;simpl;
 
 
 Definition timer_unmasked_states :=
-  run_states sliced_init (@observe_timer_output handler_runtime slice_runs TPublicOutput TTypeSyscall)
+  run_states sliced_init (@observe_timer_output handler_runtime slice_runs Bool Bool)
              (tick_unmasked handler_runtime).
 
 Lemma timer_unmasked_states_no_dI : seq.map state_row (timer_unmasked_states sliced_no_dI') =
@@ -184,7 +184,7 @@ Proof. by vm_compute. Qed.
 Corollary timer_unmasked_states_model l (es : seqtype') n :
   Trace (public_equiv _) l es model_timer_unmasked_concrete -> n < size es ->
   exists q', Steps (take n.+1 es) model_timer_unmasked_concrete
-    (system (@observe_timer_output handler_runtime slice_runs TPublicOutput TTypeSyscall)
+    (system (@observe_timer_output handler_runtime slice_runs Bool Bool)
             (tick_unmasked handler_runtime)
             (nth sliced_init (timer_unmasked_states es) n) q').
 Proof. exact: run_states_model. Qed.

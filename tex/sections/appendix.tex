@@ -69,24 +69,23 @@ for our definitions.
 One further difference is an alternative definition of characterised equivalence.
 The original makes $\unobs$ an extra value of every type; we keep the values as
 they are and make unobservability a predicate, tied to the equivalence by requiring
-the unobservable values to form one of its classes, the distinguished class.
-\m{NI_lEquiv} shows that the two give the same notion of non-interference, and
-this paper uses the original notation throughout.
+the unobservable values to form one of its classes. \m{NI_lEquiv} shows that the
+two give the same notion of non-interference.
 
 \paragraph{Notation and the mechanised definitions} The paper writes some equivalences differently from their mechanised definitions,
 and keeps the two forms equal by proof. The mechanisation classifies options by
 \m{eqmaybe}, as the original does, and sums by \m{eqsum} and \m{eqsum_L}; the paper
 uses one sum former, $\eqo{X} + \eqo{Y}$ (\m{eqsum_LR}), with
-$\doteq^\circ$ (\m{eqvisible}) and $\one^S$ (\m{unit_equiv}). Agreement lemmas show
+$\one^S$ (\m{unit_equiv}). Write $\eqo{X}^\circ$ (\m{eqvisible}) for the equivalence
+that relates as $\eqv{X}$ and hides nothing, so that $\privvis$ is $(\priveq)^\circ$.
+Agreement lemmas show
 that, at every level, each mechanised form relates and hides
-exactly what its paper form does: $\mathsf{eqmaybe}(S,\doteq)$ is ${\doteq} + \one^S$
+exactly what its paper form does: $\mathsf{eqmaybe}(S,\eqv{A})$ is $\eqo{A} + \one^S$
 along the map from options to sums (\m{eqmaybe_sum_rel}, \m{eqmaybe_sum_dis}),
 $\mathsf{eqsum}(\eqv{X},\eqv{Y})$ is ${\eqv{X}^\circ} + {\eqv{Y}^\circ}$
 (\m{eqsum_sum_rel}), $\mathsf{eqsum\_L}(\eqv{X},\eqv{Y})$ is
 $\eqo{X} + {\eqv{Y}^\circ}$ (\m{eqsum_L_sum_rel}), and $(\pubeq)^\circ$ is
-$\pubeq$ (\m{eqvisible_public_rel}). Likewise \m{in_equiv} agrees with
-\m{in_equiv_interrupt}, over a two-constructor type (\m{in_equiv_interrupt_rel},
-\m{in_equiv_interrupt_dis}). No proof depends on the presentation, and the calculus is
+$\pubeq$ (\m{eqvisible_public_rel}). No proof depends on the presentation, and the calculus is
 the original's with sums added, which change no constructor or theorem.
 
 \paragraph{The development} \Cref{tab:files} lists the files of the development.

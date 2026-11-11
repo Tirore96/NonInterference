@@ -62,23 +62,25 @@ Definition times_on (n : nat) (f : nat -> Ty) := times_n n (Option \o f).
 
 
 (* An interrupt is a sum, like the current pid: the secret disk interrupt on
-   the inl side, the public timer interrupt on the inr side.  interrupt_of
-   names the interrupt-controller entry it raises. *)
+   the inl side, the public timer interrupt on the inr side.  The interrupt
+   controller is indexed by the same type (irq, below). *)
 Definition T_in := Sum Unit Unit.
-Definition interrupt_of (i : [T_in]) : [TInterrupt] :=
-  if i is inl _ then DiskInterrupt else TimerInterrupt.
+(* A handler's output is a bool: [Notify] when its run completes, [Nothing]
+   on every other step. *)
+Notation Notify := true (only parsing).
+Notation Nothing := false (only parsing).
 (* [Opub] and [Opriv] are the alphabets of the public and the secret user
    process.  They are parameters throughout: the mechanism never inspects a
    user-slot value, only whether the slot produced one, so nothing below
    depends on what fills these two positions. *)
-Definition T_out (Opub Opriv : Ty) := Times (Option Opub) (Times (Option Opriv) (Times (Option Nat) (times_on 2 (fun _ => THandlerOutput)))).
+Definition T_out (Opub Opriv : Ty) := Times (Option Opub) (Times (Option Opriv) (Times (Option Nat) (times_on 2 (fun _ => Bool)))).
 Definition T_out_userview (Opub Opriv : Ty) := Option (Sum Opub Opriv).
 
 
 
 (* === 1. Interrupt handler and the slot family === *)
 
-Definition handler_type := Proc Empty THandlerOutput.
+Definition handler_type := Proc Empty Bool.
 
 (* ir_handler runtime =
      map id (fun o => if o.1 == 0 then Notify else Nothing)
@@ -92,7 +94,7 @@ Definition handler_type := Proc Empty THandlerOutput.
    ([runtime = 0] degenerates: [n %% 0 = n], so the count never returns to 0 and
    the handler never signals completion.) *)
 Definition ir_handler (runtime : nat) : handler_type :=
-  map (O := Times Nat Unit) (O' := THandlerOutput) id
+  map (O := Times Nat Unit) (O' := Bool) id
     (fun o => if o.1 == 0 then Notify else Nothing)
     (sta (V := Nat) (O := Unit)
        (fun _ v => v) (fun _ v => v.+1 %% runtime)
@@ -107,16 +109,16 @@ Definition slot_I (n : nat) :=
   | 1 => Empty (*dI*)
   | 2 => Empty (*NOP handler*)
   | 3 => Empty (*scheduler*)
-  | 4 => THandlerOutput (*high*)
+  | 4 => Bool (*high*)
   | 5 => Empty (*low*)
   | _ => Empty (*padding*)
   end.
 
 Definition slot_O (Opub Opriv : Ty) (n : nat) :=
   match n with
-  | 0 => THandlerOutput (*tI*)
-  | 1 => THandlerOutput (*dI*)
-  | 2 => THandlerOutput (*NOP handler*)
+  | 0 => Bool (*tI*)
+  | 1 => Bool (*dI*)
+  | 2 => Bool (*NOP handler*)
   | 3 => Nat (*scheduler*)
   | 4 => Opriv (*high*)
   | 5 => Opub (*low*)
@@ -135,7 +137,7 @@ Definition unit_proc : Proc Empty Unit := out (O := Unit) tt.
    outermost (5), then the secret process (4), then the scheduler (3). *)
 Definition slot_procs (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)             (*public user process, slot 5*)
-  (p_priv : Proc THandlerOutput Opriv)  (*secret user process, slot 4*)
+  (p_priv : Proc Bool Opriv)  (*secret user process, slot 4*)
   (p_sched : Proc Empty Nat)            (*scheduler,           slot 3*)
   : forall n, Proc (slot_I n) (slot_O Opub Opriv n) :=
   fun n => match n with
@@ -204,7 +206,7 @@ Definition slot_pid (pid : [cur_pid]) : [Nat] :=
 
 Definition slot_initial (n : nat) := n == (slot_pid initial_pid).
 
-Definition T_intermediate := Option THandlerOutput.
+Definition T_intermediate := Option Bool.
 Definition f_proj (i : [T_intermediate]) : forall n, [Option (slot_I n)] :=
   fun n => match n with
            | 4 => i     (*the high process receives the disk-interrupt handler's output*)
@@ -216,7 +218,7 @@ Definition f_proj (i : [T_intermediate]) : forall n, [Option (slot_I n)] :=
        (slot_procs p_pub p_priv p_sched) *)
 Definition pool (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
-  (p_priv : Proc THandlerOutput Opriv)
+  (p_priv : Proc Bool Opriv)
   (p_sched : Proc Empty Nat) :=
   @process_pool cur_pid 5 slot_initial slot_I (slot_O Opub Opriv) T_intermediate f_proj slot_pid
     (slot_procs runtime p_pub p_priv p_sched).
@@ -268,9 +270,9 @@ Definition bool_state := Times re_sched ic_count.
 (* The interrupt controller has one entry per external interrupt and one more,
    [nop_irq], for the NOP handler.  No external interrupt raises the NOP entry;
    the sliced policy sets it pending itself, to use the NOP handler as filler. *)
-Definition irq := Option TInterrupt.
-Notation timer_irq := (Some TimerInterrupt).
-Notation disk_irq := (Some DiskInterrupt).
+Definition irq := Option T_in.
+Notation timer_irq := (Some (inr tt)).
+Notation disk_irq := (Some (inl tt)).
 Notation nop_irq := None (only parsing).
 Definition all_interrupts : seq [irq] :=
   [:: timer_irq; disk_irq; nop_irq].
@@ -393,7 +395,7 @@ Definition parse_output (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [T_out_user
    decided later, by [initiate_next].  This is the whole of the input update:
    f_EP forbids the transition from taking any decision on an input event. *)
 Definition set_pending (i : [T_in]) (v : [state_type]) : [state_type] :=
-  update_ir_pending v (Some (interrupt_of i)) true.
+  update_ir_pending v (Some i) true.
 
 (* The [sta]'s input update.  Its input type is the loop's sum, so it also sees
    each output fed back by the loop, by which time [output_update] has already
@@ -425,7 +427,7 @@ Definition ir_handler_pid (ir : [irq]) : [cur_pid] :=
 
 (* It selects the slot the interrupt's own position in all_interrupts names. *)
 Lemma slot_pid_ir_handler_pid : forall ir, slot_pid (ir_handler_pid ir) = index ir all_interrupts.
-Proof. by case=> [[]|]. Qed.
+Proof. by case=> [[[]|[]]|]. Qed.
 
 Definition is_handler_pid (v : [state_type]) :=
     match get_cur_pid v with
@@ -509,7 +511,7 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
   (observe_policy : [T_out Opub Opriv] -> [state_type] -> [state_type])
   (advance_policy : [state_type] -> [state_type])
   (p_pub : Proc Empty Opub)
-  (p_priv : Proc THandlerOutput Opriv)
+  (p_priv : Proc Bool Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
   @reactive_system cur_pid state_type init_policy T_in (T_out Opub Opriv) T_intermediate
     (@input_update Opub Opriv) (output_update observe_policy advance_policy) (no_output Opub Opriv)

@@ -32,7 +32,7 @@ With $\Ev$ the state equivalence (\cref{def:state}), this reduces to
   \in \NI(\Ein + \Eout,\, \Ev \times \Eout)
 \]
 This is the first hard step, \cref{lem:state-cell}. \Cref{thm:sta-pred}, with $P$ the slice invariant
-$\Gated$ (\cref{def:gated}), needs $P$ to hold of \code{init_policy}, $f$ and $g$ to preserve $P$,
+$\Gated$ (\cref{def:gated}), needs $P$ to hold of \code{init_policy}, $f, g \in \mathsf{Pres}(P)$,
 $f \in \NI_P(\Ein + \Eout,\Ev,\Ev) \cap \mathsf{PE}_P(\Ein + \Eout,\Ev)$ and
 $g \in \NI_P(\Eout,\Ev,\Ev)$. Here $g$ decides whether a secret handler runs.
 What remains is the \code{sta}'s
@@ -90,7 +90,7 @@ where a condition forces it:
 \item \emph{The current pid is $\privvis + \pubeq$.} Its
   \code{inl} side holds exactly the two secret handlers (\cref{sec:global-state}),
   and which of them runs may differ between the two states, so the value inside
-  \code{inl} is private. The $^\circ$ makes no \code{inl} unobservable, so
+  \code{inl} is private. $\privvis$ makes no \code{inl} unobservable, so
   the sum never relates an \code{inl} to an \code{inr}, and \emph{whether} a secret
   handler runs stays public.
 \item \emph{Every other field is public:} the timer's pending bit, the masks, the

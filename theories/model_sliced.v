@@ -69,7 +69,7 @@ Definition sliced_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opu
        p_pub p_priv p_sched *)
 Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
-  (p_priv : Proc THandlerOutput Opriv)
+  (p_priv : Proc Bool Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
   model runtime sliced_init (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime)
     p_pub p_priv p_sched.
@@ -196,9 +196,9 @@ case E1: (get_slice_count v1) => [|[|n]].
     rewrite masks_setE !Tm !M1 /= orbC /=.
     move: C1 Hl; rewrite E1.
     case: (tI_out o) => [[|]|].
-    * by move<-; rewrite /= masks_setE => ->.
     * (* a slice just opened lands on a boundary *)
       by case=> Hs; move: HC; rewrite Hs slice_at_boundary_start.
+    * by move<-; rewrite /= masks_setE => ->.
     * by move<-; rewrite /= masks_setE => ->.
 Qed.
 
@@ -224,7 +224,7 @@ case Ms: (masks_set w).
   by case: (slice_open w).
 - case FR: (first_ready w) => [ir|].
   + move: w {Hw Ms FR} => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]].
-    by case: ir => [[]|]; case: cur => [b|[|m]]; case: c.
+    by case: ir => [[[]|[]]|]; case: cur => [b|[|m]]; case: c.
   + have NS : ~~ slice_open w.
       apply/negP => S; move: Hw.
       rewrite /secret_gated_at_boundary /gated S Ms orbF /secret_ready.
@@ -280,7 +280,7 @@ End SlicedInvariant.
 
 Definition model_sliced_userview (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
-  (p_priv : Proc THandlerOutput Opriv)
+  (p_priv : Proc Bool Opriv)
   (p_sched : Proc Empty Nat) : Proc T_in (T_out_userview Opub Opriv) :=
   userview (model_sliced runtime runs p_pub p_priv p_sched).
 
@@ -311,7 +311,7 @@ Proof. rewrite /model_sliced_concrete /model_sliced. rewr;simpl;rewr;simpl;rewr;
 
 
 Definition sliced_states :=
-  run_states sliced_init (@observe_timer_output handler_runtime slice_runs TPublicOutput TTypeSyscall)
+  run_states sliced_init (@observe_timer_output handler_runtime slice_runs Bool Bool)
              (tick_slice handler_runtime).
 
 Lemma sliced_states_no_dI : seq.map state_row (sliced_states sliced_no_dI') =
@@ -351,7 +351,7 @@ Proof. by vm_compute. Qed.
 Corollary sliced_states_model l (es : seqtype') n :
   Trace (public_equiv _) l es model_sliced_concrete -> n < size es ->
   exists q', Steps (take n.+1 es) model_sliced_concrete
-    (system (@observe_timer_output handler_runtime slice_runs TPublicOutput TTypeSyscall)
+    (system (@observe_timer_output handler_runtime slice_runs Bool Bool)
             (tick_slice handler_runtime)
             (nth sliced_init (sliced_states es) n) q').
 Proof. exact: run_states_model. Qed.
@@ -362,10 +362,10 @@ Proof. exact: run_states_model. Qed.
 Definition good_no_dI : seqtype := [::out_get;out_get;out_get;tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_nop].
 Definition good_with_dI : seqtype := [::out_get;dI;out_get;out_get;tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_syscall].
 
-Lemma good_no_dI_eq : map_tr (@parse_output TPublicOutput TTypeSyscall) sliced_no_dI' = good_no_dI.
+Lemma good_no_dI_eq : map_tr (@parse_output Bool Bool) sliced_no_dI' = good_no_dI.
 Proof. ssa. Qed.
 
-Lemma good_with_dI_eq : map_tr (@parse_output TPublicOutput TTypeSyscall) sliced_with_dI' = good_with_dI.
+Lemma good_with_dI_eq : map_tr (@parse_output Bool Bool) sliced_with_dI' = good_with_dI.
 Proof. ssa. Qed.
 
 Lemma trace_no_dI : forall l, Trace (public_equiv _) l good_no_dI model_sliced_userview_concrete.

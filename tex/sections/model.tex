@@ -95,7 +95,7 @@ controller.
   the current time slice closes, and is \code{0} outside a slice; the immediate
   policy leaves it \code{0}.
 \item The \emph{interrupt controller} \m{ic} holds the two bits of each handler,
-  indexed by \m{irq}, of type $\mathit{Interrupt} + 1$: \code{timer_irq} and
+  indexed by \m{irq}, of type \code{T_in}${} + 1$: \code{timer_irq} and
   \code{disk_irq} for the two interrupts and \code{nop_irq}, which is \code{None},
   for the NOP handler.
 \end{itemize}

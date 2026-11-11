@@ -818,9 +818,9 @@ Qed.
    Rafnsson et al., hypotheses included. *)
 Corollary model_sliced_NI_paper :
   forall (Opub Opriv : Ty) (runtime runs : nat) (p_pub : Proc Empty Opub)
-         (p_priv : Proc THandlerOutput Opriv) (p_sched : Proc Empty Nat),
+         (p_priv : Proc Bool Opriv) (p_sched : Proc Empty Nat),
   PNI (public_equiv Empty) (public_equiv Opub) p_pub ->
-  PNI (private_equiv THandlerOutput) (private_equiv Opriv) p_priv ->
+  PNI (private_equiv Bool) (private_equiv Opriv) p_priv ->
   PNI (public_equiv Empty) (public_equiv Nat) p_sched ->
   PNI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.

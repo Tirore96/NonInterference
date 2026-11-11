@@ -30,7 +30,7 @@
   shaded as in \cref{fig:io} by the state equivalence (\cref{def:state}). The current pid is a sum: its \texttt{inl}
   side holds a secret handler (an S step), a \texttt{Bool} saying which one, and
   its \texttt{inr} side the number of any other process (U or T). Its
-  equivalence is $\privvis + \pubeq$ (\cref{def:formers}), so
+  equivalence is $\privvis + \pubeq$ (\cref{def:sum}), so
   the tag is public: whether a secret handler runs is public; which one runs is private.
   So are the pending bits of the NOP and disk handlers. Every other field is public.}
 \label{fig:state}

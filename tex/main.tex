@@ -67,8 +67,9 @@
 \newcommand{\stepO}[3]{#1 \xrightarrow{#2} #3}
 % p performs trace t at level l
 \newcommand{\perf}[3]{#1 \overset{#2}{\dashrightarrow}_{#3}}
-% equivalences: \eqv{I} is (=.) with I on top; \unobs the distinguished value
-\newcommand{\eqv}[1]{\overset{#1}{\doteq}}
+% equivalences: \eqv{I} is = with the type I in place of the dot of =.; \unobs the
+% distinguished value
+\newcommand{\eqv}[1]{\overset{#1}{=}}
 \newcommand{\unobs}{\bullet}
 \newcommand{\Lo}{\mathsf{L}}
 \newcommand{\Hi}{\mathsf{H}}
@@ -102,9 +103,9 @@
 \newcommand{\priveq}{{\doteq^{\Hi}}}
 \newcommand{\privvis}{{\doteq^{\Hi\circ}}}
 \newcommand{\eqo}[1]{{\eqv{#1}}}
-% the base equivalence on the unit type: \one^S is 1 over (=.)^S, the superscript
-% kept on the =. so that it sits at its usual height
-\NewDocumentCommand{\one}{e{^}}{\overset{1}{\doteq\IfValueT{#1}{^{#1}}}}
+% the base equivalence on the unit type: \one^S is 1 over =^S, the superscript
+% kept on the = so that it sits at its usual height
+\NewDocumentCommand{\one}{e{^}}{\overset{1}{=\IfValueT{#1}{^{#1}}}}
 % the single, unnumbered appendix
 \newcommand{\appx}{\hyperref[sec:appendix]{the appendix}}
 \newcommand{\Appx}{\hyperref[sec:appendix]{The appendix}}

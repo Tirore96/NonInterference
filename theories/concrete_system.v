@@ -20,9 +20,13 @@ Require Export NonInterference.theories.generic_model.
    trace tactics and the state along a run.
    ================================================================= *)
 
-(* The concrete alphabets. *)
-Notation T_outC := (T_out TPublicOutput TTypeSyscall).
-Notation T_out_userviewC := (T_out_userview TPublicOutput TTypeSyscall).
+(* The concrete alphabets are both bool: the public process emits [GetRequest],
+   the secret one [Syscall] or [Idle]. *)
+Notation GetRequest := true (only parsing).
+Notation Syscall := true (only parsing).
+Notation Idle := false (only parsing).
+Notation T_outC := (T_out Bool Bool).
+Notation T_out_userviewC := (T_out_userview Bool Bool).
 
 (* === 1. A concrete system ===
 
@@ -32,7 +36,7 @@ Notation T_out_userviewC := (T_out_userview TPublicOutput TTypeSyscall).
    own, in model_sliced.v. *)
 
 (* p_pub_concrete = out GetRequest *)
-Definition p_pub_concrete := @out Empty TPublicOutput GetRequest.
+Definition p_pub_concrete := @out Empty Bool GetRequest.
 
 
 (* alternate x y z pred =
@@ -54,7 +58,7 @@ Definition alternate (A B C : Ty) (x y : [B]) (z : [C]) (pred : [A] -> bool) :=
                            (@out (Times Bool _ ) C z)
                         )))).
 (* p_priv_concrete = alternate Syscall NOP tt (fun i => i == Notify) *)
-Definition p_priv_concrete := @alternate THandlerOutput TTypeSyscall Unit Syscall Idle tt (fun i => i == Notify).
+Definition p_priv_concrete := @alternate Bool Bool Unit Syscall Idle tt (fun i => i == Notify).
 
 (* scheduler =
      map id (fun o => o.1 + 2)

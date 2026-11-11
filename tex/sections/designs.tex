@@ -75,6 +75,9 @@ nests.
 \end{minipage}
 \medskip
 
+An optional value is a sum with the unit, so under $\eqo{A} + \one^S$ levels in $S$
+see whether a process emitted: $\one^\Lo$ shows \code{None} to everyone, $\one^\Hi$
+hides it from the attacker, and $\one^\emptyset$ from everyone.
 Under these equivalences the disk interrupt is hidden from the attacker and the timer
 interrupt is public. Of each output the attacker sees whether the slot ran and its value on the
 white slots of \cref{fig:io}, only whether it ran on the light slot, and nothing
@@ -136,7 +139,13 @@ types \code{Opub} and \code{Opriv}: the public user's as
 
 The user view needs its own equivalence. At $\Lo$ a private-user output and \code{None}
 are both hidden, so a plain sum would relate them, hiding whether the private user
-ran; we use $\privvis$ instead.
+ran. We use $\privvis$ (\m{eqvisible}) instead, which relates as $\priveq$ and hides
+nothing: for all $\ell$ and $x, x'$,
+\[
+x \doteq^{\Hi\circ}_\ell x' \iff x \doteq^\Hi_\ell x', \qquad
+\neg\dis^{\Hi\circ}_\ell\,x.
+\]
+Under $\privvis + \pubeq$ the attacker thus learns only which side a value is on.
 
 \begin{definition}[User-view equivalence]\label{def:userview}
 The user-view equivalence $\Euser$ (\m{out_equiv_userview}) is
