@@ -290,7 +290,8 @@ handler runs.
 \end{figure}
 
 \begin{lemma}[Slot, \m{slot_visible_NI}, \m{slot_hidden_NI}]\label{lem:slot}
-If $p_n \in \NI(\Ex_n,\Ey_n)$, then $\mathsf{slot}_n \in \NI(\Eq,\Eout_n)$,
+If $(\lambda x.\,\mathsf{f\_proj}\;x\;n) \in \NI(\priveq + \one^\emptyset,\,\Ex_n + \one^\emptyset)$
+and $p_n \in \NI(\Ex_n,\Ey_n)$, then $\mathsf{slot}_n \in \NI(\Eq,\Eout_n)$,
 with $\Eout_n$ being $\Ey_n + \one^\Lo$ for a slot that no secret pid selects, and
 $\priveq + \one^\Hi$ for the disk and NOP slots, whose $\Ey_n$ is $\priveq$.
 \end{lemma}
