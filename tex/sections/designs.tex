@@ -54,9 +54,8 @@ disk interrupt the system never enters S.
 
 \input{sections/fig-io}
 To state the leak we classify what the system receives and emits. Its input
-type \m{T_in} is a sum, like the
-current pid of \cref{sec:global-state}: \code{inl} is the disk interrupt and
-\code{inr} the timer interrupt. Its output type is the pool's six-tuple
+type \m{T_in} is a sum: \code{inl} is the timer interrupt and \code{inr} the disk
+interrupt. Its output type is the pool's six-tuple
 \m{T_out}.
 
 \medskip
@@ -65,9 +64,9 @@ current pid of \cref{sec:global-state}: \code{inl} is the disk interrupt and
 The input equivalence $\Ein$ (\m{in_equiv}) and the output equivalence $\Eout$
 (\m{out_equiv}) are
 \begin{align*}
-\Ein &\triangleq \priveq + \pubeq, \\
-\Eout &\triangleq (\pubeq + \one^\Lo) \times (\priveq + \one^\Lo) \times (\pubeq + \one^\Lo) \\
-&\quad{} \times (\priveq + \one^\Hi) \times (\priveq + \one^\Hi) \times (\pubeq + \one^\Lo),
+\Ein &\triangleq \pubeq +_R \priveq, \\
+\Eout &\triangleq (\pubeq +_{LR} \one^\Lo) \times (\priveq +_{LR} \one^\Lo) \times (\pubeq +_{LR} \one^\Lo) \\
+&\quad{} \times (\priveq +_{LR} \one^\Hi) \times (\priveq +_{LR} \one^\Hi) \times (\pubeq +_{LR} \one^\Lo),
 \end{align*}
 one factor per slot of \cref{fig:io}, with $\times$ right-associative as the output
 nests.
@@ -75,7 +74,7 @@ nests.
 \end{minipage}
 \medskip
 
-An optional value is a sum with the unit, so under $\eqo{A} + \one^S$ levels in $S$
+An optional value is a sum with the unit, so under $\eqo{A} +_{LR} \one^S$ levels in $S$
 see whether a process emitted: $\one^\Lo$ shows \code{None} to everyone, $\one^\Hi$
 hides it from the attacker, and $\one^\emptyset$ from everyone.
 Under these equivalences the disk interrupt is hidden from the attacker and the timer
@@ -115,13 +114,13 @@ next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
 The counterexample turns on the public slot alone, so the leak needs only the public
 user's output. The \emph{public view} of a model \code{m},
 \code{map id public_output m}, keeps only that slot, as a value of type
-\code{Opub + 1} at $\pubeq + \one^\emptyset$ (\m{out_equiv_publicview}):
+\code{Opub + 1} at $\pubeq +_{LR} \one^\emptyset$ (\m{out_equiv_publicview}):
 
 \begin{corollary}[Public-view leak,\newline \m{model_immediate_publicview_not_NI}]\label{cor:leak-publicview}
 For the concrete system,
 \[
 \mathsf{publicview}\;\mathsf{model\_immediate\_concrete}
-  \notin \NI(\Ein,\, \pubeq + \one^\emptyset).
+  \notin \NI(\Ein,\, \pubeq +_{LR} \one^\emptyset).
 \]
 \end{corollary}
 
@@ -137,21 +136,15 @@ types \code{Opub} and \code{Opriv}: the public user's as
 \code{Some (inl v)}, the private user's as \code{Some (inr v)}, and any other as
 \code{None}.
 
-The user view needs its own equivalence. At $\Lo$ a private-user output and \code{None}
-are both hidden, so a plain sum would relate them, hiding whether the private user
-ran. We use $\privvis$ (\m{eqvisible}) instead, which relates as $\priveq$ and hides
-nothing: for all $\ell$ and $x, x'$,
-\[
-x \doteq^{\Hi_\bot}_\ell x' \iff x \doteq^{\Hi_\Lo}_\ell x', \qquad
-\neg\dis^{\Hi_\bot}_\ell\,x,
-\]
-where the subscript $\bot$ says it hides at no level.
-Under $\privvis + \pubeq$ the attacker thus learns only which side a value is on.
+The user view needs its own equivalence. Under $\pubeq +_{LR} \priveq$ a
+private-user output would be hidden at $\Lo$, and so related to \code{None}, hiding
+whether the private user ran. The plain sum $\pubeq + \priveq$ hides neither side:
+under it the attacker learns only which side a value is on.
 
 \begin{definition}[User-view equivalence]\label{def:userview}
 The user-view equivalence $\Euser$ (\m{out_equiv_userview}) is
 \[
-\Euser \triangleq (\pubeq + \privvis) + \one^\emptyset.
+\Euser \triangleq (\pubeq + \priveq) +_{LR} \one^\emptyset.
 \]
 \end{definition}
 

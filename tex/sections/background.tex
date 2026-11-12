@@ -77,13 +77,13 @@ x \doteq^S_\ell x' \iff x = x' \vee \ell \notin S, \qquad
 
 Values are related if they are equal or hidden, and they are hidden at levels outside $S$. We write $\doteq^\ell$ for $\doteq^S$ with
 $S = \{\ell' \mid \ell \sqsubseteq \ell'\}$. The \emph{public} equivalence $\pubeq$ thus has $S = \{\Lo, \Hi\}$ and hides
-nothing (\m{public_equiv}). The \emph{private} equivalence $\priveq$ is $\doteq^\Hi$,
-with $S = \{\Hi\}$ (\m{private_equiv}): at $\Lo$ it relates and hides all values,
-and at $\Hi$ it is equality. Its subscript names the level at which it hides.
+nothing (\m{public_equiv}). The \emph{private} equivalence $\priveq$ has
+$S = \{\Hi\}$ (\m{private_equiv}): at $\Lo$ it relates and hides all values,
+and at $\Hi$ it is equality.
 
 Equivalences on pairs and sums follow the type constructors: pairs are related
-componentwise and sums tag by tag, and related otherwise only when both are hidden.
-The three pair formers differ only in when a pair is hidden.
+componentwise and sums tag by tag, and otherwise only when both are hidden.
+The three formers of each kind differ only in when a value is hidden.
 
 \begin{definition}[Products]\label{def:formers}
 Let $\eqv{X}$ and $\eqv{Y}$ be equivalences on $X$ and $Y$. For
@@ -104,15 +104,21 @@ where
 \end{definition}
 
 \begin{definition}[Sums]\label{def:sum}
-For equivalences $\eqv{X}$ and $\eqv{Y}$ on $X$ and $Y$, the sum $\eqo{X} + \eqo{Y}$
-on $X + Y$ (\m{eqsum_LR}) is given by
+Let $\eqv{X}$ and $\eqv{Y}$ be equivalences on $X$ and $Y$. For
+${\oplus} \in \{{+}, {+_R}, {+_{LR}}\}$ (\m{eqsum}, \m{eqsum_R}, \m{eqsum_LR}),
+$\eqo{X} \oplus \eqo{Y}$ on $X + Y$ is given by
 \begin{align*}
-\mathsf{inl}\,x \mathrel{\eqo{X}_\ell + \eqo{Y}_\ell} \mathsf{inl}\,x' &\iff x \eqv{X}_\ell x', \\
-\mathsf{inr}\,y \mathrel{\eqo{X}_\ell + \eqo{Y}_\ell} \mathsf{inr}\,y' &\iff y \eqv{Y}_\ell y', \\
-\mathsf{inl}\,x \mathrel{\eqo{X}_\ell + \eqo{Y}_\ell} \mathsf{inr}\,y &\iff
-  \dis^X_\ell\,x \wedge \dis^Y_\ell\,y, \\
-\dis^{X+Y}_\ell\,(\mathsf{inl}\,x) &\iff \dis^X_\ell\,x, \\
-\dis^{X+Y}_\ell\,(\mathsf{inr}\,y) &\iff \dis^Y_\ell\,y.
+\mathsf{inl}\,x \mathrel{\eqo{X}_\ell \oplus \eqo{Y}_\ell} \mathsf{inl}\,x' &\iff x \eqv{X}_\ell x', \\
+\mathsf{inr}\,y \mathrel{\eqo{X}_\ell \oplus \eqo{Y}_\ell} \mathsf{inr}\,y' &\iff y \eqv{Y}_\ell y', \\
+\mathsf{inl}\,x \mathrel{\eqo{X}_\ell \oplus \eqo{Y}_\ell} \mathsf{inr}\,y &\iff
+  \dis^{X \oplus Y}_\ell\,(\mathsf{inl}\,x) \wedge \dis^{X \oplus Y}_\ell\,(\mathsf{inr}\,y),
+\end{align*}
+where
+\begin{align*}
+\dis^{X + Y}_\ell\,z &\iff \mathsf{false}, \\
+\dis^{X +_R Y}_\ell\,z &\iff \exists y.\; z = \mathsf{inr}\,y \wedge \dis^Y_\ell\,y, \\
+\dis^{X +_{LR} Y}_\ell\,z &\iff \exists x.\; z = \mathsf{inl}\,x \wedge \dis^X_\ell\,x \\
+&\phantom{{}\iff{}} \vee \exists y.\; z = \mathsf{inr}\,y \wedge \dis^Y_\ell\,y.
 \end{align*}
 \end{definition}
 
@@ -201,16 +207,16 @@ For all processes, functions and equivalences of matching types:
 \item\label{it:swi} (\m{swi_NI}) If $p \in \NI(\eqv{I},\eqo{B} \times_{LR} \eqo{O})$ and
   for every $\ell$,
   $\ell \in \Aw(\mathsf{true},\eqv{B}) \cup
-    \Ob(\mathsf{swi}\;b\;p,\eqo{O} + \one^{\Aw(\mathsf{true},\eqv{B})})$, then
+    \Ob(\mathsf{swi}\;b\;p,\eqo{O} +_{LR} \one^{\Aw(\mathsf{true},\eqv{B})})$, then
   $\mathsf{swi}\;b\;p \in
-    \NI(\eqo{B} \times_{LR} \eqo{I},\eqo{O} + \one^{\Aw(\mathsf{true},\eqv{B})})$.
+    \NI(\eqo{B} \times_{LR} \eqo{I},\eqo{O} +_{LR} \one^{\Aw(\mathsf{true},\eqv{B})})$.
 \item\label{it:par} (\m{par_NI}) If $p_1 \in \NI(\eqv{I},\eqv{O_1})$ and
   $p_2 \in \NI(\eqv{I},\eqv{O_2})$, then
   $\mathsf{par}\;p_1\;p_2 \in \NI(\eqv{I},\eqo{O_1} \times \eqo{O_2})$.
 \item\label{it:loop} (\m{loop_NI}) If $p \in \NI(\eqv{I},\eqv{I})$, then
   $\mathsf{loop}\;p \in \NI(\eqv{I},\eqv{I})$.
 \item\label{it:maybe} (\m{maybe_NI}) If $p \in \NI(\eqv{I},\eqv{O})$, then
-  $\mathsf{maybe}\;p \in \NI(\eqo{I} + \one^\emptyset,\eqv{O})$.
+  $\mathsf{maybe}\;p \in \NI(\eqo{I} +_{LR} \one^\emptyset,\eqv{O})$.
 \end{enumerate}
 \end{theorem}
 

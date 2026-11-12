@@ -10,21 +10,21 @@
 \foreach \l [count=\k from 0] in
   {public user, private user, scheduler, NOP handler, disk handler, timer handler}
   {\node[anchor=east] at (3.9, 1.25-0.5*\k) {\l};}
-\node[val] (o0) at (4.75, 1.25)  {$\pubeq + \one^\Lo$};
-\node[ran] (o1) at (4.75, 0.75)  {$\priveq + \one^\Lo$};
-\node[val] (o2) at (4.75, 0.25)  {$\pubeq + \one^\Lo$};
-\node[hid] (o3) at (4.75, -0.25) {$\priveq + \one^\Hi$};
-\node[hid] (o4) at (4.75, -0.75) {$\priveq + \one^\Hi$};
-\node[val] (o5) at (4.75, -1.25) {$\pubeq + \one^\Lo$};
+\node[val] (o0) at (4.75, 1.25)  {$\pubeq +_{LR} \one^\Lo$};
+\node[ran] (o1) at (4.75, 0.75)  {$\priveq +_{LR} \one^\Lo$};
+\node[val] (o2) at (4.75, 0.25)  {$\pubeq +_{LR} \one^\Lo$};
+\node[hid] (o3) at (4.75, -0.25) {$\priveq +_{LR} \one^\Hi$};
+\node[hid] (o4) at (4.75, -0.75) {$\priveq +_{LR} \one^\Hi$};
+\node[val] (o5) at (4.75, -1.25) {$\pubeq +_{LR} \one^\Lo$};
 \node[draw, rounded corners=2pt, fit=(o0)(o5), inner sep=2pt] (tuple) {};
 \node[anchor=south] at (tuple.north) {output: $\times$};
-% the input: a sum, disk (inl) dark, timer (inr) white
-\node[hid, minimum width=0.85cm] (id) at (0.8, 0.25) {$\priveq$};
-\node[val, minimum width=0.85cm] (it) at (0.8, -0.25) {$\pubeq$};
-\node[anchor=east] at (0.3, 0.25) {disk};
-\node[anchor=east] at (0.3, -0.25) {timer};
+% the input: a sum, timer (inl) white, disk (inr) dark
+\node[val, minimum width=0.85cm] (it) at (0.8, 0.25) {$\pubeq$};
+\node[hid, minimum width=0.85cm] (id) at (0.8, -0.25) {$\priveq$};
+\node[anchor=east] at (0.3, 0.25) {timer};
+\node[anchor=east] at (0.3, -0.25) {disk};
 \node[draw, rounded corners=2pt, fit=(id)(it), inner sep=2pt] (input) {};
-\node[anchor=south] at (input.north) {input: $+$};
+\node[anchor=south] at (input.north) {input: $+_R$};
 % key: the shades as nested sets
 \begin{scope}[shift={(-1.2,-1.7)}]
 \draw[rounded corners=3pt, fill=black!28] (0,0) rectangle (7.6,-0.62);

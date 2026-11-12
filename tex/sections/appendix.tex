@@ -72,21 +72,13 @@ they are and make unobservability a predicate, tied to the equivalence by requir
 the unobservable values to form one of its classes. \m{NI_lEquiv} shows that the
 two give the same notion of non-interference.
 
-\paragraph{Notation and the mechanised definitions} The paper writes some equivalences differently from their mechanised definitions,
-and keeps the two forms equal by proof. The mechanisation classifies options by
-\m{eqmaybe}, as the original does, and sums by \m{eqsum} and \m{eqsum_L}; the paper
-uses one sum former, $\eqo{X} + \eqo{Y}$ (\m{eqsum_LR}), with
-$\one^S$ (\m{unit_equiv}). Write $\eqo{X}^\circ$ (\m{eqvisible}) for the equivalence
-that relates as $\eqv{X}$ and hides nothing, so that $\privvis$ is $(\priveq)^\circ$.
-Agreement lemmas show
-that, at every level, each mechanised form relates and hides
-exactly what its paper form does: $\mathsf{eqmaybe}(S,\eqv{A})$ is $\eqo{A} + \one^S$
-along the map from options to sums (\m{eqmaybe_sum_rel}, \m{eqmaybe_sum_dis}),
-$\mathsf{eqsum}(\eqv{X},\eqv{Y})$ is ${\eqv{X}^\circ} + {\eqv{Y}^\circ}$
-(\m{eqsum_sum_rel}), $\mathsf{eqsum\_L}(\eqv{X},\eqv{Y})$ is
-$\eqo{X} + {\eqv{Y}^\circ}$ (\m{eqsum_L_sum_rel}), and $(\pubeq)^\circ$ is
-$\pubeq$ (\m{eqvisible_public_rel}). No proof depends on the presentation, and the calculus is
-the original's with sums added, which change no constructor or theorem.
+\paragraph{Options} The paper writes an optional value as a sum with the unit, and
+its equivalence as $\eqo{A} +_{LR} \one^S$ (\m{unit_equiv}). The mechanisation
+classifies options by \m{eqmaybe}, as the original does, and agreement lemmas show
+that at every level $\mathsf{eqmaybe}(S,\eqv{A})$ relates and hides exactly what
+$\eqo{A} +_{LR} \one^S$ does, along the map from options to sums
+(\m{eqmaybe_sum_rel}, \m{eqmaybe_sum_dis}). The calculus is the original's with
+sums added, which change no constructor or theorem.
 
 \paragraph{The development} \Cref{tab:files} lists the files of the development.
 
@@ -136,4 +128,4 @@ a level relates stays related below it, and likewise for unobservability. Our mo
 need nothing more. Every equivalence in them treats the bottom level, read as $\Lo$,
 apart from all others, so the proofs split on $\ell = \Lo$ against $\ell \neq \Lo$,
 and the second case covers every other level at once; $\Hi$ in
-$\priveq$, $\privvis$ and $\one^\Hi$ stands for all levels but $\Lo$.
+$\priveq$ and $\one^\Hi$ stands for all levels but $\Lo$.

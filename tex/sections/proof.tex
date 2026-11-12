@@ -19,32 +19,32 @@ is a map, at the theorem's equivalences (\cref{fig:io}), with $p$ the rest of th
 \mathsf{map}\;\mathsf{inl}\;(\mathsf{inr\_or\_def}\;\mathsf{no\_output})\;p
   \in \NI(\Ein,\Eout)
 \]
-Inside it an event is a sum, at $\Ein + \Eout$. No output is hidden, so this never
+Inside it an event is a sum, at $\Ein +_{LR} \Eout$. No output is hidden, so this never
 relates an interrupt to an output; \code{inl} thus carries $\Ein$ into the sum unchanged, \m{inr_or_def} strips the tag from outputs, and this
 reduces to
 \[
-\mathsf{loop}\;p \in \NI(\Ein + \Eout,\, \Ein + \Eout)
+\mathsf{loop}\;p \in \NI(\Ein +_{LR} \Eout,\, \Ein +_{LR} \Eout)
 \]
 The loop asks the same of its argument, a map that drops the state and tags the output.
 With $\Ev$ the state equivalence (\cref{def:state}), this reduces to
 \[
 \mathsf{sta}\;f\;g\;\mathsf{init\_policy}\;p
-  \in \NI(\Ein + \Eout,\, \Ev \times \Eout)
+  \in \NI(\Ein +_{LR} \Eout,\, \Ev \times \Eout)
 \]
 This is the first hard step, \cref{lem:state-cell}. \Cref{thm:sta-pred}, with $P$ the slice invariant
 $\Gated$ (\cref{def:gated}), needs $P$ to hold of \code{init_policy}, $f, g \in \mathsf{Pres}(P)$,
-$f \in \NI_P(\Ein + \Eout,\Ev,\Ev) \cap \mathsf{PE}_P(\Ein + \Eout,\Ev)$ and
+$f \in \NI_P(\Ein +_{LR} \Eout,\Ev,\Ev) \cap \mathsf{PE}_P(\Ein +_{LR} \Eout,\Ev)$ and
 $g \in \NI_P(\Eout,\Ev,\Ev)$. Here $g$ decides whether a secret handler runs.
 What remains is the \code{sta}'s
 argument, which receives the state with each event:
 \[
 \mathsf{map}\;\mathsf{pool\_input}\;\mathsf{id}\;(\mathsf{maybe}\;p)
-  \in \NI(\Ev \times_R (\Ein + \Eout),\, \Eout)
+  \in \NI(\Ev \times_R (\Ein +_{LR} \Eout),\, \Eout)
 \]
 \m{pool_input} sends an interrupt to \code{None}, which \code{maybe} ignores and no level
 sees, so a hidden interrupt stays hidden. It sends an output to the current pid and the
 disk handler's output, related by $\Ev$ and $\Eout$. With
-$\Eq \triangleq (\privvis + \pubeq) \times (\priveq + \one^\emptyset)$ on that pair, this
+$\Eq \triangleq (\priveq + \pubeq) \times (\priveq +_{LR} \one^\emptyset)$ on that pair, this
 reduces to
 \[
 \mathsf{par}\;\mathsf{slot}_5\;(\dots\;\mathsf{slot}_0) \in \NI(\Eq,\Eout)
@@ -55,7 +55,7 @@ The \code{par} asks the same of each slot, at its factor $\Eout_n$ of $\Eout$:
 \]
 This is the second hard step, \cref{lem:slot}, which hides which secret handler runs. It
 leaves $p_n \in \NI(\Ex_n,\Ey_n)$, for the process's input and output equivalences,
-where $\Eout_n$ is $\Ey_n + \one^S$.
+where $\Eout_n$ is $\Ey_n +_{LR} \one^S$.
 
 \input{sections/fig-state}
 
@@ -66,7 +66,7 @@ The proof's main choice is the attacker's view of the state.
 \begin{definition}[State equivalence]\label{def:state}
 The state equivalence $\Ev$ (\m{state_type_equiv}) is
 \begin{align*}
-\Ev &\triangleq ((\privvis + \pubeq) \times \pubeq) \times \pubeq \times \pubeq \\
+\Ev &\triangleq ((\priveq + \pubeq) \times \pubeq) \times \pubeq \times \pubeq \\
 &\quad{} \times (\priveq \times \pubeq) \times (\priveq \times \pubeq) \times (\pubeq \times \pubeq),
 \end{align*}
 for the current pid, previous pid, reschedule flag and slice counter, then the
@@ -87,11 +87,10 @@ where a condition forces it:
   when a slice opens, the disk handler takes the
   run the NOP handler was queued for, so during that run the NOP handler is pending
   in one state and not in the other.
-\item \emph{The current pid is $\privvis + \pubeq$.} Its
+\item \emph{The current pid is $\priveq + \pubeq$.} Its
   \code{inl} side holds exactly the two secret handlers (\cref{sec:global-state}),
   and which of them runs may differ between the two states, so the value inside
-  \code{inl} is private. $\privvis$ makes no \code{inl} unobservable, so
-  the sum never relates an \code{inl} to an \code{inr}, and \emph{whether} a secret
+  \code{inl} is private. The plain sum hides neither side, so it never relates an \code{inl} to an \code{inr}, and \emph{whether} a secret
   handler runs stays public.
 \item \emph{Every other field is public:} the timer's pending bit, the masks, the
   slice counter, the reschedule flag and the previous pid. Nothing forces them private, and
@@ -115,7 +114,7 @@ public field, so an interrupt's effects wait for a later output step.
 
 The conditions on $f$ hold on every state (\m{input_update_EP},
 \m{input_update_NI}): the only unobservable events are disk interrupts, which set one
-private bit (\m{set_pending_NI}), $\Ein + \Eout$ never relates an interrupt to an
+private bit (\m{set_pending_NI}), $\Ein +_{LR} \Eout$ never relates an interrupt to an
 output, and a fed-back output leaves the state alone. The hard obligation is
 $g \in \NI_P(\Eout,\Ev,\Ev)$. On output $o$, $g$ is the
 composite $\mathsf{initiate\_next}\;o \circ \mathsf{service}\;o$, where
@@ -242,10 +241,10 @@ steps leave the masks alone. \Cref{sec:update} gave the third.
 
 \begin{lemma}[State cell, \m{policy_state_cell_NI}]\label{lem:state-cell}
 Under the obligations of \cref{thm:policy}, if
-$p \in \NI(\Ev \times_R (\Ein + \Eout),\Eout)$, then
+$p \in \NI(\Ev \times_R (\Ein +_{LR} \Eout),\Eout)$, then
 \[
 \mathsf{sta}\;f\;g\;\mathsf{init\_policy}\;p
-  \in \NI(\Ein + \Eout,\, \Ev \times \Eout).
+  \in \NI(\Ein +_{LR} \Eout,\, \Ev \times \Eout).
 \]
 \end{lemma}
 
@@ -290,24 +289,24 @@ handler runs.
 \end{figure}
 
 \begin{lemma}[Slot, \m{slot_visible_NI}, \m{slot_hidden_NI}]\label{lem:slot}
-If $(\lambda x.\,\mathsf{f\_proj}\;x\;n) \in \NI(\priveq + \one^\emptyset,\,\Ex_n + \one^\emptyset)$
+If $(\lambda x.\,\mathsf{f\_proj}\;x\;n) \in \NI(\priveq +_{LR} \one^\emptyset,\,\Ex_n +_{LR} \one^\emptyset)$
 and $p_n \in \NI(\Ex_n,\Ey_n)$, then $\mathsf{slot}_n \in \NI(\Eq,\Eout_n)$,
-with $\Eout_n$ being $\Ey_n + \one^\Lo$ for a slot that no secret pid selects, and
-$\priveq + \one^\Hi$ for the disk and NOP slots, whose $\Ey_n$ is $\priveq$.
+with $\Eout_n$ being $\Ey_n +_{LR} \one^\Lo$ for a slot that no secret pid selects, and
+$\priveq +_{LR} \one^\Hi$ for the disk and NOP slots, whose $\Ey_n$ is $\priveq$.
 \end{lemma}
 
 \begin{proof}
 A slot is a map around a switch. The proof chooses an equivalence $\Eb$ on its gate
-bit with $\Ey_n + \one^{\Aw(\mathsf{true},\Eb)} = \Eout_n$. The map
+bit with $\Ey_n +_{LR} \one^{\Aw(\mathsf{true},\Eb)} = \Eout_n$. The map
 \[
 \mathsf{map}\;\gamma_n\;\mathsf{id}\;p \in \NI(\Eq,\Eout_n)
 \]
 needs related pids to go to related bits,
-$\gamma_n \in \NI(\Eq,\Eb \times_{LR} (\Ex_n + \one^\emptyset))$, and reduces to
+$\gamma_n \in \NI(\Eq,\Eb \times_{LR} (\Ex_n +_{LR} \one^\emptyset))$, and reduces to
 the switch:
 \[
 \mathsf{swi}\;b_n\;p
-  \in \NI(\Eb \times_{LR} (\Ex_n + \one^\emptyset),\Eout_n)
+  \in \NI(\Eb \times_{LR} (\Ex_n +_{LR} \one^\emptyset),\Eout_n)
 \]
 This needs every observer to be aware of the gate or oblivious to the slot:
 \[
@@ -328,7 +327,7 @@ related pids go to equal bits, and we take $\Eb = \Ef$ (\cref{fig:equivs},
 unobservable at $\Lo$ and \code{true} is public. Every level is aware of
 \code{true}, so
 $\Aw(\mathsf{true},\Ef) = \{\Lo,\Hi\}$ and the slot's output equivalence is
-$\Ey_n + \one^\Lo$: the attacker tells \code{Some} from
+$\Ey_n +_{LR} \one^\Lo$: the attacker tells \code{Some} from
 \code{None}, so it sees whether the slot ran. While a secret handler runs, all these
 slots emit \code{None}; this is how the attacker sees that the system is in S. The
 private user's slot is among them; its secrecy is carried by its private payload.
@@ -338,7 +337,7 @@ other to \code{false}, so $\gamma_n \in \NI$ needs \code{true} and \code{false} 
 $\Lo$: $\Eb$ is $\priveq$, and
 $\Aw(\mathsf{true},\priveq) = \{\Hi\}$, so awareness fails at $\Lo$. The proof
 uses obliviousness, and gets it by construction: both slots get a private payload
-and the output equivalence $\priveq + \one^\Hi$, under which every output, \code{None} included,
+and the output equivalence $\priveq +_{LR} \one^\Hi$, under which every output, \code{None} included,
 is unobservable at $\Lo$. This is needed, because when a slice opens the disk slot
 emits \code{Some o} in one execution and \code{None} in the other, and the NOP slot the
 reverse.
