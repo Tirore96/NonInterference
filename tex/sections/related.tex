@@ -1,12 +1,5 @@
 \section{Related Work}\label{sec:related}
 
-\paragraph{Non-interference} Non-interference goes back to Goguen and
-Meseguer~\cite{goguen1982}; Sabelfeld and Myers survey language-based
-approaches~\cite{sabelfeld2003}. Timing channels in programs have been closed by
-padding transformations that equalise the running time of secret-dependent
-branches~\cite{agat2000}; the sliced policy pads handler runs likewise, with the
-NOP handler.
-
 \paragraph{Concurrency and scheduling} How the scheduler affects the security of
 multi-threaded programs has been studied since Smith and Volpano~\cite{smith1998},
 with probabilistic~\cite{sabelfeld2000}, scheduler-independent~\cite{mantel2010},
@@ -20,12 +13,13 @@ schedule predicted from public information, bounding what their timing
 leaks~\cite{askarov2010}, also in a language-based setting~\cite{zhang2012}. Our
 requirement has the same shape: when secret interrupts are handled, and for how
 long, must be fixed by public events. The sliced policy meets it exactly, at the cost of reserving
-handler time whether or not it is used.
+handler time whether or not it is used. Padding transformations close timing channels
+in programs by equalising the running time of secret-dependent
+branches~\cite{agat2000}; the NOP handler pads handler runs likewise.
 
 \paragraph{Composable timing-sensitive non-interference} Our proofs rest on the
 calculus of Rafnsson et al.~\cite{rafnsson2017}, which we mechanise and apply to a
-model of interrupt handling. Rafnsson and Sabelfeld investigate how information-flow
-security composes in interactive systems~\cite{rafnsson2014}.
+model of interrupt handling.
 
 \paragraph{Verified operating systems} Murray et al.\ prove non-interference for
 seL4~\cite{murray2012,murray2013}, leaving timing channels out of scope; Cock et al.\

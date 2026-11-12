@@ -22,9 +22,7 @@
 \caption{The immediate policy over the three kinds of step. A wavy arrow is taken because
   the interrupt labelling it, D or T, is pending; a plain arrow when a handler completes
   and none is pending. Bold arrows are triggered by the disk interrupt: it decides when
-  S is entered and how long it lasts. Every completion is observed by
-  \m{observe_handler_output}, which reads the completing handler's output, the
-  disk's included.}
+  S is entered and how long it lasts.}
 \label{fig:policy-ordinary}
 \end{figure}
 \begin{figure}[t]
@@ -61,6 +59,6 @@
 \foreach \c [count=\i] in {{},{$\bullet$},{},{},{},{},{},{},{},{},{},{}} \node[priv] at (0.45*\i,-3.09) {\c};
 \foreach \i in {2} \node[diff] at (0.45*\i,-3.09) {};
 \end{tikzpicture}
-\caption{The immediate policy on the concrete system of \cref{sec:designs}, without and with a disk interrupt: who runs at each step (G: public user, P: private user, R: scheduler, T, D: timer and disk handler), and the state in which the step takes place ($\bullet$: set). Shading as in \cref{fig:leak}: private cells shaded. A wavy arrow marks an interrupt arriving between two steps (T: timer, D: disk); framed cells differ between the two runs. The disk handler takes steps 3 and 4 from the public user and holds the masks set meanwhile, so the runs differ in public cells. Both runs are proved traces (\protect\mechfile{theories/model_immediate.v}{model_immediate.v}), and the states are those the model holds along them (\m{run_states_model}).}
+\caption{The immediate policy on the concrete system of \cref{sec:designs}, without and with a disk interrupt: who runs at each step and the state in which the step takes place ($\bullet$: set). Lettering, shading and arrows as in \cref{fig:leak}; framed cells differ between the two runs. The disk handler takes steps 3 and 4 from the public user and holds the masks set meanwhile, so the runs differ in public cells. Both runs are proved traces (\protect\mechfile{theories/model_immediate.v}{model_immediate.v}), and the states are those the model holds along them (\m{run_states_model}).}
 \label{fig:run-ordinary}
 \end{figure}

@@ -53,10 +53,7 @@ reschedule: T to U, where the scheduler hands step 8 to the private user. Withou
 disk interrupt the system never enters S.
 
 \input{sections/fig-io}
-To state the leak we classify what the system receives and emits. Its input
-type \m{T_in} is a sum: \code{inl} is the timer interrupt and \code{inr} the disk
-interrupt. Its output type is the pool's six-tuple
-\m{T_out}.
+To state the leak we classify the system's inputs \m{T_in} and outputs \m{T_out}.
 
 \medskip
 \noindent\begin{minipage}{\linewidth}

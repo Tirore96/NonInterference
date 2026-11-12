@@ -31,10 +31,9 @@ With $\Ev$ the state equivalence (\cref{def:state}), this reduces to
 \mathsf{sta}\;f\;g\;\mathsf{init\_policy}\;p
   \in \NI(\Ein +_{LR} \Eout,\, \Ev \times \Eout)
 \]
-This is the first hard step, \cref{lem:state-cell}. \Cref{thm:sta-pred}, with $P$ the slice invariant
-$\Gated$ (\cref{def:gated}), needs $P$ to hold of \code{init_policy}, $f, g \in \mathsf{Pres}(P)$,
-$f \in \NI_P(\Ein +_{LR} \Eout,\Ev,\Ev) \cap \mathsf{PE}_P(\Ein +_{LR} \Eout,\Ev)$ and
-$g \in \NI_P(\Eout,\Ev,\Ev)$. Here $g$ decides whether a secret handler runs.
+This is the first hard step, \cref{lem:state-cell}, by \cref{thm:sta-pred} with $P$
+the slice invariant $\Gated$ (\cref{def:gated}). Its hard condition is
+$g \in \NI_P(\Eout,\Ev,\Ev)$: $g$ decides whether a secret handler runs.
 What remains is the \code{sta}'s
 argument, which receives the state with each event:
 \[
@@ -108,8 +107,6 @@ The same conditions are why \m{set_pending} sets one bit and stops: any decision
 on an input step, such as starting a handler or moving the counter, would change a
 public field, so an interrupt's effects wait for a later output step.
 
-\input{sections/fig-lane}
-
 \subsection{The state update}\label{sec:update}
 
 The conditions on $f$ hold on every state (\m{input_update_EP},
@@ -120,7 +117,7 @@ $g \in \NI_P(\Eout,\Ev,\Ev)$. On output $o$, $g$ is the
 composite $\mathsf{initiate\_next}\;o \circ \mathsf{service}\;o$, where
 $\mathsf{service}\;o$ is the service policy,
 $\mathsf{advance\_policy} \circ \mathsf{observe\_policy}\;o$, and the
-proof takes its stages one at a time (\m{policy_output_NI_on}, \cref{fig:lane}).
+proof takes its stages one at a time (\m{policy_output_NI_on}).
 
 The service policy must be non-interfering on every pair of related states, an
 obligation on the policy. For the sliced policy this is routine
@@ -162,7 +159,7 @@ itself. We use \cref{thm:sta-pred}, with $P$ the invariant the sliced policy
 maintains between steps.
 
 \begin{definition}[Slice invariant, \m{secret_gated},\newline \m{secret_gated_at_boundary}]\label{def:gated}
-Write $\mathsf{masked}\,v$ when all three handlers are masked in state $v$,
+For every state $v$, write $\mathsf{masked}\,v$ when all three handlers are masked in $v$,
 $\mathsf{masked}_S\,v$ when the secret handlers $S = \{D,N\}$ are,
 $\mathsf{ready}_h\,v$ when handler $h$ is pending and unmasked, and
 $\mathsf{open}\,v$ when the counter is not \code{0}. Then
@@ -185,6 +182,7 @@ makes $\mathsf{ready}_N$ hold at every boundary. $\GatedB$ gives \m{initiate_nex
 fact:
 
 \begin{definition}[Open iff ready, \m{open_iff_ready}]\label{def:ready}
+For every state $v$,
 \begin{align*}
 \RIO\,v \triangleq{}& \neg\mathsf{masked}\,v \Rightarrow \\
 &(\mathsf{open}\,v \iff \mathsf{ready}_D\,v \vee \mathsf{ready}_N\,v).
@@ -207,9 +205,10 @@ extend it, and unmasks the disk so its handler can take a run; the proof uses ne
 the timer left unmasked the policy is also secure (\m{model_timer_unmasked_NI}), and a
 timer handler run then extends the slice (\m{timer_unmasked_states_in_slice}).
 
-The invariant passes through the output update as the triple
+Write $\{P\}\;h\;\{Q\}$ for $\forall v.\; P\,v \Rightarrow Q\,(h\,v)$. The invariant
+passes through the output update as the triple
 $\{\Gated\}\;\mathsf{service}\;o\;\{\GatedB\}$, an obligation on the policy, and then
-$\{\GatedB\}\;\mathsf{initiate\_next}\;o\;\{\Gated\}$ (\cref{fig:lane}). The latter and
+$\{\GatedB\}\;\mathsf{initiate\_next}\;o\;\{\Gated\}$. The latter and
 $\{\Gated\}\;\mathsf{set\_pending}\;i\;\{\Gated\}$ hold for every policy
 (\m{initiate_next_gated}, \m{set_pending_gated}). The invariant is a predicate on the
 model's states, and holds whatever the pool emits (\m{sliced_run_gated}, for the sliced
@@ -219,13 +218,21 @@ The rest of the proof uses three facts about the policy, so the result holds for
 policy that has them:
 
 \begin{theorem}[Policy security, \m{model_policy_NI}]\label{thm:policy}
-Under the hypotheses of \cref{thm:main} on the processes, if
+For all $\mathit{runtime}$, all processes of the types of \cref{thm:main} with
+$p_{pub}, p_{sched} \in \NI(\pubeq,\pubeq)$ and $p_{priv} \in \NI(\priveq,\priveq)$,
+every initial state \code{init_policy} and all stages \code{observe_policy} and
+\code{advance_policy}, with
+$\mathsf{service}\;o \triangleq \mathsf{advance\_policy} \circ \mathsf{observe\_policy}\;o$: if
 \begin{enumerate}
 \item\label{it:po-init} $\Gated\,\mathsf{init\_policy}$,
 \item\label{it:po-inv} $\{\Gated\}\;\mathsf{service}\;o\;\{\GatedB\}$ for every output $o$, and
 \item\label{it:po-ni} $\mathsf{service} \in \NI(\Eout,\Ev,\Ev)$,
 \end{enumerate}
-then \m{model} at this policy and these processes is in $\NI(\Ein,\Eout)$.
+then
+\begin{align*}
+&\mathsf{model}\;\mathit{runtime}\;\mathsf{init\_policy}\;\mathsf{observe\_policy}\\
+&\quad \mathsf{advance\_policy}\;p_{pub}\;p_{priv}\;p_{sched} \in \NI(\Ein,\Eout).
+\end{align*}
 \end{theorem}
 
 The theorem concerns security alone: a policy that keeps the secret handlers masked
@@ -240,12 +247,13 @@ $\mathsf{masked}_S$, \m{queue_secret_run} makes $\mathsf{ready}_N$ hold, and oth
 steps leave the masks alone. \Cref{sec:update} gave the third.
 
 \begin{lemma}[State cell, \m{policy_state_cell_NI}]\label{lem:state-cell}
-Under the obligations of \cref{thm:policy}, if
+Under the obligations of \cref{thm:policy}, for every process $p$: if
 $p \in \NI(\Ev \times_R (\Ein +_{LR} \Eout),\Eout)$, then
 \[
 \mathsf{sta}\;f\;g\;\mathsf{init\_policy}\;p
-  \in \NI(\Ein +_{LR} \Eout,\, \Ev \times \Eout).
+  \in \NI(\Ein +_{LR} \Eout,\, \Ev \times \Eout)
 \]
+for the input update $f$ and output update $g$ of \cref{sec:state} at this policy.
 \end{lemma}
 
 \begin{proof}
@@ -289,11 +297,20 @@ handler runs.
 \end{figure}
 
 \begin{lemma}[Slot, \m{slot_visible_NI}, \m{slot_hidden_NI}]\label{lem:slot}
-If $(\lambda x.\,\mathsf{f\_proj}\;x\;n) \in \NI(\priveq +_{LR} \one^\emptyset,\,\Ex_n +_{LR} \one^\emptyset)$
-and $p_n \in \NI(\Ex_n,\Ey_n)$, then $\mathsf{slot}_n \in \NI(\Eq,\Eout_n)$,
-with $\Eout_n$ being $\Ey_n +_{LR} \one^\Lo$ for a slot that no secret pid selects, and
-$\priveq +_{LR} \one^\Hi$ for the disk and NOP slots, whose $\Ey_n$ is $\priveq$.
+For every slot $n$ with initial phase $b_n$ and process $p_n$, and all equivalences
+$\Ex_n$ and $\Ey_n$: if
+$(\lambda x.\,\mathsf{f\_proj}\;x\;n) \in \NI(\priveq +_{LR} \one^\emptyset,\,\Ex_n +_{LR} \one^\emptyset)$
+and $p_n \in \NI(\Ex_n,\Ey_n)$, then
+\begin{enumerate}
+\item $\mathsf{slot}_n \in \NI(\Eq,\,\Ey_n +_{LR} \one^\Lo)$ if no secret pid selects
+  $n$, that is, $\mathsf{slot\_pid}\,(\mathsf{inl}\,b) \neq n$ for both $b$;
+\item $\mathsf{slot}_n \in \NI(\Eq,\,\priveq +_{LR} \one^\Hi)$ if $\Ey_n$ is $\priveq$.
+\end{enumerate}
 \end{lemma}
+
+The proof of \cref{thm:policy} uses the first case for the four slots no secret pid
+selects and the second for the disk and NOP slots. Write $\Eout_n$ for the output
+equivalence of slot $n$ in each case.
 
 \begin{proof}
 A slot is a map around a switch. The proof chooses an equivalence $\Eb$ on its gate
@@ -313,8 +330,7 @@ This needs every observer to be aware of the gate or oblivious to the slot:
 \forall \ell.\; \ell \in \Aw(\mathsf{true},\Eb) \cup
   \Ob(\mathsf{swi}\;b_n\;p,\,\Eout_n)
 \]
-Awareness means a bit related to \code{true} is \code{true} and observable;
-obliviousness means the observer sees none of the slot's outputs. Below the switch, the \code{maybe} and the map that tags each output reduce to
+Below the switch, the \code{maybe} and the map that tags each output reduce to
 $p_n \in \NI(\Ex_n,\Ey_n)$, because \code{true} is related to itself.
 
 At $\Lo$ the two
@@ -332,6 +348,8 @@ $\Ey_n +_{LR} \one^\Lo$: the attacker tells \code{Some} from
 \code{None}, so it sees whether the slot ran. While a secret handler runs, all these
 slots emit \code{None}; this is how the attacker sees that the system is in S. The
 private user's slot is among them; its secrecy is carried by its private payload.
+The second case would also apply to it, and choosing the first is what lets the
+attacker see when the private user runs.
 
 \emph{The disk and NOP slots hide which of them ran.} One secret pid maps to \code{true} and the
 other to \code{false}, so $\gamma_n \in \NI$ needs \code{true} and \code{false} related at
@@ -348,8 +366,10 @@ reverse.
 Follow the outline. Down to the state cell the
 steps are routine, and \cref{lem:state-cell} handles the cell. Below it, \code{map},
 \code{maybe} and \code{par} leave one obligation per slot, which \cref{lem:slot} reduces
-to $p_n \in \NI(\Ex_n,\Ey_n)$. For the scheduler and the user processes these are
-the hypotheses of the theorem. Each handler is non-interfering at its output's
+to $p_n \in \NI(\Ex_n,\Ey_n)$. Its projection hypothesis holds because \m{f_proj} is
+the identity for the private user's slot and constantly \code{None} elsewhere
+(\m{slot_no_input}). For the scheduler and the user processes these are the
+hypotheses of the theorem. Each handler is non-interfering at its output's
 equivalence, public or private, with its step count classified alike
 (\m{ir_handler_public_NI}, \m{ir_handler_private_NI}).
 \end{proof}

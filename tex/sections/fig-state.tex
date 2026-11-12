@@ -27,11 +27,7 @@
 \node[anchor=south] at (1.5,0.28) {global state: $\times$};
 \end{tikzpicture}
 \caption{The global state of \cref{sec:global-state}, field by field,
-  shaded as in \cref{fig:io} by the state equivalence (\cref{def:state}). The current pid is a sum: its \texttt{inl}
-  side holds a secret handler (an S step), a \texttt{Bool} saying which one, and
-  its \texttt{inr} side the number of any other process (U or T). Its
-  equivalence is $\priveq + \pubeq$ (\cref{def:sum}), so
-  the tag is public: whether a secret handler runs is public; which one runs is private.
-  So are the pending bits of the NOP and disk handlers. Every other field is public.}
+  shaded as in \cref{fig:io} by the state equivalence (\cref{def:state}). The current
+  pid is a sum, and only its \texttt{inl} payload is private.}
 \label{fig:state}
 \end{figure}

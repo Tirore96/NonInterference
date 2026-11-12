@@ -3,17 +3,15 @@ The mechanism we model is that of
 Linux~\cite{love2010}\note{check Love: page reference, second source for current
 kernels}. A device raises an \emph{interrupt request} (IRQ) at the
 \emph{interrupt controller}, where it stays \emph{pending} while it is \emph{masked}.
-Linux splits its handling in two. The \emph{top half}, the interrupt handler proper,
-displaces the running process and runs with interrupts masked\note{check: some or all
-interrupts?}, so it is not interrupted itself. It does the time-critical work and defers the rest to a \emph{bottom half} (a
-softirq, tasklet or work queue). The handler of the periodic
+The interrupt handler displaces the running process and runs with interrupts
+masked\note{check: some or all interrupts?}, so it is not interrupted itself; we leave
+out the work it defers to a \emph{bottom half}. The handler of the periodic
 \emph{timer tick} sets the \code{need_resched} flag when the running process has used
 up its time. On the \emph{return from interrupt} the kernel checks this flag: if set,
 the scheduler runs; otherwise the interrupted process resumes.
 
 Our model keeps these parts in a simpler form\note{check: state the differences? The
-timer handler always sets the flag; one processor}. A handler is a top half; bottom
-halves are left out. The interrupt controller holds a pending and a mask bit per
+timer handler always sets the flag; one processor}. The interrupt controller holds a pending and a mask bit per
 handler. An interrupt only sets its pending bit. A handler
 can start when its pending bit is set and its mask is clear; starting it clears the
 pending bit and sets all the masks. Once a handler has finished, the next handler that
@@ -27,16 +25,17 @@ The system runs six processes: three interrupt handlers, a scheduler, and two us
 processes. We group them by the three kinds of step, which the rest of the
 paper keeps apart:
 \begin{itemize}
-\item \emph{U}, a user process or the scheduler. The public user process issues
-  requests (\code{Get}) whose results the attacker sees. The private user process
-  takes the disk handler's output as input, and emits \code{Sys} when notified of a
-  disk event and \code{Idle} otherwise. It is why the disk interrupt is secret: it is
-  the process doing disk I/O, and the legitimate recipient of the interrupt. The disk
-  that raises an interrupt in answer to a request is part of the environment. The
-  scheduler chooses which user process runs next.
-\item \emph{T}, the timer handler. The timer's interrupt is public, and when its
-  handler finishes it sets the reschedule flag, which is how control reaches the
-  scheduler.
+\item \emph{U}, a user process or the scheduler, the three parameters of the model:
+  $p_{pub} : \Proc{\mathsf{Empty}}{\mathsf{Opub}}$, whose output the attacker sees;
+  $p_{priv} : \Proc{\mathsf{Bool}}{\mathsf{Opriv}}$, which takes the disk handler's
+  output as input; and $p_{sched} : \Proc{\mathsf{Empty}}{\mathsf{Bool}}$, whose
+  output chooses which user process runs next. The private user process is why the
+  disk interrupt is secret: it does the disk I/O, and is the legitimate recipient of
+  the interrupt. The disk that raises an interrupt in answer to a request is part of
+  the environment.
+\item \emph{T}, the timer handler. The timer's interrupt is public, and both policies
+  set the reschedule flag when its handler finishes, which is how control reaches
+  the scheduler.
 \item \emph{S}, a secret handler. The disk interrupt is the secret. The NOP handler
   belongs to no device: no interrupt raises it, it computes nothing, and the sliced
   policy uses it as filler.
@@ -73,7 +72,9 @@ lets an interrupt, which reaches the pool as \code{None}, leave it unchanged.
 The pool's output records \emph{who ran} as well as what was computed, so the schedule
 is part of what the system emits. Since \code{par} pairs outputs, the output is a
 six-tuple, the type \m{T_out}, whose positions have types $A + 1$: \code{Some} where
-the slot ran and \code{None} elsewhere, so at most one \code{Some} per step.
+the slot ran and \code{None} elsewhere, so at most one \code{Some} per step. The
+system's input type \m{T_in} is a sum of the two interrupts, \code{inl} for the timer
+and \code{inr} for the disk.
 
 \subsection{The state}\label{sec:global-state}\label{sec:state}
 
