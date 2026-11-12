@@ -61,9 +61,9 @@ Fixpoint times_n n (f : nat -> Ty) : Ty :=
 Definition times_on (n : nat) (f : nat -> Ty) := times_n n (Option \o f).
 
 
-(* An interrupt is a sum, like the current pid: the secret disk interrupt on
-   the inl side, the public timer interrupt on the inr side.  The interrupt
-   controller is indexed by the same type (irq, below). *)
+(* An interrupt is a sum: the public timer interrupt on the inl side, the
+   secret disk interrupt on the inr side, the side [eqsum_R] hides.  The
+   interrupt controller is indexed by the same type (irq, below). *)
 Definition T_in := Sum Unit Unit.
 (* A handler's output is a bool: [Notify] when its run completes, [Nothing]
    on every other step. *)
@@ -73,7 +73,7 @@ Notation Nothing := false (only parsing).
    process.  They are parameters throughout: the mechanism never inspects a
    user-slot value, only whether the slot produced one, so nothing below
    depends on what fills these two positions. *)
-Definition T_out (Opub Opriv : Ty) := Times (Option Opub) (Times (Option Opriv) (Times (Option Nat) (times_on 2 (fun _ => Bool)))).
+Definition T_out (Opub Opriv : Ty) := Times (Option Opub) (Times (Option Opriv) (Times (Option Bool) (times_on 2 (fun _ => Bool)))).
 Definition T_out_userview (Opub Opriv : Ty) := Option (Sum Opub Opriv).
 
 
@@ -119,7 +119,7 @@ Definition slot_O (Opub Opriv : Ty) (n : nat) :=
   | 0 => Bool (*tI*)
   | 1 => Bool (*dI*)
   | 2 => Bool (*NOP handler*)
-  | 3 => Nat (*scheduler*)
+  | 3 => Bool (*scheduler: which user runs next, see user_pid*)
   | 4 => Opriv (*high*)
   | 5 => Opub (*low*)
   | _ => Unit (*padding*)
@@ -138,7 +138,7 @@ Definition unit_proc : Proc Empty Unit := out (O := Unit) tt.
 Definition slot_procs (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)             (*public user process, slot 5*)
   (p_priv : Proc Bool Opriv)  (*secret user process, slot 4*)
-  (p_sched : Proc Empty Nat)            (*scheduler,           slot 3*)
+  (p_sched : Proc Empty Bool)            (*scheduler,           slot 3*)
   : forall n, Proc (slot_I n) (slot_O Opub Opriv n) :=
   fun n => match n with
            | 0        (*timer interrupt handler*)
@@ -219,7 +219,7 @@ Definition f_proj (i : [T_intermediate]) : forall n, [Option (slot_I n)] :=
 Definition pool (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Nat) :=
+  (p_sched : Proc Empty Bool) :=
   @process_pool cur_pid 5 slot_initial slot_I (slot_O Opub Opriv) T_intermediate f_proj slot_pid
     (slot_procs runtime p_pub p_priv p_sched).
 
@@ -260,7 +260,9 @@ Definition slice_count := Nat.
 Definition ic := Times ir_bits (Times ir_bits ir_bits).
 Definition count := Nat.
 Definition re_sched := Bool.
-Definition prev_pid := Nat.
+(* The previous pid only ever names a user process, so it is the bit
+   [user_pid] reads (section 6): which user runs when the handlers are done. *)
+Definition prev_pid := Bool.
 Definition pids := Times cur_pid prev_pid.
 (* ic_count bundles the interrupt-handler time slice with the interrupt controller.
    The slice counter is the number of output steps until the slice closes:
@@ -271,8 +273,8 @@ Definition bool_state := Times re_sched ic_count.
    [nop_irq], for the NOP handler.  No external interrupt raises the NOP entry;
    the sliced policy sets it pending itself, to use the NOP handler as filler. *)
 Definition irq := Option T_in.
-Notation timer_irq := (Some (inr tt)).
-Notation disk_irq := (Some (inl tt)).
+Notation timer_irq := (Some (inl tt)).
+Notation disk_irq := (Some (inr tt)).
 Notation nop_irq := None (only parsing).
 Definition all_interrupts : seq [irq] :=
   [:: timer_irq; disk_irq; nop_irq].
@@ -404,16 +406,23 @@ Definition input_update (Opub Opriv : Ty)
   (e : [Sum T_in (T_out Opub Opriv)]) (v : [state_type]) : [state_type] :=
   if e is inl i then set_pending i v else v.
 
+(* The scheduler and the previous pid choose between the two user processes
+   only, by a bit: [true] is the private user (pid inr 2, slot 4), [false]
+   the public user (pid inr 3, slot 5).  So no scheduler, however it behaves,
+   can install a handler or a padding slot: the model, not the scheduler,
+   guarantees that the scheduler hands control to a user. *)
+Definition user_pid (b : bool) : [cur_pid] := if b then inr 2 else inr 3.
+
 Definition is_sched_out (Opub Opriv : Ty) (o : [T_out Opub Opriv]) :=
   match o with
-  | (None,(None,(Some n,_))) => Some n
+  | (None,(None,(Some b,_))) => Some b
   | _ => None
   end.
 Definition apply_scheduler_choice (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type])  :=
-  if is_sched_out o is Some n then update_cur_pid v (inr n) else v.
+  if is_sched_out o is Some b then update_cur_pid v (user_pid b) else v.
 
-(* [apply_scheduler_choice] installs the pid a scheduler output names as the
-   current one.  Note this reads the scheduler slot only -- the user slots are
+(* [apply_scheduler_choice] installs the user the scheduler's bit names as the
+   current pid.  Note this reads the scheduler slot only -- the user slots are
    inspected for None-ness and nothing more (see [is_sched_out]), which is what
    keeps the state transition independent of what userspace does. *)
 
@@ -436,14 +445,16 @@ Definition is_handler_pid (v : [state_type]) :=
     | _ => true
     end.
 
-(* before overriding cur_pid, save it to prev_pid unless it is a handler, so that
-   control returns to the scheduler or a user process.  Only the value saved by
-   the latest handler start from outside a handler is ever read back, so prev_pid
-   is never cleared. *)
+(* before overriding cur_pid, save it to prev_pid if it is a user process, so
+   that control returns to that user.  Any other pid (a handler, the scheduler
+   or padding) leaves prev_pid alone.  Only the value saved by the latest
+   handler start from a user is ever read back, so prev_pid is never cleared. *)
 Definition save_cur_to_prev (v : [state_type]) : [state_type] :=
-  if is_handler_pid v then v
-  else if get_cur_pid v is inr n then update_prev_pid v n
-  else v.
+  match get_cur_pid v with
+  | inr 2 => update_prev_pid v true
+  | inr 3 => update_prev_pid v false
+  | _ => v
+  end.
 
 Definition initiate_handler (ir : [irq]) (v : [state_type]) :=
   update_ir_pending (set_masks (update_cur_pid (save_cur_to_prev v) (ir_handler_pid ir))) ir false.
@@ -459,7 +470,7 @@ Definition scheduler_pid : [cur_pid] := inr 1.
 
 Definition initiate_scheduler  (v : [state_type]) := update_re_sched (update_cur_pid v scheduler_pid) false.
 
-Definition initiate_prev_pid  (v : [state_type]) := update_cur_pid v (inr (get_prev_pid v)).
+Definition initiate_prev_pid  (v : [state_type]) := update_cur_pid v (user_pid (get_prev_pid v)).
 
 (* Choose the next pid.  First install the scheduler's choice, if the scheduler
    has just run; then apply rules 1-4. *)
@@ -475,8 +486,8 @@ Definition initiate_next (Opub Opriv : Ty)
 
 (* The [sta]'s output update.  An arriving interrupt only records itself;
    everything it eventually causes happens here, where the input is no longer
-   the thing being varied.  That split is forced by f_EP, which under eqsum_L
-   constrains the input update alone.  The policy has two stages:
+   the thing being varied.  That split is forced by f_EP, which under eqsum_LR,
+   with no output unobservable, constrains the input update alone.  The policy has two stages:
    [observe_policy] reads the output, and [advance_policy] reads only the state,
    as its type says. *)
 Definition output_update (Opub Opriv : Ty)
@@ -512,7 +523,7 @@ Definition model (runtime : nat) (Opub Opriv : Ty)
   (advance_policy : [state_type] -> [state_type])
   (p_pub : Proc Empty Opub)
   (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
+  (p_sched : Proc Empty Bool) : Proc T_in (T_out Opub Opriv) :=
   @reactive_system cur_pid state_type init_policy T_in (T_out Opub Opriv) T_intermediate
     (@input_update Opub Opriv) (output_update observe_policy advance_policy) (no_output Opub Opriv)
     (pool runtime p_pub p_priv p_sched) (@pool_input Opub Opriv).

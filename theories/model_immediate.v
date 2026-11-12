@@ -21,7 +21,7 @@ Require Export NonInterference.theories.concrete_system.
 
 Definition false_ir_bits : [ir_bits] := (false,false).
 Definition false_ic : [ic] := ((false,false),(false_ir_bits,false_ir_bits)).
-Definition immediate_init : [state_type] := ((initial_pid,3),(false,(0,false_ic))).
+Definition immediate_init : [state_type] := ((initial_pid,false),(false,(0,false_ic))).
 
 (* Observe every handler's output: a finished handler unmasks everything, and a
    finished timer handler also requests a reschedule.  The two policies differ
@@ -34,7 +34,7 @@ Definition observe_handler_output (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v 
 Definition model_immediate (runtime : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
+  (p_sched : Proc Empty Bool) : Proc T_in (T_out Opub Opriv) :=
   model runtime immediate_init (@observe_handler_output Opub Opriv) id
     p_pub p_priv p_sched.
 

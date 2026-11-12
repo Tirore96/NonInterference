@@ -11,7 +11,7 @@
 \node[anchor=east] at (-0.1,0) {current pid: $+$};
 \node[priv, minimum width=1.5cm] at (0.75,0) {S: Bool};
 \node[pub, minimum width=1.5cm] at (2.25,0) {U, T: Nat};
-\foreach \y/\l/\t in {-0.42/previous pid/Nat, -0.84/reschedule/Bool,
+\foreach \y/\l/\t in {-0.42/previous pid/Bool, -0.84/reschedule/Bool,
                       -1.26/slice counter/Nat}
   {\node[anchor=east] at (-0.1,\y) {\l};
    \node[pub, minimum width=3.0cm] at (1.5,\y) {\t};}

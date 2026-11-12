@@ -57,7 +57,8 @@ control~\cite{sabelfeld2003}, where Goguen and Meseguer's
 non-interference~\cite{goguen1982} states the absence of a leak: varying what the
 attacker may not see must not change what it does see. For timing
 leaks, what the attacker sees includes when each output appears~\cite{agat2000}. Our
-attacker watches the output of the public process, and when it appears.
+attacker is in user space: it sees the output of the public process and when each
+user process runs.
 
 Existing results leave this problem open. Non-interference proofs for verified
 kernels such as seL4 exclude timing channels~\cite{murray2012,murray2013}, which
@@ -71,8 +72,9 @@ non-interfering\todo{confirm}.
 We build such a proof in the process calculus of Rafnsson, Jia and
 Bauer~\cite{rafnsson2017}, whose non-interference is timing-sensitive and whose
 theorems compose: if the parts of a process are non-interfering, so is the whole. We model interrupt handling and process scheduling as
-one closed process (\cref{fig:system}): the user processes, the scheduler and the
-handlers run in a pool, and a global state decides at each step which of them runs.
+one closed process (\cref{fig:system}): the user processes, one public and one
+private, which is the one doing disk I/O, the scheduler and the handlers run in a
+pool, and a global state decides at each step which of them runs.
 The model is generic in its \emph{interrupt policy}, the part that decides when
 handlers may run. With the immediate policy the model is interfering, with \cref{fig:leak} as the counterexample. Our
 policy fixes when secret interrupts are handled, and for how long, by public events.
@@ -94,7 +96,7 @@ of the model, and an invariant on the states the policy reaches does the rest.
   (\m{model_immediate_not_NI}), and the leak needs only the output of the public
   process (\m{model_immediate_publicview_not_NI}) (\cref{sec:leak}).
 \item A mechanised, timing-sensitive non-interference proof for the sliced policy
-  (\m{model_sliced_NI}), for every non-interfering scheduler and pair of user
+  (\m{model_sliced_NI_unconditional}), for every scheduler and pair of user
   processes, every handler length and every slice size
   (\cref{sec:designs,sec:proof}). The proof is compositional: one generic theorem per
   constructor of the model leaves two steps specific to interrupt handling

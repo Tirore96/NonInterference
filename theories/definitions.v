@@ -714,8 +714,39 @@ Definition eqsum {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) : cEquiv ([S
   apply:(@eqsum_aux _ _ IRel ORel (fun l i => False)); ssa.
 Defined.
 
-Definition eqsum_L {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) : cEquiv ([Sum I O]).
-  apply:(@eqsum_aux _ _ IRel ORel (dis IRel)); ssa; eauto.
+(* The mirror image of [eqsum_aux]: an inr may be unobservable, an inl never is. *)
+Definition eqsum_aux_R {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O])
+                       (D : level -> [O] -> Prop) :
+  (forall l0 l1, order l0 l1 -> forall o, D l1 o -> D l0 o) ->
+  (forall l o0, D l o0 -> forall o1, D l o1 <-> rel ORel l o0 o1) ->
+  cEquiv ([Sum I O]).
+  move=> Hmon Hl.
+  assert (HlD : forall l o0 o1, D l o0 -> rel ORel l o0 o1 -> D l o1)
+    by (intros; by apply/(Hl _ _ H)).
+  assert (HlR : forall l o0 o1, D l o0 -> D l o1 -> rel ORel l o0 o1)
+    by (intros; by apply/(Hl _ _ H)).
+  refine (@CEquiv _
+            (fun l x => match x with | inl _ => False | inr o => D l o end)
+            (fun l x y => match x,y with
+                          | inl i1,inl i2 => rel IRel l i1 i2
+                          | inr o1,inr o2 => rel ORel l o1 o2
+                          | _,_ => False
+                          end)
+            _ _ _ _).
+  - move=> l. con.
+    move=> x. de x.
+    move=> x y. de x; de y; ssa; eauto.
+    move=> x y z. de x; de y; de z; ssa; eauto.
+  - move=> l0 l1 Hord x y. de x; de y; ssa; eauto.
+  - move=> l0 l1 Hord x. de x. eauto.
+  - move=> l x Hx y. de x; de y; con; ssa; eauto.
+Defined.
+
+(* [eqsum_R] (written ≐1 +_R ≐2) hides the right side: an inr is unobservable
+   exactly when its payload is, an inl never.  An inl and an inr are never
+   related; as no inl is unobservable, this is the sum rule of the paper. *)
+Definition eqsum_R {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) : cEquiv ([Sum I O]).
+  apply:(@eqsum_aux_R _ _ IRel ORel (dis ORel)); ssa; eauto.
 Defined.
 
 
@@ -794,13 +825,13 @@ Definition eqmaybe_nobody {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
 Defined.
 
 
-(* --- The paper's sum notation and the definitions above ---
-   The paper writes every sum and option equivalence with one sum former,
-   [eqsum_LR] (written ≐1 + ≐2), and two helpers: [eqvisible] (written ≐°)
-   and [unit_equiv P] (written 1_L), with options read as V + 1.  The
-   definitions above stay as they are; the lemmas below show that each one
-   agrees with its sum form at every level, in what it relates and in what it
-   makes unobservable, so no proof depends on the presentation. *)
+(* --- Sums that hide both sides, and options ---
+   Like products, sums have three formers: [eqsum] (≐1 + ≐2, hides nothing),
+   [eqsum_R] (≐1 +_R ≐2, hides the right side) and [eqsum_LR] below
+   (≐1 +_LR ≐2, hides both).  The paper reads an option as V + 1, at
+   [eqsum_LR] with [unit_equiv P] (written 1^S); [eqmaybe] stays as it is, and
+   the two lemmas below show that it agrees with that sum form at every level,
+   in what it relates and in what it makes unobservable. *)
 
 (* Each injection is unobservable exactly when its payload is, and an inl is
    related to an inr exactly when both are unobservable. *)
@@ -827,16 +858,6 @@ Definition eqsum_LR {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) : cEquiv 
   - move=> l [x|x] Hx [y|y] /=; split; eauto; try (by case); try (by move=> ?; split).
 Defined.
 
-(* The same relation with nothing unobservable: under a sum it keeps the tag
-   visible. *)
-Definition eqvisible {A : Set} (ARel : cEquiv A) : cEquiv A.
-  refine (@CEquiv _ (fun _ _ => False) (rel ARel) _ _ _ _).
-  - exact: equiv.
-  - by case: ARel.
-  - done.
-  - done.
-Defined.
-
 (* The unit, unobservable exactly at the levels outside P: the base equivalence
    on the unit type. *)
 Definition unit_equiv (P : levelPred) (HP : presP P) : cEquiv ([Unit]) :=
@@ -853,33 +874,6 @@ Proof. by case: v => [v|]; case: v' => [v'|]. Qed.
 Lemma eqmaybe_sum_dis (V : Ty) (P : levelPred) (HP : presP P) (VRel : cEquiv [V]) l v :
   dis (eqmaybe VRel HP) l v <-> dis (eqsum_LR VRel (unit_equiv HP)) l (option_to_sum v).
 Proof. by case: v. Qed.
-
-(* eqsum ≐1 ≐2 is ≐1° + ≐2°. *)
-Lemma eqsum_sum_rel (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l x y :
-  rel (eqsum ARel BRel) l x y <-> rel (eqsum_LR (eqvisible ARel) (eqvisible BRel)) l x y.
-Proof. by case: x => x; case: y => y //=; split; case. Qed.
-
-Lemma eqsum_sum_dis (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l x :
-  dis (eqsum ARel BRel) l x <-> dis (eqsum_LR (eqvisible ARel) (eqvisible BRel)) l x.
-Proof. by case: x. Qed.
-
-(* eqsum_L ≐1 ≐2 is ≐1 + ≐2°. *)
-Lemma eqsum_L_sum_rel (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l x y :
-  rel (eqsum_L ARel BRel) l x y <-> rel (eqsum_LR ARel (eqvisible BRel)) l x y.
-Proof. by case: x => x; case: y => y //=; split; case. Qed.
-
-Lemma eqsum_L_sum_dis (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l x :
-  dis (eqsum_L ARel BRel) l x <-> dis (eqsum_LR ARel (eqvisible BRel)) l x.
-Proof. by case: x. Qed.
-
-(* pub° is pub: nothing public is unobservable. *)
-Lemma eqvisible_public_rel (A : Ty) l x y :
-  rel (eqvisible (public_equiv A)) l x y <-> rel (public_equiv A) l x y.
-Proof. done. Qed.
-
-Lemma eqvisible_public_dis (A : Ty) l x :
-  dis (eqvisible (public_equiv A)) l x <-> dis (public_equiv A) l x.
-Proof. by split=> // H; apply: H. Qed.
 
 Lemma rel_eq : forall (I : Set) (IRel : cEquiv I) (x : I) l, rel IRel l x x.
 Proof.
@@ -1122,28 +1116,42 @@ Lemma rel_eqsum2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : cEquiv [A]) (BRel : 
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_L : forall (A B : Ty) (a1 a2 : [A]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, rel ARel l a1 a2 -> rel (eqsum_L ARel BRel) l (inl a1) (inl a2). 
+Lemma rel_eqsum_LR : forall (A B : Ty) (a1 a2 : [A]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, rel ARel l a1 a2 -> rel (eqsum_LR ARel BRel) l (inl a1) (inl a2).
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_L2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, rel BRel l b1 b2 -> rel (eqsum_L ARel BRel) l (inr b1) (inr b2). 
+Lemma rel_eqsum_LR2 : forall (A B : Ty) (b1 b2 : [B]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, rel BRel l b1 b2 -> rel (eqsum_LR ARel BRel) l (inr b1) (inr b2).
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_L' : forall (A B : Ty) (a1 a2 : [A]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l,rel (eqsum_L ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2. 
+Lemma rel_eqsum_LR' : forall (A B : Ty) (a1 a2 : [A]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l,rel (eqsum_LR ARel BRel) l (inl a1) (inl a2) ->  rel ARel l a1 a2.
 Proof. ssa.
 Qed.
 
-Lemma rel_eqsum_L2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, rel (eqsum_L ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2. 
+Lemma rel_eqsum_LR2' : forall (A B : Ty) (b1 b2 : [B]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, rel (eqsum_LR ARel BRel) l (inr b1) (inr b2) -> rel BRel l b1 b2.
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum_L : forall (A B : Ty) (a : [A]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, dis ARel l a -> dis (eqsum_L ARel BRel) l (inl a). 
+Lemma dis_eqsum_LR : forall (A B : Ty) (a : [A]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, dis ARel l a -> dis (eqsum_LR ARel BRel) l (inl a).
 Proof. ssa.
 Qed.
 
-Lemma dis_eqsum_L2 : forall (A B : Ty) (a : [A]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, dis (eqsum_L ARel BRel) l (inl a) -> dis ARel l a. 
+Lemma dis_eqsum_LR2 : forall (A B : Ty) (a : [A]) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l, dis (eqsum_LR ARel BRel) l (inl a) -> dis ARel l a.
 Proof. ssa.
+Qed.
+
+(* Under eqsum_LR with a right side of which nothing is unobservable, as for a
+   loop's events when outputs are never hidden, the tags agree. *)
+Lemma eqsum_LR_split (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l i0 i1 :
+  (forall b, ~ dis BRel l b) -> rel (eqsum_LR ARel BRel) l i0 i1 ->
+  (exists i0' i1', i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1') \/
+  (exists i0' i1', i0 = inr i0' /\ i1 = inr i1' /\ rel BRel l i0' i1').
+Proof.
+  move=> HB; case: i0 => [a|b]; case: i1 => [a'|b'] /=.
+  - by left; exists a, a'.
+  - by case=> _ /HB.
+  - by case=> /HB.
+  - by right; exists b, b'.
 Qed.
 
 

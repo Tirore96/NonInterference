@@ -269,7 +269,7 @@ handler runs.
 % false_equiv / private_equiv), one framed row per equivalence, its operator in the
 % title; slots in the order of fig:io
 \begin{tikzpicture}[font=\scriptsize]
-\foreach \x/\c in {0/G, 0.6/P, 1.2/S, 1.8/N, 2.4/D, 3.0/T}
+\foreach \x/\c in {0/G, 0.6/P, 1.2/R, 1.8/N, 2.4/D, 3.0/T}
   \node[anchor=south] at (\x+0.3,0.18) {\c};
 \foreach \x in {0, 0.6, 1.2, 3.0}
   {\draw (\x,-0.18) rectangle (\x+0.6,0.18); \node[font=\tiny] at (\x+0.3,0) {$\Ef$};}
@@ -277,11 +277,11 @@ handler runs.
 \draw[rounded corners=2pt] (-0.07,-0.25) rectangle (3.67,0.55);
 \node[anchor=south] at (1.8,0.55) {$\Eb$};
 % the gate equivalence of the visible slots: a bit read as a sum
-\foreach \x/\l in {4.4/false, 5.2/true} \node[anchor=south] at (\x+0.4,0.18) {\l};
-\draw[fill=black!28] (4.4,-0.18) rectangle (5.2,0.18);
-\draw[fill=white] (5.2,-0.18) rectangle (6.0,0.18);
+\foreach \x/\l in {4.4/true, 5.2/false} \node[anchor=south] at (\x+0.4,0.18) {\l};
+\draw[fill=white] (4.4,-0.18) rectangle (5.2,0.18);
+\draw[fill=black!28] (5.2,-0.18) rectangle (6.0,0.18);
 \draw[rounded corners=2pt] (4.33,-0.25) rectangle (6.07,0.55);
-\node[anchor=south] at (5.2,0.55) {$\Ef$: $+$};
+\node[anchor=south] at (5.2,0.55) {$\Ef$: $+_R$};
 \end{tikzpicture}
 \caption{Gate bits: $\Eb$ per slot, $\Ef$ where marked and $\priveq$ on the dark N and
   D cells; on the right, $\Ef$ read as a sum, shaded as in \cref{fig:io}.}
@@ -322,8 +322,9 @@ secret pids are related, and the slots fall into two groups (\cref{fig:equivs}).
 
 \emph{Slots no secret pid selects show whether they ran.} Both secret pids map to \code{false}, so
 related pids go to equal bits, and we take $\Eb = \Ef$ (\cref{fig:equivs},
-\m{false_equiv}): $\priveq + \pubeq$ on a bit read as a sum,
-\code{false} on the private side (\m{false_equiv_sum_rel}). So \code{false} is
+\m{false_equiv}): $\pubeq +_R \priveq$ on a bit read as a sum,
+\code{true} on the public side and \code{false} on the private side
+(\m{false_equiv_sum_rel}). So \code{false} is
 unobservable at $\Lo$ and \code{true} is public. Every level is aware of
 \code{true}, so
 $\Aw(\mathsf{true},\Ef) = \{\Lo,\Hi\}$ and the slot's output equivalence is

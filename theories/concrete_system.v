@@ -61,14 +61,18 @@ Definition alternate (A B C : Ty) (x y : [B]) (z : [C]) (pred : [A] -> bool) :=
 Definition p_priv_concrete := @alternate Bool Bool Unit Syscall Idle tt (fun i => i == Notify).
 
 (* scheduler =
-     map id (fun o => o.1 + 2)
-       (sta (fun _ v => v) (fun _ v => v.+1 %% 2) 1 (out tt)) *)
-Definition scheduler : Proc Empty Nat :=
-  map (O := Times Nat Unit) (O' := Nat) id
-    (fun o => o.1 + 2)                        (*skip the interrupt handlers to reach p_priv_concrete and p_pub_concrete*)
+     map id (fun o => o.1 == 0)
+       (sta (fun _ v => v) (fun _ v => v.+1 %% 2) 1 (out tt))
+
+   It alternates the bit [user_pid] reads: true for the private user, false
+   for the public one.  The state is a counter modulo 2, like a handler's,
+   which the trace tactics reduce as they do the handlers. *)
+Definition scheduler : Proc Empty Bool :=
+  map (O := Times Nat Unit) (O' := Bool) id
+    (fun o => o.1 == 0)
     (sta (V := Nat) (O := Unit)
        (fun _ v => v) (fun _ v => v.+1 %% 2)
-       1                                      (*will start scheduling the high process*)
+       1                                      (*counted to 0 before the first output: starts with the private user*)
        (out (O := Unit) tt)).
 
 (* The concrete handler length: handlers are two output steps long. *)
@@ -90,8 +94,8 @@ Definition pool_concrete := pool handler_runtime p_pub_concrete p_priv_concrete 
 Definition Tsum' := ([T_in] + [T_outC])%type.
 Definition Tsum := Sum T_in T_out_userviewC.
 
-Definition dI' : Tsum' := inl (inl tt).
-Definition tI' : Tsum' := inl (inr tt).
+Definition dI' : Tsum' := inl (inr tt).
+Definition tI' : Tsum' := inl (inl tt).
 Definition low_out x : [T_outC] := (Some x,(None,(None,(None,(None,None))))).
 Definition high_out x : [T_outC] := (None,(Some x,(None,(None,(None,None))))).
 Definition sched_o x : [T_outC] := (None,(None,(Some x,(None,(None,None))))).
@@ -109,8 +113,8 @@ Definition out_get' : Tsum' := inr (low_out GetRequest).
 Definition out_nop' : Tsum' := inr (high_out Idle).
 Definition out_syscall' : Tsum' := inr (high_out Syscall).
 
-Definition sched_pub' : Tsum' := inr (sched_o 3).
-Definition sched_priv' : Tsum' := inr (sched_o 2).
+Definition sched_pub' : Tsum' := inr (sched_o false).
+Definition sched_priv' : Tsum' := inr (sched_o true).
 
 Definition nop_step' : Tsum' :=  inr (nop_o (Nothing)).
 Definition nop_done' : Tsum' :=  inr (nop_o (Notify)).
@@ -119,8 +123,8 @@ Definition out_get : [Tsum] := inr (Some (inl (GetRequest))).
 Definition out_nop : [Tsum] := inr (Some (inr Idle)).
 Definition out_syscall : [Tsum] := inr (Some (inr Syscall)).
 Definition w_None : [Tsum] := inr None.
-Definition tI : [Tsum] := inl (inr tt).
-Definition dI : [Tsum] := inl (inl tt).
+Definition tI : [Tsum] := inl (inl tt).
+Definition dI : [Tsum] := inl (inr tt).
 
 Definition seqtype' := seq Tsum'.
 Definition seqtype := seq ([T_in] + [T_out_userviewC]).

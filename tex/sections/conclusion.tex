@@ -23,7 +23,7 @@ to ensure that a real implementation is safe.}
 the channel, when secret handlers run and for how long must be fixed by public events;
 servicing them only in time slices of fixed length, opened by the public timer handler
 and padded by a dummy handler, achieves this. We proved the leak and its absence in
-Rocq, the latter for any non-interfering scheduler and user processes, by composing
+Rocq, the latter for any scheduler and user processes, by composing
 generic non-interference theorems over the structure of the model. Both results hold
 for an attacker who sees the public part of the schedule, and for the
 user view. The proof did more than check the policy: it fixed the classification of the

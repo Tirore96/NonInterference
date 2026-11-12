@@ -16,7 +16,13 @@ induction on a trace. \m{NI_paper} proves the two equivalent, so
 details and the development's files.
 
 \paragraph{Scope} The development fixes the shape of the pool: six slots, with one
-scheduler, two user processes and three handlers, and the two interrupts.
+scheduler, two user processes and three handlers, and the two interrupts. Interrupts
+are inputs. What causes a disk interrupt, such as the disk answering a request of the
+private user process, is left to the environment, and \cref{thm:main} holds for every
+sequence of interrupts, so for every such disk. The scheduler and the public user
+process take no input, so a scheduler is a fixed sequence of choices: it cannot wake a
+process when its interrupt arrives, a channel the model leaves out. The private user
+process emits only private output, and all handlers have the same fixed length.
 \Cref{thm:leak} is a counterexample on the concrete system. The listings are typed by hand
 from the Rocq sources, and the runs in the figures are proved traces (\appx).
 

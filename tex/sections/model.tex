@@ -30,8 +30,10 @@ paper keeps apart:
 \item \emph{U}, a user process or the scheduler. The public user process issues
   requests (\code{Get}) whose results the attacker sees. The private user process
   takes the disk handler's output as input, and emits \code{Sys} when notified of a
-  disk event and \code{Idle} otherwise. The scheduler proposes which user process
-  runs next.
+  disk event and \code{Idle} otherwise. It is why the disk interrupt is secret: it is
+  the process doing disk I/O, and the legitimate recipient of the interrupt. The disk
+  that raises an interrupt in answer to a request is part of the environment. The
+  scheduler chooses which user process runs next.
 \item \emph{T}, the timer handler. The timer's interrupt is public, and when its
   handler finishes it sets the reschedule flag, which is how control reaches the
   scheduler.
@@ -88,8 +90,9 @@ controller.
   \code{inl false} for the NOP handler, and every other process on the \code{inr}
   side, numbered from 0: timer handler, scheduler, private user, public user, where
   the system starts (\m{initial_pid}).
-\item The \emph{previous pid}, a number, is the pid a handler
-  displaced, which control returns to.
+\item The \emph{previous pid}, a bit, names the user process a handler last
+  displaced, which control returns to: \code{true} for the private user and
+  \code{false} for the public one (\m{user_pid}).
 \item The \emph{reschedule flag} is the boolean \m{re_sched}.
 \item The \emph{slice counter} \m{slice_count} counts the output steps until
   the current time slice closes, and is \code{0} outside a slice; the immediate
@@ -119,8 +122,10 @@ Its first two stages, left open here, are the \emph{service policy}:
 \code{observe_policy} reacts to the output, and \code{advance_policy} reads only the
 state. The third, \m{initiate_next}, computes the next pid.
 
-The next pid is chosen in two steps. \m{initiate_next} first adopts the pid the scheduler
-proposed, if the scheduler ran (\m{apply_scheduler_choice}), and then chooses by
+The next pid is chosen in two steps. \m{initiate_next} first adopts the user process
+the scheduler chose, if the scheduler ran (\m{apply_scheduler_choice}): the
+scheduler emits a bit, which the model maps to one of the two user pids, so no
+scheduler can select a handler. It then chooses by
 four rules, tried in order:
 \begin{enumerate}
 \item if a handler is running (all masks are set), it continues;
@@ -130,8 +135,8 @@ four rules, tried in order:
 \item otherwise, the current process continues.
 \end{enumerate}
 If several handlers can start, the order is timer, disk, NOP.
-Starting a handler saves the current pid as the previous pid, unless it is a
-handler, points the current pid at the handler, sets all masks and clears the handler's
+Starting a handler saves the current pid as the previous pid if it is a user
+process, points the current pid at the handler, sets all masks and clears the handler's
 pending bit (\m{initiate_handler}).
 
 \subsection{The loop}\label{sec:loop}

@@ -3,9 +3,9 @@
 Two interrupt policies instantiate the model: \m{model_immediate}, which
 leaks, and \m{model_sliced}, which does not.
 Both run on one concrete system. Its public user process emits
-\code{Get} whenever it runs, its private user process emits \code{Sys} when notified by
-the disk handler and \code{Idle} otherwise, and the scheduler alternates between
-them. Handlers take $\mathit{runtime} = 2$ steps.
+\code{Get} whenever it runs, its private user process emits \code{Sys}, its next disk
+request, when the disk handler notifies it that the last one completed, and
+\code{Idle} otherwise, and the scheduler alternates between them. Handlers take $\mathit{runtime} = 2$ steps.
 
 \subsection{Immediate interrupt handling, and the leak}\label{sec:leak}
 
@@ -21,7 +21,7 @@ interrupt controller clear (fields as in \cref{sec:global-state}, with one (pend
 mask) pair per handler):
 \begin{lstlisting}
 immediate_init :=
-  ((inr 3, 3),          (* public user *)
+  ((inr 3, false),      (* public user *)
    (false, (0,           (* slice counter *)
     ((false,false),      (* NOP *)
      ((false,false),     (* disk *)
@@ -111,25 +111,12 @@ next output step $\stepO{p_2}{o_2}{p_3}$ is the disk handler's, so $o_2$ has
 \code{None} in the public slot, and $o_2 \not\Eout_\Lo o_G$.
 \end{proof}
 
-The counterexample turns on the public slot alone, so the leak needs only the public
-user's output. The \emph{public view} of a model \code{m},
-\code{map id public_output m}, keeps only that slot, as a value of type
-\code{Opub + 1} at $\pubeq +_{LR} \one^\emptyset$ (\m{out_equiv_publicview}):
+The counterexample turns on the public slot alone: the leak already shows when only the
+public user's output is kept (\m{model_immediate_publicview_not_NI}).
 
-\begin{corollary}[Public-view leak,\newline \m{model_immediate_publicview_not_NI}]\label{cor:leak-publicview}
-For the concrete system,
-\[
-\mathsf{publicview}\;\mathsf{model\_immediate\_concrete}
-  \notin \NI(\Ein,\, \pubeq +_{LR} \one^\emptyset).
-\]
-\end{corollary}
-
-\begin{proof}
-The counterexample of \cref{thm:leak}: $o_2$ and $o_G$ differ in the public slot.
-\end{proof}
-
-To present results in user space, we abstract from interrupts and
-scheduling to what the user processes emit. The \emph{user view} of a model \code{m},
+Our claim is about user space: an attacker there sees the public user's output and
+when each user process runs, and neither the handlers nor the scheduler. The
+\emph{user view} of a model \code{m},
 \code{map id parse_output m}, keeps only the two user slots: \m{parse_output} maps an
 output into \code{(Opub + Opriv) + 1}, for the user processes' output
 types \code{Opub} and \code{Opriv}: the public user's as
@@ -139,7 +126,8 @@ types \code{Opub} and \code{Opriv}: the public user's as
 The user view needs its own equivalence. Under $\pubeq +_{LR} \priveq$ a
 private-user output would be hidden at $\Lo$, and so related to \code{None}, hiding
 whether the private user ran. The plain sum $\pubeq + \priveq$ hides neither side:
-under it the attacker learns only which side a value is on.
+under it the attacker learns which user process emitted, and the value if it was the
+public one.
 
 \begin{definition}[User-view equivalence]\label{def:userview}
 The user-view equivalence $\Euser$ (\m{out_equiv_userview}) is
@@ -239,10 +227,11 @@ the timer stays masked while its own handler runs.
 
 The sliced policy is non-interfering:
 
-\begin{theorem}[Security, \m{model_sliced_NI}]\label{thm:main}
-If the scheduler and the public user process are non-interfering at
-$\pubeq$ on input and output, and the private user process is
-non-interfering at $\priveq$ on input and output, then
+\begin{theorem}[Security,\newline \m{model_sliced_NI_unconditional}]\label{thm:main}
+For all $\mathit{runtime}$ and $\mathit{runs}$, all output types \code{Opub} and
+\code{Opriv}, and all processes $p_{pub} : \Proc{\mathsf{Empty}}{\mathsf{Opub}}$,
+$p_{priv} : \Proc{\mathsf{Bool}}{\mathsf{Opriv}}$ and
+$p_{sched} : \Proc{\mathsf{Empty}}{\mathsf{Bool}}$,
 \[
 \mathsf{model\_sliced}\;\mathit{runtime}\;\mathit{runs}\;p_{pub}\;p_{priv}\;p_{sched}
   \in \NI(\Ein,\, \Eout).
@@ -255,17 +244,18 @@ that differ only in disk interrupts must give outputs that $\Eout$ relates.
 \Cref{sec:proof} proves it as an instance of a theorem for any interrupt policy
 meeting three obligations (\cref{thm:policy}).
 
-The theorem holds for every scheduler, pair of user processes and output
-types, handler length and slice size, provided each slot process
-is non-interfering at its own classification. This rests on the state update reading
-only \emph{whether} a user slot emitted, never what, so no user behaviour reaches the
-schedule.
+The theorem holds for every scheduler, pair of user processes and output types,
+handler length and slice size. The composition (\m{model_sliced_NI}) asks each slot
+process to be non-interfering at its slot's classification, $\pubeq$ on input and
+output for the scheduler and the public user and $\priveq$ for the private user, and
+every process of these types is: the first two receive no input, and the third is
+private on both sides. The state update reads only \emph{whether} a user slot
+emitted, so no user behaviour reaches the schedule.
 
 The result carries over to the user view:
 
-\begin{corollary}[User-view security,\newline \m{model_sliced_userview_NI}]\label{cor:userview}
-Under the same hypotheses, the user view of the sliced model,
-\m{model_sliced_userview}, is in $\NI(\Ein, \Euser)$.
+\begin{corollary}[User-view security,\newline \m{model_sliced_userview_NI_unconditional}]\label{cor:userview}
+For the model $m$ of \cref{thm:main}, $\mathsf{userview}\;m \in \NI(\Ein,\Euser)$.
 \end{corollary}
 
 \begin{proof}
@@ -275,6 +265,8 @@ $\mathsf{parse\_output} \in \NI(\Eout,\Euser)$ because outputs that $\Eout$ rela
 agree on which user slot, if any, emitted, and on the public user's value.
 \end{proof}
 
-The disk interrupt still affects this view, through the private user's input (\cref{sec:loop}): on the concrete system, the private user emits
-\code{Sys} with a disk interrupt and \code{Idle} without (\m{trace_with_dI},
-\m{trace_no_dI}), a value the attacker cannot see.
+The user view shows both halves of the result on the concrete system. The disk
+interrupt reaches its recipient through the private user's input (\cref{sec:loop}):
+the private user emits \code{Sys} with it and \code{Idle} without (\m{trace_with_dI},
+\m{trace_no_dI}). And the attacker, who cannot see that value, sees the same outputs
+at the same steps in both.

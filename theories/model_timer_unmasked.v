@@ -40,7 +40,7 @@ Definition unmasked_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out O
 Definition model_timer_unmasked (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
+  (p_sched : Proc Empty Bool) : Proc T_in (T_out Opub Opriv) :=
   model runtime sliced_init (@observe_timer_output runtime runs Opub Opriv) (tick_unmasked runtime)
     p_pub p_priv p_sched.
 

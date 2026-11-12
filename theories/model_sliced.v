@@ -21,7 +21,7 @@ Require Export NonInterference.theories.concrete_system.
 
 Definition mask_most : [ic] := ((false,true),((false,true),(false,false))). (*mask set for everything but timer interrupt*)
 
-Definition sliced_init : [state_type] := ((initial_pid,3),(false,(0,mask_most))).
+Definition sliced_init : [state_type] := ((initial_pid,false),(false,(0,mask_most))).
 
 (* A handler boundary: the counter is a multiple of the handler length. *)
 Definition slice_at_boundary (runtime m : nat) := dvdn runtime m.
@@ -70,7 +70,7 @@ Definition sliced_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opu
 Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out Opub Opriv) :=
+  (p_sched : Proc Empty Bool) : Proc T_in (T_out Opub Opriv) :=
   model runtime sliced_init (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime)
     p_pub p_priv p_sched.
 
@@ -224,7 +224,7 @@ case Ms: (masks_set w).
   by case: (slice_open w).
 - case FR: (first_ready w) => [ir|].
   + move: w {Hw Ms FR} => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]].
-    by case: ir => [[[]|[]]|]; case: cur => [b|[|m]]; case: c.
+    by case: ir => [[[]|[]]|]; case: cur => [b|[|[|[|[|m]]]]]; case: c.
   + have NS : ~~ slice_open w.
       apply/negP => S; move: Hw.
       rewrite /secret_gated_at_boundary /gated S Ms orbF /secret_ready.
@@ -281,7 +281,7 @@ End SlicedInvariant.
 Definition model_sliced_userview (runtime runs : nat) (Opub Opriv : Ty)
   (p_pub : Proc Empty Opub)
   (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Nat) : Proc T_in (T_out_userview Opub Opriv) :=
+  (p_sched : Proc Empty Bool) : Proc T_in (T_out_userview Opub Opriv) :=
   userview (model_sliced runtime runs p_pub p_priv p_sched).
 
 

@@ -29,10 +29,10 @@ Require Export NonInterference.theories.model_timer_unmasked.
    =================================================================== *)
 
 (* --- Section 4: the input equivalence.  An interrupt is a sum (generic_model.v,
-   T_in), classified like the current pid: the disk interrupt (inl) is secret,
-   unobservable at bot only; the timer interrupt (inr) is public.  (Paper,
+   T_in): the timer interrupt (inl) is public; the disk interrupt (inr) is
+   secret, unobservable at bot only, which eqsum_R hides.  (Paper,
    Section IV-A.) --- *)
-Definition in_equiv : cEquiv [T_in] := eqsum_L (private_equiv Unit) (public_equiv Unit).
+Definition in_equiv : cEquiv [T_in] := eqsum_R (public_equiv Unit) (private_equiv Unit).
 
 
 (* out_equiv: the 6-slot pool output.  Handler slots are NOP, disk,
@@ -44,6 +44,11 @@ Definition out_equiv (Opub Opriv : Ty) : cEquiv [T_out Opub Opriv] := eqpair (eq
                                                 (eqpair (eqmaybe_nonbot ((private_equiv _)))
                                                    (eqpair (eqmaybe_nonbot (private_equiv _))
                                                       (eqmaybe_all (public_equiv _)))))).
+
+(* No output is unobservable: an output is a tuple, and eqpair hides nothing. *)
+Lemma out_equiv_nodis (Opub Opriv : Ty) l (o : [T_out Opub Opriv]) :
+  ~ dis (out_equiv Opub Opriv) l o.
+Proof. done. Qed.
 
 (* The alphabets the concrete models are instantiated at. *)
 Notation out_equiv_concrete := (out_equiv Bool Bool).
@@ -125,8 +130,8 @@ Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
   move: helper_trace.
-  move/a. move/(_ (inl tt) 0). simpl.
-  have: dis in_equiv \bot (inl tt). ssa.
+  move/a. move/(_ (inr tt) 0). simpl.
+  have: dis in_equiv \bot (inr tt). ssa.
   move=>aa. move/(_ aa).
   move=>Htr. clear a aa.
   inv Htr; clear Htr; match_dd_out_first.
@@ -143,8 +148,8 @@ Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
   move: helper_trace_userview. rewrite /two_gets.
-  move/a. move/(_ (inl tt) 0). simpl.
-  have: dis in_equiv \bot (inl tt). ssa.
+  move/a. move/(_ (inr tt) 0). simpl.
+  have: dis in_equiv \bot (inr tt). ssa.
   move=>aa. move/(_ aa).
   move=>Htr. clear a aa.
   inv Htr; clear Htr; match_dd_out_first.
@@ -161,8 +166,8 @@ Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
   move: helper_trace_publicview. rewrite /two_gets_public.
-  move/a. move/(_ (inl tt) 0). simpl.
-  have: dis in_equiv \bot (inl tt). ssa.
+  move/a. move/(_ (inr tt) 0). simpl.
+  have: dis in_equiv \bot (inr tt). ssa.
   move=>aa. move/(_ aa).
   move=>Htr. clear a aa.
   inv Htr; clear Htr; match_dd_out_first.
@@ -193,11 +198,6 @@ Proof.
   exfalso. ssa. destruct i'. ssa. ssa.
 Qed.
 
-Lemma eqsum_L_llrr (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l i i' : rel (eqsum_L ARel BRel) l i i' -> is_inl i /\ is_inl i' \/ is_inr i /\ is_inr i'.
-Proof.
-  intros. destruct i. destruct i'. ssa.
-  exfalso. ssa. destruct i'. ssa. ssa.
-Qed.
 
 Lemma eqsum_split (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l i0 i1 : rel (eqsum ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
                                                                                                               exists i0' i1', (i0 = inr i0' /\ i1 = inr i1' /\ rel BRel l i0' i1').
@@ -210,16 +210,6 @@ Proof.
   right. exists i. exists i0. ssa.
 Qed.
 
-Lemma eqsum_L_split (A B : Ty) (ARel : cEquiv [A]) (BRel : cEquiv [B]) l i0 i1 : rel (eqsum_L ARel BRel) l i0 i1 -> (exists i0' i1', (i0 = inl i0' /\ i1 = inl i1' /\ rel ARel l i0' i1')) \/
-                                                                                                              exists i0' i1', (i0 = inr i0' /\ i1 = inr i1' /\ rel BRel l i0' i1').
-Proof.
-  intros. apply eqsum_L_llrr in H as H'. destruct H'.
-  destruct H0. destruct i0. destruct i1.
-  left. exists i. exists i0. ssa.
-  ssa. ssa. destruct i0. ssa.
-  destruct i1. ssa.
-  right. exists i. exists i0. ssa.
-Qed.
 
 Lemma eqmaybe_nonbot_not_bot' : forall (A : Ty) l (x y : [Option A]), l <> \bot -> rel (eqmaybe_all (private_equiv _)) l x y -> x = y.
 Proof.
@@ -270,15 +260,15 @@ Lemma false_equiv_aware : forall l, aware false_equiv true l.
 Proof.
 intros. rewrite /aware. intros. ssa. subst. simpl. intro. ssa.
 Qed.
-(* false_equiv is private + public, like in_equiv: read a gate bit as a sum,
-   false on the inl side (unobservable at bot) and true on the inr side
-   (public).  It agrees with eqsum_L along bool_to_sum, on relatedness and on
+(* false_equiv is public +_R private, like in_equiv: read a gate bit as a sum,
+   true on the inl side (public) and false on the inr side (unobservable at
+   bot).  It agrees with eqsum_R along bool_to_sum, on relatedness and on
    unobservability, at every level.  (Paper, Fig. 10.) *)
-Definition bool_to_sum (b : bool) : [Sum Unit Unit] := if b then inr tt else inl tt.
+Definition bool_to_sum (b : bool) : [Sum Unit Unit] := if b then inl tt else inr tt.
 
 Lemma false_equiv_sum_rel l b b' :
   rel false_equiv l b b' <->
-  rel (eqsum_L (private_equiv Unit) (public_equiv Unit)) l (bool_to_sum b) (bool_to_sum b').
+  rel (eqsum_R (public_equiv Unit) (private_equiv Unit)) l (bool_to_sum b) (bool_to_sum b').
 Proof.
 rewrite /false_equiv /bool_to_sum /=.
 case: b; case: b' => /=.
@@ -290,7 +280,7 @@ Qed.
 
 Lemma false_equiv_sum_dis l b :
   dis false_equiv l b <->
-  dis (eqsum_L (private_equiv Unit) (public_equiv Unit)) l (bool_to_sum b).
+  dis (eqsum_R (public_equiv Unit) (private_equiv Unit)) l (bool_to_sum b).
 Proof.
 rewrite /false_equiv /bool_to_sum /=; case: b => /=.
 - by split; case.
@@ -302,7 +292,8 @@ Qed.
    states: masks PUBLIC everywhere; the secret handlers' (disk, NOP)
    pending bits secret via private_pending_equiv; cur_pid's inl/inr tag PUBLIC but the
    bool inside inl (which handler) secret;
-   re_sched, slice_count (the slice), scheduler/user pid all public.
+   re_sched, slice_count (the slice), scheduler/user pid and the saved user
+   (prev_pid) all public.
    (Paper, Section V-A.) === *)
 Definition pids_equiv : cEquiv [pids] := eqpair (eqsum (private_equiv _) (public_equiv _)) (public_equiv _).
 Definition private_pending_equiv : cEquiv [ir_bits] := eqpair (private_equiv _) (public_equiv _).
@@ -338,8 +329,8 @@ Qed.
 (* === The composition-breakdown technique.  output_update is
      fun o => initiate_next o \o (advance_policy \o observe_policy o),
    and fv_NI_comp discharges fv_NI of a pipeline from fv_NI of its stages.  The
-   input event equivalence is eqsum_L: an input may be unobservable, an output
-   never is, which is why input_update_EP reduces to a condition on set_pending
+   input event equivalence is eqsum_LR, but no output is unobservable
+   (out_equiv_nodis), so only an input may be, which is why input_update_EP reduces to a condition on set_pending
    alone.  initiate_next is non-interfering only on states the sliced policy
    reaches, so for the sliced model output_update is proved under the slice
    invariant (sta_NI_pred in theorems.v). === *)
@@ -440,17 +431,17 @@ Qed.
 Lemma p_priv_concrete_NI : NI (private_equiv Bool) (private_equiv Bool) p_priv_concrete.
 Proof.
   eapply map_NI.
-  mrw. intros. apply rel_eqsum_L. eauto.
-  mrw. intros. apply dis_eqsum_L. done.
+  mrw. intros. apply rel_eqsum_LR. eauto.
+  mrw. intros. apply dis_eqsum_LR. done.
   mrw. intros. move: H.
-  instantiate (1:= eqsum_L _ _). intros.
+  instantiate (1:= eqsum_LR (private_equiv Bool) (eqpair (private_equiv Bool) (public_equiv Unit))). intros.
   destruct i. destruct i'. apply rel_refl. ssa.
   destruct i'. ssa.
-  apply rel_eqsum_L2' in H.
+  apply rel_eqsum_LR2' in H.
   destruct i. destruct i0.
   2: apply loop_NI.
   destruct i1. destruct i2.
-  move:H. instantiate (1:=  (eqpair (private_equiv Bool) _)).
+  move:H.
   move/rel_eqpair. case. rewrite !pair_rewr.
   intros. clear b. ssa. destruct a. ssa. subst. case_if. subst. ssa. subst. ssa.
   ssa.
@@ -460,21 +451,21 @@ Proof.
   apply f_NI_id.
   apply f_PU_id.
 
-  mrw. intros. apply rel_eqsum_L2. eauto.
+  mrw. intros. apply rel_eqsum_LR2. eauto.
 
   apply sta_NI.
   mrw. intros. eauto.
   mrw. intros.
   case: (eqVneq l \bot) => [->|/eqP N]; first exact: private_bot.
   apply (private_not_bot N). move/(private_not_bot' N): H0 => ->.
-  by case/eqsum_L_split: H => [[o][o'][->][->] /(private_not_bot' N) ->|[p][p'][->][->] _].
-  mrw. intros. destruct i. apply dis_eqsum_L2 in H. ssa. ssa.
+  by case: (@eqsum_LR_split _ _ _ (eqpair (private_equiv Bool) (public_equiv Unit)) _ _ _ (fun _ H => H) H) => [[o][o'][->][->] /(private_not_bot' N) ->|[p][p'][->][->] _].
+  mrw. intros. destruct i. apply dis_eqsum_LR2 in H. ssa. ssa.
   apply out_NI.
   Unshelve. all: exact (public_equiv _).
 Qed.
 
-(* Slot 3, the scheduler.  Its output -- the pid it picks -- is public. *)
-Lemma scheduler_NI : NI (public_equiv Empty) (public_equiv Nat) scheduler.
+(* Slot 3, the scheduler.  Its output -- the user it picks -- is public. *)
+Lemma scheduler_NI : NI (public_equiv Empty) (public_equiv Bool) scheduler.
 Proof.
   eapply map_NI. eauto. eauto.
   instantiate (1:=eqpair _ _).
@@ -499,7 +490,7 @@ Qed.
    The result holds for *any* scheduler and any two user processes that are
    themselves non-interfering at the classification their slot declares.  That
    it can: [state_step] never reads a user process's output value, only whether
-   the slot produced one -- [is_sched_out] matches [(None,(None,(Some n,_)))] --
+   the slot produced one -- [is_sched_out] matches [(None,(None,(Some b,_)))] --
    so no user behaviour reaches the schedule, and fv_NI, the one hard
    obligation, does not depend on which processes fill the slots.
 
@@ -514,11 +505,11 @@ Section Parametric.
 
 Variable p_pub : Proc Empty Opub.
 Variable p_priv : Proc Bool Opriv.
-Variable p_sched : Proc Empty Nat.
+Variable p_sched : Proc Empty Bool.
 
 Hypothesis p_pub_NI : NI (public_equiv Empty) (public_equiv Opub) p_pub.
 Hypothesis p_priv_NI : NI (private_equiv Bool) (private_equiv Opriv) p_priv.
-Hypothesis p_sched_NI : NI (public_equiv Empty) (public_equiv Nat) p_sched.
+Hypothesis p_sched_NI : NI (public_equiv Empty) (public_equiv Bool) p_sched.
 
 (* The slice stages write two fields the same way in both related states: the
    NOP pending bit (private) at each handler boundary, and re_sched (public) when
@@ -599,6 +590,7 @@ Proof.
   move=>_. (*drop*)
 
   apply/rel_eqpair2;con;try solve [ssa].
+  by case: y0; ssa. (*either user pid, the same on both sides*)
 
   move=>[]->[]->//.
 Qed.
@@ -707,7 +699,7 @@ Proof.
 move: w w' => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]] [[cur' prev'] [rs' [c' [[dp' dm'] [[kp' km'] [tp' tm']]]]]].
 rewrite /pub_view /get_cur_pid /get_prev_pid /get_pids /get_re_sched /get_bool_state /get_slice_count /get_ic_count /get_ir_mask /get_mask' /get_ir_bits /get_ir_bits' /get_ic /get_ir_pending /get_pending' /=.
 case=> Hc -> -> -> -> -> -> ->.
-case: ir ir' => [[[]|[]]|] [[[]|[]]|] //= _; case: cur cur' Hc => [b|n] [b'|n'] //=; try case=> ->; try case: n' => [|n']; by vm_compute.
+case: ir ir' => [[[]|[]]|] [[[]|[]]|] //= _; case: cur cur' Hc => [b|n] [b'|n'] //=; try case=> ->; try case: n' => [|[|[|[|n']]]]; by vm_compute.
 Qed.
 
 (* The last branch of [initiate_next]: no handler ready. *)
@@ -807,7 +799,7 @@ Lemma set_pending_EP : f_EP in_equiv state_type_equiv set_pending.
 Proof.
   rewrite /set_pending.
   mrw. intros.
-  case: i H => [[]|[]] H; simpl in H; last done. subst.
+  case: i H => [[]|[]] H; simpl in H; first done. subst.
 
   move: v => [[cur prev]] [re_sched] [slice_count] [[def_pending def_mask]] [[disk_pending disk_mask]] [timer_pending timer_mask].
   apply/rel_eqpair2. con. rewrite !pair_rewr. ssa. de cur.
@@ -915,29 +907,30 @@ Qed.
 (* The input update.  An event equivalence never relates an inl to an inr, and an
    output fed back leaves the state alone. *)
 Lemma input_update_NI :
-  fv_NI (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv state_type_equiv
+  fv_NI (eqsum_LR in_equiv (out_equiv Opub Opriv)) state_type_equiv state_type_equiv
     (@input_update Opub Opriv).
 Proof.
 move=> l e e' He v v' Hv.
 case: e e' He => [i|o] [i'|o'] He /=.
-- apply: set_pending_NI Hv; exact: rel_eqsum_L' He.
-- by case/eqsum_L_llrr: He => -[].
-- by case/eqsum_L_llrr: He => -[].
+- apply: set_pending_NI Hv; exact: rel_eqsum_LR' He.
+- by case: He => _ /out_equiv_nodis.
+- by case: He => /out_equiv_nodis.
 - exact: Hv.
 Qed.
 
-(* Under eqsum_L only an inl is ever unobservable. *)
+(* Under eqsum_LR with no output unobservable, only an inl is ever
+   unobservable. *)
 Lemma input_update_EP :
-  f_EP (eqsum_L in_equiv (out_equiv Opub Opriv)) state_type_equiv (@input_update Opub Opriv).
+  f_EP (eqsum_LR in_equiv (out_equiv Opub Opriv)) state_type_equiv (@input_update Opub Opriv).
 Proof. by move=> l [i|o] Hi v //; apply: set_pending_EP. Qed.
 
 (* The state cell: the first hard step of the proof of model_policy_NI.  For any
    inner process, the obligations of sta_NI_pred hold with the slice invariant.
    (Paper, Section V-C.) *)
 Lemma policy_state_cell_NI p :
-  NI (eqpair_R state_type_equiv (eqsum_L in_equiv (out_equiv Opub Opriv)))
+  NI (eqpair_R state_type_equiv (eqsum_LR in_equiv (out_equiv Opub Opriv)))
      (out_equiv Opub Opriv) p ->
-  NI (eqsum_L in_equiv (out_equiv Opub Opriv))
+  NI (eqsum_LR in_equiv (out_equiv Opub Opriv))
      (eqpair state_type_equiv (out_equiv Opub Opriv))
      (sta (@input_update Opub Opriv)
         (output_update observe_policy advance_policy) init_policy p).
@@ -1085,19 +1078,18 @@ Theorem model_policy_NI : NI in_equiv (out_equiv Opub Opriv)
 Proof.
   rewr;simpl;rewr;simpl.
   eapply map_NI.
-  instantiate (1:= eqsum_L in_equiv (out_equiv Opub Opriv)). ssa. ssa.
+  instantiate (1:= eqsum_LR in_equiv (out_equiv Opub Opriv)). ssa. ssa.
   mrw. intros.
-  2:eapply loop_NI. apply eqsum_L_llrr in H as H'. destruct H'.
-  destruct i. destruct i'. ssa. ssa. ssa.
-  destruct i. ssa. destruct i'. ssa.
-  apply rel_eqsum_L2' in H.
+  2:eapply loop_NI.
+  case/(eqsum_LR_split (@out_equiv_nodis _ _ l)): H => [[x][x'][->][->] _|[o][o'][->][->] H].
+  done.
   rewrite /inr_or_def. done.
 
   eapply map_NI.
   eauto. eauto.
   instantiate (1:= eqpair state_type_equiv (out_equiv Opub Opriv)).
   mrw. intros.
-  apply: rel_eqsum_L2.
+  apply: rel_eqsum_LR2.
   case/rel_eqpair: H;eauto.
 
   (*state update, under the slice invariant*)
@@ -1113,7 +1105,7 @@ Proof.
   apply rel_eqpair_R2' in H.
   destruct H. destruct H.
   remember H0. clear Heqr.
-  move/eqsum_L_split : H0. case.
+  move/(eqsum_LR_split (@out_equiv_nodis _ _ l)) : H0. case.
   move=>[]x0[]x1[]->[]->. auto.
   move=>[]x0[]x1[]->[]->Hout.
   apply rel_eqmaybe_nobody2.
@@ -1148,7 +1140,7 @@ Proof.
   apply par_NI.
   exact: (@slot_visible_NI Bool Opriv 4 _ id (private_equiv _) (private_equiv _) _ erefl erefl (fun _ _ _ H => H) p_priv_NI).
   apply par_NI.
-  exact: (@slot_visible_NI Empty Nat 3 _ _ (public_equiv _) _ _ erefl erefl (slot_no_input _) p_sched_NI).
+  exact: (@slot_visible_NI Empty Bool 3 _ _ (public_equiv _) _ _ erefl erefl (slot_no_input _) p_sched_NI).
   apply par_NI.
   exact: (@slot_hidden_NI Empty Bool 2 _ _ (public_equiv _) (private_equiv _) _ (slot_no_input _) ir_handler_private_NI).
   apply par_NI.
@@ -1242,6 +1234,53 @@ Qed.
 End Parametric.
 
 End Parameters.
+
+
+(* === The hypotheses of model_sliced_NI hold for every process. ===
+   A process with input type Empty receives no input, and each clause of NI
+   quantifies over an input, so it is non-interfering at any equivalences.  A
+   process whose input and output are both private is non-interfering too: at
+   bot it relates and hides everything, and above bot it relates only equal
+   values and hides none.  So the scheduler, the public user and the private
+   user always meet their hypotheses, and the theorem holds unconditionally. *)
+Lemma NI_empty_input (O : Ty) (IRel : cEquiv [Empty]) (ORel : cEquiv [O]) (p : Proc Empty O) :
+  NI IRel ORel p.
+Proof. move=> l; split; [|split]; by move=> t []. Qed.
+
+Lemma Trace_private_bot (A B : Ty) (t : seq ([A] + [B])) (p : Proc A B) :
+  Trace (private_equiv B) \bot t p.
+Proof.
+elim: t p => [|[i|o] t IH] p; first by constructor.
+- case: (@Proc_has_input _ _ p i) => p' H. by econstructor; eauto.
+- case: (@Proc_has_output _ _ p) => o' [p' H].
+  econstructor; [exact: H | exact: private_bot | exact: IH].
+Qed.
+
+Lemma NI_private_private (A B : Ty) (p : Proc A B) : NI (private_equiv A) (private_equiv B) p.
+Proof.
+move=> l. case: (eqVneq l \bot) => [->|/eqP N].
+- split; [|split]; intros; exact: Trace_private_bot.
+- split; [|split].
+  + by move=> t i i' n /(private_not_bot' N) <-.
+  + by move=> t i n /private_dis.
+  + by move=> t i n /private_dis.
+Qed.
+
+Theorem model_sliced_NI_unconditional (runtime runs : nat) (Opub Opriv : Ty)
+  (p_pub : Proc Empty Opub) (p_priv : Proc Bool Opriv) (p_sched : Proc Empty Bool) :
+  NI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
+Proof.
+apply: model_sliced_NI;
+  [exact: NI_empty_input | exact: NI_private_private | exact: NI_empty_input].
+Qed.
+
+Theorem model_sliced_userview_NI_unconditional (runtime runs : nat) (Opub Opriv : Ty)
+  (p_pub : Proc Empty Opub) (p_priv : Proc Bool Opriv) (p_sched : Proc Empty Bool) :
+  NI in_equiv (out_equiv_userview Opub Opriv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
+Proof.
+apply: model_sliced_userview_NI;
+  [exact: NI_empty_input | exact: NI_private_private | exact: NI_empty_input].
+Qed.
 
 
 (* === The concrete system, recovered by instantiation. === *)

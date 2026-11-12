@@ -62,7 +62,8 @@ $\dis^A_\ell\,x$. The predicate was more convenient to mechanise, and the two gi
 the same non-interference (\m{NI_lEquiv}).
 
 The equivalences of our model are built from base equivalences with formers. We say
-$\eqv{A}$ \emph{hides} $x$ at $\ell$ when $\dis^A_\ell\,x$, and write the predicate
+$\eqv{A}$ \emph{hides} $x$ at $\ell$, and $x$ is \emph{unobservable} at $\ell$, when
+$\dis^A_\ell\,x$, and write the predicate
 of a built equivalence with the same superscript as its relation.
 
 \begin{definition}[Base equivalence, \m{base_equiv}]\label{def:base}
@@ -113,7 +114,7 @@ $\eqo{X} \oplus \eqo{Y}$ on $X + Y$ is given by
 \mathsf{inl}\,x \mathrel{\eqo{X}_\ell \oplus \eqo{Y}_\ell} \mathsf{inr}\,y &\iff
   \dis^{X \oplus Y}_\ell\,(\mathsf{inl}\,x) \wedge \dis^{X \oplus Y}_\ell\,(\mathsf{inr}\,y),
 \end{align*}
-where
+and symmetrically, where
 \begin{align*}
 \dis^{X + Y}_\ell\,z &\iff \mathsf{false}, \\
 \dis^{X +_R Y}_\ell\,z &\iff \exists y.\; z = \mathsf{inr}\,y \wedge \dis^Y_\ell\,y, \\
@@ -166,9 +167,9 @@ $\eqv{V}$ for an equivalence on the state of a \code{sta} and $\eqv{B}$ for one 
 \emph{gate bits} of a \code{swi}, the tag and the input bit that toggle its phase.
 
 \begin{definition}[Side conditions]\label{def:side}
-For all equivalences $\eqv{X}$ and $\eqv{Y}$, functions $f$, values $x \in X$,
-processes $p$ with output type $Y$ and levels $\ell$, the side conditions of
-\code{map}, \code{sta} and \code{swi} are
+For all equivalences $\eqv{X}$, $\eqv{Y}$ and $\eqv{V}$, functions $f$ and processes
+$p$ with output type $Y$, and, in the lines of \code{swi}, all $x \in X$ and levels
+$\ell$, the side conditions of \code{map}, \code{sta} and \code{swi} are
 \begin{alignat*}{2}
 &\text{\small\code{map}}\; & f \in \NI(\eqv{X},\eqv{Y}) &\iff \forall \ell, x, x'.\;
   x \eqv{X}_\ell x' \Rightarrow f\,x \eqv{Y}_\ell f\,x' \\
@@ -181,13 +182,14 @@ processes $p$ with output type $Y$ and levels $\ell$, the side conditions of
   \dis^X_\ell\,x \Rightarrow f\,x\,v \eqv{V}_\ell v \\[3pt]
 &\text{\small\code{swi}} & \ell \in \Aw(x,\eqv{X}) &\iff \forall x'.\; x \eqv{X}_\ell x' \\
 &&  &\hphantom{{}\iff{}} \Rightarrow x = x' \wedge \neg\dis^X_\ell\,x' \\
-&& \ell \in \Ob(p,\eqv{Y}) &\iff \dis^Y_\ell\,y \text{ for every output $y$ of $p$}
+&& \ell \in \Ob(p,\eqv{Y}) &\iff \forall t.\; \perf{p}{t}{\ell} \\
+&&  &\hphantom{{}\iff{}} \Rightarrow \dis^Y_\ell\,y \text{ for every $!y$ in $t$}
 \end{alignat*}
 \end{definition}
 
 A function is non-interfering if it maps related values to related ones
 (\m{f_NI}, \m{fv_NI}), unobservable-preserving if it maps unobservable values to
-unobservable ones (\m{f_PU}), and equivalence-preserving if an unobservable input
+unobservable ones (\m{f_PU}), and preserves equivalence if an unobservable input
 does not visibly move the state (\m{f_EP}). An observer is \emph{aware} of $x$
 (\m{aware}) if it can tell $x$ from every other value and sees it, and \emph{oblivious} to $p$
 (\m{oblivious}) if it sees none of $p$'s outputs.
@@ -220,7 +222,6 @@ For all processes, functions and equivalences of matching types:
 \end{enumerate}
 \end{theorem}
 
-% Got to here.
 Two of these carry substantial side conditions: the state update of \code{sta} must
 be non-interfering and equivalence-preserving, and \code{swi} requires every observer
 to be aware of the gate or oblivious to the gated process.
