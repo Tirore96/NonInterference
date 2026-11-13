@@ -487,15 +487,17 @@ Qed.
    to the pool; the only non-mechanical obligation is fv_NI of the state
    transition (section 7).  (Paper, Section V.)
 
-   The result holds for *any* scheduler and any two user processes that are
-   themselves non-interfering at the classification their slot declares.  That
-   it can: [state_step] never reads a user process's output value, only whether
-   the slot produced one -- [is_sched_out] matches [(None,(None,(Some b,_)))] --
-   so no user behaviour reaches the schedule, and fv_NI, the one hard
-   obligation, does not depend on which processes fill the slots.
-
-   [p_pub_concrete_NI], [p_priv_concrete_NI] and [scheduler_NI] above are the instances that give
-   back the concrete system; see the corollaries at the end of the file. === *)
+   The result is stated for a scheduler and two user processes that are
+   non-interfering at the classification their slot declares, and these
+   hypotheses hold of every process of these types: the scheduler and the
+   public user take no input ([NI_empty_input]), and the private user's input
+   and output are both private ([NI_private_private]).  So the result holds for
+   *any* scheduler and user processes ([model_sliced_NI_unconditional], after
+   the section).  That it can: [state_step] never reads a user process's output
+   value, only whether the slot produced one -- [is_sched_out] matches
+   [(None,(None,(Some b,_)))] -- so no user behaviour reaches the schedule, and
+   fv_NI, the one hard obligation, does not depend on which processes fill the
+   slots. === *)
 
 (* The parametric proof cannot unfold its own processes, so [rewr] drops
    /p_pub_concrete /alternate /p_priv_concrete /scheduler. *)
@@ -1280,6 +1282,25 @@ Theorem model_sliced_userview_NI_unconditional (runtime runs : nat) (Opub Opriv 
 Proof.
 apply: model_sliced_userview_NI;
   [exact: NI_empty_input | exact: NI_private_private | exact: NI_empty_input].
+Qed.
+
+(* Any policy meeting the three policy obligations, for any processes. *)
+Theorem model_policy_NI_unconditional (Opub Opriv : Ty) (runtime : nat)
+  (p_pub : Proc Empty Opub) (p_priv : Proc Bool Opriv) (p_sched : Proc Empty Bool)
+  (init_policy : [state_type])
+  (observe_policy : [T_out Opub Opriv] -> [state_type] -> [state_type])
+  (advance_policy : [state_type] -> [state_type]) :
+  secret_gated init_policy ->
+  (forall o v, secret_gated v ->
+     secret_gated_at_boundary (advance_policy (observe_policy o v))) ->
+  fv_NI (out_equiv Opub Opriv) state_type_equiv state_type_equiv
+    (fun o => advance_policy \o observe_policy o) ->
+  NI in_equiv (out_equiv Opub Opriv)
+    (model runtime init_policy observe_policy advance_policy p_pub p_priv p_sched).
+Proof.
+move=> Hinit Hgated Hservice.
+by apply: model_policy_NI => //;
+  first [exact: NI_empty_input | exact: NI_private_private].
 Qed.
 
 

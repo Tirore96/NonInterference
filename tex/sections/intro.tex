@@ -72,9 +72,8 @@ non-interfering\todo{confirm}.
 We build such a proof in the process calculus of Rafnsson, Jia and
 Bauer~\cite{rafnsson2017}, whose non-interference is timing-sensitive and whose
 theorems compose: if the parts of a process are non-interfering, so is the whole. We model interrupt handling and process scheduling as
-one closed process (\cref{fig:system}): the user processes, one public and one
-private, which is the one doing disk I/O, the scheduler and the handlers run in a
-pool, and a global state decides at each step which of them runs.
+one closed process (\cref{fig:system}): two user processes, a public one and a
+private one that does the disk I/O, the scheduler and the handlers run in a pool, and a global state decides at each step which of them runs.
 The model is generic in its \emph{interrupt policy}, the part that decides when
 handlers may run. With the immediate policy the model is interfering, with \cref{fig:leak} as the counterexample. Our
 policy fixes when secret interrupts are handled, and for how long, by public events.

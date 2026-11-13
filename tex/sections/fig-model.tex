@@ -23,8 +23,8 @@
 \node[draw, rounded corners=2pt, minimum width=1.3cm, minimum height=1.1cm,
   align=center] (sta) at (0.35, 0 |- pool.center) {global\\state};
 % the input is a sum, laid out like the output
-\node[outv, minimum width=0.85cm, font=\scriptsize] (id) at ($(-1.4, 0 |- sta.center)+(0,0.21)$) {disk};
-\node[outv, minimum width=0.85cm, font=\scriptsize] (it) at ($(-1.4, 0 |- sta.center)+(0,-0.21)$) {timer};
+\node[outv, minimum width=0.85cm, font=\scriptsize] (id) at ($(-1.4, 0 |- sta.center)+(0,-0.21)$) {disk};
+\node[outv, minimum width=0.85cm, font=\scriptsize] (it) at ($(-1.4, 0 |- sta.center)+(0,0.21)$) {timer};
 \node[draw, rounded corners=2pt, fit=(id)(it), inner sep=2pt] (input) {};
 \node[anchor=south] at (input.north) {input: $+$};
 \draw[->] (input.east) -- (sta.west);

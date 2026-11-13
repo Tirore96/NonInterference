@@ -113,14 +113,15 @@ public user's output is kept (\m{model_immediate_publicview_not_NI}).
 
 Our claim is about user space: an attacker there sees the public user's output and
 when each user process runs, and neither the handlers nor the scheduler. The
-\emph{user view} of a model \code{m},
+\emph{user view} of a model \code{m} (\m{userview}),
 \code{map id parse_output m}, keeps only the two user slots: \m{parse_output} maps an
 output into \code{(Opub + Opriv) + 1}, for the user processes' output
 types \code{Opub} and \code{Opriv}: the public user's as
 \code{Some (inl v)}, the private user's as \code{Some (inr v)}, and any other as
 \code{None}.
 
-The user view needs its own equivalence. Under $\pubeq +_{LR} \priveq$ a
+The user view needs its own equivalence. Under $\pubeq +_R \priveq$, the form of
+$\Ein$, or under $+_{LR}$, a
 private-user output would be hidden at $\Lo$, and so related to \code{None}, hiding
 whether the private user ran. The plain sum $\pubeq + \priveq$ hides neither side:
 under it the attacker learns which user process emitted, and the value if it was the
@@ -245,8 +246,9 @@ The theorem holds for every scheduler, pair of user processes and output types,
 handler length and slice size. The composition (\m{model_sliced_NI}) asks each slot
 process to be non-interfering at its slot's classification, $\pubeq$ on input and
 output for the scheduler and the public user and $\priveq$ for the private user, and
-every process of these types is: the first two receive no input, and the third is
-private on both sides. The state update reads only \emph{whether} a user slot
+every process of these types is: the first two receive no input
+(\m{NI_empty_input}), and the third is private on both sides
+(\m{NI_private_private}). The state update reads only \emph{whether} a user slot
 emitted, so no user behaviour reaches the schedule.
 
 The result carries over to the user view:

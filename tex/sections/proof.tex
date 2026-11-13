@@ -19,7 +19,8 @@ is a map, at the theorem's equivalences (\cref{fig:io}), with $p$ the rest of th
 \mathsf{map}\;\mathsf{inl}\;(\mathsf{inr\_or\_def}\;\mathsf{no\_output})\;p
   \in \NI(\Ein,\Eout)
 \]
-Inside it an event is a sum, at $\Ein +_{LR} \Eout$. No output is hidden, so this never
+Inside it an event is a sum, at $\Ein +_{LR} \Eout$. No output is hidden
+(\m{out_equiv_nodis}), so this never
 relates an interrupt to an output; \code{inl} thus carries $\Ein$ into the sum unchanged, \m{inr_or_def} strips the tag from outputs, and this
 reduces to
 \[
@@ -111,7 +112,7 @@ public field, so an interrupt's effects wait for a later output step.
 
 The conditions on $f$ hold on every state (\m{input_update_EP},
 \m{input_update_NI}): the only unobservable events are disk interrupts, which set one
-private bit (\m{set_pending_NI}), $\Ein +_{LR} \Eout$ never relates an interrupt to an
+private bit (\m{set_pending_EP}, \m{set_pending_NI}), $\Ein +_{LR} \Eout$ never relates an interrupt to an
 output, and a fed-back output leaves the state alone. The hard obligation is
 $g \in \NI_P(\Eout,\Ev,\Ev)$. On output $o$, $g$ is the
 composite $\mathsf{initiate\_next}\;o \circ \mathsf{service}\;o$, where
@@ -217,10 +218,9 @@ policy).
 The rest of the proof uses three facts about the policy, so the result holds for any
 policy that has them:
 
-\begin{theorem}[Policy security, \m{model_policy_NI}]\label{thm:policy}
-For all $\mathit{runtime}$, all processes of the types of \cref{thm:main} with
-$p_{pub}, p_{sched} \in \NI(\pubeq,\pubeq)$ and $p_{priv} \in \NI(\priveq,\priveq)$,
-every initial state \code{init_policy} and all stages \code{observe_policy} and
+\begin{theorem}[Policy security,\newline \m{model_policy_NI_unconditional}]\label{thm:policy}
+For all $\mathit{runtime}$, output types and processes as in \cref{thm:main}, every
+initial state \code{init_policy} and all stages \code{observe_policy} and
 \code{advance_policy}, with
 $\mathsf{service}\;o \triangleq \mathsf{advance\_policy} \circ \mathsf{observe\_policy}\;o$: if
 \begin{enumerate}
@@ -340,7 +340,7 @@ secret pids are related, and the slots fall into two groups (\cref{fig:equivs}).
 related pids go to equal bits, and we take $\Eb = \Ef$ (\cref{fig:equivs},
 \m{false_equiv}): $\pubeq +_R \priveq$ on a bit read as a sum,
 \code{true} on the public side and \code{false} on the private side
-(\m{false_equiv_sum_rel}). So \code{false} is
+(\m{false_equiv_sum_rel}, \m{false_equiv_sum_dis}). So \code{false} is
 unobservable at $\Lo$ and \code{true} is public. Every level is aware of
 \code{true}, so
 $\Aw(\mathsf{true},\Ef) = \{\Lo,\Hi\}$ and the slot's output equivalence is
@@ -368,8 +368,8 @@ steps are routine, and \cref{lem:state-cell} handles the cell. Below it, \code{m
 \code{maybe} and \code{par} leave one obligation per slot, which \cref{lem:slot} reduces
 to $p_n \in \NI(\Ex_n,\Ey_n)$. Its projection hypothesis holds because \m{f_proj} is
 the identity for the private user's slot and constantly \code{None} elsewhere
-(\m{slot_no_input}). For the scheduler and the user processes these are the
-hypotheses of the theorem. Each handler is non-interfering at its output's
+(\m{slot_no_input}). For the scheduler and the user processes these hold of
+every process of their types (\m{NI_empty_input}, \m{NI_private_private}). Each handler is non-interfering at its output's
 equivalence, public or private, with its step count classified alike
 (\m{ir_handler_public_NI}, \m{ir_handler_private_NI}).
 \end{proof}

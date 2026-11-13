@@ -184,7 +184,7 @@ interrupts are handled, and for how long, depend only on public events, while
 our model the timer interrupt is public, and when its handler completes, the policy
 allocates a time slice in which secret interrupts may be handled; a dummy handler
 fills whatever time they leave unused. We prove it timing-sensitive non-interfering
-for any scheduler and user processes that are themselves non-interfering.
+for every scheduler and pair of user processes of our model.
 \end{abstract}
 
 \begin{IEEEkeywords}

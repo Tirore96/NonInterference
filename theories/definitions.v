@@ -499,7 +499,7 @@ Defined.
 Definition levelPred := level -> Prop.
 Definition presP (P:levelPred) := forall x0 x1, order x0 x1 -> P x0 -> P x1.
 
-(* The base equivalence (paper, Definition 3): the levels in the upward-closed set
+(* The base equivalence (paper, Definition 2): the levels in the upward-closed set
    S see the values exactly; every other level relates and hides them all.  The
    public and private equivalences and the unit's are its instances. *)
 Definition base_equiv (S : levelPred) (HS : presP S) (A : Ty) : cEquiv ([A]).
@@ -679,10 +679,10 @@ Definition eqpair_LR {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) : cEquiv
            (fun l io => dis IRel l io.1 /\ dis ORel l io.2)); ssa; eauto.
 Defined.
 
-(* Both sum equivalences relate a Sum tag-by-tag and never relate an inl to an inr.
-   They differ only in whether an inl can be unobservable, so that is the
-   parameter; an inr never is.  The four cEquiv obligations are discharged once
-   instead of twice. *)
+(* A sum equivalence that relates a Sum tag-by-tag and never relates an inl to
+   an inr.  Which inl values are unobservable is the parameter [D]; an inr never
+   is.  Its one instance is [eqsum], at D = False; [eqsum_aux_R] below is its
+   mirror image, for [eqsum_R]. *)
 Definition eqsum_aux {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O])
                      (D : level -> [I] -> Prop) :
   (forall l0 l1, order l0 l1 -> forall i, D l1 i -> D l0 i) ->

@@ -26,8 +26,8 @@ Require Export NonInterference.theories.theorems.
      model_sliced.v     [model] at the sliced policy: secret interrupts are
                         received without leaking.  [model_sliced] shows every
                         pool output; [model_sliced_userview] erases all but the
-                        two user slots, and is the one proved non-interfering
-                        in noninterference.v
+                        two user slots.  Both are proved non-interfering in
+                        noninterference.v
 
    Contents:
      0.  Input and output types

@@ -14,9 +14,9 @@ to ensure that a real implementation is safe.}
 %    policy allocates a time slice ...; a dummy handler fills whatever time they leave
 %    unused".
 %  - "Both results hold for an attacker who sees the public part of the schedule, and
-%    for the user view": the leak now holds already in the public view (Corollary 1,
-%    the output of the public process alone), the full output is the proof's view, and
-%    the user view is for presentation.
+%    for the user view": the leak already shows in the public user's output alone
+%    (model_immediate_publicview_not_NI, a sentence after Theorem 3), the full output
+%    is the proof's view, and the user view is the claim (2026-11-12 ruling).
 %  - "when secret handlers run": the abstract puts secrecy on the interrupt ("when
 %    secret interrupts are handled").
 \paragraph{Conclusion} A secret interrupt leaks through the schedule alone. To close

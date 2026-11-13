@@ -815,18 +815,14 @@ Qed.
 (** * 5. The main results in the paper's terms                              *)
 
 (* The two model results, with non-interference read as Definition 4 of
-   Rafnsson et al., hypotheses included. *)
+   Rafnsson et al. *)
 Corollary model_sliced_NI_paper :
   forall (Opub Opriv : Ty) (runtime runs : nat) (p_pub : Proc Empty Opub)
          (p_priv : Proc Bool Opriv) (p_sched : Proc Empty Bool),
-  PNI (public_equiv Empty) (public_equiv Opub) p_pub ->
-  PNI (private_equiv Bool) (private_equiv Opriv) p_priv ->
-  PNI (public_equiv Empty) (public_equiv Bool) p_sched ->
   PNI in_equiv (out_equiv Opub Opriv) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
-  move=> Opub Opriv runtime runs p_pub p_priv p_sched
-         /NI_paper Hpub /NI_paper Hpriv /NI_paper Hsched.
-  apply NI_paper. by apply model_sliced_NI.
+  move=> Opub Opriv runtime runs p_pub p_priv p_sched.
+  apply/NI_paper; exact: model_sliced_NI_unconditional.
 Qed.
 
 Corollary model_immediate_not_NI_paper :
