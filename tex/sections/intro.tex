@@ -66,8 +66,8 @@ remain measurable~\cite{cock2014}. Language-based
 work closes timing channels in programs~\cite{agat2000,askarov2010} and asks which
 programs are secure under a given scheduler~\cite{smith1998,mantel2010}, but leaves out
 the interrupt mechanism, which decides when handlers preempt the scheduled process.
-To our knowledge, no proof shows an interrupt policy timing-sensitive
-non-interfering\todo{confirm}.
+To our knowledge, no mechanised proof shows a policy for handling secret interrupts
+timing-sensitive non-interfering\todo{confirm}.
 
 We build such a proof in the process calculus of Rafnsson, Jia and
 Bauer~\cite{rafnsson2017}, whose non-interference is timing-sensitive and whose
@@ -75,7 +75,7 @@ theorems compose: if the parts of a process are non-interfering, so is the whole
 one closed process (\cref{fig:system}): two user processes, a public one and a
 private one that does the disk I/O, the scheduler and the handlers run in a pool, and a global state decides at each step which of them runs.
 The model is generic in its \emph{interrupt policy}, the part that decides when
-handlers may run. With the immediate policy the model is interfering, with \cref{fig:leak} as the counterexample. Our
+handlers may run. With the immediate policy the model is interfering, as \cref{fig:leak} shows. Our
 policy fixes when secret interrupts are handled, and for how long, by public events.
 In our model the timer interrupt is public, and when its handler completes, the
 policy allocates a time slice in which secret interrupts may be handled, as in time

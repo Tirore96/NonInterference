@@ -178,7 +178,8 @@ If the interrupt is meant to be secret, this leaks it. We use the process calcul
 Rafnsson et al.\ to model interrupt handling and process scheduling, and prove in
 Rocq that immediate interrupt handling, which services an interrupt as soon as
 possible, leaks: a secret disk interrupt is observable in the output of the public
-process alone. A non-interfering policy must therefore make \emph{when} secret
+process alone. For an attacker who sees when secret interrupts are handled, a
+non-interfering policy must therefore make \emph{when} secret
 interrupts are handled, and for how long, depend only on public events, while
 \emph{which} of them is handled may stay hidden. We model a policy that does so. In
 our model the timer interrupt is public, and when its handler completes, the policy

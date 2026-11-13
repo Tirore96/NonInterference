@@ -51,7 +51,7 @@ constructors described in \cref{sec:background}.
 defines non-interference as a coinductive simulation over infinite streams of
 labels, whose clauses apply at the head of a stream. We quantify over finite traces
 instead, with closure clauses that apply at an arbitrary position (\cref{def:ni}).
-This makes every proof in the development an induction on a trace.
+The composition theorems are thus proved by induction on a trace.
 
 The original definition is written out in \mechfile{theories/adequacy.v}{adequacy.v},
 and \m{NI_paper} proves the two equivalent. The proof passes through infinite
@@ -73,10 +73,10 @@ the unobservable values to form one of its classes. \m{NI_lEquiv} shows that the
 two give the same notion of non-interference.
 
 \paragraph{Options} The paper writes an optional value as a sum with the unit, and
-its equivalence as $\eqo{A} +_{LR} \one^S$ (\m{unit_equiv}). The mechanisation
+its equivalence as $\eqo{A} +_{LR} \one^K$ (\m{unit_equiv}). The mechanisation
 classifies options by \m{eqmaybe}, as the original does, and agreement lemmas show
-that at every level $\mathsf{eqmaybe}(S,\eqv{A})$ relates and hides exactly what
-$\eqo{A} +_{LR} \one^S$ does, along the map from options to sums
+that at every level $\mathsf{eqmaybe}(K,\eqv{A})$ relates and hides exactly what
+$\eqo{A} +_{LR} \one^K$ does, along the map from options to sums
 (\m{eqmaybe_sum_rel}, \m{eqmaybe_sum_dis}). The calculus is the original's with
 sums added, which change no constructor or theorem.
 
@@ -105,7 +105,7 @@ file & lines & contents \\
 \end{table}
 
 \paragraph{Types and axioms} Input and output types range over an inductive universe
-\m{Ty} of codes, interpreted into \code{Set}, rather than over \code{Set} directly. This
+\m{Ty} of codes, interpreted into \code{Set}. This
 makes reductions invertible, which the negative result needs: refuting non-interference
 means showing that a trace is \emph{not} admitted. The development assumes neither
 classical logic nor uniqueness of identity proofs, which dependent elimination on the

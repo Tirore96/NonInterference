@@ -5,13 +5,15 @@ leaks, and \m{model_sliced}, which does not.
 Both run on one concrete system. Its public user process emits
 \code{Get} whenever it runs, its private user process emits \code{Sys}, its next disk
 request, when the disk handler notifies it that the last one completed, and
-\code{Idle} otherwise, and the scheduler alternates between them. Handlers take $\mathit{runtime} = 2$ steps.
+\code{Idle} otherwise, and the scheduler alternates between them. Handlers take $\mathit{runtime} = 2$ steps. The results hold
+for every $\mathit{runtime}$ and slice size $\mathit{runs}$; the interesting case, and
+the one we describe, is $\mathit{runtime}, \mathit{runs} \geq 1$.
 
 \subsection{Immediate interrupt handling, and the leak}\label{sec:leak}
 
 The immediate policy \m{model_immediate} services an interrupt as soon as no handler is running
 (\cref{fig:policy-ordinary}). A pending timer interrupt takes the system from U to T,
-and a pending disk interrupt takes it to S from U or T, whenever it arrives. Each
+and a pending disk interrupt takes it to S from U or T. Each
 completion unmasks everything and moves on to the next pending handler, or back to U.
 The bold arrows into S are the leak: through rule 2 of \cref{sec:state}, the secret
 decides when S is entered and how long it lasts.
@@ -54,6 +56,7 @@ disk interrupt the system never enters S.
 
 \input{sections/fig-io}
 To state the leak we classify the system's inputs \m{T_in} and outputs \m{T_out}.
+Calligraphic letters name the fixed equivalences of the model.
 
 \medskip
 \noindent\begin{minipage}{\linewidth}
@@ -71,9 +74,10 @@ nests.
 \end{minipage}
 \medskip
 
-An optional value is a sum with the unit, so under $\eqo{A} +_{LR} \one^S$ levels in $S$
+An optional value is a sum with the unit, so under $\eqo{A} +_{LR} \one^K$ levels in $K$
 see whether a process emitted: $\one^\Lo$ shows \code{None} to everyone, $\one^\Hi$
-hides it from the attacker, and $\one^\emptyset$ from everyone.
+hides it from the attacker, and $\one^\emptyset$ from everyone. A level outside $K$
+still sees it unless the payload is hidden there too.
 Under these equivalences the disk interrupt is hidden from the attacker and the timer
 interrupt is public. Of each output the attacker sees whether the slot ran and its value on the
 white slots of \cref{fig:io}, only whether it ran on the light slot, and nothing
@@ -208,7 +212,7 @@ queue_secret_run v :=
     nop_irq true
 \end{lstlisting}
 \end{minipage}
-At \code{n+2}, $n+1$ steps of handler runs are left, and
+The three branches follow the counter. At \code{n+2}, $n+1$ steps of handler runs are left, and
 \m{slice_at_boundary}, which tests $\mathit{runtime} \mid n+1$, holds when they are a
 whole number of runs: when the slice opens and after each
 completed run inside it. Unmasking has moved here from the first stage, to boundaries
@@ -218,7 +222,9 @@ the masks reopen, but the timer is masked again, so it cannot leave S early,
 and the NOP handler becomes pending. That last step is the \emph{filler}: a handler
 is always ready at a boundary, so S is entered and every run of the slice takes place
 whether or not a disk interrupt is waiting. A pending disk handler takes priority;
-which of the two runs is all the secret decides. At \code{1}, \m{close_slice}
+which of the two runs is all the secret decides.
+
+At \code{1}, \m{close_slice}
 closes the slice: it masks the disk and NOP handlers, so U cannot lead to S, unmasks
 the timer and sets the counter to \code{0}. As the \code{0} branch changes nothing,
 the timer stays masked while its own handler runs.
@@ -237,8 +243,9 @@ $p_{sched} : \Proc{\mathsf{Empty}}{\mathsf{Bool}}$,
 \end{theorem}
 
 At the attacker's level $\Lo$ the theorem says that disk interrupts do not show: a
-disk interrupt is unobservable at $\Lo$ (\cref{def:io}), so two input streams
-that differ only in disk interrupts must give outputs that $\Eout$ relates.
+disk interrupt is unobservable at $\Lo$ (\cref{def:io}), so inserting or deleting a
+disk interrupt anywhere in a trace must leave a trace the model performs, with outputs
+that $\Eout$ relates at $\Lo$.
 \Cref{sec:proof} proves it as an instance of a theorem for any interrupt policy
 meeting three obligations (\cref{thm:policy}).
 

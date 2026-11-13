@@ -8,6 +8,14 @@ results. These works treat the scheduler as given and ask which
 programs are secure under it. We instead secure the interrupt mechanism, which
 decides when handlers preempt the scheduled process.
 
+\paragraph{Interrupts as a channel} Mantel and Sudbrock compare countermeasures
+against interrupt-related covert channels in an information-theoretic
+framework~\cite{mantel2007}. Busi et al.\ prove secure isolation for interruptible
+enclaves on small microprocessors, with padding as a countermeasure~\cite{busi2020}:
+they protect an enclave from an interrupting attacker at the instruction level, and we
+protect the secrecy of the interrupt itself from a user process at the level of the
+handling policy\todo{check both characterisations}.
+
 \paragraph{Timing-channel mitigation} Predictive mitigation delays outputs to a
 schedule predicted from public information, bounding what their timing
 leaks~\cite{askarov2010}, also in a language-based setting~\cite{zhang2012}. Our
@@ -26,7 +34,8 @@ seL4~\cite{murray2012,murray2013}, leaving timing channels out of scope; Cock et
 measure those that remain~\cite{cock2014}. Time
 protection~\cite{ge2019} argues that an operating system must partition time as well
 as space, and includes the partitioning of interrupts among its
-mechanisms\todo{check this characterisation against~\cite{ge2019}}; our time slices
+mechanisms\todo{check this characterisation against~\cite{ge2019}}, and its prevention
+of microarchitectural timing channels has been formalised~\cite{sison2023}\todo{check}; our time slices
 apply it to handler runs in a small model, with a timing-sensitive, compositional,
 mechanised proof. At the hardware interface, Zagieboylo et
 al.\ design an instruction set that controls timing channels and leave exceptions and

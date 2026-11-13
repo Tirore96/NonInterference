@@ -67,19 +67,19 @@ $\dis^A_\ell\,x$, and write the predicate
 of a built equivalence with the same superscript as its relation.
 
 \begin{definition}[Base equivalence, \m{base_equiv}]\label{def:base}
-For a set $S$ of levels closed upwards ($\ell \in S \wedge \ell \sqsubseteq \ell'
-\Rightarrow \ell' \in S$), $\doteq^S$ on a type $A$ is given by, for all $\ell$ and
+For a set $K$ of levels closed upwards ($\ell \in K \wedge \ell \sqsubseteq \ell'
+\Rightarrow \ell' \in K$), $\doteq^K$ on a type $A$ is given by, for all $\ell$ and
 $x, x' \in A$,
 \[
-x \doteq^S_\ell x' \iff x = x' \vee \ell \notin S, \qquad
-\dis^S_\ell\,x \iff \ell \notin S.
+x \doteq^K_\ell x' \iff x = x' \vee \ell \notin K, \qquad
+\dis^K_\ell\,x \iff \ell \notin K.
 \]
 \end{definition}
 
-Values are related if they are equal or hidden, and they are hidden at levels outside $S$. We write $\doteq^\ell$ for $\doteq^S$ with
-$S = \{\ell' \mid \ell \sqsubseteq \ell'\}$. The \emph{public} equivalence $\pubeq$ thus has $S = \{\Lo, \Hi\}$ and hides
+Values are related if they are equal or hidden, and they are hidden at levels outside $K$. We write $\doteq^\ell$ for $\doteq^K$ with
+$K = \{\ell' \mid \ell \sqsubseteq \ell'\}$. The \emph{public} equivalence $\pubeq$ thus has $K = \{\Lo, \Hi\}$ and hides
 nothing (\m{public_equiv}). The \emph{private} equivalence $\priveq$ has
-$S = \{\Hi\}$ (\m{private_equiv}): at $\Lo$ it relates and hides all values,
+$K = \{\Hi\}$ (\m{private_equiv}): at $\Lo$ it relates and hides all values,
 and at $\Hi$ it is equality.
 
 Equivalences on pairs and sums follow the type constructors: pairs are related
