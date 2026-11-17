@@ -1,7 +1,8 @@
 # NonInterference
 
 Rocq mechanisation accompanying the paper *Timing-Sensitive Non-Interference for
-Interrupt Handling, Compositionally and Mechanically* (draft in [`tex/`](tex/)).
+Interrupt Handling, Compositionally and Mechanically*, which is kept in a separate
+repository.
 The paper is the reference for everything here; this file only says where things
 are.
 
