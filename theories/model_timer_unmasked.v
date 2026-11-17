@@ -34,18 +34,17 @@ Definition tick_unmasked (runtime : nat) (v : [state_type]) : [state_type] :=
       if slice_at_boundary runtime n.+1 then queue_unmasked v else v
   end.
 
-Definition unmasked_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [state_type] -> [state_type] :=
+Definition unmasked_service (runtime runs : nat) (o : [T_out]) : [state_type] -> [state_type] :=
   tick_unmasked runtime \o observe_timer_output runtime runs o.
 
-Definition model_timer_unmasked (runtime runs : nat) (Opub Opriv : Ty)
-  (p_pub : Proc Empty Opub)
-  (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Bool) : Proc T_in (T_out Opub Opriv) :=
-  model runtime sliced_init (@observe_timer_output runtime runs Opub Opriv) (tick_unmasked runtime)
+Definition model_timer_unmasked (runtime runs : nat)  (p_pub : Proc Empty Unit)
+  (p_priv : Proc Bool Bool)
+  (p_sched : Proc Empty Bool) : Proc T_in (T_out) :=
+  model runtime sliced_init (@observe_timer_output runtime runs) (tick_unmasked runtime)
     p_pub p_priv p_sched.
 
 Section TimerUnmaskedInvariant.
-Variables (runtime runs : nat) (Opub Opriv : Ty).
+Variables (runtime runs : nat).
 
 (* The branches of [tick_unmasked], as for [tick_slice]. *)
 Lemma tick_unmasked_close v : get_slice_count v = 1 ->
@@ -72,7 +71,7 @@ Lemma tick_unmasked_none v : get_slice_count v = 0 -> tick_unmasked runtime v = 
 Proof. by rewrite /tick_unmasked => ->. Qed.
 
 (* {secret_gated} unmasked_service o {secret_gated_at_boundary} *)
-Lemma unmasked_service_gated (o : [T_out Opub Opriv]) v :
+Lemma unmasked_service_gated (o : [T_out]) v :
   secret_gated v -> secret_gated_at_boundary (unmasked_service runtime runs o v).
 Proof.
 have -> : unmasked_service runtime runs o v =
@@ -123,7 +122,7 @@ Proof. rewrite /model_timer_unmasked_concrete /model_timer_unmasked. rewr;simpl;
 
 
 Definition timer_unmasked_states :=
-  run_states sliced_init (@observe_timer_output handler_runtime slice_runs Bool Bool)
+  run_states sliced_init (@observe_timer_output handler_runtime slice_runs)
              (tick_unmasked handler_runtime).
 
 Lemma timer_unmasked_states_no_dI : seq.map state_row (timer_unmasked_states sliced_no_dI') =
@@ -184,7 +183,7 @@ Proof. by vm_compute. Qed.
 Corollary timer_unmasked_states_model l (es : seqtype') n :
   Trace (public_equiv _) l es model_timer_unmasked_concrete -> n < size es ->
   exists q', Steps (take n.+1 es) model_timer_unmasked_concrete
-    (system (@observe_timer_output handler_runtime slice_runs Bool Bool)
+    (system (@observe_timer_output handler_runtime slice_runs)
             (tick_unmasked handler_runtime)
             (nth sliced_init (timer_unmasked_states es) n) q').
 Proof. exact: run_states_model. Qed.

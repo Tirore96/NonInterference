@@ -33,7 +33,7 @@ Definition slice_at_boundary (runtime m : nat) := dvdn runtime m.
    constant is what makes "the slice ends on a handler boundary" structural
    instead of a side condition: [slice_at_boundary] can then *compute* the
    boundaries as the multiples of [runtime]. *)
-Definition observe_timer_output (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) (v : [state_type]) : [state_type] :=
+Definition observe_timer_output (runtime runs : nat) (o : [T_out]) (v : [state_type]) : [state_type] :=
   if tI_out o is Some Notify
   then update_re_sched (update_slice_count v (runs * runtime).+1) true else v.
 
@@ -62,16 +62,15 @@ Definition tick_slice (runtime : nat) (v : [state_type]) : [state_type] :=
   end.
 
 (* The two stages together, the composite the proofs reason about. *)
-Definition sliced_service (runtime runs : nat) (Opub Opriv : Ty) (o : [T_out Opub Opriv]) : [state_type] -> [state_type] := tick_slice runtime \o observe_timer_output runtime runs o.
+Definition sliced_service (runtime runs : nat) (o : [T_out]) : [state_type] -> [state_type] := tick_slice runtime \o observe_timer_output runtime runs o.
 
 (* model_sliced p_pub p_priv p_sched =
      model sliced_init (observe_timer_output runtime runs) (tick_slice runtime)
        p_pub p_priv p_sched *)
-Definition model_sliced (runtime runs : nat) (Opub Opriv : Ty)
-  (p_pub : Proc Empty Opub)
-  (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Bool) : Proc T_in (T_out Opub Opriv) :=
-  model runtime sliced_init (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime)
+Definition model_sliced (runtime runs : nat)  (p_pub : Proc Empty Unit)
+  (p_priv : Proc Bool Bool)
+  (p_sched : Proc Empty Bool) : Proc T_in (T_out) :=
+  model runtime sliced_init (@observe_timer_output runtime runs) (tick_slice runtime)
     p_pub p_priv p_sched.
 
 
@@ -114,7 +113,7 @@ Definition open_iff_ready (w : [state_type]) : Prop :=
   ~~ masks_set w -> slice_open w = secret_ready w.
 
 Section SlicedInvariant.
-Variables (runtime runs : nat) (Opub Opriv : Ty).
+Variables (runtime runs : nat).
 
 Lemma masks_setE v : masks_set v =
   [&& get_ir_mask v timer_irq, get_ir_mask v disk_irq & get_ir_mask v nop_irq].
@@ -122,7 +121,7 @@ Proof. by rewrite /masks_set /= andbT. Qed.
 
 (* The scheduler's choice writes only the current pid, which none of the
    predicates reads. *)
-Lemma apply_scheduler_choice_gated (o : [T_out Opub Opriv]) w :
+Lemma apply_scheduler_choice_gated (o : [T_out]) w :
   [/\ masks_set (apply_scheduler_choice o w) = masks_set w,
       secret_gated (apply_scheduler_choice o w) = secret_gated w,
       secret_gated_at_boundary (apply_scheduler_choice o w) = secret_gated_at_boundary w,
@@ -130,11 +129,11 @@ Lemma apply_scheduler_choice_gated (o : [T_out Opub Opriv]) w :
       slice_open (apply_scheduler_choice o w) = slice_open w].
 Proof. rewrite /apply_scheduler_choice. by case: (is_sched_out o). Qed.
 
-Lemma observe_timer_output_mask (o : [T_out Opub Opriv]) v ir :
+Lemma observe_timer_output_mask (o : [T_out]) v ir :
   get_ir_mask (observe_timer_output runtime runs o v) ir = get_ir_mask v ir.
 Proof. by rewrite /observe_timer_output; case: (tI_out o) => [[|]|]. Qed.
 
-Lemma observe_timer_output_count (o : [T_out Opub Opriv]) v :
+Lemma observe_timer_output_count (o : [T_out]) v :
   get_slice_count (observe_timer_output runtime runs o v) =
   if tI_out o is Some Notify then (runs * runtime).+1 else get_slice_count v.
 Proof. by rewrite /observe_timer_output; case: (tI_out o) => [[|]|]. Qed.
@@ -170,7 +169,7 @@ Lemma slice_at_boundary_start : slice_at_boundary runtime (runs * runtime).
 Proof. by rewrite /slice_at_boundary dvdn_mull. Qed.
 
 (* {secret_gated} sliced_service o {secret_gated_at_boundary} *)
-Lemma sliced_service_gated (o : [T_out Opub Opriv]) v :
+Lemma sliced_service_gated (o : [T_out]) v :
   secret_gated v -> secret_gated_at_boundary (sliced_service runtime runs o v).
 Proof.
 have -> : sliced_service runtime runs o v =
@@ -213,7 +212,7 @@ case: (slice_open w) => H Ms; apply: esym.
 Qed.
 
 (* {secret_gated_at_boundary} initiate_next o {secret_gated} *)
-Lemma initiate_next_gated (o : [T_out Opub Opriv]) w :
+Lemma initiate_next_gated (o : [T_out]) w :
   secret_gated_at_boundary w -> secret_gated (initiate_next o w).
 Proof.
 rewrite /initiate_next.
@@ -244,27 +243,27 @@ Lemma sliced_init_gated : secret_gated sliced_init.
 Proof. by []. Qed.
 
 (* Both updates preserve [secret_gated]. *)
-Lemma input_update_gated (e : [Sum T_in (T_out Opub Opriv)]) v :
+Lemma input_update_gated (e : [Sum T_in (T_out)]) v :
   secret_gated v -> secret_gated (input_update e v).
 Proof. by case: e => [i|o] Hv //; apply: set_pending_gated. Qed.
 
-Lemma output_update_gated (o : [T_out Opub Opriv]) v :
+Lemma output_update_gated (o : [T_out]) v :
   secret_gated v ->
-  secret_gated (output_update (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime) o v).
+  secret_gated (output_update (@observe_timer_output runtime runs) (tick_slice runtime) o v).
 Proof. by move=> Hv; apply: initiate_next_gated; apply: sliced_service_gated. Qed.
 
 (* Every step preserves [secret_gated]. *)
-Lemma state_step_gated (e : [Sum T_in (T_out Opub Opriv)]) v :
+Lemma state_step_gated (e : [Sum T_in (T_out)]) v :
   secret_gated v ->
-  secret_gated (state_step (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime) e v).
+  secret_gated (state_step (@observe_timer_output runtime runs) (tick_slice runtime) e v).
 Proof.
 case: e => [i|o] Hv; first exact: input_update_gated.
 exact: output_update_gated.
 Qed.
 
 (* The state after any sequence of events, starting from [sliced_init]. *)
-Definition sliced_run (es : seq [Sum T_in (T_out Opub Opriv)]) :=
-  foldl (fun v e => state_step (@observe_timer_output runtime runs Opub Opriv) (tick_slice runtime) e v)
+Definition sliced_run (es : seq [Sum T_in (T_out)]) :=
+  foldl (fun v e => state_step (@observe_timer_output runtime runs) (tick_slice runtime) e v)
         sliced_init es.
 
 Theorem sliced_run_gated es : secret_gated (sliced_run es).
@@ -278,10 +277,9 @@ End SlicedInvariant.
 
 (* === 9. model_sliced_userview === *)
 
-Definition model_sliced_userview (runtime runs : nat) (Opub Opriv : Ty)
-  (p_pub : Proc Empty Opub)
-  (p_priv : Proc Bool Opriv)
-  (p_sched : Proc Empty Bool) : Proc T_in (T_out_userview Opub Opriv) :=
+Definition model_sliced_userview (runtime runs : nat)  (p_pub : Proc Empty Unit)
+  (p_priv : Proc Bool Bool)
+  (p_sched : Proc Empty Bool) : Proc T_in (T_out_userview) :=
   userview (model_sliced runtime runs p_pub p_priv p_sched).
 
 
@@ -311,7 +309,7 @@ Proof. rewrite /model_sliced_concrete /model_sliced. rewr;simpl;rewr;simpl;rewr;
 
 
 Definition sliced_states :=
-  run_states sliced_init (@observe_timer_output handler_runtime slice_runs Bool Bool)
+  run_states sliced_init (@observe_timer_output handler_runtime slice_runs)
              (tick_slice handler_runtime).
 
 Lemma sliced_states_no_dI : seq.map state_row (sliced_states sliced_no_dI') =
@@ -351,7 +349,7 @@ Proof. by vm_compute. Qed.
 Corollary sliced_states_model l (es : seqtype') n :
   Trace (public_equiv _) l es model_sliced_concrete -> n < size es ->
   exists q', Steps (take n.+1 es) model_sliced_concrete
-    (system (@observe_timer_output handler_runtime slice_runs Bool Bool)
+    (system (@observe_timer_output handler_runtime slice_runs)
             (tick_slice handler_runtime)
             (nth sliced_init (sliced_states es) n) q').
 Proof. exact: run_states_model. Qed.
@@ -362,10 +360,10 @@ Proof. exact: run_states_model. Qed.
 Definition good_no_dI : seqtype := [::out_get;out_get;out_get;tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_nop].
 Definition good_with_dI : seqtype := [::out_get;dI;out_get;out_get;tI;out_get;w_None;w_None;w_None;w_None;w_None;w_None;w_None;out_syscall].
 
-Lemma good_no_dI_eq : map_tr (@parse_output Bool Bool) sliced_no_dI' = good_no_dI.
+Lemma good_no_dI_eq : map_tr parse_output sliced_no_dI' = good_no_dI.
 Proof. ssa. Qed.
 
-Lemma good_with_dI_eq : map_tr (@parse_output Bool Bool) sliced_with_dI' = good_with_dI.
+Lemma good_with_dI_eq : map_tr parse_output sliced_with_dI' = good_with_dI.
 Proof. ssa. Qed.
 
 Lemma trace_no_dI : forall l, Trace (public_equiv _) l good_no_dI model_sliced_userview_concrete.

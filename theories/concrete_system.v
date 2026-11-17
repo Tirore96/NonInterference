@@ -20,13 +20,11 @@ Require Export NonInterference.theories.generic_model.
    trace tactics and the state along a run.
    ================================================================= *)
 
-(* The concrete alphabets are both bool: the public process emits [GetRequest],
-   the secret one [Syscall] or [Idle]. *)
-Notation GetRequest := true (only parsing).
+(* The public process emits the unit value [GetRequest]; the secret one
+   [Syscall] or [Idle]. *)
+Notation GetRequest := tt (only parsing).
 Notation Syscall := true (only parsing).
 Notation Idle := false (only parsing).
-Notation T_outC := (T_out Bool Bool).
-Notation T_out_userviewC := (T_out_userview Bool Bool).
 
 (* === 1. A concrete system ===
 
@@ -36,7 +34,7 @@ Notation T_out_userviewC := (T_out_userview Bool Bool).
    own, in model_sliced.v. *)
 
 (* p_pub_concrete = out GetRequest *)
-Definition p_pub_concrete := @out Empty Bool GetRequest.
+Definition p_pub_concrete := @out Empty Unit GetRequest.
 
 
 (* alternate x y z pred =
@@ -78,7 +76,6 @@ Definition scheduler : Proc Empty Bool :=
 (* The concrete handler length: handlers are two output steps long. *)
 Definition handler_runtime := 2.
 
-Definition slot_procs_concrete := slot_procs handler_runtime p_pub_concrete p_priv_concrete scheduler.
 Definition pool_concrete := pool handler_runtime p_pub_concrete p_priv_concrete scheduler.
 
 (* === 2. Example traces ===
@@ -91,17 +88,17 @@ Definition pool_concrete := pool handler_runtime p_pub_concrete p_priv_concrete 
    traces are the [model_sliced] ones under [parse_output]. *)
 
 (* -- Named inputs and outputs -- *)
-Definition Tsum' := ([T_in] + [T_outC])%type.
-Definition Tsum := Sum T_in T_out_userviewC.
+Definition Tsum' := ([T_in] + [T_out])%type.
+Definition Tsum := Sum T_in T_out_userview.
 
 Definition dI' : Tsum' := inl (inr tt).
 Definition tI' : Tsum' := inl (inl tt).
-Definition low_out x : [T_outC] := (Some x,(None,(None,(None,(None,None))))).
-Definition high_out x : [T_outC] := (None,(Some x,(None,(None,(None,None))))).
-Definition sched_o x : [T_outC] := (None,(None,(Some x,(None,(None,None))))).
-Definition nop_o x : [T_outC] := (None,(None,(None,(Some x,(None,None))))).
-Definition dI_o x : [T_outC] := (None,(None,(None,(None,(Some x,None))))).
-Definition tI_o x : [T_outC] := (None,(None,(None,(None,(None,Some x))))).
+Definition low_out x : [T_out] := (Some x,(None,(None,(None,(None,None))))).
+Definition high_out x : [T_out] := (None,(Some x,(None,(None,(None,None))))).
+Definition sched_o x : [T_out] := (None,(None,(Some x,(None,(None,None))))).
+Definition nop_o x : [T_out] := (None,(None,(None,(Some x,(None,None))))).
+Definition dI_o x : [T_out] := (None,(None,(None,(None,(Some x,None))))).
+Definition tI_o x : [T_out] := (None,(None,(None,(None,(None,Some x))))).
 
 Definition tmr_done' : Tsum' :=  inr (tI_o (Notify)).
 Definition tmr_step' : Tsum' :=  inr (tI_o (Nothing)).
@@ -127,7 +124,7 @@ Definition tI : [Tsum] := inl (inl tt).
 Definition dI : [Tsum] := inl (inr tt).
 
 Definition seqtype' := seq Tsum'.
-Definition seqtype := seq ([T_in] + [T_out_userviewC]).
+Definition seqtype := seq ([T_in] + [T_out_userview]).
 
 
 (* -- the four runs --
@@ -143,7 +140,7 @@ Definition seqtype := seq ([T_in] + [T_out_userviewC]).
 
 (* Unfolds everything below the policy; a proof about a policy's concrete model
    first unfolds the model itself. *)
-Ltac rewr := rewrite /model /reactive_system /pool_concrete /pool /process_pool /slot_initial /p_pub_concrete /alternate /p_priv_concrete /pool_input /tI_o /ir_handler /f_proj /scheduler /low_out /pool_concrete /pool /pool_input /f_proj.
+Ltac rewr := rewrite /model /reactive_system /pool_concrete /pool /slot /no_input /p_pub_concrete /alternate /p_priv_concrete /tI_o /ir_handler /scheduler /low_out.
 
 Ltac lsolv := try solve [ reduce_tac;reduce_tac | reduce_tac;try solve [reduce_once | econ];simpl;first (reduce_tac;reduce_tac)];simpl.
 Ltac reduce_tac2 :=
@@ -153,7 +150,7 @@ Ltac reduce_tac2 :=
 
 Ltac sta_state_reduce :=
   match goal with
-  | |- context [(@sta (Sum T_in T_outC) T_outC state_type _ (output_update _ _) ?state _)] =>let reduced := eval cbv in state in
+  | |- context [(@sta (Sum T_in T_out) T_out state_type _ (output_update _ _) ?state _)] =>let reduced := eval cbv in state in
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.
 
@@ -181,7 +178,7 @@ Ltac trace_last := (first [econ;[idtac | tecon | idtac] | econ];
    [model_sliced] the counter and the masks agree; the runs differ only in the
    private pending bits, and from the second run of the slice on not at all. *)
 Definition run_states (init : [state_type])
-  (observe : [T_outC] -> [state_type] -> [state_type])
+  (observe : [T_out] -> [state_type] -> [state_type])
   (advance : [state_type] -> [state_type]) (es : seqtype') :=
   scanl (fun v e => state_step observe advance e v) init es.
 Definition state_row (v : [state_type]) :=
@@ -201,7 +198,7 @@ Inductive Steps (I O : Ty) : seq ([I] + [O]) -> Proc I O -> Proc I O -> Prop :=
 | StepsI p i p' t p'' : reduceI p i p' -> Steps t p' p'' -> Steps (inl i :: t) p p''
 | StepsO p o p' t p'' : reduceO p o p' -> Steps t p' p'' -> Steps (inr o :: t) p p''.
 
-Lemma Trace_Steps l (es : seqtype') (p : Proc T_in T_outC) n :
+Lemma Trace_Steps l (es : seqtype') (p : Proc T_in T_out) n :
   Trace (public_equiv _) l es p -> exists p', Steps (take n es) p p'.
 Proof.
 move=> H; elim: H n => [p0|p0 i p1 t Hr _ IH|p0 o' o p1 t Hr Ho _ IH] [|n] /=;
@@ -211,16 +208,15 @@ move=> H; elim: H n => [p0|p0 i p1 t Hr _ IH|p0 o' o p1 t Hr Ho _ IH] [|n] /=;
 Qed.
 
 Section ModelStates.
-Variables (observe : [T_outC] -> [state_type] -> [state_type])
+Variables (observe : [T_out] -> [state_type] -> [state_type])
           (advance : [state_type] -> [state_type]).
 
-Definition system (v : [state_type]) (q : Proc (Times cur_pid T_intermediate) T_outC) : Proc T_in T_outC :=
-  @reactive_system cur_pid state_type v T_in T_outC T_intermediate
-    (@input_update _ _) (output_update observe advance) (no_output _ _) q (@pool_input _ _).
+Definition system (v : [state_type]) (q : Proc T_pool_in T_out) : Proc T_in T_out :=
+  reactive_system v (output_update observe advance) q.
 
 Lemma system_stepI v q i p :
   reduceI (system v q) i p -> exists q', p = system (state_step observe advance (inl i) v) q'.
-Proof. by move/reduceI_fun => ->; exists q. Qed.
+Proof. by move/reduceI_fun => ->; eexists. Qed.
 
 Lemma system_stepO v q o p :
   reduceO (system v q) o p -> exists q', p = system (state_step observe advance (inr o) v) q'.
