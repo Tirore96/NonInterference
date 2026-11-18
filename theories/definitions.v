@@ -828,8 +828,8 @@ Defined.
 (* --- Sums that hide both sides, and options ---
    Like products, sums have three formers: [eqsum] (≐1 + ≐2, hides nothing),
    [eqsum_R] (≐1 +_R ≐2, hides the right side) and [eqsum_LR] below
-   (≐1 +_LR ≐2, hides both).  The paper reads an option as V + 1, at
-   [eqsum_LR] with [unit_equiv P] (written 1^S); [eqmaybe] stays as it is, and
+   (≐1 +_LR ≐2, hides both).  The paper reads an option as 1 + V, at
+   [eqsum_LR] with [unit_equiv P] (written 1^S) on the left; [eqmaybe] stays as it is, and
    the two lemmas below show that it agrees with that sum form at every level,
    in what it relates and in what it makes unobservable. *)
 
@@ -863,16 +863,16 @@ Defined.
 Definition unit_equiv (P : levelPred) (HP : presP P) : cEquiv ([Unit]) :=
   base_equiv HP Unit.
 
-Definition option_to_sum {V : Ty} (v : [Option V]) : [Sum V Unit] :=
-  if v is Some v' then inl v' else inr tt.
+Definition option_to_sum {V : Ty} (v : [Option V]) : [Sum Unit V] :=
+  if v is Some v' then inr v' else inl tt.
 
-(* eqmaybe P ≐ is ≐ + 1_P, along option_to_sum. *)
+(* eqmaybe P ≐ is 1_P + ≐, along option_to_sum. *)
 Lemma eqmaybe_sum_rel (V : Ty) (P : levelPred) (HP : presP P) (VRel : cEquiv [V]) l v v' :
-  rel (eqmaybe VRel HP) l v v' <-> rel (eqsum_LR VRel (unit_equiv HP)) l (option_to_sum v) (option_to_sum v').
+  rel (eqmaybe VRel HP) l v v' <-> rel (eqsum_LR (unit_equiv HP) VRel) l (option_to_sum v) (option_to_sum v').
 Proof. by case: v => [v|]; case: v' => [v'|]. Qed.
 
 Lemma eqmaybe_sum_dis (V : Ty) (P : levelPred) (HP : presP P) (VRel : cEquiv [V]) l v :
-  dis (eqmaybe VRel HP) l v <-> dis (eqsum_LR VRel (unit_equiv HP)) l (option_to_sum v).
+  dis (eqmaybe VRel HP) l v <-> dis (eqsum_LR (unit_equiv HP) VRel) l (option_to_sum v).
 Proof. by case: v. Qed.
 
 Lemma rel_eq : forall (I : Set) (IRel : cEquiv I) (x : I) l, rel IRel l x x.
