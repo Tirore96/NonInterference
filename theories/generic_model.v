@@ -262,9 +262,15 @@ Definition parse_output (o : [T_out]) : [T_out_userview] :=
    noninterference.v). *)
 Definition T_event := Option (Sum Unit T_out).
 
-(* An interrupt as an event, and back. *)
-Definition lift (i : [T_in]) : [T_event] := if i is Some u then Some (inl u) else None.
-Definition unlift (e : [T_event]) : [T_in] := if e is Some (inl u) then Some u else None.
+(* Into an event and out of it.  [tag_in] makes an interrupt an event and
+   [tag_out] an output; [untag_in] and [untag_out] take them back, with
+   [no_output] for an event that carries no output (it only makes the function
+   total).  The loop's maps use them: the outer map tags interrupts in and
+   untags outputs, the inner map tags the pool's outputs to feed them back. *)
+Definition tag_in (i : [T_in]) : [T_event] := if i is Some u then Some (inl u) else None.
+Definition tag_out (o : [T_out]) : [T_event] := Some (inr o).
+Definition untag_in (e : [T_event]) : [T_in] := if e is Some (inl u) then Some u else None.
+Definition untag_out (e : [T_event]) : [T_out] := if e is Some (inr o) then o else no_output.
 
 (* What reaches the pool: the state, and the event of the loop. *)
 Definition T_pool_in := Times state_type T_event.
@@ -316,7 +322,7 @@ Definition set_pending (i : [T_in]) (v : [state_type]) : [state_type] :=
    also sees each output fed back by the loop, by which time [output_update] has
    already run: it leaves the state alone. *)
 Definition input_update  (e : [T_event]) (v : [state_type]) : [state_type] :=
-  if e is Some (inr _) then v else set_pending (unlift e) v.
+  if e is Some (inr _) then v else set_pending (untag_in e) v.
 
 (* The scheduler and the previous pid choose between the two user processes
    only, by a boolean: [true] is the private user, [false] the public user.
@@ -411,14 +417,9 @@ Definition state_step  (observe_policy : [T_out] -> [state_type] -> [state_type]
 
 (* === 6. Stateful wrapper === *)
 
-(* The output an event carries, if it is a fed-back output, and [def] for an
-   interrupt; [def] only makes the function total. *)
-Definition out_or_def (def : [T_out]) (e : [T_event]) : [T_out] :=
-  if e is Some (inr o) then o else def.
-
 (* reactive_system state output_update p =
-     map lift (out_or_def no_output)
-       (loop (map id (fun x => Some (inr x.2))
+     map tag_in untag_out
+       (loop (map id (fun x => tag_out x.2)
          (sta input_update output_update state p)))
 
    Inside the loop an event is an interrupt ([None] or [Some (inl tt)]) or an
@@ -431,10 +432,10 @@ Definition reactive_system
   (output_update : [T_out] -> [state_type] -> [state_type])
   (p : Proc T_pool_in T_out)
   : Proc T_in T_out :=
-  @map T_in T_event T_event T_out lift (out_or_def no_output)
+  @map T_in T_event T_event T_out tag_in untag_out
     (@loop T_event
        (@map T_event T_event (Times state_type T_out) T_event
-          id (fun x => Some (inr x.2))
+          id (fun x => tag_out x.2)
           (@sta T_event T_out state_type input_update output_update state p))).
 
 

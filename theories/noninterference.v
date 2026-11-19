@@ -964,7 +964,7 @@ Proof. by move/dis_eqpair_R/event_dis. Qed.
    states. *)
 Lemma slot_in_rel l (v v' : [state_type]) (e e' : [T_event]) :
   rel slot_in_equiv l (v, e) (v', e') ->
-  (exists i i', e = lift i /\ e' = lift i') \/
+  (exists i i', e = tag_in i /\ e' = tag_in i') \/
   (exists o o', e = Some (inr o) /\ e' = Some (inr o') /\
      rel (eqsum (private_equiv Bool) (public_equiv Nat)) l (get_cur_pid v) (get_cur_pid v') /\
      rel out_equiv_full l o o').
@@ -1115,7 +1115,7 @@ Theorem model_policy_NI_given : NI in_equiv (out_equiv_full)
   (model runtime init_policy observe_policy advance_policy p_pub p_priv p_sched).
 Proof.
   rewr;simpl;rewr;simpl.
-  (* the outer map: lift keeps what in_equiv relates and hides; out_or_def can
+  (* the outer map: tag_in keeps what in_equiv relates and hides; untag_out can
      only meet related events of the same kind (event_rel) *)
   apply: (@map_NI _ _ _ _ _ _ _ _ event_equiv event_equiv).
   - move=> l [[]|] [[]|] H;

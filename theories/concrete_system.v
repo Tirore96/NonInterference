@@ -177,10 +177,10 @@ Ltac trace_last := (first [econ;[idtac | tecon | idtac] | econ];
    disk handler holds them set at steps 3-4, and the masks are public.  Under
    [model_sliced] the counter and the masks agree; the runs differ only in the
    private pending bits, and from the second run of the slice on not at all. *)
-(* The event a trace label is to the state: an input enters the loop lifted,
-   an output is fed back. *)
+(* The event a trace label is to the state: an input enters the loop tagged,
+   an output is fed back tagged. *)
 Definition event_of (x : Tsum') : [T_event] :=
-  match x with inl i => lift i | inr o => Some (inr o) end.
+  match x with inl i => tag_in i | inr o => tag_out o end.
 Definition run_states (init : [state_type])
   (observe : [T_out] -> [state_type] -> [state_type])
   (advance : [state_type] -> [state_type]) (es : seqtype') :=
@@ -219,11 +219,11 @@ Definition system (v : [state_type]) (q : Proc T_pool_in T_out) : Proc T_in T_ou
   reactive_system v (output_update observe advance) q.
 
 Lemma system_stepI v q i p :
-  reduceI (system v q) i p -> exists q', p = system (state_step observe advance (lift i) v) q'.
+  reduceI (system v q) i p -> exists q', p = system (state_step observe advance (tag_in i) v) q'.
 Proof. by move/reduceI_fun => ->; case: i => [[]|] /=; eexists. Qed.
 
 Lemma system_stepO v q o p :
-  reduceO (system v q) o p -> exists q', p = system (state_step observe advance (Some (inr o)) v) q'.
+  reduceO (system v q) o p -> exists q', p = system (state_step observe advance (tag_out o) v) q'.
 Proof.
 move/reduceO_fun; rewrite /system /reactive_system /=.
 case: (stepO q) => o0 q0 /= [-> ->].
