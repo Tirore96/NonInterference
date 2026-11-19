@@ -875,6 +875,26 @@ Lemma eqmaybe_sum_dis (V : Ty) (P : levelPred) (HP : presP P) (VRel : cEquiv [V]
   dis (eqmaybe VRel HP) l v <-> dis (eqsum_LR (unit_equiv HP) VRel) l (option_to_sum v).
 Proof. by case: v. Qed.
 
+(* The sum former follows what its summands hide.  A public unit (1^L) is never
+   unobservable, so 1^L +_LR ≐ relates and hides exactly what 1^L +_R ≐ does; and
+   +_R is the plain sum when its right side hides nothing. *)
+Lemma eqsum_LR_public_rel (V : Ty) (HP : presP (fun _ => True)) (VRel : cEquiv [V]) l x y :
+  rel (eqsum_LR (unit_equiv HP) VRel) l x y <-> rel (eqsum_R (unit_equiv HP) VRel) l x y.
+Proof. case: x => [x|x]; case: y => [y|y] /=; tauto. Qed.
+
+Lemma eqsum_LR_public_dis (V : Ty) (HP : presP (fun _ => True)) (VRel : cEquiv [V]) l x :
+  dis (eqsum_LR (unit_equiv HP) VRel) l x <-> dis (eqsum_R (unit_equiv HP) VRel) l x.
+Proof. case: x => [x|x] /=; tauto. Qed.
+
+Lemma eqsum_R_nodis_rel {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) l x y :
+  rel (eqsum_R IRel ORel) l x y <-> rel (eqsum IRel ORel) l x y.
+Proof. by case: x => [x|x]; case: y => [y|y]. Qed.
+
+Lemma eqsum_R_nodis_dis {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) l x :
+  (forall o, ~ dis ORel l o) ->
+  dis (eqsum_R IRel ORel) l x <-> dis (eqsum IRel ORel) l x.
+Proof. by move=> H; case: x => [x|x] //=; split => // /H. Qed.
+
 Lemma rel_eq : forall (I : Set) (IRel : cEquiv I) (x : I) l, rel IRel l x x.
 Proof.
   intros. de IRel. ssa.
