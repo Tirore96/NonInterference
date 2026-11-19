@@ -444,7 +444,9 @@ Definition model (runtime : nat) (init_policy : [state_type])
 Definition userview (p : Proc T_in T_out) : Proc T_in T_out_userview :=
   map id parse_output p.
 
-Definition out_equiv_userview : cEquiv [T_out_userview] :=
+(* The output equivalence of the claim, on the user view; noninterference.v
+   defines the full view's, out_equiv_full, which the proof works with. *)
+Definition out_equiv : cEquiv [T_out_userview] :=
   eqmaybe_nobody (eqsum (public_equiv Unit) (private_equiv Bool)).
 
 (* The public view of a model: only the public user's output.  This is all an

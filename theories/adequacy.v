@@ -819,13 +819,13 @@ Qed.
 Corollary model_sliced_NI_paper :
   forall (runtime runs : nat) (p_pub : Proc Empty Unit)
          (p_priv : Proc Bool Bool) (p_sched : Proc Empty Bool),
-  PNI in_equiv out_equiv (model_sliced runtime runs p_pub p_priv p_sched).
+  PNI in_equiv out_equiv_full (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
   move=> runtime runs p_pub p_priv p_sched.
   apply/NI_paper; exact: model_sliced_NI_unconditional.
 Qed.
 
 Corollary model_immediate_not_NI_paper :
-  ~ PNI in_equiv out_equiv model_immediate_concrete.
+  ~ PNI in_equiv out_equiv_full model_immediate_concrete.
 Proof. move/NI_paper. exact model_immediate_not_NI. Qed.
 

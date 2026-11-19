@@ -20,7 +20,7 @@ Require Export NonInterference.theories.model_timer_unmasked.
    NonInterference: the concrete security equivalences and the results.
 
    Paper: Sections IV and V.  Structure:
-     4. The model's equivalences : in_equiv, out_equiv (out_equiv_userview is in generic_model.v)
+     4. The model's equivalences : in_equiv, out_equiv_full (out_equiv is in generic_model.v)
      5. model_immediate_concrete is not non-interfering        (model_immediate_not_NI),
         nor is its user view                          (model_immediate_userview_not_NI),
         nor even its public view                      (model_immediate_publicview_not_NI)
@@ -35,10 +35,10 @@ Require Export NonInterference.theories.model_timer_unmasked.
 Definition in_equiv : cEquiv [T_in] := eqsum_R (public_equiv Unit) (private_equiv Unit).
 
 
-(* out_equiv: the 6-slot pool output.  Handler slots are NOP, disk,
+(* out_equiv_full: the 6-slot pool output.  Handler slots are NOP, disk,
    timer: the first two are secret (eqmaybe_nonbot private_equiv), the timer slot
    is public (it reacts only to public timer interrupts). *)
-Definition out_equiv : cEquiv [T_out] := eqpair (eqmaybe_all (public_equiv _))
+Definition out_equiv_full : cEquiv [T_out] := eqpair (eqmaybe_all (public_equiv _))
                                           (eqpair (eqmaybe_all (private_equiv _))
                                              (eqpair (eqmaybe_all (public_equiv _))
                                                 (eqpair (eqmaybe_nonbot ((private_equiv _)))
@@ -46,8 +46,8 @@ Definition out_equiv : cEquiv [T_out] := eqpair (eqmaybe_all (public_equiv _))
                                                       (eqmaybe_all (public_equiv _)))))).
 
 (* No output is unobservable: an output is a tuple, and eqpair hides nothing. *)
-Lemma out_equiv_nodis l (o : [T_out]) :
-  ~ dis (out_equiv) l o.
+Lemma out_equiv_full_nodis l (o : [T_out]) :
+  ~ dis (out_equiv_full) l o.
 Proof. done. Qed.
 
 
@@ -66,7 +66,7 @@ Proof.
     trace_step. trace_last.
 Qed.
 
-Lemma helper_trace : Trace out_equiv \bot [::out_get';out_get'] model_immediate_concrete.
+Lemma helper_trace : Trace out_equiv_full \bot [::out_get';out_get'] model_immediate_concrete.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace'.
   intros. move/public_equiv_eq: H => ->. auto.
@@ -82,7 +82,7 @@ Proof.
   by move=> ? ? ? /public_equiv_eq ->; right.
 Qed.
 
-Lemma helper_trace_userview : Trace out_equiv_userview \bot two_gets model_immediate_userview_concrete.
+Lemma helper_trace_userview : Trace out_equiv \bot two_gets model_immediate_userview_concrete.
 Proof.
   eapply Trace_imp. 2:eapply helper_trace_userview'.
   intros. move/public_equiv_eq: H => ->. auto.
@@ -114,7 +114,7 @@ Opaque input_update output_update immediate_init no_output.
    (secret at bot); its pending flag reschedules the disk handler, which then
    runs its full two steps, so the expected second public output becomes None.
    Two public outputs suffice to refute NI.  (Paper, Section IV-A.) === *)
-Lemma model_immediate_not_NI : ~ NI in_equiv out_equiv model_immediate_concrete.
+Lemma model_immediate_not_NI : ~ NI in_equiv out_equiv_full model_immediate_concrete.
 Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
@@ -132,7 +132,7 @@ Qed.
 
 (* The leak survives the user view: the missing public request is a user-slot
    output, which [parse_output] keeps.  Same witness, same proof. *)
-Lemma model_immediate_userview_not_NI : ~ NI in_equiv out_equiv_userview model_immediate_userview_concrete.
+Lemma model_immediate_userview_not_NI : ~ NI in_equiv out_equiv model_immediate_userview_concrete.
 Proof.
   intro. rewrite /NI in H. move: (H \bot). clear H.
   rewrite /NI_l. case=>_ [] + _. intros.
@@ -219,7 +219,7 @@ Proof.
 Qed.
 
 
-Lemma out_equiv_not_bot : forall i i' l, l <> \bot -> rel (out_equiv) l i i' -> i = i'.
+Lemma out_equiv_full_not_bot : forall i i' l, l <> \bot -> rel (out_equiv_full) l i i' -> i = i'.
 Proof.
   intros.
   move:H0. move/rel_eqpair=> [] + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [] + /rel_eqpair [].
@@ -317,7 +317,7 @@ Qed.
      fun o => initiate_next o \o (advance_policy \o observe_policy o),
    and fv_NI_comp discharges fv_NI of a pipeline from fv_NI of its stages.  The
    input event equivalence is eqsum_LR, but no output is unobservable
-   (out_equiv_nodis), so only an input may be, which is why input_update_EP reduces to a condition on set_pending
+   (out_equiv_full_nodis), so only an input may be, which is why input_update_EP reduces to a condition on set_pending
    alone.  initiate_next is non-interfering only on states the sliced policy
    reaches, so for the sliced model output_update is proved under the slice
    invariant (sta_NI_pred in theorems.v). === *)
@@ -543,14 +543,14 @@ Qed.
 (* The scheduler's choice: it reads only the scheduler's output, which is
    public, and whether the user slots emitted. *)
 Lemma apply_scheduler_choice_NI :
-  fv_NI (out_equiv) state_type_equiv state_type_equiv (@apply_scheduler_choice).
+  fv_NI (out_equiv_full) state_type_equiv state_type_equiv (@apply_scheduler_choice).
 Proof.
   rewrite /apply_scheduler_choice.
 
   mrw. intros.
 
   destruct (eqVneq l \bot).
-  2: {  apply out_equiv_not_bot in H. 2:apply/eqP=>//. subst.
+  2: {  apply out_equiv_full_not_bot in H. 2:apply/eqP=>//. subst.
         apply state_type_equiv_not_bot in H0. 2:apply/eqP=>//. subst. eauto. }
   subst.
 
@@ -715,7 +715,7 @@ Qed.
 
 (* ⦃≐ ∧ open_iff_ready on both sides⦄ initiate_next ⦃≐⦄ *)
 Lemma initiate_next_NI_on l (o o' : [T_out]) v v' :
-  rel (out_equiv) l o o' -> rel state_type_equiv l v v' ->
+  rel (out_equiv_full) l o o' -> rel state_type_equiv l v v' ->
   open_iff_ready v -> open_iff_ready v' ->
   rel state_type_equiv l (initiate_next o v) (initiate_next o' v').
 Proof.
@@ -802,7 +802,7 @@ Qed.
 (* service_policy: observe_timer_output, then tick_slice.  Both read only public
    fields, so they need no invariant. *)
 Lemma observe_timer_output_NI :
-  fv_NI (out_equiv) state_type_equiv state_type_equiv (@observe_timer_output runtime runs).
+  fv_NI (out_equiv_full) state_type_equiv state_type_equiv (@observe_timer_output runtime runs).
 Proof.
   mrw. intros.
   rewrite /observe_timer_output.
@@ -832,7 +832,7 @@ Proof.
 Qed.
 
 Lemma sliced_service_NI :
-  fv_NI (out_equiv) state_type_equiv state_type_equiv (@sliced_service runtime runs).
+  fv_NI (out_equiv_full) state_type_equiv state_type_equiv (@sliced_service runtime runs).
 Proof.
   rewrite /sliced_service.
   apply fv_NI_comp; first exact: observe_timer_output_NI.
@@ -875,7 +875,7 @@ Variable advance_policy : [state_type] -> [state_type].
 Hypothesis init_inv : secret_gated init_policy.
 Hypothesis service_gated : forall o v, secret_gated v ->
   secret_gated_at_boundary (advance_policy (observe_policy o v)).
-Hypothesis service_NI : fv_NI (out_equiv) state_type_equiv state_type_equiv
+Hypothesis service_NI : fv_NI (out_equiv_full) state_type_equiv state_type_equiv
   (fun o => advance_policy \o observe_policy o).
 
 (* The output summand, on states satisfying the slice invariant: the service
@@ -883,7 +883,7 @@ Hypothesis service_NI : fv_NI (out_equiv) state_type_equiv state_type_equiv
    choice point (service_gated), which gives initiate_next what it needs
    (secret_gated_at_boundary_ready). *)
 Lemma policy_output_NI_on :
-  fv_NI_on secret_gated (out_equiv) state_type_equiv
+  fv_NI_on secret_gated (out_equiv_full) state_type_equiv
     (output_update observe_policy advance_policy).
 Proof.
 move=> l o o' Ho v v' Pv Pv' Hv /=.
@@ -896,31 +896,31 @@ Qed.
 (* The input update.  An event equivalence never relates an inl to an inr, and an
    output fed back leaves the state alone. *)
 Lemma input_update_NI :
-  fv_NI (eqsum_LR in_equiv (out_equiv)) state_type_equiv state_type_equiv
+  fv_NI (eqsum_LR in_equiv (out_equiv_full)) state_type_equiv state_type_equiv
     (@input_update).
 Proof.
 move=> l e e' He v v' Hv.
 case: e e' He => [i|o] [i'|o'] He /=.
 - apply: set_pending_NI Hv; exact: rel_eqsum_LR' He.
-- by case: He => _ /out_equiv_nodis.
-- by case: He => /out_equiv_nodis.
+- by case: He => _ /out_equiv_full_nodis.
+- by case: He => /out_equiv_full_nodis.
 - exact: Hv.
 Qed.
 
 (* Under eqsum_LR with no output unobservable, only an inl is ever
    unobservable. *)
 Lemma input_update_EP :
-  f_EP (eqsum_LR in_equiv (out_equiv)) state_type_equiv (@input_update).
+  f_EP (eqsum_LR in_equiv (out_equiv_full)) state_type_equiv (@input_update).
 Proof. by move=> l [i|o] Hi v //; apply: set_pending_EP. Qed.
 
 (* The state cell: the first hard step of the proof of model_policy_NI.  For any
    inner process, the obligations of sta_NI_pred hold with the slice invariant.
    (Paper, Section V-C.) *)
 Lemma policy_state_cell_NI p :
-  NI (eqpair_R state_type_equiv (eqsum_LR in_equiv (out_equiv)))
-     (out_equiv) p ->
-  NI (eqsum_LR in_equiv (out_equiv))
-     (eqpair state_type_equiv (out_equiv))
+  NI (eqpair_R state_type_equiv (eqsum_LR in_equiv (out_equiv_full)))
+     (out_equiv_full) p ->
+  NI (eqsum_LR in_equiv (out_equiv_full))
+     (eqpair state_type_equiv (out_equiv_full))
      (sta (@input_update)
         (output_update observe_policy advance_policy) init_policy p).
 Proof.
@@ -937,7 +937,7 @@ Qed.
 (* The equivalence on what reaches a slot: the state, with each event of the
    loop.  It is the input equivalence of the [sta]'s argument. *)
 Definition slot_in_equiv : cEquiv [T_pool_in] :=
-  eqpair_R state_type_equiv (eqsum_LR in_equiv out_equiv).
+  eqpair_R state_type_equiv (eqsum_LR in_equiv out_equiv_full).
 
 (* Only a disk interrupt is unobservable, and only at bot. *)
 Lemma in_equiv_dis_bot l (i : [T_in]) : dis in_equiv l i -> l = \bot.
@@ -947,7 +947,7 @@ Proof. by case: i => [[]|[]] /= H; [case: H | exact/not_not_bot]. Qed.
 Lemma slot_in_dis l (v : [state_type]) (e : [Sum T_in T_out]) :
   dis slot_in_equiv l (v, e) -> l = \bot /\ exists i, e = inl i.
 Proof.
-move/dis_eqpair_R; case: e => [i H|o H]; last by case: (out_equiv_nodis H).
+move/dis_eqpair_R; case: e => [i H|o H]; last by case: (out_equiv_full_nodis H).
 by split; [exact: (in_equiv_dis_bot H) | exists i].
 Qed.
 
@@ -958,15 +958,15 @@ Lemma slot_in_rel l (v v' : [state_type]) (e e' : [Sum T_in T_out]) :
   (exists i i', e = inl i /\ e' = inl i') \/
   (exists o o', e = inr o /\ e' = inr o' /\
      rel (eqsum (private_equiv Bool) (public_equiv Nat)) l (get_cur_pid v) (get_cur_pid v') /\
-     rel out_equiv l o o').
+     rel out_equiv_full l o o').
 Proof.
 case/rel_eqpair_R2' => [[Hv He]|[He He']].
-- case/(eqsum_LR_split (@out_equiv_nodis l)): He => [[i][i'][-> [-> _]]|[o][o'][-> [-> Ho]]].
+- case/(eqsum_LR_split (@out_equiv_full_nodis l)): He => [[i][i'][-> [-> _]]|[o][o'][-> [-> Ho]]].
   + by left; exists i, i'.
   + right; exists o, o'; do 3 (split => //).
     by case/rel_eqpair: Hv => /rel_eqpair[].
-- left. case: e He => [i _|o H]; last by case: (out_equiv_nodis H).
-  case: e' He' => [i' _|o' H]; last by case: (out_equiv_nodis H).
+- left. case: e He => [i _|o H]; last by case: (out_equiv_full_nodis H).
+  case: e' He' => [i' _|o' H]; last by case: (out_equiv_full_nodis H).
   by exists i, i'.
 Qed.
 
@@ -976,7 +976,7 @@ Qed.
    unobservable at bot like the disk interrupt itself.  (Paper, Section V-D.) *)
 Lemma slot_visible_NI (A O : Ty) pid proj (IRel : cEquiv [A]) (YRel : cEquiv [O]) p :
   pid != disk_pid -> pid != nop_pid ->
-  f_NI out_equiv (eqmaybe_nobody IRel) proj ->
+  f_NI out_equiv_full (eqmaybe_nobody IRel) proj ->
   NI IRel YRel p ->
   NI slot_in_equiv (eqmaybe_all YRel) (slot pid proj p).
 Proof.
@@ -1010,7 +1010,7 @@ Qed.
    current is private, so the gate is private and the attacker cannot trust it;
    instead it sees none of the slot's outputs.  (Paper, Section V-D.) *)
 Lemma slot_hidden_NI (A O : Ty) pid proj (IRel : cEquiv [A]) (YRel : cEquiv [O]) p :
-  f_NI out_equiv (eqmaybe_nobody IRel) proj ->
+  f_NI out_equiv_full (eqmaybe_nobody IRel) proj ->
   NI IRel (private_equiv O) p ->
   NI slot_in_equiv (eqmaybe_nonbot (private_equiv O)) (slot pid proj p).
 Proof.
@@ -1086,12 +1086,12 @@ Proof.
 Qed.
 
 Lemma slot_no_input (IRel : cEquiv [Empty]) :
-  f_NI out_equiv (eqmaybe_nobody IRel) no_input.
+  f_NI out_equiv_full (eqmaybe_nobody IRel) no_input.
 Proof. by mrw. Qed.
 
 (* The private user's share of an output, the disk handler's output: secret
    there, it reaches the private user as a private input. *)
-Lemma dI_out_NI : f_NI out_equiv (eqmaybe_nobody (private_equiv Bool)) dI_out.
+Lemma dI_out_NI : f_NI out_equiv_full (eqmaybe_nobody (private_equiv Bool)) dI_out.
 Proof.
   mrw. move=> l o o'.
   move/rel_eqpair=>[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] _ /rel_eqpair[] Hout _.
@@ -1102,21 +1102,21 @@ Proof.
   case: e => [x|]; case: e' => [y|] //=; rewrite /eqmaybe_dis /=; by case=> ? _; split.
 Qed.
 
-Theorem model_policy_NI : NI in_equiv (out_equiv)
+Theorem model_policy_NI : NI in_equiv (out_equiv_full)
   (model runtime init_policy observe_policy advance_policy p_pub p_priv p_sched).
 Proof.
   rewr;simpl;rewr;simpl.
   eapply map_NI.
-  instantiate (1:= eqsum_LR in_equiv (out_equiv)). ssa. ssa.
+  instantiate (1:= eqsum_LR in_equiv (out_equiv_full)). ssa. ssa.
   mrw. intros.
   2:eapply loop_NI.
-  case/(eqsum_LR_split (@out_equiv_nodis l)): H => [[x][x'][->][->] _|[o][o'][->][->] H].
+  case/(eqsum_LR_split (@out_equiv_full_nodis l)): H => [[x][x'][->][->] _|[o][o'][->][->] H].
   done.
   rewrite /inr_or_def. done.
 
   eapply map_NI.
   eauto. eauto.
-  instantiate (1:= eqpair state_type_equiv (out_equiv)).
+  instantiate (1:= eqpair state_type_equiv (out_equiv_full)).
   mrw. intros.
   apply: rel_eqsum_LR2.
   case/rel_eqpair: H;eauto.
@@ -1142,7 +1142,7 @@ Qed.
 End Policy.
 
 (* The sliced policy meets the three obligations. *)
-Lemma model_sliced_NI : NI in_equiv (out_equiv) (model_sliced runtime runs p_pub p_priv p_sched).
+Lemma model_sliced_NI : NI in_equiv (out_equiv_full) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
 apply: model_policy_NI.
 - exact: sliced_init_gated.
@@ -1161,7 +1161,7 @@ Proof.
 Qed.
 
 Lemma unmasked_service_NI :
-  fv_NI (out_equiv) state_type_equiv state_type_equiv (@unmasked_service runtime runs).
+  fv_NI (out_equiv_full) state_type_equiv state_type_equiv (@unmasked_service runtime runs).
 Proof.
   rewrite /unmasked_service.
   apply fv_NI_comp; first exact: observe_timer_output_NI.
@@ -1188,7 +1188,7 @@ Proof.
     + by apply update_slice_count_rel.
 Qed.
 
-Theorem model_timer_unmasked_NI : NI in_equiv (out_equiv)
+Theorem model_timer_unmasked_NI : NI in_equiv (out_equiv_full)
   (model_timer_unmasked runtime runs p_pub p_priv p_sched).
 Proof.
 apply: model_policy_NI.
@@ -1200,9 +1200,9 @@ Qed.
 
 (* === Section 6 (payoff): the top result.  model_sliced_userview = map id
    parse_output model_sliced; NI is obtained from model_sliced_NI by output
-   weakening through parse_output (out_equiv-related outputs map to
-   out_equiv_userview-related ones).  (Paper, Section IV-B.) === *)
-Lemma model_sliced_userview_NI : NI in_equiv (out_equiv_userview) (model_sliced_userview runtime runs p_pub p_priv p_sched).
+   weakening through parse_output (out_equiv_full-related outputs map to
+   out_equiv-related ones).  (Paper, Section IV-B.) === *)
+Lemma model_sliced_userview_NI : NI in_equiv (out_equiv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
   rewrite /model_sliced_userview /userview.
   eapply map_NI. eauto. eauto.
@@ -1259,7 +1259,7 @@ Qed.
 
 Theorem model_sliced_NI_unconditional (runtime runs : nat)
   (p_pub : Proc Empty Unit) (p_priv : Proc Bool Bool) (p_sched : Proc Empty Bool) :
-  NI in_equiv (out_equiv) (model_sliced runtime runs p_pub p_priv p_sched).
+  NI in_equiv (out_equiv_full) (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
 apply: model_sliced_NI;
   [exact: NI_empty_input | exact: NI_private_private | exact: NI_empty_input].
@@ -1267,7 +1267,7 @@ Qed.
 
 Theorem model_sliced_userview_NI_unconditional (runtime runs : nat)
   (p_pub : Proc Empty Unit) (p_priv : Proc Bool Bool) (p_sched : Proc Empty Bool) :
-  NI in_equiv (out_equiv_userview) (model_sliced_userview runtime runs p_pub p_priv p_sched).
+  NI in_equiv (out_equiv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
 Proof.
 apply: model_sliced_userview_NI;
   [exact: NI_empty_input | exact: NI_private_private | exact: NI_empty_input].
@@ -1282,9 +1282,9 @@ Theorem model_policy_NI_unconditional (runtime : nat)
   secret_gated init_policy ->
   (forall o v, secret_gated v ->
      secret_gated_at_boundary (advance_policy (observe_policy o v))) ->
-  fv_NI (out_equiv) state_type_equiv state_type_equiv
+  fv_NI (out_equiv_full) state_type_equiv state_type_equiv
     (fun o => advance_policy \o observe_policy o) ->
-  NI in_equiv (out_equiv)
+  NI in_equiv (out_equiv_full)
     (model runtime init_policy observe_policy advance_policy p_pub p_priv p_sched).
 Proof.
 move=> Hinit Hgated Hservice.
@@ -1294,14 +1294,14 @@ Qed.
 
 
 (* === The concrete system, recovered by instantiation. === *)
-Corollary model_sliced_concrete_NI : NI in_equiv out_equiv model_sliced_concrete.
+Corollary model_sliced_concrete_NI : NI in_equiv out_equiv_full model_sliced_concrete.
 Proof.
   apply model_sliced_NI.
   apply p_pub_concrete_NI. apply p_priv_concrete_NI. apply scheduler_NI.
 Qed.
 
 Corollary model_sliced_userview_concrete_NI :
-  NI in_equiv out_equiv_userview model_sliced_userview_concrete.
+  NI in_equiv out_equiv model_sliced_userview_concrete.
 Proof.
   apply model_sliced_userview_NI.
   apply p_pub_concrete_NI. apply p_priv_concrete_NI. apply scheduler_NI.
