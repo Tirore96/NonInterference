@@ -91,8 +91,8 @@ Definition pool_concrete := pool handler_runtime p_pub_concrete p_priv_concrete 
 Definition Tsum' := ([T_in] + [T_out])%type.
 Definition Tsum := Sum T_in T_out_userview.
 
-Definition dI' : Tsum' := inl (inr tt).
-Definition tI' : Tsum' := inl (inl tt).
+Definition dI' : Tsum' := inl disk_in.
+Definition tI' : Tsum' := inl timer_in.
 Definition low_out x : [T_out] := (Some x,(None,(None,(None,(None,None))))).
 Definition high_out x : [T_out] := (None,(Some x,(None,(None,(None,None))))).
 Definition sched_o x : [T_out] := (None,(None,(Some x,(None,(None,None))))).
@@ -120,8 +120,8 @@ Definition out_get : [Tsum] := inr (Some (inl (GetRequest))).
 Definition out_nop : [Tsum] := inr (Some (inr Idle)).
 Definition out_syscall : [Tsum] := inr (Some (inr Syscall)).
 Definition w_None : [Tsum] := inr None.
-Definition tI : [Tsum] := inl (inl tt).
-Definition dI : [Tsum] := inl (inr tt).
+Definition tI : [Tsum] := inl timer_in.
+Definition dI : [Tsum] := inl disk_in.
 
 Definition seqtype' := seq Tsum'.
 Definition seqtype := seq ([T_in] + [T_out_userview]).
@@ -150,7 +150,7 @@ Ltac reduce_tac2 :=
 
 Ltac sta_state_reduce :=
   match goal with
-  | |- context [(@sta (Sum T_in T_out) T_out state_type _ (output_update _ _) ?state _)] =>let reduced := eval cbv in state in
+  | |- context [(@sta T_event T_out state_type _ (output_update _ _) ?state _)] =>let reduced := eval cbv in state in
                                                                                                           pattern state; match goal with |- ?F state => change (F reduced) end; cbv beta
   end.
 
@@ -177,10 +177,14 @@ Ltac trace_last := (first [econ;[idtac | tecon | idtac] | econ];
    disk handler holds them set at steps 3-4, and the masks are public.  Under
    [model_sliced] the counter and the masks agree; the runs differ only in the
    private pending bits, and from the second run of the slice on not at all. *)
+(* The event a trace label is to the state: an input enters the loop lifted,
+   an output is fed back. *)
+Definition event_of (x : Tsum') : [T_event] :=
+  match x with inl i => lift i | inr o => Some (inr o) end.
 Definition run_states (init : [state_type])
   (observe : [T_out] -> [state_type] -> [state_type])
   (advance : [state_type] -> [state_type]) (es : seqtype') :=
-  scanl (fun v e => state_step observe advance e v) init es.
+  scanl (fun v e => state_step observe advance (event_of e) v) init es.
 Definition state_row (v : [state_type]) :=
   (get_slice_count v, get_ir_mask v timer_irq, get_ir_mask v disk_irq,
    get_ir_pending v disk_irq, get_ir_pending v nop_irq).
@@ -215,11 +219,11 @@ Definition system (v : [state_type]) (q : Proc T_pool_in T_out) : Proc T_in T_ou
   reactive_system v (output_update observe advance) q.
 
 Lemma system_stepI v q i p :
-  reduceI (system v q) i p -> exists q', p = system (state_step observe advance (inl i) v) q'.
-Proof. by move/reduceI_fun => ->; eexists. Qed.
+  reduceI (system v q) i p -> exists q', p = system (state_step observe advance (lift i) v) q'.
+Proof. by move/reduceI_fun => ->; case: i => [[]|] /=; eexists. Qed.
 
 Lemma system_stepO v q o p :
-  reduceO (system v q) o p -> exists q', p = system (state_step observe advance (inr o) v) q'.
+  reduceO (system v q) o p -> exists q', p = system (state_step observe advance (Some (inr o)) v) q'.
 Proof.
 move/reduceO_fun; rewrite /system /reactive_system /=.
 case: (stepO q) => o0 q0 /= [-> ->].
@@ -228,7 +232,7 @@ Qed.
 
 Lemma system_steps (es : seqtype') v q p :
   Steps es (system v q) p ->
-  exists q', p = system (foldl (fun v e => state_step observe advance e v) v es) q'.
+  exists q', p = system (foldl (fun v e => state_step observe advance (event_of e) v) v es) q'.
 Proof.
 elim: es v q p => [|[i|o] es IH] v q p H; inversion H; subst; clear H.
 - by exists q.

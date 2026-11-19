@@ -822,7 +822,7 @@ Corollary model_sliced_NI_paper :
   PNI in_equiv out_equiv_full (model_sliced runtime runs p_pub p_priv p_sched).
 Proof.
   move=> runtime runs p_pub p_priv p_sched.
-  apply/NI_paper; exact: model_sliced_NI_unconditional.
+  apply/NI_paper; exact: model_sliced_NI.
 Qed.
 
 Corollary model_immediate_not_NI_paper :

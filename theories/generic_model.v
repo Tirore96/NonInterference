@@ -52,10 +52,13 @@ Require Export NonInterference.theories.theorems.
 
 (* === 0. Input and output types === *)
 
-(* An interrupt is a sum: the public timer interrupt on the inl side, the
-   secret disk interrupt on the inr side, the side [eqsum_R] hides.  The
-   interrupt controller is indexed by the same type (irq, below). *)
-Definition T_in := Sum Unit Unit.
+(* An interrupt is an option: [Some tt] is the public timer interrupt and
+   [None] the secret disk interrupt, the value [eqmaybe_nonbot] hides from the
+   attacker (in_equiv, noninterference.v).  The interrupt controller has its own
+   index type (irq, below). *)
+Definition T_in := Option Unit.
+Notation timer_in := (Some tt) (only parsing).
+Notation disk_in := None (only parsing).
 (* A handler's output is a bool: [Notify] when its run completes, [Nothing]
    on every other step. *)
 Notation Notify := true (only parsing).
@@ -134,10 +137,13 @@ Definition bool_state := Times re_sched ic_count.
 (* The interrupt controller has one entry per external interrupt and one more,
    [nop_irq], for the NOP handler.  No external interrupt raises the NOP entry;
    the sliced policy sets it pending itself, to use the NOP handler as filler. *)
-Definition irq := Option T_in.
+Definition irq := Option (Sum Unit Unit).
 Notation timer_irq := (Some (inl tt)).
 Notation disk_irq := (Some (inr tt)).
 Notation nop_irq := None (only parsing).
+(* The controller entry an interrupt raises. *)
+Definition irq_of_input (i : [T_in]) : [irq] :=
+  if i is Some _ then timer_irq else disk_irq.
 Definition all_interrupts : seq [irq] :=
   [:: timer_irq; disk_irq; nop_irq].
 Definition sans_timer : seq [irq] :=
@@ -250,12 +256,21 @@ Definition parse_output (o : [T_out]) : [T_out_userview] :=
 
 (* === 4. Slots and the process pool === *)
 
-(* What reaches the pool: the state, and the event of the loop -- an interrupt
-   (inl) or the pool's own output fed back (inr). *)
-Definition T_pool_in := Times state_type (Sum T_in T_out).
+(* An event of the loop: [None] is the disk interrupt, [Some (inl tt)] the timer
+   interrupt, and [Some (inr o)] the pool's own output fed back.  The value
+   hidden from the attacker is [None], as in T_in (event_equiv,
+   noninterference.v). *)
+Definition T_event := Option (Sum Unit T_out).
+
+(* An interrupt as an event, and back. *)
+Definition lift (i : [T_in]) : [T_event] := if i is Some u then Some (inl u) else None.
+Definition unlift (e : [T_event]) : [T_in] := if e is Some (inl u) then Some u else None.
+
+(* What reaches the pool: the state, and the event of the loop. *)
+Definition T_pool_in := Times state_type T_event.
 
 (* slot pid proj p =
-     map (fun x => if x.2 is inr o then (get_cur_pid x.1 == pid, proj o)
+     map (fun x => if x.2 is Some (inr o) then (get_cur_pid x.1 == pid, proj o)
                    else (false, None)) id
        (swi (pid == initial_pid) (maybe (map id (fun o => (true, o)) p)))
 
@@ -267,7 +282,7 @@ Definition T_pool_in := Times state_type (Sum T_in T_out).
    switch nor the process: interrupts only touch the state. *)
 Definition slot (A O : Ty) (pid : [cur_pid]) (proj : [T_out] -> [Option A]) (p : Proc A O)
   : Proc T_pool_in (Option O) :=
-  map ((fun x => if x.2 is inr o then (get_cur_pid x.1 == pid, proj o) else (false, None))
+  map ((fun x => if x.2 is Some (inr o) then (get_cur_pid x.1 == pid, proj o) else (false, None))
          : [T_pool_in] -> [Times Bool (Option A)]) id
     (swi (pid == initial_pid)
        (maybe (map id ((fun o => (true, o)) : [O] -> [Times Bool O]) p))).
@@ -295,13 +310,13 @@ Definition pool (runtime : nat)
    decided later, by [initiate_next].  This is the whole of the input update:
    f_EP forbids the transition from taking any decision on an input event. *)
 Definition set_pending (i : [T_in]) (v : [state_type]) : [state_type] :=
-  update_ir_pending v (Some i) true.
+  update_ir_pending v (irq_of_input i) true.
 
-(* The [sta]'s input update.  Its input type is the loop's sum, so it also sees
-   each output fed back by the loop, by which time [output_update] has already
-   run: it leaves the state alone. *)
-Definition input_update  (e : [Sum T_in (T_out)]) (v : [state_type]) : [state_type] :=
-  if e is inl i then set_pending i v else v.
+(* The [sta]'s input update.  Its input type is the loop's event type, so it
+   also sees each output fed back by the loop, by which time [output_update] has
+   already run: it leaves the state alone. *)
+Definition input_update  (e : [T_event]) (v : [state_type]) : [state_type] :=
+  if e is Some (inr _) then v else set_pending (unlift e) v.
 
 (* The scheduler and the previous pid choose between the two user processes
    only, by a boolean: [true] is the private user, [false] the public user.
@@ -375,8 +390,9 @@ Definition initiate_next  (o : [T_out]) (v : [state_type]) : [state_type] :=
 
 (* The [sta]'s output update.  An arriving interrupt only records itself;
    everything it eventually causes happens here, where the input is no longer
-   the thing being varied.  That split is forced by f_EP, which under eqsum_LR,
-   with no output unobservable, constrains the input update alone.  The policy has two stages:
+   the thing being varied.  That split is forced by f_EP, which under
+   event_equiv, where only the disk interrupt is unobservable, constrains the
+   input update alone.  The policy has two stages:
    [observe_policy] reads the output, and [advance_policy] reads only the state,
    as its type says. *)
 Definition output_update  (observe_policy : [T_out] -> [state_type] -> [state_type])
@@ -388,22 +404,26 @@ Definition output_update  (observe_policy : [T_out] -> [state_type] -> [state_ty
    runs.  The [sta] itself takes the two updates apart. *)
 Definition state_step  (observe_policy : [T_out] -> [state_type] -> [state_type])
   (advance_policy : [state_type] -> [state_type])
-  (e : [Sum T_in (T_out)]) (v : [state_type]) : [state_type] :=
-  if e is inr o then output_update observe_policy advance_policy o v
+  (e : [T_event]) (v : [state_type]) : [state_type] :=
+  if e is Some (inr o) then output_update observe_policy advance_policy o v
   else input_update e v.
 
 
 (* === 6. Stateful wrapper === *)
 
-Definition inr_or_def {A B : Set} (def: B) (x : A + B) := if x is inr x' then x' else def.
+(* The output an event carries, if it is a fed-back output, and [def] for an
+   interrupt; [def] only makes the function total. *)
+Definition out_or_def (def : [T_out]) (e : [T_event]) : [T_out] :=
+  if e is Some (inr o) then o else def.
 
 (* reactive_system state output_update p =
-     map inl (inr_or_def no_output)
-       (loop (map id (fun x => inr x.2)
+     map lift (out_or_def no_output)
+       (loop (map id (fun x => Some (inr x.2))
          (sta input_update output_update state p)))
 
-   Inside the loop an event is an interrupt (inl) or an output of the pool
-   (inr).  Each output updates the state by [output_update], which computes the
+   Inside the loop an event is an interrupt ([None] or [Some (inl tt)]) or an
+   output of the pool ([Some (inr o)]).  Each output updates the state by
+   [output_update], which computes the
    next pid, and is fed back, so the pool's slots read that pid in the same
    step.  The outer map gives the loop the system's input and output types. *)
 Definition reactive_system
@@ -411,11 +431,11 @@ Definition reactive_system
   (output_update : [T_out] -> [state_type] -> [state_type])
   (p : Proc T_pool_in T_out)
   : Proc T_in T_out :=
-  @map T_in (Sum T_in T_out) (Sum T_in T_out) T_out inl (inr_or_def no_output)
-    (@loop (Sum T_in T_out)
-       (@map (Sum T_in T_out) (Sum T_in T_out) (Times state_type T_out) (Sum T_in T_out)
-          id (fun x => inr x.2)
-          (@sta (Sum T_in T_out) T_out state_type input_update output_update state p))).
+  @map T_in T_event T_event T_out lift (out_or_def no_output)
+    (@loop T_event
+       (@map T_event T_event (Times state_type T_out) T_event
+          id (fun x => Some (inr x.2))
+          (@sta T_event T_out state_type input_update output_update state p))).
 
 
 (* === 7. The generic model ===

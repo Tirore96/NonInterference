@@ -237,15 +237,15 @@ Qed.
 (* {secret_gated} set_pending i {secret_gated}: an input writes only a pending
    bit, which [secret_gated] does not read. *)
 Lemma set_pending_gated i v : secret_gated v -> secret_gated (set_pending i v).
-Proof. by move: v => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]]; case: i => -[]. Qed.
+Proof. by move: v => [[cur prev] [rs [c [[dp dm] [[kp km] [tp tm]]]]]]; case: i => [[]|]. Qed.
 
 Lemma sliced_init_gated : secret_gated sliced_init.
 Proof. by []. Qed.
 
 (* Both updates preserve [secret_gated]. *)
-Lemma input_update_gated (e : [Sum T_in (T_out)]) v :
+Lemma input_update_gated (e : [T_event]) v :
   secret_gated v -> secret_gated (input_update e v).
-Proof. by case: e => [i|o] Hv //; apply: set_pending_gated. Qed.
+Proof. by case: e => [[i|o]|] Hv //; apply: set_pending_gated. Qed.
 
 Lemma output_update_gated (o : [T_out]) v :
   secret_gated v ->
@@ -253,16 +253,16 @@ Lemma output_update_gated (o : [T_out]) v :
 Proof. by move=> Hv; apply: initiate_next_gated; apply: sliced_service_gated. Qed.
 
 (* Every step preserves [secret_gated]. *)
-Lemma state_step_gated (e : [Sum T_in (T_out)]) v :
+Lemma state_step_gated (e : [T_event]) v :
   secret_gated v ->
   secret_gated (state_step (@observe_timer_output runtime runs) (tick_slice runtime) e v).
 Proof.
-case: e => [i|o] Hv; first exact: input_update_gated.
-exact: output_update_gated.
+case: e => [[i|o]|] Hv; [exact: input_update_gated | exact: output_update_gated |
+  exact: input_update_gated].
 Qed.
 
 (* The state after any sequence of events, starting from [sliced_init]. *)
-Definition sliced_run (es : seq [Sum T_in (T_out)]) :=
+Definition sliced_run (es : seq [T_event]) :=
   foldl (fun v e => state_step (@observe_timer_output runtime runs) (tick_slice runtime) e v)
         sliced_init es.
 

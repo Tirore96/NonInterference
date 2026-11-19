@@ -21,14 +21,13 @@ and pair of user processes of the model.
 |---|---|---|
 | `out_NI`, `map_NI`, `sta_NI`, `swi_NI`, `par_NI`, `loop_NI`, `maybe_NI` ([`theorems.v`](theories/theorems.v)) | Theorem 1 (composition) | none |
 | `sta_NI_pred` ([`theorems.v`](theories/theorems.v)) | Theorem 2 (composition of a state cell under an invariant; our addition) | none |
-| `model_immediate_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (the leak) | none |
-| `model_immediate_userview_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Corollary 1 (the leak in the user view) | none |
-| `model_sliced_NI_unconditional` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (no leak, for every scheduler and pair of user processes) | none |
-| `model_policy_NI_unconditional` ([`noninterference.v`](theories/noninterference.v)) | Theorem 5 (any policy meeting three obligations is non-interfering) | none |
+| `model_immediate_userview_not_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 3 (the leak, in the user view) | none |
+| `model_immediate_not_NI` ([`noninterference.v`](theories/noninterference.v)) | §V-A: the leak in the full view | none |
+| `model_sliced_userview_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 4 (no leak in the user view, for every scheduler and pair of user processes) | none |
+| `model_sliced_NI` ([`noninterference.v`](theories/noninterference.v)) | §V-A: no leak in the full view | none |
+| `model_policy_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 5 (any policy meeting three obligations is non-interfering) | none |
 | `model_timer_unmasked_NI` ([`noninterference.v`](theories/noninterference.v)) | a second instance of Theorem 5, the timer left unmasked at boundaries | none |
-| `model_sliced_userview_NI_unconditional` ([`noninterference.v`](theories/noninterference.v)) | Corollary 2 (no leak in the user view) | none |
-| `sliced_run_gated` ([`model_sliced.v`](theories/model_sliced.v)) | §V-C: the slice invariant holds of every reachable state | none |
-| `eqmaybe_sum_rel`, `eqmaybe_sum_dis` ([`definitions.v`](theories/definitions.v)) | Appendix: the paper's options, written as sums, equal the mechanised equivalence | none |
+| `sliced_run_gated` ([`model_sliced.v`](theories/model_sliced.v)) | §V-B: the slice invariant holds of every reachable state | none |
 | `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | Appendix: our definitions equal the original's | none |
 | `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 3 and 4 in the original's terms | none |
 

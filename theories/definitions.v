@@ -825,13 +825,11 @@ Definition eqmaybe_nobody {V : Ty} (VRel : cEquiv [V]) : cEquiv ([Option V]).
 Defined.
 
 
-(* --- Sums that hide both sides, and options ---
-   Like products, sums have three formers: [eqsum] (≐1 + ≐2, hides nothing),
-   [eqsum_R] (≐1 +_R ≐2, hides the right side) and [eqsum_LR] below
-   (≐1 +_LR ≐2, hides both).  The paper reads an option as 1 + V, at
-   [eqsum_LR] with [unit_equiv P] (written 1^S) on the left; [eqmaybe] stays as it is, and
-   the two lemmas below show that it agrees with that sum form at every level,
-   in what it relates and in what it makes unobservable. *)
+(* --- Sums that hide both sides ---
+   Sums have three formers: [eqsum] (hides nothing), [eqsum_R] (hides the right
+   side) and [eqsum_LR] below (hides both).  The paper uses only [eqsum]: every
+   injection the model hides is an option's [None], at [eqmaybe] (the paper's
+   A_{⊥^K}).  [eqsum_LR] serves the concrete private user's own loop. *)
 
 (* Each injection is unobservable exactly when its payload is, and an inl is
    related to an inr exactly when both are unobservable. *)
@@ -858,42 +856,6 @@ Definition eqsum_LR {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) : cEquiv 
   - move=> l [x|x] Hx [y|y] /=; split; eauto; try (by case); try (by move=> ?; split).
 Defined.
 
-(* The unit, unobservable exactly at the levels outside P: the base equivalence
-   on the unit type. *)
-Definition unit_equiv (P : levelPred) (HP : presP P) : cEquiv ([Unit]) :=
-  base_equiv HP Unit.
-
-Definition option_to_sum {V : Ty} (v : [Option V]) : [Sum Unit V] :=
-  if v is Some v' then inr v' else inl tt.
-
-(* eqmaybe P ≐ is 1_P + ≐, along option_to_sum. *)
-Lemma eqmaybe_sum_rel (V : Ty) (P : levelPred) (HP : presP P) (VRel : cEquiv [V]) l v v' :
-  rel (eqmaybe VRel HP) l v v' <-> rel (eqsum_LR (unit_equiv HP) VRel) l (option_to_sum v) (option_to_sum v').
-Proof. by case: v => [v|]; case: v' => [v'|]. Qed.
-
-Lemma eqmaybe_sum_dis (V : Ty) (P : levelPred) (HP : presP P) (VRel : cEquiv [V]) l v :
-  dis (eqmaybe VRel HP) l v <-> dis (eqsum_LR (unit_equiv HP) VRel) l (option_to_sum v).
-Proof. by case: v. Qed.
-
-(* The sum former follows what its summands hide.  A public unit (1^L) is never
-   unobservable, so 1^L +_LR ≐ relates and hides exactly what 1^L +_R ≐ does; and
-   +_R is the plain sum when its right side hides nothing. *)
-Lemma eqsum_LR_public_rel (V : Ty) (HP : presP (fun _ => True)) (VRel : cEquiv [V]) l x y :
-  rel (eqsum_LR (unit_equiv HP) VRel) l x y <-> rel (eqsum_R (unit_equiv HP) VRel) l x y.
-Proof. case: x => [x|x]; case: y => [y|y] /=; tauto. Qed.
-
-Lemma eqsum_LR_public_dis (V : Ty) (HP : presP (fun _ => True)) (VRel : cEquiv [V]) l x :
-  dis (eqsum_LR (unit_equiv HP) VRel) l x <-> dis (eqsum_R (unit_equiv HP) VRel) l x.
-Proof. case: x => [x|x] /=; tauto. Qed.
-
-Lemma eqsum_R_nodis_rel {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) l x y :
-  rel (eqsum_R IRel ORel) l x y <-> rel (eqsum IRel ORel) l x y.
-Proof. by case: x => [x|x]; case: y => [y|y]. Qed.
-
-Lemma eqsum_R_nodis_dis {I O : Ty} (IRel : cEquiv [I]) (ORel : cEquiv [O]) l x :
-  (forall o, ~ dis ORel l o) ->
-  dis (eqsum_R IRel ORel) l x <-> dis (eqsum IRel ORel) l x.
-Proof. by move=> H; case: x => [x|x] //=; split => // /H. Qed.
 
 Lemma rel_eq : forall (I : Set) (IRel : cEquiv I) (x : I) l, rel IRel l x x.
 Proof.
