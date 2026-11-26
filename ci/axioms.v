@@ -15,6 +15,7 @@ Print Assumptions model_immediate_not_NI.
 Print Assumptions model_immediate_userview_not_NI.
 Print Assumptions model_immediate_publicview_not_NI.
 Print Assumptions model_policy_NI.
+Print Assumptions model_policy_userview_NI.
 Print Assumptions model_sliced_NI.
 Print Assumptions model_sliced_userview_NI.
 Print Assumptions model_timer_unmasked_NI.
@@ -22,7 +23,6 @@ Print Assumptions trace_timer_in_slice'.
 Print Assumptions sliced_run_gated.
 Print Assumptions run_states_model.
 Print Assumptions NI_paper.
-Print Assumptions ObliviousDis_iff.
 Print Assumptions NI_lEquiv.
 Print Assumptions model_immediate_not_NI_paper.
 Print Assumptions model_sliced_NI_paper.

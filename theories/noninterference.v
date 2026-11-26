@@ -1018,7 +1018,7 @@ Qed.
 (* The second hard step, for a slot a secret pid selects.  Which secret pid is
    current is private, so the gate is private and the attacker cannot trust it;
    instead it sees none of the slot's outputs.  (Paper, Section V-D.) *)
-Lemma slot_hidden_NI (A O : Ty) pid proj (IRel : cEquiv [A]) (YRel : cEquiv [O]) p :
+Lemma slot_hidden_NI (A O : Ty) pid proj (IRel : cEquiv [A]) p :
   f_NI out_equiv_full (eqmaybe_nobody IRel) proj ->
   NI IRel (private_equiv O) p ->
   NI slot_in_equiv (eqmaybe_nonbot (private_equiv O)) (slot pid proj p).
@@ -1047,10 +1047,10 @@ instantiate (1:= eqpair_LR (private_equiv _) (eqmaybe_nobody IRel)).
 - apply swi_NI.
   + move=> l.
     destruct (eqVneq l \bot). subst. right.
-    (* At bot the gate cannot be trusted, but everything the switch emits is
-       unobservable there: the gate is hidden, so None is, and so is every
-       payload. *)
-    apply oblivious_all_dis. case=> [o|] /=; first done.
+    (* At bot the gate cannot be trusted, but every two outputs of the switch
+       are related there: the gate is hidden, so None is unobservable, and so
+       is every payload. *)
+    apply all_dis_rel. case=> [o|] /=; first done.
     move=>Ha. have Hr : rel (private_equiv Bool) \bot true false by exact: private_bot.
     by move: (Ha _ Hr)=>[].
     left. have N : l <> \bot by apply/eqP.
@@ -1142,9 +1142,9 @@ Proof.
   apply par_NI.
   exact: (@slot_visible_NI Empty Bool scheduler_pid _ (public_equiv _) _ _ erefl erefl (slot_no_input _) p_sched_NI).
   apply par_NI.
-  exact: (@slot_hidden_NI Empty Bool nop_pid _ (public_equiv _) (private_equiv _) _ (slot_no_input _) ir_handler_private_NI).
+  exact: (@slot_hidden_NI Empty Bool nop_pid _ (public_equiv _) _ (slot_no_input _) ir_handler_private_NI).
   apply par_NI.
-  exact: (@slot_hidden_NI Empty Bool disk_pid _ (public_equiv _) (private_equiv _) _ (slot_no_input _) ir_handler_private_NI).
+  exact: (@slot_hidden_NI Empty Bool disk_pid _ (public_equiv _) _ (slot_no_input _) ir_handler_private_NI).
   exact: (@slot_visible_NI Empty Bool timer_pid _ (public_equiv _) _ _ erefl erefl (slot_no_input _) ir_handler_public_NI).
 Qed.
 
@@ -1211,11 +1211,8 @@ Qed.
    parse_output model_sliced; NI is obtained from model_sliced_NI_given by output
    weakening through parse_output (out_equiv_full-related outputs map to
    out_equiv-related ones).  (Paper, Section IV-B.) === *)
-Lemma model_sliced_userview_NI_given : NI in_equiv (out_equiv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
+Lemma parse_output_NI : f_NI out_equiv_full out_equiv parse_output.
 Proof.
-  rewrite /model_sliced_userview /userview.
-  eapply map_NI. eauto. eauto.
-  2: apply model_sliced_NI_given.
   mrw. intros.
   move: H=> /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + /rel_eqpair[] + +.
   move: i=>[a[] b[] c[] d[] e f].
@@ -1229,6 +1226,12 @@ Proof.
   move=>[]x'[]y'[]->[]-> H _ _ _ _.
   apply rel_eqmaybe_all. ssa.
   move=>[]->[]->. auto.
+Qed.
+
+Lemma model_sliced_userview_NI_given : NI in_equiv (out_equiv) (model_sliced_userview runtime runs p_pub p_priv p_sched).
+Proof.
+  rewrite /model_sliced_userview /userview.
+  eapply map_NI; [eauto | eauto | exact: parse_output_NI | exact: model_sliced_NI_given].
 Qed.
 
 End Parametric.
@@ -1299,6 +1302,26 @@ Proof.
 move=> Hinit Hgated Hservice.
 by apply: model_policy_NI_given => //;
   first [exact: NI_empty_input | exact: NI_private_private].
+Qed.
+
+Theorem model_policy_userview_NI (runtime : nat)
+  (p_pub : Proc Empty Unit) (p_priv : Proc Bool Bool) (p_sched : Proc Empty Bool)
+  (init_policy : [state_type])
+  (observe_policy : [T_out] -> [state_type] -> [state_type])
+  (advance_policy : [state_type] -> [state_type]) :
+  secret_gated init_policy ->
+  (forall o v, secret_gated v ->
+     secret_gated_at_boundary (advance_policy (observe_policy o v))) ->
+  fv_NI (out_equiv_full) state_type_equiv state_type_equiv
+    (fun o => advance_policy \o observe_policy o) ->
+  NI in_equiv out_equiv
+    (userview (model runtime init_policy observe_policy advance_policy p_pub p_priv p_sched)).
+Proof.
+move=> Hinit Hgated Hservice.
+rewrite /userview.
+apply: (@map_NI _ _ _ _ _ _ _ _ in_equiv out_equiv_full);
+  [exact: f_NI_id | exact: f_PU_id | exact: parse_output_NI |].
+exact: model_policy_NI.
 Qed.
 
 

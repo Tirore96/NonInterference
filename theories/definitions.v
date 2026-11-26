@@ -864,37 +864,6 @@ Proof.
 Qed.
 Hint Resolve rel_eq.
 
-(* [ObliviousTrace ORel l o0 s]: every output in [s] is indistinguishable from
-   the reference output [o0] at level [l], so an observer there sees the same
-   class throughout.  The reference is a plain output value, not a member of the
-   distinguished class.  Used only by [oblivious_class] below. *)
-Inductive ObliviousTrace {I O : Ty} (ORel : cEquiv [O]) (l : level) (o0 : [O]) : seq ([I] + [O]) -> Prop :=
- | OT_nil : ObliviousTrace ORel l o0 nil
- | OT_cons_in i s :  ObliviousTrace ORel l o0 s -> ObliviousTrace ORel l o0 ((inl i)::s)
- | OT_cons_out o s :  rel ORel l o0 o -> ObliviousTrace ORel l o0 s -> ObliviousTrace ORel l o0 ((inr o)::s).
-
-Definition oblivious_at {I O : Ty} (ORel : cEquiv [O]) (o0 : [O]) (p : Proc I O) (l : level) :=
-  forall s, Trace ORel l s p -> ObliviousTrace ORel l o0 s.
-
-(* [p] never leaves one indistinguishability class at [l].  This is weaker than
-   [oblivious] below and is used only inside the proof of [swi_NI]. *)
-Definition oblivious_class {I O : Ty} (ORel : cEquiv [O]) (p : Proc I O) (l : level) :=
-  exists o0, oblivious_at ORel o0 p l.
-
-(* [DisTrace ORel l s]: every output in [s] is unobservable at [l]. *)
-Inductive DisTrace {I O : Ty} (ORel : cEquiv [O]) (l : level) : seq ([I] + [O]) -> Prop :=
- | DT_nil : DisTrace ORel l nil
- | DT_cons_in i s : DisTrace ORel l s -> DisTrace ORel l ((inl i)::s)
- | DT_cons_out o s : dis ORel l o -> DisTrace ORel l s -> DisTrace ORel l ((inr o)::s).
-
-(* Obliviousness as in Rafnsson et al.: every output [p] can emit is
-   unobservable at [l]. *)
-Definition oblivious {I O : Ty} (ORel : cEquiv [O]) (p : Proc I O) (l : level) :=
-  forall s, Trace ORel l s p -> DisTrace ORel l s.
-
-Definition aware_or_oblivious  {I O : Ty} (ORel : cEquiv [O]) (o : [O]) (p : Proc I O) : levelPred := fun l => aware ORel o l \/ oblivious ORel p l.
-
-
 Lemma zerol : 0 < 0 = false.
 Proof. done.
 Qed.

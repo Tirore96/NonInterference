@@ -28,7 +28,7 @@ and pair of user processes of the model.
 | `model_policy_NI` ([`noninterference.v`](theories/noninterference.v)) | Theorem 5 (any policy meeting three obligations is non-interfering) | none |
 | `model_timer_unmasked_NI` ([`noninterference.v`](theories/noninterference.v)) | a second instance of Theorem 5, the timer left unmasked at boundaries | none |
 | `sliced_run_gated` ([`model_sliced.v`](theories/model_sliced.v)) | §V-B: the slice invariant holds of every reachable state | none |
-| `NI_paper`, `ObliviousDis_iff`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | Appendix: our definitions equal the original's | none |
+| `NI_paper`, `NI_lEquiv` ([`adequacy.v`](theories/adequacy.v)) | Appendix: our definitions equal the original's | none |
 | `model_immediate_not_NI_paper`, `model_sliced_NI_paper` ([`adequacy.v`](theories/adequacy.v)) | Theorems 3 and 4 in the original's terms | none |
 
 Every result depends only on the two parameters `d` and `L` that fix the security

@@ -16,10 +16,9 @@ Require Export NonInterference.theories.definitions.
 Require Import NonInterference.theories.model_immediate NonInterference.theories.model_sliced NonInterference.theories.noninterference.
 
 (* The paper's presentations, and the results that say departing from them costs
-   nothing: L-equivalences (section 1), streams (section 2), obliviousness over
-   reachable states (section 3), and the paper's own coinductive definition of
-   non-interference (section 4).  Section 5 states the main results in the
-   paper's own terms.  Paper: the appendix. *)
+   nothing: L-equivalences (section 1), streams (section 2), and the paper's
+   own coinductive definition of non-interference (section 3).  Section 4
+   states the main results in the paper's own terms.  Paper: the appendix. *)
 
 (* ----------------------------------------------------------------------- *)
 (** * 1. L-equivalences                                                     *)
@@ -421,68 +420,7 @@ Theorem NI_SNI : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (p : 
 Proof. intros. split. apply SNI_of_NI. apply NI_of_SNI. Qed.
 
 (* ----------------------------------------------------------------------- *)
-(** * 3. Obliviousness                                                      *)
-
-(* The paper (Definition 10) states obliviousness coinductively over reductions:
-   every output a process can reach is unobservable.  Here it is stated over the
-   traces a process admits ([oblivious]).  The two agree. *)
-
-Variant ObliviousDisF (I O : Ty) (ORel : cEquiv [O]) (l : level)
-        (R : Proc I O -> Prop) : Proc I O -> Prop :=
-| ODF p : (forall i p', reduceI p i p' -> R p') ->
-          (forall o p', reduceO p o p' -> dis ORel l o /\ R p') ->
-          ObliviousDisF ORel l R p.
-
-Lemma monotone_ObliviousDisF : forall (I O : Ty) (ORel : cEquiv [O]) l,
-    monotone1 (@ObliviousDisF I O ORel l).
-Proof.
-  intros I O ORel l x0 r r' IN LE. inv IN. constructor.
-  - intros. apply LE. eauto.
-  - intros. move: (H0 _ _ H1) => [Hr Hp]. split; auto.
-Qed.
-Hint Resolve monotone_ObliviousDisF : paco.
-
-Definition ObliviousDis (I O : Ty) (ORel : cEquiv [O]) (l : level) (p : Proc I O) :=
-  paco1 (@ObliviousDisF I O ORel l) bot1 p.
-
-(* Quantifying over reachable states and quantifying over admitted traces come
-   to the same thing.  Neither direction needs reduction to be a function. *)
-Lemma ObliviousDis_oblivious : forall (I O : Ty) (ORel : cEquiv [O]) l (p : Proc I O),
-    ObliviousDis ORel l p -> oblivious ORel p l.
-Proof.
-  intros I O ORel l p H s Hs. revert H.
-  induction Hs as [q | q i q' t Hred Hs IH | q o' o q' t Hred Hrel Hs IH];
-    intros HO.
-  - constructor.
-  - punfold HO. destruct HO as [r Hi Ho]. constructor. apply IH.
-    move: (Hi _ _ Hred). intros [X|X]; [auto | destruct X].
-  - punfold HO. destruct HO as [r Hi Ho]. move: (Ho _ _ Hred) => [Hd HO'].
-    constructor. eapply dis_rel_l; eauto. apply IH.
-    destruct HO' as [X|X]; [auto | destruct X].
-Qed.
-
-Lemma oblivious_ObliviousDis : forall (I O : Ty) (ORel : cEquiv [O]) l (p : Proc I O),
-    oblivious ORel p l -> ObliviousDis ORel l p.
-Proof.
-  intros I O ORel l. pcofix CIH. intros p H. pfold. constructor.
-  - intros i p' Hred. right. apply CIH. intros s Hs.
-    move: (H (inl i :: s) (TR1 Hred Hs)) => Ho. inversion Ho; subst. auto.
-  - intros o p' Hred. split.
-    + move: (H [:: inr o] (TR2 Hred (rel_eq ORel o l) (TR0 ORel l p'))) => Ho.
-      inversion Ho; subst. auto.
-    + right. apply CIH. intros s Hs.
-      move: (H (inr o :: s) (TR2 Hred (rel_eq ORel o l) Hs)) => Ho.
-      inversion Ho; subst. auto.
-Qed.
-
-Theorem ObliviousDis_iff : forall (I O : Ty) (ORel : cEquiv [O]) l (p : Proc I O),
-    ObliviousDis ORel l p <-> oblivious ORel p l.
-Proof.
-  intros. split. apply ObliviousDis_oblivious. apply oblivious_ObliviousDis.
-Qed.
-
-(* ----------------------------------------------------------------------- *)
-(** * 4. The paper's non-interference                                       *)
+(** * 3. The paper's non-interference                                       *)
 
 (* Definition 4 quantifies over the streams a process performs, which is
    [STraceF] without the [rel] on outputs. *)
@@ -812,7 +750,7 @@ Proof.
 Qed.
 
 (* ----------------------------------------------------------------------- *)
-(** * 5. The main results in the paper's terms                              *)
+(** * 4. The main results in the paper's terms                              *)
 
 (* The two model results, with non-interference read as Definition 4 of
    Rafnsson et al. *)

@@ -493,9 +493,7 @@ Proof.
       * split; [apply Hw0 | eapply IH; eauto].
 Qed.
 
-(* sta_NI: clause 1 (rel) is PROVED via the projection + converse approach.     *)
-(* Clauses 2 (insert disclosed) and 3 (remove) are analogous (using p's clauses *)
-(* 2/3 and f_EP) and are left admitted.                                         *)
+(* sta_NI: proved via the projection + converse approach. *)
 Lemma sta_NI : forall (I O V : Ty) (p : Proc (Times V I) O) f g v (IRel : cEquiv [I]) (VRel : cEquiv [V]) (ORel : cEquiv [O]),
     fv_NI ORel VRel VRel g -> fv_NI IRel VRel VRel f -> f_EP IRel VRel f ->
     NI (eqpair_R VRel IRel) ORel p ->
@@ -776,139 +774,44 @@ Proof.
     exists o_val, (maybe p'). apply reduce_maybeO; auto.
 Qed.
 
-(* With the inductive [oblivious_at ORel o0 p l := forall s, Trace ORel l s p ->
-   ObliviousTrace ORel l o0 s], these three lemmas replace the old coinductive
-   inversion: they feed a one-longer trace to the hypothesis and invert the
-   resulting ObliviousTrace.  The reference output [o0] is carried along
-   unchanged, since it is fixed for the whole process. *)
-Lemma oblivious_at_reduceI : forall (I O : Ty) (ORel : cEquiv [O]) (o0 : [O]) (p p' : Proc I O) l i,
-  oblivious_at ORel o0 p l -> reduceI p i p' -> oblivious_at ORel o0 p' l.
+(* When every two outputs are related at [l], a process admits every trace
+   there: it can always take an input, and whatever it emits is related to the
+   output the trace asks for. *)
+Lemma Trace_all_rel : forall (I O : Ty) (ORel : cEquiv [O]) l,
+  (forall o o', rel ORel l o o') -> forall t (p : Proc I O), Trace ORel l t p.
 Proof.
-  intros I O ORel o0 p p' l i H_obl H_red s H_tr.
-  have H_tr': Trace ORel l (inl i :: s) p by (eapply TR1; eauto).
-  apply H_obl in H_tr'. inv H_tr'. auto.
+  move=> I O ORel l Hall. elim=> [|[i|o] t IH] p.
+  - apply TR0.
+  - case: (Proc_has_input I O p i) => p' Hred. exact: TR1 Hred (IH p').
+  - case: (Proc_has_output I O p) => o' [p' Hred]. exact: TR2 Hred (Hall o' o) (IH p').
 Qed.
 
-Lemma oblivious_at_reduceO : forall (I O : Ty) (ORel : cEquiv [O]) (o0 : [O]) (p p' : Proc I O) l o,
-  oblivious_at ORel o0 p l -> reduceO p o p' -> oblivious_at ORel o0 p' l.
+(* So such a level sees nothing of any process, and every process is
+   non-interfering there. *)
+Lemma all_rel_NI_l : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (p : Proc I O) l,
+  (forall o o', rel ORel l o o') -> NI_l IRel ORel l p.
 Proof.
-  intros I O ORel o0 p p' l o H_obl H_red s H_tr.
-  have H_tr': Trace ORel l (inr o :: s) p by (eapply TR2; [eauto | apply rel_eq | eauto]).
-  apply H_obl in H_tr'. inv H_tr'. auto.
+  move=> I O IRel ORel p l Hall.
+  split; [| split]; intros; exact: Trace_all_rel.
 Qed.
 
-Lemma oblivious_at_reduceO_rel : forall (I O : Ty) (ORel : cEquiv [O]) (o0 : [O]) (p p' : Proc I O) l o,
-  oblivious_at ORel o0 p l -> reduceO p o p' -> rel ORel l o0 o.
-Proof.
-  intros I O ORel o0 p p' l o H_obl H_red.
-  have H_tr': Trace ORel l [:: inr o] p by (eapply TR2; [eauto | apply rel_eq | apply TR0]).
-  apply H_obl in H_tr'. inv H_tr'. auto.
-Qed.
-
-Fixpoint all_outputs_rel (I O : Ty) (ORel : cEquiv [O]) (l : level) (o0 : [O]) (t : seq ([I] + [O])) : Prop :=
-  match t with
-  | nil => True
-  | inl _ :: t' => all_outputs_rel I O ORel l o0 t'
-  | inr o :: t' => rel ORel l o0 o /\ all_outputs_rel I O ORel l o0 t'
-  end.
-
-Lemma ObliviousTrace_all_outputs_rel : forall (I O : Ty) (ORel : cEquiv [O]) l o0 t,
-  ObliviousTrace ORel l o0 t -> all_outputs_rel I O ORel l o0 t.
-Proof.
-  intros I O ORel l o0 t H. induction H; simpl; try (split; assumption); auto.
-Qed.
-
-Lemma oblivious_at_trace_any : forall (I O : Ty) (ORel : cEquiv [O]) (l : level) (o0 : [O]) (p : Proc I O) t,
-  oblivious_at ORel o0 p l ->
-  all_outputs_rel I O ORel l o0 t ->
-  Trace ORel l t p.
-Proof.
-  intros I O ORel l o0 p t.
-  elim: t p.
-  - intros p H_obl H_rel. apply TR0.
-  - intros [i | o] t IH p H_obl H_rel.
-    + simpl in H_rel.
-      destruct (Proc_has_input I O p i) as [p' HredI].
-      eapply TR1; [exact HredI |].
-      apply IH; [eapply oblivious_at_reduceI; eauto | exact H_rel].
-    + simpl in H_rel. destruct H_rel as [H_rel_o H_rel_t].
-      destruct (Proc_has_output I O p) as [o' [p' HredO]].
-      have H_rel_o': rel ORel l o0 o' by (eapply oblivious_at_reduceO_rel; eauto).
-      have H_obl': oblivious_at ORel o0 p' l by (eapply oblivious_at_reduceO; eauto).
-      have H_rel: rel ORel l o' o.
-      { move: (equiv ORel l) => [] _ Hsym Htrans.
-        eapply Htrans; [apply Hsym; exact H_rel_o' | exact H_rel_o]. }
-      eapply TR2; [exact HredO | exact H_rel |].
-      apply IH; [exact H_obl' | exact H_rel_t].
-Qed.
-
-Lemma oblivious_at_trace_rel : forall (I O : Ty) (ORel : cEquiv [O]) (l : level) (o0 : [O]) (p : Proc I O) t,
-  oblivious_at ORel o0 p l ->
-  Trace ORel l t p ->
-  all_outputs_rel I O ORel l o0 t.
-Proof.
-  intros I O ORel l o0 p t H_obl H_tr.
-  apply H_obl in H_tr. eapply ObliviousTrace_all_outputs_rel; eauto.
-Qed.
-
-Lemma all_outputs_rel_insert_inl : forall I O (ORel : cEquiv [O]) l o0 t n i,
-  all_outputs_rel I O ORel l o0 (insert n (inl i) t) <-> all_outputs_rel I O ORel l o0 t.
-Proof.
-  intros I O ORel l o0 t n i.
-  elim: t n.
-  - intros n. destruct n; simpl; tauto.
-  - intros a t0 IH n. destruct n; simpl.
-    + tauto.
-    + destruct (IH n) as [Hfwd Hbwd].
-      destruct a; simpl.
-      * split; auto.
-      * split; intros [H1 H2]; split; auto.
-Qed.
-
-(* A process that never leaves one indistinguishability class at [l] is
-   non-interfering at [l]: the observer sees the same class whatever the input
-   does, so inserting, deleting and swapping inputs it may not see changes
-   nothing.  Only [rel] is involved. *)
-Lemma oblivious_NI_l : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (p : Proc I O) l,
-  oblivious_class ORel p l ->
-  NI_l IRel ORel l p.
-Proof.
-  intros I O IRel ORel p l [o0 H_obl].
-  split; [| split].
-  - intros t i i' n H_rel H_tr.
-    have H_all: all_outputs_rel I O ORel l o0 (insert n (inl i) t).
-    { eapply oblivious_at_trace_rel; eauto. }
-    have H_all': all_outputs_rel I O ORel l o0 (insert n (inl i') t).
-    { rewrite all_outputs_rel_insert_inl in H_all.
-      rewrite all_outputs_rel_insert_inl. exact H_all. }
-    eapply oblivious_at_trace_any; eauto.
-  - intros t i n H_dis H_tr.
-    have H_all_t: all_outputs_rel I O ORel l o0 t.
-    { eapply oblivious_at_trace_rel; eauto. }
-    have H_all': all_outputs_rel I O ORel l o0 (insert n (inl i) t).
-    { rewrite all_outputs_rel_insert_inl. exact H_all_t. }
-    eapply oblivious_at_trace_any; eauto.
-  - intros t i n H_dis H_tr.
-    have H_all_t: all_outputs_rel I O ORel l o0 (insert n (inl i) t).
-    { eapply oblivious_at_trace_rel; eauto. }
-    have H_all': all_outputs_rel I O ORel l o0 t.
-    { rewrite all_outputs_rel_insert_inl in H_all_t. exact H_all_t. }
-    eapply oblivious_at_trace_any; eauto.
-Qed.
+(* Every output unobservable at [l] relates every two outputs there. *)
+Lemma all_dis_rel : forall (O : Ty) (ORel : cEquiv [O]) l,
+  (forall o, dis ORel l o) -> forall o o', rel ORel l o o'.
+Proof. move=> O ORel l Hd o o'. exact: (proj1 (cEquiv_rule3 (Hd o) o')). Qed.
 
 Set Implicit Arguments.
 
-(* A proof device for [swi_NI] below.  The second disjunct asks only that
-   everything the switch emits stays in one indistinguishability class, which
-   is weaker than the original condition. *)
-Theorem swi_NI_class : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) p b,
-(forall l, aware BRel true l \/  oblivious_class (eqmaybe_aware ORel BRel) (swi b p) l ) -> NI IRel (eqpair_LR BRel ORel) p ->
+(* At every level the observer is either aware of the gate or relates every
+   output of the switch, so it learns nothing from it. *)
+Theorem swi_NI : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) p b,
+(forall l, aware BRel true l \/ forall o o', rel (eqmaybe_aware ORel BRel) l o o') -> NI IRel (eqpair_LR BRel ORel) p ->
 NI (eqpair_LR BRel IRel) (eqmaybe_aware ORel BRel) (swi b p).
 Proof.
   intros I O IRel ORel BRel p b H_aware_ob H_NI_p.
   intro l.
   (* Case on the premise itself; no decision on [aware] is needed. *)
-  destruct (H_aware_ob l) as [H_aware | H_oblivious].
+  destruct (H_aware_ob l) as [H_aware | H_all].
   - split; [| split].
     + intros t [bi val_i] [bi' val_i'] n Hrel Htr.
       apply rel_eqpair_LR in Hrel as [Hrel_b Hrel_i].
@@ -946,37 +849,7 @@ Proof.
       have Htr_p': Trace (eqpair_LR BRel ORel) l t_p' p.
       { eapply H_NI_p3; [apply Hdis_i | apply Htr_p]. }
       eapply swi_conv; [apply H_aware | apply Htr_p' | apply Hswi_tr'].
-    + apply oblivious_NI_l; exact H_oblivious.
-Qed.
-
-(* [swi_NI] as stated by Rafnsson et al.: at every level the observer is aware
-   of the gate or oblivious to the switch. *)
-Theorem swi_NI : forall (I O : Ty) (IRel : cEquiv [I]) (ORel : cEquiv [O]) (BRel : cEquiv [Bool]) p b,
-(forall l, aware BRel true l \/ oblivious (eqmaybe_aware ORel BRel) (swi b p) l) -> NI IRel (eqpair_LR BRel ORel) p ->
-NI (eqpair_LR BRel IRel) (eqmaybe_aware ORel BRel) (swi b p).
-Proof.
-  move=> I O IRel ORel BRel p b H Hp. apply swi_NI_class => // l.
-  case: (H l) => [Ha | Hob]; [by left | right].
-  (* Every process emits, so [stepO] gives an output of the switch; it is
-     unobservable, and so related to every other unobservable output. *)
-  set o0 := (stepO (swi b p)).1.
-  have Hd : dis (eqmaybe_aware ORel BRel) l o0.
-  { have Htr : Trace (eqmaybe_aware ORel BRel) l [:: inr o0] (swi b p).
-    { eapply TR2; [apply reduceO_step | apply rel_eq | apply TR0]. }
-    move: (Hob _ Htr). by inversion 1. }
-  exists o0 => s /Hob.
-  elim=> [|i s' _ IH|o s' Hdo _ IH]; [apply OT_nil | by apply OT_cons_in |].
-  apply OT_cons_out => //. exact: (proj1 (cEquiv_rule3 Hd o) Hdo).
-Qed.
-
-(* Every output unobservable at [l] makes any process oblivious there. *)
-Lemma oblivious_all_dis : forall (I O : Ty) (ORel : cEquiv [O]) (p : Proc I O) l,
-  (forall o, dis ORel l o) -> oblivious ORel p l.
-Proof.
-  move=> I O ORel p l Hd s _. elim: s => [|[i|o] s IH].
-  - apply DT_nil.
-  - by apply DT_cons_in.
-  - by apply DT_cons_out.
+    + exact: all_rel_NI_l.
 Qed.
 
 Fixpoint filter_none {I O : Ty} (t : seq ([Option I] + [O])) : seq ([I] + [O]) :=
